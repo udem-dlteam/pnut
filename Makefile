@@ -1,9 +1,9 @@
 watch:
 	# TODO: Replace watch with an inotifywait-like loop
 	# Check if file is defined
-	ifndef file
-		$(error file is undefined. Use `make watch file=filename.c`)
-	endif
+ifndef file
+	$(error file is undefined. Use `make watch file=filename.c`)
+endif
 	touch out.sh
 	chmod +x out.sh
 	watch -n1 "./cc.sh $(file) > out.sh && ./out.sh"
