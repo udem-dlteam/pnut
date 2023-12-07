@@ -599,15 +599,15 @@ parse_postfix_expression()
         ;;
 
       '.')
-        syntax_error "TODO 222"
+        syntax_error "Struct/Union not supported"
         ;;
 
       '->')
-        syntax_error "TODO 333"
+        syntax_error "Struct/Union not supported"
         ;;
 
       '++'|'--')
-        syntax_error "TODO 444"
+        syntax_error "++/-- not supported"
         ;;
 
       *)
