@@ -4,26 +4,26 @@
 #
 # $ cat test.c
 # #include <stdio.h>
-# 
+#
 # #define NL 10
 # #define ZERO '0'
-# 
+#
 # void main() {
-# 
+#
 #   /* print a number to stdout */
-# 
+#
 #   int n = 31416;
 #   int p = 1;
-# 
+#
 #   while (p * 10 <= n) p *= 10;
-# 
+#
 #   while (p > 0) {
 #     int digit = n / p;
 #     putchar(ZERO + digit);
 #     n %= p;
 #     p /= 10;
 #   }
-# 
+#
 #   putchar(NL);
 # }
 # $ ./cc.sh test.c
@@ -479,7 +479,13 @@ pop()  { eval $1=\$STACK$SP ; SP=$((SP-1)) ; }
 
 syntax_error()
 {
-  printf "SYNTAX ERROR: %s\n" "$1"
+  >&2 printf "SYNTAX ERROR: %s\n" "$1"
+  exit 1
+}
+
+missing_feature_error()
+{
+  >&2 printf "Not yet implemented: %s\n" "$1"
   exit 1
 }
 
@@ -640,8 +646,7 @@ parse_unary_expression()
       ;;
 
     'sizeof')
-      printf "TODO\n"
-      exit 1
+      missing_feature_error "sizeof"
       ;;
 
     *)
@@ -1730,13 +1735,11 @@ comp_subexpr()
         ;;
 
       STRING)
-        echo error
-        exit
+        missing_feature_error "string subexpression"
         ;;
 
       '++x'|'--x'|'&x'|'*x')
-        echo error
-        exit
+        missing_feature_error "increment/decrement/address/dereference"
         ;;
 
       '+x'|'-x'|'~x'|'!x')
@@ -1777,8 +1780,7 @@ comp_subexpr()
 
       'x[y]'|'x(y)'|\
       'x&&y'|'x||y'|'x,y')
-        echo error
-        exit
+        missing_feature_error "array subscript/function call/logical operators/comma operator"
         ;;
 
       'x=y'|'x+=y'|'x-=y'|'x*=y'|'x/=y'|'x%=y'|\
@@ -1798,8 +1800,7 @@ comp_subexpr()
         ;;
 
       'x?y:z')
-        echo error
-        exit
+        missing_feature_error "ternary operator"
         ;;
 
       *)
@@ -1836,8 +1837,7 @@ comp_lvalue()
         ;;
 
       *)
-        echo error
-        exit
+        missing_feature_error "lvalue compound expression"
         ;;
 
   esac
