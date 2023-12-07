@@ -9,3 +9,10 @@ compiled shell code. In case of compilation error, it outputs to stderr the
 error message.
 
 To compile and run: `./cc.sh test.c > test.sh && ./test.sh`
+
+## TODO
+
+- #include macros
+- macros with arguments
+- sizeof
+- struct
