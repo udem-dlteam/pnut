@@ -1,0 +1,3 @@
+out.sh
+tests/*.sh
+tests/*.err
