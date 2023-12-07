@@ -10,43 +10,34 @@ watch:
 
 clean:
 	rm -f out.sh
-	rm tests/*.sh
+	rm tests/*.sh tests/*.err
 
 test:
-	# Read all files in test directory
-ifdef save
-	echo "Saving test output..."
-	for file in $(shell find tests -type f -name "*.c"); do \
+	@echo "Running tests..."
+	@for file in $(shell find tests -type f -name "*.c"); do \
 		filename=$$(basename $$file .c); \
-		cc_err=$$(./cc.sh $$file > tests/$$filename.sh 2>&1); \
+		./cc.sh $$file > tests/$$filename.sh 2> tests/$$filename.err; \
 		if [ $$? -eq 0 ]; then \
 			chmod +x tests/$$filename.sh; \
-			./tests/$$filename.sh > tests/$$filename.golden; \
-		else \
-			echo "$$filename: Failed to compile"; \
-		fi \
-	done
-else
-	echo "Running tests..."
-	for file in $(shell find tests -type f -name "*.c"); do \
-		filename=$$(basename $$file .c); \
-		cc_err=$$(./cc.sh $$file > tests/$$filename.sh 2>&1); \
-		if [ $$? -eq 0 ]; then \
-			chmod +x tests/$$filename.sh; \
-			test_output=$$(./tests/$$filename.sh 2>&1); \
+			test_output=$$(./tests/$$filename.sh 2> tests/$$filename.err); \
 			if [ $$? -eq 0 ]; then \
-				diff_out=$$(echo $$test_output | diff - tests/$$filename.golden); \
-				if [ $$? -eq 0 ]; then \
-					echo "$$filename: ✅"; \
+				if [ -f "tests/$$filename.golden" ]; then \
+					diff_out=$$(echo $$test_output | diff - tests/$$filename.golden); \
+					if [ $$? -eq 0 ]; then \
+						echo "$$filename: ✅"; \
+					else \
+						echo "$$filename: ❌"; \
+						echo "diff (output vs expected)"; \
+						echo "$$diff_out"; \
+					fi \
 				else \
-					echo "$$filename: ❌"; \
-					echo $$test_output; \
+					$$(echo $$test_output > tests/$$filename.golden); \
+					echo "$$filename: ❌ Generated golden file"; \
 				fi \
 			else \
-				echo "$$filename: ❌ Failed to run: $$test_output"; \
+				echo "$$filename: ❌ Failed to run: $$(cat tests/$$filename.err)"; \
 			fi \
 		else \
-			echo "$$filename: ❌ Failed to compile: $$cc_err"; \
+			echo "$$filename: ❌ Failed to compile: $$(cat tests/$$filename.err)"; \
 		fi \
 	done
-endif
