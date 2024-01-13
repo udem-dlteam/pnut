@@ -478,9 +478,15 @@ int main(int argc, char **argv)
   *--sp = (int)t;
 
   // Dump the heap and op codes
+  // The format is:
+  //  <data size>
+  //  <data>
+  //  <main address>
+  //  <opcodes> \n <opcodes> \n ...
   if (ops) {
+    // <data size>
     printf("%d\n", data - datastart);
-    // printf("%.*s\n", data - datastart - 10, datastart);
+    // <data>
     datastart2 = datastart; // Saving this to compute reference offset
     while (datastart < data) {
       printf("%c", *datastart);
@@ -489,6 +495,9 @@ int main(int argc, char **argv)
     datastart = datastart2;
     printf("\n");
 
+    // <main address>
+    printf("%d\n", (pc - (int *)estart));
+    // <opcodes>
     le = estart;
     le--; // Not sure why this is necessary
     while (le <= e) {
