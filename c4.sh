@@ -1,23 +1,23 @@
 #!/bin/sh
 
 # set -x # Prints all commands run
-debug=1
 set -e # Exit on first error
-set -u # Exit on using unset variable
+
+debug=0
+trace=0
+if [ $trace -eq 0 ] ; then
+  set -u # Exit on using unset variable
+fi
+
+# Infinite loop breaker.
+# On a M1 CPU, 35518 cycles take 18 seconds to run, so 100000 is a minute of execution.
+MAX_CYCLE=100000
 
 # Opcodes
 LEA=0; IMM=1; REF=2; JMP=3; JSR=4; BZ=5; BNZ=6; ENT=7; ADJ=8; LEV=9; LI=10; LC=11; SI=12; SC=13; PSH=14; OR=15; XOR=16; AND=17; EQ=18; NE=19; LT=20; GT=21; LE=22; GE=23; SHL=24; SHR=25; ADD=26; SUB=27; MUL=28; DIV=29; MOD=30; OPEN=31; READ=32; CLOS=33; PRTF=34; MALC=35; FREE=36; MSET=37; MCMP=38; EXIT=39;
 
-# if [ $# -eq 0 ]; then
-#   echo "Usage: $0 <op-file>"
-# fi
-
-# TODO: Should the stack grow up or down? Up makes more sense since the negative
-# sign breaks the variable interpolation, so Down caps the stack size at whatever
-# sp is initialized to.
-# It grows down in the original C code, so I'll keep it that way for now.
-initial_stack_pos=1000000
-sp=$initial_stack_pos
+INITIAL_STACK_POS=1000000
+sp=$INITIAL_STACK_POS
 push_stack() {
   : $((sp--))
   : $((_data_$sp=$1))
@@ -36,20 +36,6 @@ pop_data() {
   : $((dat--))
   : $((res = _data_$dat))
 }
-
-push_instr() {
-  push_data $1
-  # echo "Pushing $1"
-  # : $((_instr_$instr=$1))
-  # : $((instr++))
-}
-pop_instr() {
-  pop_data
-  # : $((instr--))
-  # : $((res = _instr_$instr))
-}
-
-# Read op codes
 
 src_buf=
 get_char()                           # get next char from source into $char
@@ -72,9 +58,6 @@ get_char()                           # get next char from source into $char
       return
     fi
   fi
-
-  # code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code
-  # echo "get_char returns $char: $char"
 
   # current character is at the head of $src_buf
 
@@ -107,7 +90,6 @@ get_token() {
 
     case "$token" in
       ' '|NEWLINE)                   # skip whitespace
-          # echo "Skipping whitespace"
           while : ; do
             case "$char" in
               ' ') get_char ;;
@@ -118,7 +100,6 @@ get_token() {
           ;;
 
       [0-9-])                         # parse integer
-          # echo "Parsing integer $token"
           value="$token"
           token=INTEGER
           while : ; do
@@ -137,7 +118,6 @@ get_token() {
 
       [a-zA-Z_])                     # parse identifier or C keyword
           parse_identifier
-          # echo "Parsed indentifier: $token"
           value="$token"
           token=IDENTIFIER
           break
@@ -163,17 +143,18 @@ read_data() {
   get_num
   count=$value
 
-  echo "Reading $value bytes of data"
+  if [ $debug -eq 1 ] ; then
+    echo "Reading $value bytes of data"
+  fi
 
   while [ "$count" != "0" ] ; do
     get_char
     code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code
-    # echo "$char: $code"
     push_data $code
     : $((count--))
   done
 
-  # Repeat data
+  # Repeat data, useful for debugging
   # while [ "$dat" != "0" ] ; do
   #   pop_data
   #   echo $res
@@ -183,6 +164,9 @@ read_data() {
 # Encode instructions to internal representation.
 # To inspect instructions, use decode_instructions and print_instructions.
 encode_instruction() {
+  # This big case statement could be replaced with res=$(( $(($1)) )) but it
+  # wouldn't handle the case where $1 is an invalid instruction, which is useful
+  # for debugging.
   case "$1" in
     LEA)  res=$LEA ;;
     IMM)  res=$IMM ;;
@@ -226,10 +210,9 @@ encode_instruction() {
     EXIT) res=$EXIT ;;
     *) echo "Unknown instruction $1" ; exit 1 ;;
   esac
-  # echo "$1: $res"
 }
 
-# It's kind of silly that we have to list everything, but without array I'm not sure how else to do it
+# Without arrays it's hard to write this function in a way that isn't verbose.
 decode_instruction() {
   case "$1" in
     $LEA)  res=LEA ;;
@@ -276,25 +259,28 @@ decode_instruction() {
   esac
 }
 
+# Read instructions and encode them until EOF.
 read_instructions() {
   get_token
   count=0
   while : ; do
-    # echo "$token: $value"
     case "$token" in
       EOF) break ;;
-      INTEGER) push_instr $value ;;
-      IDENTIFIER) encode_instruction $value ; push_instr $res ;;
+      INTEGER) push_data $value ;;
+      IDENTIFIER) encode_instruction $value ; push_data $res ;;
       *) echo "Unknown instruction $value" ; exit 1 ;;
     esac
     : $((count++))
     get_token
   done
-  echo "Finished reading $count instructions"
+  if [ $debug -eq 1 ] ; then
+    echo "Finished reading $count instructions"
+  fi
 }
 
 # Useful for debugging
 print_instructions() {
+  echo "Main starts at position $main_addr"
   instr=$instr_start
 
   while [ $instr -lt $last_instr ]; do
@@ -303,7 +289,6 @@ print_instructions() {
     : $((instr++))
 
     if [ $i -le $ADJ ] ; then
-
       : $((imm = _data_$instr))
       : $((instr++))
       decode_instruction $i
@@ -317,10 +302,9 @@ print_instructions() {
 
 run_instructions() {
   while : ; do
-    # echo "cycle = $cycle:\n    pc = $pc, sp = $sp, bp = $bp, a = $a"
-
     : $((i = _data_$pc))
     : $((pc++))
+    : $((cycle++))
 
     debug_str=""
     instr_str=""
@@ -335,13 +319,13 @@ run_instructions() {
       instr_str=$debug_str$(echo "$res")
     fi
 
-    if [ $debug -eq 1 ] ; then
+    if [ $trace -eq 1 ] ; then
       # State
       debug_str="$cycle> \n    $instr_str\n    pc = $pc, sp = $sp, bp = $bp, a = $a"
       # echo $debug_str
       # Show stack
       # Because the stack may contain undefined values, this code is incompatible with the set -u option
-      stack_ix=$initial_stack_pos
+      stack_ix=$INITIAL_STACK_POS
       debug_str="$debug_str\n    Stack:"
       while [ $stack_ix -gt $sp ]; do
         : $((stack_ix--))
@@ -351,8 +335,8 @@ run_instructions() {
     fi
 
     # Infinite loop breaker
-    if [ $cycle -gt 250 ] ; then
-      echo "Too many instructions"
+    if [ $cycle -gt $MAX_CYCLE ] ; then
+      echo "Too many instructions, aborting execution."
       exit 1;
     fi
 
@@ -399,17 +383,16 @@ run_instructions() {
       sp=$((sp + 1))
     #  if (i == LI)  a = *(int *)a;                                     // load int
     elif [ $i -eq $LI ] ; then
-      : $((a = _data_$a))
+      a=$((_data_$a))
     #  if (i == LC)  a = *(char *)a;                                    // load char
     elif [ $i -eq $LC ] ; then
       a=$((_data_$a))
     #  if (i == SI)  *(int *)*sp++ = a;                                 // store int
     elif [ $i -eq $SI ] ; then
-      # echo "_data_$(_data_$sp)"
-      push_stack $a
+      : $((_data_$((_data_$sp))=$a))
     #  if (i == SC)  a = *(char *)*sp++ = a;                            // store char
     elif [ $i -eq $SC ] ; then
-      push_stack $a
+      : $((_data_$((_data_$sp))=$a))
     #  if (i == PSH) *--sp = a;                                         // push
     elif [ $i -eq $PSH ] ; then
       push_stack $a
@@ -471,18 +454,20 @@ run_instructions() {
       pop_stack
       a=$(close $a)
     elif [ $i -eq $PRTF ] ; then
-      pop_stack
-      a=$(printf $res $a)
+      echo "PRINT not defined"
+      exit 1
     elif [ $i -eq $MALC ] ; then
-      a=$(malloc $a)
+      echo "MALLOC not defined"
+      exit 1
     elif [ $i -eq $FREE ] ; then
-      free $a
+      echo "FREE not defined"
+      exit 1
     elif [ $i -eq $MSET ] ; then
-      pop_stack
-      a=$(memset $res $a)
+      echo "MEMSET not defined"
+      exit 1
     elif [ $i -eq $MCMP ] ; then
-      pop_stack
-      a=$(memcmp $res $a)
+      echo "MCMP not defined"
+      exit 1
     elif [ $i -eq $EXIT ] ; then
       echo "exit($a) cycle = $cycle"
       exit $a
@@ -490,8 +475,6 @@ run_instructions() {
       echo "unknown instruction = $i! cycle = $cycle"
       exit 1
     fi
-
-    : $((cycle++))
   done
 }
 
@@ -499,10 +482,11 @@ read_data
 instr_start=$dat
 get_num
 main_addr=$value
-echo "Instructions start at $main_addr"
 read_instructions
 last_instr=$dat
-print_instructions
+if [ $debug -eq 1 ] ; then
+  print_instructions
+fi
 
 # sp=0;
 pc=$main_addr; bp=$sp; a=0; cycle=0; # vm registers
