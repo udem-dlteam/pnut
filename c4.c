@@ -25,6 +25,7 @@ int *e, *le,  // current position in emitted code
     loc,      // local variable offset
     line,     // current line number
     src,      // print source and assembly flag
+    ops,      // print opcodes
     debug;    // print executed instructions
 
 // tokens and classes (operators last and in precedence order)
@@ -336,17 +337,21 @@ int main(int argc, char **argv)
   int *pc, *sp, *bp, a, cycle; // vm registers
   int i, *t; // temps
 
+  int *estart;  // start of emitted code
+  char *datastart, *datastart2; // start of data/bss
+
   --argc; ++argv;
   if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
   if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 'b') { ops = 1; --argc; ++argv; }
   if (argc < 1) { printf("usage: c4 [-s] [-d] file ...\n"); return -1; }
 
   if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
 
   poolsz = 256*1024; // arbitrary size
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
-  if (!(le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
-  if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
+  if (!(estart = le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
+  if (!(datastart = data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
   if (!(sp = malloc(poolsz))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }
 
   memset(sym,  0, poolsz);
@@ -470,6 +475,41 @@ int main(int argc, char **argv)
   *--sp = argc;
   *--sp = (int)argv;
   *--sp = (int)t;
+
+  // Dump the heap and op codes
+  if (ops) {
+    printf("%d\n", data - datastart);
+    // printf("%.*s\n", data - datastart - 10, datastart);
+    datastart2 = datastart; // Saving this to compute reference offset
+    while (datastart < data) {
+      printf("%c", *datastart);
+      datastart++;
+    }
+    datastart = datastart2;
+    printf("\n");
+
+    le = estart;
+    le--; // Not sure why this is necessary
+    while (le <= e) {
+      i = *le;
+      // Relocate addresses
+      if (i == JMP || i == JSR || i == BZ || i == BNZ) {
+        printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
+                              "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
+                              "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
+        if (*le <= ADJ) printf(" %d\n", (*++le) - (int) estart); else printf("\n");
+      } else if (i == REF) {
+        printf("REF  %d\n", *++le - (int) datastart);
+      } else {
+        printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
+                              "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
+                              "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
+        if (*le <= ADJ) printf(" %d\n", *++le); else printf("\n");
+      }
+      le++;
+    }
+    return 0;
+  }
 
   // run...
   cycle = 0;
