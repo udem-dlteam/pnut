@@ -497,9 +497,9 @@ int main(int argc, char **argv)
         printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
                               "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
                               "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
-        if (*le <= ADJ) printf(" %d\n", (*++le) - (int) estart); else printf("\n");
+        if (*le <= ADJ) printf(" %d\n", ((*++le) - (int) estart) / sizeof(int)); else printf("\n");
       } else if (i == REF) {
-        printf("REF  %d\n", *++le - (int) datastart);
+        printf("REF  %d\n", (*++le - (int) datastart) / sizeof(int));
       } else {
         printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
                               "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
