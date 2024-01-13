@@ -66,6 +66,24 @@ get_char()                           # get next char from source into $char
   char="${char%"$rest"}"             # remove all but first char
 }
 
+# Same as get_char, but \ is recognized as the start of an escape sequence.
+# If an escape sequence is found, $char is set its ascii code and $escaped is set to true.
+# If the next character is not \, the function behaves just like get_char.
+get_char_encoded() {
+  get_char
+  escaped="false"
+  # If $char is \, then the next 2 characters are the hex code of the character
+  if [ '\' = "$char" ] ; then
+    escaped="true"
+    get_char
+    x1=$char
+    get_char
+    x2=$char
+    : $((char=0x$x1$x2))
+    return
+  fi
+}
+
 parse_identifier()
 {
   while : ; do
@@ -148,11 +166,19 @@ read_data() {
   fi
 
   while [ "$count" != "0" ] ; do
-    get_char
+    get_char_encoded
+    if [ $escaped = "true" ] ; then
+      code=$char
+    else
     code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code
+    fi
+    # echo "Pushing $code"
     push_data $code
     : $((count--))
   done
+
+  # Read final newline
+  get_char
 
   # Repeat data, useful for debugging
   # while [ "$dat" != "0" ] ; do

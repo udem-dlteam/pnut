@@ -490,7 +490,12 @@ int main(int argc, char **argv)
     // <data>
     datastart2 = datastart; // Saving this to compute reference offset
     while (datastart < data) {
-      printf("%c", *datastart);
+      // Escape non-printable characters and '\'
+      if (*datastart <= 31 || *datastart >= 127 || *datastart == '\\') {
+        printf("\\%x%x", *datastart / 16, *datastart % 16);
+      } else {
+        printf("%c", *datastart);
+      }
       datastart++;
     }
     datastart = datastart2;
