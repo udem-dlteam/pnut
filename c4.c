@@ -484,6 +484,7 @@ int main(int argc, char **argv)
   //  <main address>
   //  <opcodes> \n <opcodes> \n ...
   if (ops) {
+    estart++; // Instructions start being encoded at position 1. See line containing: *++e = ENT; *++e = i - loc;
     // <data size>
     printf("%d\n", data - datastart);
     // <data>
@@ -499,7 +500,6 @@ int main(int argc, char **argv)
     printf("%d\n", (pc - (int *)estart));
     // <opcodes>
     le = estart;
-    le--; // Not sure why this is necessary
     while (le <= e) {
       i = *le;
       // Relocate addresses
