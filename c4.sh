@@ -341,141 +341,175 @@ run_instructions() {
       exit 1;
     fi
 
-    #  if (i == LEA) a = (int)(bp + *pc++);                             // load local address
-    if [ $i -eq $LEA ] ; then
-      a=$((bp + imm))
-    #  if (i == IMM) a = *pc++;                                         // load global address or immediate
-    elif [ $i -eq $IMM ] ; then
-      a=$imm
-    #  if (i == REF) a = *pc++;                                         // load global address
-    elif [ $i -eq $REF ] ; then
-      a=$imm
-    #  if (i == JMP) pc = (int *)*pc;                                   // jump
-    elif [ $i -eq $JMP ] ; then
-      pc=$imm
-    #  if (i == JSR) { *--sp = (int)(pc + 1); pc = (int *)*pc; }        // jump to subroutine
-    elif [ $i -eq $JSR ] ; then
-      push_stack $pc # Not (pc + 1) because we already incremented pc when getting imm
-      pc=$imm
-    #  if (i == BZ)  pc = a ? pc + 1 : (int *)*pc;                      // branch if zero
-    elif [ $i -eq $BZ ] ; then
-      if [ $a -eq 0 ] ; then
+    case "$i" in
+      #  if (i == LEA) a = (int)(bp + *pc++);                             // load local address
+      $LEA) a=$((bp + imm)) ;;
+      #  if (i == IMM) a = *pc++;                                         // load global address or immediate
+      $IMM) a=$imm ;;
+      #  if (i == REF) a = *pc++;                                         // load global address
+      $REF) a=$imm ;;
+      #  if (i == JMP) pc = (int *)*pc;                                   // jump
+      $JMP) pc=$imm ;;
+      #  if (i == JSR) { *--sp = (int)(pc + 1); pc = (int *)*pc; }        // jump to subroutine
+      $JSR)
+        push_stack $pc # Not (pc + 1) because we already incremented pc when getting imm
         pc=$imm
-      fi
-    #  if (i == BNZ) pc = a ? (int *)*pc : pc + 1;                      // branch if not zero
-    elif [ $i -eq $BNZ ] ; then
-      if [ $a -ne 0 ] ; then
-        pc=$imm
-      fi
-    #  if (i == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }     // enter subroutine
-    elif [ $i -eq $ENT ] ; then
-      push_stack $bp
-      bp=$sp
-      sp=$((sp - imm))
-    #  if (i == ADJ) sp = sp + *pc++;                                   // stack adjust
-    elif [ $i -eq $ADJ ] ; then
-      sp=$((sp + imm))
-    #  if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
-    elif [ $i -eq $LEV ] ; then
-      sp=$bp
-      bp=$((_data_$sp))
-      sp=$((sp + 1))
-      pc=$((_data_$sp))
-      sp=$((sp + 1))
-    #  if (i == LI)  a = *(int *)a;                                     // load int
-    elif [ $i -eq $LI ] ; then
-      a=$((_data_$a))
-    #  if (i == LC)  a = *(char *)a;                                    // load char
-    elif [ $i -eq $LC ] ; then
-      a=$((_data_$a))
-    #  if (i == SI)  *(int *)*sp++ = a;                                 // store int
-    elif [ $i -eq $SI ] ; then
-      : $((_data_$((_data_$sp))=$a))
-    #  if (i == SC)  a = *(char *)*sp++ = a;                            // store char
-    elif [ $i -eq $SC ] ; then
-      : $((_data_$((_data_$sp))=$a))
-    #  if (i == PSH) *--sp = a;                                         // push
-    elif [ $i -eq $PSH ] ; then
-      push_stack $a
-    elif [ $i -eq $OR ] ; then
-      pop_stack
-      a=$((res | a))
-    elif [ $i -eq $XOR ] ; then
-      pop_stack
-      a=$((res ^ a))
-    elif [ $i -eq $AND ] ; then
-      pop_stack
-      a=$((res & a))
-    elif [ $i -eq $EQ ] ; then
-      pop_stack
-      a=$((res == a))
-    elif [ $i -eq $NE ] ; then
-      pop_stack
-      a=$((res != a))
-    elif [ $i -eq $LT ] ; then
-      pop_stack
-      a=$((res < a))
-    elif [ $i -eq $GT ] ; then
-      pop_stack
-      a=$((res > a))
-    elif [ $i -eq $LE ] ; then
-      pop_stack
-      a=$((res <= a))
-    elif [ $i -eq $GE ] ; then
-      pop_stack
-      a=$((res >= a))
-    elif [ $i -eq $SHL ] ; then
-      pop_stack
-      a=$((res << a))
-    elif [ $i -eq $SHR ] ; then
-      pop_stack
-      a=$((res >> a))
-    elif [ $i -eq $ADD ] ; then
-      pop_stack
-      a=$((res + a))
-    elif [ $i -eq $SUB ] ; then
-      pop_stack
-      a=$((res - a))
-    elif [ $i -eq $MUL ] ; then
-      pop_stack
-      a=$((res * a))
-    elif [ $i -eq $DIV ] ; then
-      pop_stack
-      a=$((res / a))
-    elif [ $i -eq $MOD ] ; then
-      pop_stack
-      a=$((res % a))
-    elif [ $i -eq $OPEN ] ; then
-      pop_stack
-      a=$(open $res $a)
-    elif [ $i -eq $READ ] ; then
-      pop_stack
-      a=$(read $res $a)
-    elif [ $i -eq $CLOS ] ; then
-      pop_stack
-      a=$(close $a)
-    elif [ $i -eq $PRTF ] ; then
-      echo "PRINT not defined"
-      exit 1
-    elif [ $i -eq $MALC ] ; then
-      echo "MALLOC not defined"
-      exit 1
-    elif [ $i -eq $FREE ] ; then
-      echo "FREE not defined"
-      exit 1
-    elif [ $i -eq $MSET ] ; then
-      echo "MEMSET not defined"
-      exit 1
-    elif [ $i -eq $MCMP ] ; then
-      echo "MCMP not defined"
-      exit 1
-    elif [ $i -eq $EXIT ] ; then
-      echo "exit($a) cycle = $cycle"
-      exit $a
-    else
-      echo "unknown instruction = $i! cycle = $cycle"
-      exit 1
-    fi
+        ;;
+      #  if (i == BZ)  pc = a ? pc + 1 : (int *)*pc;                      // branch if zero
+      $BZ)
+        if [ $a -eq 0 ] ; then
+          pc=$imm
+        fi
+        ;;
+      #  if (i == BNZ) pc = a ? (int *)*pc : pc + 1;                      // branch if not zero
+      $BNZ)
+        if [ $a -ne 0 ] ; then
+          pc=$imm
+        fi
+        ;;
+      #  if (i == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }     // enter subroutine
+      $ENT)
+        push_stack $bp
+        bp=$sp
+        sp=$((sp - imm))
+        ;;
+      #  if (i == ADJ) sp = sp + *pc++;                                   // stack adjust
+      $ADJ)
+        sp=$((sp + imm))
+        ;;
+      #  if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
+      $LEV)
+        sp=$bp
+        bp=$((_data_$sp))
+        sp=$((sp + 1))
+        pc=$((_data_$sp))
+        sp=$((sp + 1))
+        ;;
+      #  if (i == LI)  a = *(int *)a;                                     // load int
+      $LI)
+        a=$((_data_$a))
+        ;;
+      #  if (i == LC)  a = *(char *)a;                                    // load char
+      $LC)
+        a=$((_data_$a))
+        ;;
+      #  if (i == SI)  *(int *)*sp++ = a;                                 // store int
+      $SI)
+        : $((_data_$((_data_$sp))=$a))
+        ;;
+      #  if (i == SC)  a = *(char *)*sp++ = a;                            // store char
+      $SC)
+        : $((_data_$((_data_$sp))=$a))
+        ;;
+      #  if (i == PSH) *--sp = a;                                         // push
+      $PSH)
+        push_stack $a
+        ;;
+      $OR)
+        pop_stack
+        a=$((res | a))
+        ;;
+      $XOR)
+        pop_stack
+        a=$((res ^ a))
+        ;;
+      $AND)
+        pop_stack
+        a=$((res & a))
+        ;;
+      $EQ)
+        pop_stack
+        a=$((res == a))
+        ;;
+      $NE)
+        pop_stack
+        a=$((res != a))
+        ;;
+      $LT)
+        pop_stack
+        a=$((res < a))
+        ;;
+      $GT)
+        pop_stack
+        a=$((res > a))
+        ;;
+      $LE)
+        pop_stack
+        a=$((res <= a))
+        ;;
+      $GE)
+        pop_stack
+        a=$((res >= a))
+        ;;
+      $SHL)
+        pop_stack
+        a=$((res << a))
+        ;;
+      $SHR)
+        pop_stack
+        a=$((res >> a))
+        ;;
+      $ADD)
+        pop_stack
+        a=$((res + a))
+        ;;
+      $SUB)
+        pop_stack
+        a=$((res - a))
+        ;;
+      $MUL)
+        pop_stack
+        a=$((res * a))
+        ;;
+      $DIV)
+        pop_stack
+        a=$((res / a))
+        ;;
+      $MOD)
+        pop_stack
+        a=$((res % a))
+        ;;
+      $OPEN)
+        pop_stack
+        a=$(open $res $a)
+        ;;
+      $READ)
+        pop_stack
+        a=$(read $res $a)
+        ;;
+      $CLOS)
+        pop_stack
+        a=$(close $a)
+        ;;
+      $PRTF)
+        echo "PRINT not defined"
+        exit 1
+        ;;
+      $MALC)
+        echo "MALLOC not defined"
+        exit 1
+        ;;
+      $FREE)
+        echo "FREE not defined"
+        exit 1
+        ;;
+      $MSET)
+        echo "MEMSET not defined"
+        exit 1
+        ;;
+      $MCMP)
+        echo "MCMP not defined"
+        exit 1
+        ;;
+      $EXIT)
+        echo "exit($a) cycle = $cycle"
+        exit $a
+        ;;
+      *)
+        echo "unknown instruction = $i! cycle = $cycle"
+        exit 1
+        ;;
+    esac
   done
 }
 
