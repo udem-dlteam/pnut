@@ -17,6 +17,7 @@ MAX_CYCLE=100000
 LEA=0; IMM=1; REF=2; JMP=3; JSR=4; BZ=5; BNZ=6; ENT=7; ADJ=8; LEV=9; LI=10; LC=11; SI=12; SC=13; PSH=14; OR=15; XOR=16; AND=17; EQ=18; NE=19; LT=20; GT=21; LE=22; GE=23; SHL=24; SHR=25; ADD=26; SUB=27; MUL=28; DIV=29; MOD=30; OPEN=31; READ=32; CLOS=33; PRTF=34; MALC=35; FREE=36; MSET=37; MCMP=38; EXIT=39;
 
 INITIAL_STACK_POS=1000000
+INITIAL_HEAP_POS=0
 sp=$INITIAL_STACK_POS
 push_stack() {
   : $((sp--))
@@ -27,7 +28,7 @@ pop_stack() {
   : $((sp++))
 }
 
-dat=0
+dat=$INITIAL_HEAP_POS
 push_data() {
   : $((_data_$dat=$1))
   : $((dat++))
@@ -292,9 +293,23 @@ read_instructions() {
   while : ; do
     case "$token" in
       EOF) break ;;
-      INTEGER) push_data $value ;;
+      INTEGER)
+        if [ $patch_next_imm = "true" ] ; then
+          value=$(($value + $patch))
+        fi
+        push_data $value ;;
       IDENTIFIER) encode_instruction $value ; push_data $res ;;
       *) echo "Unknown instruction $value" ; exit 1 ;;
+    esac
+    # Because instructions with relative addresses are relative to 0, we need to
+    # patch them to be relative to the start of the instructions.
+    case "$value" in
+      "REF") patch_next_imm="true" ; patch=$1 ;;
+      "JMP") patch_next_imm="true" ; patch=$2 ;;
+      "JSR") patch_next_imm="true" ; patch=$2 ;;
+      "BZ")  patch_next_imm="true" ; patch=$2 ;;
+      "BNZ") patch_next_imm="true" ; patch=$2 ;;
+      *)     patch_next_imm="false"; ;;
     esac
     : $((count++))
     get_token
@@ -539,11 +554,12 @@ run_instructions() {
   done
 }
 
+dat_start=$dat
 read_data
 instr_start=$dat
 get_num
-main_addr=$value
-read_instructions
+main_addr=$(($value + $instr_start))
+read_instructions $dat_start $instr_start
 last_instr=$dat
 if [ $debug -eq 1 ] ; then
   print_instructions
