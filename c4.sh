@@ -306,24 +306,25 @@ run_instructions() {
     : $((pc++))
     : $((cycle++))
 
-    debug_str=""
-    instr_str=""
-
     if [ $i -le $ADJ ] ; then
       : $((imm = _data_$pc))
       : $((pc++))
-      decode_instruction $i
-      instr_str=$debug_str$(echo "$res  $imm")
-    else
-      decode_instruction $i
-      instr_str=$debug_str$(echo "$res")
     fi
 
     if [ $trace -eq 1 ] ; then
-      # State
+      debug_str=""
+      instr_str=""
+      # Current instruction
+      decode_instruction $i
+      if [ $i -le $ADJ ] ; then
+        instr_str=$debug_str$(echo "$res  $imm")
+      else
+        instr_str=$debug_str$(echo "$res")
+      fi
+
+      # VM registers
       debug_str="$cycle> \n    $instr_str\n    pc = $pc, sp = $sp, bp = $bp, a = $a"
-      # echo $debug_str
-      # Show stack
+      # Stack
       # Because the stack may contain undefined values, this code is incompatible with the set -u option
       stack_ix=$INITIAL_STACK_POS
       debug_str="$debug_str\n    Stack:"
