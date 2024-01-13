@@ -366,7 +366,7 @@ run_instructions() {
       fi
 
       # VM registers
-      debug_str="$cycle> \n    $instr_str\n    pc = $pc, sp = $sp, bp = $bp, a = $a"
+      debug_str="$cycle> \n    $instr_str\n    pc = $pc, sp = $sp, bp = $bp, hp = $dat, a = $a"
       # Stack
       # Because the stack may contain undefined values, this code is incompatible with the set -u option
       if [ $trace_stack -eq 1 ] ; then
