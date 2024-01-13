@@ -335,7 +335,7 @@ int main(int argc, char **argv)
 {
   int fd, bt, ty, poolsz, *idmain;
   int *pc, *sp, *bp, a, cycle; // vm registers
-  int i, *t; // temps
+  int i, *t, *spstart, *stack_ix; // temps
 
   int *estart;  // start of emitted code
   char *datastart, *datastart2; // start of data/bss
@@ -470,6 +470,7 @@ int main(int argc, char **argv)
 
   // setup stack
   bp = sp = (int *)((int)sp + poolsz);
+  spstart = sp;
   *--sp = EXIT; // call exit if main returns
   *--sp = PSH; t = sp;
   *--sp = argc;
@@ -521,6 +522,15 @@ int main(int argc, char **argv)
          "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
          "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
       if (i <= ADJ) printf(" %d\n", *pc); else printf("\n");
+
+      printf("    pc = %d, sp = %d, bp = %d, a = %d\n", pc, sp, bp, a);
+
+      // Print stack
+      stack_ix = spstart;
+      while (stack_ix > sp) {
+        stack_ix--;
+        printf("    _stack_%d = %d\n", stack_ix, *stack_ix);
+      }
     }
     if      (i == LEA) a = (int)(bp + *pc++);                             // load local address
     else if (i == IMM) a = *pc++;                                         // load global address or immediate
