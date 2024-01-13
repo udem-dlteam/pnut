@@ -5,7 +5,8 @@ set -e # Exit on first error
 
 debug=0
 trace=0
-if [ $trace -eq 0 ] ; then
+trace_stack=0
+if [ $trace_stack -eq 0 ] ; then
   set -u # Exit on using unset variable
 fi
 
@@ -367,12 +368,14 @@ run_instructions() {
       debug_str="$cycle> \n    $instr_str\n    pc = $pc, sp = $sp, bp = $bp, a = $a"
       # Stack
       # Because the stack may contain undefined values, this code is incompatible with the set -u option
-      stack_ix=$INITIAL_STACK_POS
-      debug_str="$debug_str\n    Stack:"
-      while [ $stack_ix -gt $sp ]; do
-        : $((stack_ix--))
-        debug_str="$debug_str\n        _data_$stack_ix = $((_data_$stack_ix))"
-      done
+      if [ $trace_stack -eq 1 ] ; then
+        stack_ix=$INITIAL_STACK_POS
+        debug_str="$debug_str\n    Stack:"
+        while [ $stack_ix -gt $sp ]; do
+          : $((stack_ix--))
+          debug_str="$debug_str\n        _data_$stack_ix = $((_data_$stack_ix))"
+        done
+      fi
       echo $debug_str
     fi
 
