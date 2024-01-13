@@ -317,9 +317,9 @@ run_instructions() {
       # Current instruction
       decode_instruction $i
       if [ $i -le $ADJ ] ; then
-        instr_str=$debug_str$(echo "$res  $imm")
+        instr_str="$debug_str $res  $imm"
       else
-        instr_str=$debug_str$(echo "$res")
+        instr_str="$debug_str $res"
       fi
 
       # VM registers
