@@ -387,133 +387,48 @@ run_instructions() {
     fi
 
     case "$i" in
-      #  if (i == LEA) a = (int)(bp + *pc++);                             // load local address
-      $LEA) a=$((bp + imm)) ;;
-      #  if (i == IMM) a = *pc++;                                         // load global address or immediate
-      $IMM) a=$imm ;;
-      #  if (i == REF) a = *pc++;                                         // load global address
-      $REF) a=$imm ;;
-      #  if (i == JMP) pc = (int *)*pc;                                   // jump
-      $JMP) pc=$imm ;;
-      #  if (i == JSR) { *--sp = (int)(pc + 1); pc = (int *)*pc; }        // jump to subroutine
-      $JSR)
-        push_stack $pc # Not (pc + 1) because we already incremented pc when getting imm
-        pc=$imm
-        ;;
-      #  if (i == BZ)  pc = a ? pc + 1 : (int *)*pc;                      // branch if zero
-      $BZ)
-        if [ $a -eq 0 ] ; then
-          pc=$imm
-        fi
-        ;;
-      #  if (i == BNZ) pc = a ? (int *)*pc : pc + 1;                      // branch if not zero
-      $BNZ)
-        if [ $a -ne 0 ] ; then
-          pc=$imm
-        fi
-        ;;
-      #  if (i == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }     // enter subroutine
-      $ENT)
+      "$LEA") a=$((bp + imm)) ;;                # a = (int)(bp + *pc++);
+      "$IMM") a=$imm ;;                         # a = *pc++;
+      "$REF") a=$imm ;;                         # a = *pc++;
+      "$JMP") pc=$imm ;;                        # pc = (int *)*pc;
+      "$JSR") push_stack $pc ; pc=$imm ;;       # { *--sp = (int)(pc + 1); pc = (int *)*pc; }
+      "$BZ") [ $a -eq 0 ] && pc=$imm ;;         # pc = a ? pc + 1 : (int *)*pc;
+      "$BNZ") [ $a - ne 0 ] && pc=$imm ;;       # pc = a ? (int *)*pc : pc + 1;
+      "$ENT")                                   # { *--sp = (int)bp; bp = sp; sp = sp - *pc++; } // enter subroutine
         push_stack $bp
         bp=$sp
         sp=$((sp - imm))
         ;;
-      #  if (i == ADJ) sp = sp + *pc++;                                   // stack adjust
-      $ADJ)
-        sp=$((sp + imm))
-        ;;
-      #  if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
-      $LEV)
+      "$ADJ") sp=$((sp + imm)) ;;               # sp += *pc++; // stack adjust
+      "$LEV")                                   # { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
         sp=$bp
         bp=$((_data_$sp))
         sp=$((sp + 1))
         pc=$((_data_$sp))
         sp=$((sp + 1))
         ;;
-      #  if (i == LI)  a = *(int *)a;                                     // load int
-      $LI)
-        a=$((_data_$a))
-        ;;
-      #  if (i == LC)  a = *(char *)a;                                    // load char
-      $LC)
-        a=$((_data_$a))
-        ;;
-      #  if (i == SI)  *(int *)*sp++ = a;                                 // store int
-      $SI)
-        : $((_data_$((_data_$sp))=$a))
-        ;;
-      #  if (i == SC)  a = *(char *)*sp++ = a;                            // store char
-      $SC)
-        : $((_data_$((_data_$sp))=$a))
-        ;;
-      #  if (i == PSH) *--sp = a;                                         // push
-      $PSH)
-        push_stack $a
-        ;;
-      $OR)
-        pop_stack
-        a=$((res | a))
-        ;;
-      $XOR)
-        pop_stack
-        a=$((res ^ a))
-        ;;
-      $AND)
-        pop_stack
-        a=$((res & a))
-        ;;
-      $EQ)
-        pop_stack
-        a=$((res == a))
-        ;;
-      $NE)
-        pop_stack
-        a=$((res != a))
-        ;;
-      $LT)
-        pop_stack
-        a=$((res < a))
-        ;;
-      $GT)
-        pop_stack
-        a=$((res > a))
-        ;;
-      $LE)
-        pop_stack
-        a=$((res <= a))
-        ;;
-      $GE)
-        pop_stack
-        a=$((res >= a))
-        ;;
-      $SHL)
-        pop_stack
-        a=$((res << a))
-        ;;
-      $SHR)
-        pop_stack
-        a=$((res >> a))
-        ;;
-      $ADD)
-        pop_stack
-        a=$((res + a))
-        ;;
-      $SUB)
-        pop_stack
-        a=$((res - a))
-        ;;
-      $MUL)
-        pop_stack
-        a=$((res * a))
-        ;;
-      $DIV)
-        pop_stack
-        a=$((res / a))
-        ;;
-      $MOD)
-        pop_stack
-        a=$((res % a))
-        ;;
+      "$LI") a=$((_data_$a)) ;;                 # a = *(int *)a;
+      "$LC") a=$((_data_$a)) ;;                 # a = *(char *)a;
+      "$SI") : $((_data_$((_data_$sp))=$a)) ;;  # *(int *)*sp++ = a;
+      "$SC") : $((_data_$((_data_$sp))=$a)) ;;  # a = *(char *)*sp++ = a;
+      "$PSH") push_stack "$a" ;;                # *--sp = a;
+      "$OR")  pop_stack; a=$((res | a)) ;;
+      "$XOR") pop_stack; a=$((res ^ a)) ;;
+      "$AND") pop_stack; a=$((res & a)) ;;
+      "$EQ")  pop_stack; a=$((res == a)) ;;
+      "$NE")  pop_stack; a=$((res != a)) ;;
+      "$LT")  pop_stack; a=$((res < a)) ;;
+      "$GT")  pop_stack; a=$((res > a)) ;;
+      "$LE")  pop_stack; a=$((res <= a)) ;;
+      "$GE")  pop_stack; a=$((res >= a)) ;;
+      "$SHL") pop_stack; a=$((res << a)) ;;
+      "$SHR") pop_stack; a=$((res >> a)) ;;
+      "$ADD") pop_stack; a=$((res + a)) ;;
+      "$SUB") pop_stack; a=$((res - a)) ;;
+      "$MUL") pop_stack; a=$((res * a)) ;;
+      "$DIV") pop_stack; a=$((res / a)) ;;
+      "$MOD") pop_stack; a=$((res % a)) ;;
+      # if (i == OPEN) a = open((char *)sp[1], *sp);
       $OPEN)
         pop_stack
         a=$(open $res $a)
