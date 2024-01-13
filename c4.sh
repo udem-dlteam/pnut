@@ -3,10 +3,11 @@
 # set -x # Prints all commands run
 set -e # Exit on first error
 
-debug=0
-trace=0
-trace_stack=0
-if [ $trace_stack -eq 0 ] ; then
+debug=0       # Print debug information, mostly during initialization
+trace=0       # Trace the execution of the VM
+trace_stack=0 # Trace the stack when tracing instructions
+strict_mode=1 # Ensures that all variables are initialized before use
+if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
   set -u # Exit on using unset variable
 fi
 
