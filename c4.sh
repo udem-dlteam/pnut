@@ -6,6 +6,7 @@ set -e # Exit on first error
 debug=0       # Print debug information, mostly during initialization
 trace=0       # Trace the execution of the VM
 trace_stack=0 # Trace the stack when tracing instructions
+trace_heap=1  # Trace the heap when tracing instructions
 strict_mode=1 # Ensures that all variables are initialized before use
 if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
   set -u # Exit on using unset variable
@@ -375,6 +376,17 @@ run_instructions() {
         while [ $stack_ix -gt $sp ]; do
           : $((stack_ix--))
           debug_str="$debug_str\n        _data_$stack_ix = $((_data_$stack_ix))"
+        done
+      fi
+
+      # Heap
+      if [ $trace_heap -eq 1 ] ; then
+        heap_ix=$INITIAL_HEAP_POS
+        debug_str="$debug_str\n    Heap:"
+        echo "heap pointer: $dat"
+        while [ $heap_ix -lt $dat ]; do
+          debug_str="$debug_str\n        _data_$heap_ix = $((_data_$heap_ix))"
+          : $((heap_ix++))
         done
       fi
       echo $debug_str
