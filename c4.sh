@@ -473,27 +473,32 @@ run_instructions() {
   done
 }
 
-dat_start=$dat
-read_data
-instr_start=$dat
-get_num
-main_addr=$(($value + $instr_start))
-read_instructions $dat_start $instr_start
-last_instr=$dat
-if [ $debug -eq 1 ] ; then
-  print_instructions
-fi
+run() {
+  dat_start=$dat
+  read_data
+  instr_start=$dat
+  get_num
+  main_addr=$(($value + $instr_start))
+  read_instructions $dat_start $instr_start
+  last_instr=$dat
+  if [ $debug -eq 1 ] ; then
+    print_instructions
+  fi
 
-# sp=0;
-pc=$main_addr; bp=$sp; a=0; cycle=0; # vm registers
-i=0; t=0 # temps
+  # sp=0;
+  pc=$main_addr; bp=$sp; a=0; cycle=0; # vm registers
+  i=0; t=0 # temps
 
-# setup first stack frame
-push_stack $EXIT # call exit if main returns
-push_stack $PSH
-t=$sp
-push_stack $(($# + 1)) # argc
-push_stack 0 # argv # TODO: We need pack the arguments into the heap and pass a pointer here
-push_stack $t
+  # setup first stack frame
+  push_stack $EXIT # call exit if main returns
+  push_stack $PSH
+  t=$sp
+  push_stack $(($# + 1)) # argc
+  push_stack 0 # argv # TODO: We need pack the arguments into the heap and pass a pointer here
+  push_stack $t
 
-run_instructions
+  run_instructions
+}
+
+# Run the program
+run < "$1"
