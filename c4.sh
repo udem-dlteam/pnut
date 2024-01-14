@@ -31,6 +31,19 @@ pop_stack() {
   : $((sp++))
 }
 
+alloc_memory() {
+  res=$dat
+  : $((dat += $1))
+  # Need to initialize the memory to 0 or else `set -u` will complain
+  if [ $strict_mode -eq 1 ] ; then
+    ix=$res
+    while [ $ix -lt $dat ]; do
+      : $((_data_$ix=0))
+      : $((ix++))
+    done
+  fi
+}
+
 dat=$INITIAL_HEAP_POS
 push_data() {
   : $((_data_$dat=$1))
@@ -39,6 +52,35 @@ push_data() {
 pop_data() {
   : $((dat--))
   : $((res = _data_$dat))
+}
+
+# Push a Shell string to the VM heap. Returns a reference to the string in $addr.
+unpack_string() {
+  addr=$dat
+  src_buf="$1"
+  while [ -n "$src_buf" ] ; do
+    char="$src_buf"                    # remember current buffer
+    rest="${src_buf#?}"                # remove the first char
+    char="${char%"$rest"}"             # remove all but first char
+    src_buf="${src_buf#?}"             # remove the current char from $src_buf
+    code=$(LC_CTYPE=C printf "%d" "'$char'")
+    push_data "$code"
+  done
+  push_data 0
+}
+
+# Convert a VM string reference to a Shell string. $res is set to the result.
+pack_string() {
+  addr="$1"
+  res=""
+  while [ "$((_data_$addr))" -ne 0 ] ; do
+    char="$((_data_$addr))"
+    addr=$((addr + 1))
+    case $char in
+      10) res="$res\n" ;; # 10 == '\n'
+      *) res=$res$(printf "\\$(printf "%o" "$char")") # Decode
+    esac
+  done
 }
 
 src_buf=
@@ -505,12 +547,18 @@ run() {
   push_stack $EXIT # call exit if main returns
   push_stack $PSH
   t=$sp
-  push_stack $(($# + 1)) # argc
-  push_stack 0 # argv # TODO: We need pack the arguments into the heap and pass a pointer here
+  argc=$#; push_stack $argc # argc
+  alloc_memory $argc ; argv_ptr=$res ; push_stack $res # argv
+
+  while [ $# -ge 1 ]; do
+    unpack_string "$1"
+    : $((_data_$argv_ptr = $addr))
+    : $((argv_ptr++))
+    shift
+  done
   push_stack $t
 
   run_instructions
 }
 
-# Run the program
-run < "$1"
+run $@ < "$1"
