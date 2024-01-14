@@ -8,9 +8,12 @@ trace=0       # Trace the execution of the VM
 trace_stack=0 # Trace the stack when tracing instructions
 trace_heap=1  # Trace the heap when tracing instructions
 strict_mode=1 # Ensures that all variables are initialized before use
-if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
-  set -u # Exit on using unset variable
-fi
+enable_strict_mode() {
+  if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
+    set -u # Exit on using unset variable
+  fi
+}
+enable_strict_mode
 
 # Infinite loop breaker.
 # On a M1 CPU, 35518 cycles take 18 seconds to run, so 100000 is a minute of execution.
@@ -29,6 +32,9 @@ push_stack() {
 pop_stack() {
   : $((res = _data_$sp))
   : $((sp++))
+}
+at_stack() {
+  : $((res = _data_$(($1 + $sp))))
 }
 
 alloc_memory() {
@@ -110,6 +116,27 @@ get_char()                           # get next char from source into $char
   char="$src_buf"                    # remember current buffer
   rest="${src_buf#?}"                # remove the first char
   char="${char%"$rest"}"             # remove all but first char
+}
+
+# Used to implement the read instruction.
+# Does not work with NUL characters.
+read_n_char() {
+  count=$1
+  buf_ptr=$2
+  while [ "$count" != "0" ] ; do
+    get_char
+    case "$char" in
+      EOF) break ;;
+      NEWLINE) code=10 ;; # 10 == '\n'
+      *) code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code ;;
+    esac
+
+    : $((_data_$buf_ptr=$code))
+    : $((count--))
+    : $((buf_ptr++))
+  done
+
+  : $((_data_$buf_ptr=0))
 }
 
 # Same as get_char, but \ is recognized as the start of an escape sequence.
@@ -218,19 +245,12 @@ read_data() {
     else
     code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code
     fi
-    # echo "Pushing $code"
     push_data $code
     : $((count--))
   done
 
   # Read final newline
   get_char
-
-  # Repeat data, useful for debugging
-  # while [ "$dat" != "0" ] ; do
-  #   pop_data
-  #   echo $res
-  # done
 }
 
 # Encode instructions to internal representation.
@@ -487,42 +507,82 @@ run_instructions() {
       "$MUL") pop_stack; a=$((res * a)) ;;
       "$DIV") pop_stack; a=$((res / a)) ;;
       "$MOD") pop_stack; a=$((res % a)) ;;
-      # if (i == OPEN) a = open((char *)sp[1], *sp);
-      $OPEN)
-        pop_stack
-        a=$(open $res $a)
+      "$OPEN")                                  # a = open((char *)sp[1], *sp);
+        # We represent file descriptors as strings. That means that modes and offsets do not work.
+        # These limitations are acceptable since c4.cc does not use them.
+        # TODO: Packing and unpacking the string is a lazy way of copying a string
+        at_stack 1
+        pack_string "$res"
+        unpack_string "$res"
+        a=$addr
         ;;
-      $READ)
-        pop_stack
-        a=$(read $res $a)
+      "$READ")                                  # a = read(sp[2], (char *)sp[1], *sp);
+        at_stack 2; fd=$res
+        at_stack 1; buf=$res
+        at_stack 0; count=$res
+        pack_string "$fd"
+        read_n_char $count $buf < "$res" # We don't want to use cat because it's not pure Shell
         ;;
-      $CLOS)
-        pop_stack
-        a=$(close $a)
+      "$CLOS")                                  # a = close(*sp);
+        # NOP
         ;;
-      $PRTF)
-        echo "PRINT not defined"
-        exit 1
+      "$PRTF")                                  # { t = sp + pc[1]; a = printf((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
+        # Disable strict mode because printf takes optional paramters and can read uninitialized values
+        set +u
+        # this part is weird. We look 2 bytes ahead to get the number of arguments.
+        # This works because all PRTF instructions are followed by a ADJ with the number of arguments to printf as parameter.
+        : $((count = _data_$((pc + 1))))
+
+        at_stack $((count - 1)); fmt=$res
+        at_stack $((count - 2)); arg1=$res
+        at_stack $((count - 3)); arg2=$res
+        at_stack $((count - 4)); arg3=$res
+        at_stack $((count - 5)); arg4=$res
+        at_stack $((count - 6)); arg5=$res
+
+        pack_string "$fmt"
+        # Not sure about how the arguments are interpolated here. If each arg is quoted, printf prints multiple strings.
+        # If they are not quoted, printf prints a single string but I worry that spaces in the arguments will be
+        # interpreted as multiple arguments. That doesn't seem to be the case though.
+        printf "$res" "$arg1 $arg2 $arg3 $arg4 $arg5"
+        enable_strict_mode # Reset the script mode
         ;;
-      $MALC)
-        echo "MALLOC not defined"
-        exit 1
+      "$MALC")                                  # a = (int)malloc(*sp);
+        # Simple bump allocator, no GC
+        mem_to_alloc=$((_data_$sp))
+        alloc_memory $mem_to_alloc
+        a=$res
         ;;
-      $FREE)
-        echo "FREE not defined"
-        exit 1
+      "$FREE")                                  # free((void *)*sp);
+        # NOP
+        # Maybe zero out the memory to make debugging easier?
         ;;
-      $MSET)
-        echo "MEMSET not defined"
-        exit 1
+      "$MSET")                                  # a = (int)memset((char *)sp[2], sp[1], *sp);
+        at_stack 2; dst=$res
+        at_stack 1; val=$res
+        at_stack 0; len=$res
+        ix=0
+        while [ $ix -lt $len ]; do
+          : $((_data_$((dst + ix)) = val))
+          : $((ix++))
+        done
         ;;
-      $MCMP)
-        echo "MCMP not defined"
-        exit 1
+      "$MCMP")                                  # a = memcmp((char *)sp[2], (char *)sp[1], *sp);
+        at_stack 2; op1=$res
+        at_stack 1; op2=$res
+        at_stack 0; len=$res
+        ix=0; a=0
+        while [ $ix -lt $len ]; do
+          if [ $((_data_$((op1 + ix)))) -ne $((_data_$((op2 + ix)))) ] ; then
+            # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
+            : $((a = _data_$((op1 + ix)) - _data_$((op2 + ix))))
+            break
+          fi
+        done
         ;;
-      $EXIT)
+      "$EXIT")                                  # { printf("exit(%d) cycle = %d\n", *sp, cycle); return *sp; }
         echo "exit($a) cycle = $cycle"
-        exit $a
+        exit "$a"
         ;;
       *)
         echo "unknown instruction = $i! cycle = $cycle"
