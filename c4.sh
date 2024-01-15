@@ -427,7 +427,12 @@ run_instructions() {
         debug_str="$debug_str\n    Heap:"
         echo "heap pointer: $dat"
         while [ $heap_ix -lt $dat ]; do
-          debug_str="$debug_str\n        _data_$heap_ix = $((_data_$heap_ix))"
+          ascii=$((_data_$heap_ix))
+          char=""
+          if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
+            char=$(printf "\\$(printf "%o" "$ascii")")
+          fi
+          debug_str="$debug_str\n        _data_$heap_ix = $ascii  ($char)"
           : $((heap_ix++))
         done
       fi
