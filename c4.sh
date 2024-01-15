@@ -423,40 +423,16 @@ run_instructions() {
       # Current instruction
       decode_instruction $i
       if [ $i -le $ADJ ] ; then
-        instr_str="$debug_str $res  $imm"
+        instr_str="$res  $imm"
       else
-        instr_str="$debug_str $res"
+        instr_str="$res"
       fi
 
       # VM registers
-      debug_str="$cycle> \n    $instr_str\n    pc = $pc, sp = $sp, bp = $bp, hp = $dat, a = $a"
-      # Stack
-      # Because the stack may contain undefined values, this code is incompatible with the set -u option
-      if [ $trace_stack -eq 1 ] ; then
-        stack_ix=$INITIAL_STACK_POS
-        debug_str="$debug_str\n    Stack:"
-        while [ $stack_ix -gt $sp ]; do
-          : $((stack_ix--))
-          debug_str="$debug_str\n        _data_$stack_ix = $((_data_$stack_ix))"
-        done
-      fi
-
-      # Heap
-      if [ $trace_heap -eq 1 ] ; then
-        heap_ix=$INITIAL_HEAP_POS
-        debug_str="$debug_str\n    Heap:"
-        echo "heap pointer: $dat"
-        while [ $heap_ix -lt $dat ]; do
-          ascii=$((_data_$heap_ix))
-          char=""
-          if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
-            char=$(printf "\\$(printf "%o" "$ascii")")
-          fi
-          debug_str="$debug_str\n        _data_$heap_ix = $ascii  ($char)"
-          : $((heap_ix++))
-        done
-      fi
-      echo $debug_str
+      echo "$cycle>\n    $instr_str"
+      show_vm_state
+      if [ $trace_stack -eq 1 ] ; then show_stack ; fi
+      if [ $trace_heap -eq 1 ] ; then show_heap ; fi
     fi
 
     # Infinite loop breaker
@@ -624,6 +600,37 @@ run() {
   push_stack $t
 
   run_instructions
+}
+
+show_vm_state() {
+  echo "    pc = $pc, sp = $sp, bp = $bp, hp = $dat, a = $a"
+}
+
+# Because the stack may contain undefined values, this code is incompatible with the set -u option
+show_stack() {
+  debug_str="    Stack:"
+  stack_ix=$INITIAL_STACK_POS
+  debug_str="$debug_str\n    Stack:"
+  while [ $stack_ix -gt $sp ]; do
+    : $((stack_ix--))
+    debug_str="$debug_str\n        _data_$stack_ix = $((_data_$stack_ix))"
+  done
+  echo $debug_str
+}
+
+show_heap() {
+  heap_ix=$INITIAL_HEAP_POS
+  debug_str="    Heap:"
+  while [ $heap_ix -lt $dat ]; do
+    ascii=$((_data_$heap_ix))
+    char=""
+    if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
+      char=$(printf "\\$(printf "%o" "$ascii")")
+    fi
+    debug_str="$debug_str\n        _data_$heap_ix = $ascii  ($char)"
+    : $((heap_ix++))
+  done
+  echo $debug_str
 }
 
 run $@ < "$1"
