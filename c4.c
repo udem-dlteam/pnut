@@ -25,8 +25,9 @@ int *e, *le,  // current position in emitted code
     loc,      // local variable offset
     line,     // current line number
     src,      // print source and assembly flag
+    debug,    // print executed instructions
     ops,      // print opcodes
-    debug;    // print executed instructions
+    portable; // generate portable code by making ptr, int and char the same size (1)
 
 // tokens and classes (operators last and in precedence order)
 enum {
@@ -141,14 +142,14 @@ void expr(int lev)
   else if (tk == '"') {
     *++e = REF; *++e = ival; next();
     while (tk == '"') next();
-    data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR;
+    data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR; // Not sure if this needs to check portable here
   }
   else if (tk == Sizeof) {
     next(); if (tk == '(') next(); else { printf("%d: open paren expected in sizeof\n", line); exit(-1); }
     ty = INT; if (tk == Int) next(); else if (tk == Char) { next(); ty = CHAR; }
     while (tk == Mul) { next(); ty = ty + PTR; }
     if (tk == ')') next(); else { printf("%d: close paren expected in sizeof\n", line); exit(-1); }
-    *++e = IMM; *++e = (ty == CHAR) ? sizeof(char) : sizeof(int);
+    *++e = IMM; *++e = portable ? 1 : (ty == CHAR) ? sizeof(char) : sizeof(int);
     ty = INT;
   }
   else if (tk == Id) {
@@ -210,7 +211,7 @@ void expr(int lev)
     else if (*e == LI) { *e = PSH; *++e = LI; }
     else { printf("%d: bad lvalue in pre-increment\n", line); exit(-1); }
     *++e = PSH;
-    *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
+    *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof(int) : sizeof(char);
     *++e = (t == Inc) ? ADD : SUB;
     *++e = (ty == CHAR) ? SC : SI;
   }
@@ -247,13 +248,13 @@ void expr(int lev)
     else if (tk == Shr) { next(); *++e = PSH; expr(Add); *++e = SHR; ty = INT; }
     else if (tk == Add) {
       next(); *++e = PSH; expr(Mul);
-      if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL;  }
+      if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = MUL;  }
       *++e = ADD;
     }
     else if (tk == Sub) {
       next(); *++e = PSH; expr(Mul);
-      if (t > PTR && t == ty) { *++e = SUB; *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = DIV; ty = INT; }
-      else if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL; *++e = SUB; }
+      if (t > PTR && t == ty) { *++e = SUB; *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = DIV; ty = INT; }
+      else if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = MUL; *++e = SUB; }
       else *++e = SUB;
     }
     else if (tk == Mul) { next(); *++e = PSH; expr(Inc); *++e = MUL; ty = INT; }
@@ -263,17 +264,17 @@ void expr(int lev)
       if (*e == LC) { *e = PSH; *++e = LC; }
       else if (*e == LI) { *e = PSH; *++e = LI; }
       else { printf("%d: bad lvalue in post-increment\n", line); exit(-1); }
-      *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
+      *++e = PSH; *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof(int) : sizeof(char);
       *++e = (tk == Inc) ? ADD : SUB;
       *++e = (ty == CHAR) ? SC : SI;
-      *++e = PSH; *++e = IMM; *++e = (ty > PTR) ? sizeof(int) : sizeof(char);
+      *++e = PSH; *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof(int) : sizeof(char);
       *++e = (tk == Inc) ? SUB : ADD;
       next();
     }
     else if (tk == Brak) {
       next(); *++e = PSH; expr(Assign);
       if (tk == ']') next(); else { printf("%d: close bracket expected\n", line); exit(-1); }
-      if (t > PTR) { *++e = PSH; *++e = IMM; *++e = sizeof(int); *++e = MUL;  }
+      if (t > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = MUL;  }
       else if (t < PTR) { printf("%d: pointer type expected\n", line); exit(-1); }
       *++e = ADD;
       *++e = ((ty = t - PTR) == CHAR) ? LC : LI;
@@ -344,6 +345,7 @@ int main(int argc, char **argv)
   if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
   if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
   if (argc > 0 && **argv == '-' && (*argv)[1] == 'b') { ops = 1; --argc; ++argv; }
+  if (argc > 0 && **argv == '-' && (*argv)[1] == 'p') { portable = 1; --argc; ++argv; }
   if (argc < 1) { printf("usage: c4 [-s] [-d] file ...\n"); return -1; }
 
   if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
