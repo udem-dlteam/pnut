@@ -554,6 +554,7 @@ run_instructions() {
             : $((a = _data_$((op1 + ix)) - _data_$((op2 + ix))))
             break
           fi
+          : $((ix = ix + 1))
         done
         ;;
       "$EXIT")                                  # { printf("exit(%d) cycle = %d\n", *sp, cycle); return *sp; }
