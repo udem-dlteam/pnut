@@ -75,13 +75,19 @@ unpack_string() {
   push_data 0
 }
 
-# Convert a VM string reference to a Shell string. $res is set to the result.
+# Convert a VM string reference to a Shell string.
+# $res is set to the result, and $len is set to the length of the string.
 pack_string() {
-  addr="$1"
-  res=""
-  while [ "$((_data_$addr))" -ne 0 ] ; do
+  addr="$1";  shift
+  max_len=100000000
+  delim=0
+  if [ $# -ge 1 ] ; then delim="$1" ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then max_len="$1" ; shift ; fi # Optional max length
+  len=0; res=""
+  while [ "$((_data_$addr))" -ne $delim ] && [ $max_len -gt $len ] ; do
     char="$((_data_$addr))"
     addr=$((addr + 1))
+    len=$((len + 1))
     case $char in
       10) res="$res\n" ;; # 10 == '\n'
       *) res=$res$(printf "\\$(printf "%o" "$char")") # Decode
