@@ -95,6 +95,99 @@ pack_string() {
   done
 }
 
+# C like printf function.
+# Arg 1 is the number of arguments to printf.
+# Arg 2 is the format string.
+# Arg 3 to n are the arguments to printf.
+# Supports the following format specifiers:
+#   %d - decimal integer
+#   %s - string
+#   %c - character
+#   %x - hexadecimal integer
+#   %.*s - string with length
+#   %n.ms - string with length (n) and padding (m)
+c_printf() {
+  count="$1" shift
+  fmt_ptr="$1" shift
+  str=""
+  mod=0
+  while [ "$((_data_$fmt_ptr))" -ne 0 ] ; do
+    head="$((_data_$fmt_ptr))"
+    head_char=$(printf "\\$(printf "%o" "$head")") # Decode
+    fmt_ptr=$((fmt_ptr + 1))
+    if [ $mod -eq 1 ] ; then
+      case $head_char in
+        'd') # 100 = 'd' Decimal integer
+          imm="$1" ; shift
+          str="$str$imm"
+          ;;
+        'c') # 99 = 'c' Character
+          char="$1" ; shift
+          # Don't need to handle non-printable characters the only use of %c is for printable characters
+          str="$str$(printf "\\$(printf "%o" "$char")")"
+          ;;
+        'x') # 120 = 'x' Hexadecimal integer
+          imm="$1" ; shift
+          # Don't need to handle non-printable characters the only use of %c is for printable characters
+          str="$str$(printf "%x" "$imm")"
+          ;;
+        's') # 115 = 's' String
+          str_ref="$1" ; shift
+          pack_string "$str_ref" # result in $res
+          str="$str$res"
+          ;;
+        '.') # String with length
+          pack_string $fmt_ptr 0 2 # Read next 2 characters
+          fmt_ptr=$((fmt_ptr + 2))
+          if [ "$res" = "*s" ]; then
+            len="$1" ; shift
+            str_ref="$1" ; shift
+            pack_string $str_ref 0 $len # result in $res
+            str="$str$res"
+          else
+            echo "Unknown format specifier: %.$res" ; exit 1
+          fi
+          ;;
+        [0-9])                         # parse integer
+          # Get max length (with padding)
+          pack_string $fmt_ptr 46 # Read until '.' or end of string
+          fmt_ptr=$((fmt_ptr + len + 1))
+          min_len=$head_char$res # Don't forget the first digit we've already read
+
+          # Get string length
+          pack_string $fmt_ptr 115 # Read until 's' or end of string
+          fmt_ptr=$((fmt_ptr + len))
+          str_len=$res
+
+          head="$((_data_$fmt_ptr))"
+          head_char=$(printf "\\$(printf "%o" "$head")") # Decode
+          fmt_ptr=$((fmt_ptr + 1))
+          if [ "$head_char" = 's' ]; then
+            str_ref="$1" ; shift
+            pack_string $str_ref 0 $str_len # result in $res
+              : $((padding_len = $min_len - $len))
+            while [ $padding_len -gt 0 ]; do # Pad string so it has at least $min_len characters
+              res=" $res"
+                : $((padding_len--))
+              done
+            str="$str$res"
+          else
+            echo "Unknown format specifier: '%$min_len.$str_len$head_char'" ; exit 1;
+          fi
+          ;;
+        *)
+          echo "Unknown format specifier %$head_char"; exit 1
+          str="$str$head_char" ;;
+      esac
+      mod=0
+    else
+      if [ "$head_char" = '%' ]; then mod=1
+      else str="$str$head_char" ; fi
+    fi
+  done
+  echo $str
+}
+
 src_buf=
 get_char()                           # get next char from source into $char
 {
@@ -509,10 +602,10 @@ run_instructions() {
         # NOP
         ;;
       "$PRTF")                                  # { t = sp + pc[1]; a = printf((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
-        # Disable strict mode because printf takes optional paramters and can read uninitialized values
+        # Disable strict mode because printf takes optional parameters and can read uninitialized values.
         set +u
-        # this part is weird. We look 2 bytes ahead to get the number of arguments.
-        # This works because all PRTF instructions are followed by a ADJ with the number of arguments to printf as parameter.
+        # This part is weird. We look 2 bytes ahead to get the number of arguments.
+        # It works because all PRTF instructions are followed by a ADJ with the number of arguments to printf as parameter.
         : $((count = _data_$((pc + 1))))
 
         at_stack $((count - 1)); fmt=$res
@@ -522,11 +615,7 @@ run_instructions() {
         at_stack $((count - 5)); arg4=$res
         at_stack $((count - 6)); arg5=$res
 
-        pack_string "$fmt"
-        # Not sure about how the arguments are interpolated here. If each arg is quoted, printf prints multiple strings.
-        # If they are not quoted, printf prints a single string but I worry that spaces in the arguments will be
-        # interpreted as multiple arguments. That doesn't seem to be the case though.
-        printf "$res" "$arg1 $arg2 $arg3 $arg4 $arg5"
+        c_printf $count "$fmt" "$arg1" "$arg2" "$arg3" "$arg4" "$arg5"
         enable_strict_mode # Reset the script mode
         ;;
       "$MALC")                                  # a = (int)malloc(*sp);
