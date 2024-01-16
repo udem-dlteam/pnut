@@ -706,6 +706,8 @@ run() {
   done
   push_stack $t
 
+  # exit 1
+
   run_instructions
 }
 
@@ -715,29 +717,26 @@ show_vm_state() {
 
 # Because the stack may contain undefined values, this code is incompatible with the set -u option
 show_stack() {
-  debug_str="    Stack:"
+  echo "    Stack:"
   stack_ix=$INITIAL_STACK_POS
-  debug_str="$debug_str\n    Stack:"
   while [ $stack_ix -gt $sp ]; do
     : $((stack_ix--))
-    debug_str="$debug_str\n        _data_$stack_ix = $((_data_$stack_ix))"
+    echo "        _data_$stack_ix = $((_data_$stack_ix))"
   done
-  echo $debug_str
 }
 
 show_heap() {
   heap_ix=$INITIAL_HEAP_POS
-  debug_str="    Heap:"
+  echo "    Heap:"
   while [ $heap_ix -lt $dat ]; do
     ascii=$((_data_$heap_ix))
     char=""
     if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
       char=$(printf "\\$(printf "%o" "$ascii")")
     fi
-    debug_str="$debug_str\n        _data_$heap_ix = $ascii  ($char)"
+    echo "        _data_$heap_ix = $ascii  ($char)"
     : $((heap_ix++))
   done
-  echo $debug_str
 }
 
 run $@ < "$1"
