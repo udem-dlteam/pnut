@@ -8,21 +8,18 @@ trace=0       # Trace the execution of the VM
 trace_stack=0 # Trace the stack when tracing instructions
 trace_heap=1  # Trace the heap when tracing instructions
 strict_mode=1 # Ensures that all variables are initialized before use
-enable_strict_mode() {
-  if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
-    set -u # Exit on using unset variable
-  fi
-}
-enable_strict_mode
+if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
+  set -u # Exit on using unset variable
+fi
 
 # Infinite loop breaker.
 # On a M1 CPU, 35518 cycles take 18 seconds to run, so 100000 is a minute of execution.
-MAX_CYCLE=100000
+MAX_CYCLE=5000000
 
 # Opcodes
 LEA=0; IMM=1; REF=2; JMP=3; JSR=4; BZ=5; BNZ=6; ENT=7; ADJ=8; LEV=9; LI=10; LC=11; SI=12; SC=13; PSH=14; OR=15; XOR=16; AND=17; EQ=18; NE=19; LT=20; GT=21; LE=22; GE=23; SHL=24; SHR=25; ADD=26; SUB=27; MUL=28; DIV=29; MOD=30; OPEN=31; READ=32; CLOS=33; PRTF=34; MALC=35; FREE=36; MSET=37; MCMP=38; EXIT=39;
 
-INITIAL_STACK_POS=1000000
+INITIAL_STACK_POS=10000000
 INITIAL_HEAP_POS=0
 sp=$INITIAL_STACK_POS
 push_stack() {
@@ -106,9 +103,12 @@ pack_string() {
 #   %x - hexadecimal integer
 #   %.*s - string with length
 #   %n.ms - string with length (n) and padding (m)
+# Shell's printf function cannot be used because it does not support the %.*s
+# format specifier and the strings passed to it need to be unpacked.
 c_printf() {
   count="$1" shift
   fmt_ptr="$1" shift
+  arg_offset=2 # First argument is at stack position ($count - 2)
   str=""
   mod=0
   while [ "$((_data_$fmt_ptr))" -ne 0 ] ; do
@@ -118,21 +118,21 @@ c_printf() {
     if [ $mod -eq 1 ] ; then
       case $head_char in
         'd') # 100 = 'd' Decimal integer
-          imm="$1" ; shift
+          at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); imm=$res
           str="$str$imm"
           ;;
         'c') # 99 = 'c' Character
-          char="$1" ; shift
+          at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); char=$res
           # Don't need to handle non-printable characters the only use of %c is for printable characters
           str="$str$(printf "\\$(printf "%o" "$char")")"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
-          imm="$1" ; shift
+          at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); imm=$res
           # Don't need to handle non-printable characters the only use of %c is for printable characters
           str="$str$(printf "%x" "$imm")"
           ;;
         's') # 115 = 's' String
-          str_ref="$1" ; shift
+          at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); str_ref=$res
           pack_string "$str_ref" # result in $res
           str="$str$res"
           ;;
@@ -140,8 +140,8 @@ c_printf() {
           pack_string $fmt_ptr 0 2 # Read next 2 characters
           fmt_ptr=$((fmt_ptr + 2))
           if [ "$res" = "*s" ]; then
-            len="$1" ; shift
-            str_ref="$1" ; shift
+            at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); len=$res
+            at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); str_ref=$res
             pack_string $str_ref 0 $len # result in $res
             str="$str$res"
           else
@@ -163,7 +163,7 @@ c_printf() {
           head_char=$(printf "\\$(printf "%o" "$head")") # Decode
           fmt_ptr=$((fmt_ptr + 1))
           if [ "$head_char" = 's' ]; then
-            str_ref="$1" ; shift
+            at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); str_ref=$res
             pack_string $str_ref 0 $str_len # result in $res
               : $((padding_len = $min_len - $len))
             while [ $padding_len -gt 0 ]; do # Pad string so it has at least $min_len characters
@@ -602,21 +602,14 @@ run_instructions() {
         # NOP
         ;;
       "$PRTF")                                  # { t = sp + pc[1]; a = printf((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
-        # Disable strict mode because printf takes optional parameters and can read uninitialized values.
-        set +u
-        # This part is weird. We look 2 bytes ahead to get the number of arguments.
-        # It works because all PRTF instructions are followed by a ADJ with the number of arguments to printf as parameter.
+        # Unlike other primitives, PRTF can get a variable number of arguments
+        # and the arity is not encoded in the instruction. Fortunately, all PRTF
+        # instructions are followed by an ADJ instruction with the number of
+        # arguments to printf as parameter. so we can just read the number of
+        # arguments from that instruction (which is 2 words ahead).
         : $((count = _data_$((pc + 1))))
-
         at_stack $((count - 1)); fmt=$res
-        at_stack $((count - 2)); arg1=$res
-        at_stack $((count - 3)); arg2=$res
-        at_stack $((count - 4)); arg3=$res
-        at_stack $((count - 5)); arg4=$res
-        at_stack $((count - 6)); arg5=$res
-
-        c_printf $count "$fmt" "$arg1" "$arg2" "$arg3" "$arg4" "$arg5"
-        enable_strict_mode # Reset the script mode
+        c_printf $count "$fmt"
         ;;
       "$MALC")                                  # a = (int)malloc(*sp);
         # Simple bump allocator, no GC
