@@ -565,7 +565,7 @@ run_instructions() {
       "$JMP") pc=$imm ;;                        # pc = (int *)*pc;
       "$JSR") push_stack $pc ; pc=$imm ;;       # { *--sp = (int)(pc + 1); pc = (int *)*pc; }
       "$BZ") [ $a -eq 0 ] && pc=$imm ;;         # pc = a ? pc + 1 : (int *)*pc;
-      "$BNZ") [ $a - ne 0 ] && pc=$imm ;;       # pc = a ? (int *)*pc : pc + 1;
+      "$BNZ") [ $a -ne 0 ] && pc=$imm ;;       # pc = a ? (int *)*pc : pc + 1;
       "$ENT")                                   # { *--sp = (int)bp; bp = sp; sp = sp - *pc++; } // enter subroutine
         push_stack $bp
         bp=$sp
@@ -581,8 +581,8 @@ run_instructions() {
         ;;
       "$LI") a=$((_data_$a)) ;;                 # a = *(int *)a;
       "$LC") a=$((_data_$a)) ;;                 # a = *(char *)a;
-      "$SI") : $((_data_$((_data_$sp))=$a)) ;;  # *(int *)*sp++ = a;
-      "$SC") : $((_data_$((_data_$sp))=$a)) ;;  # a = *(char *)*sp++ = a;
+      "$SI") : $((_data_$((_data_$sp))=$a)) ; : $((sp++)) ;;  # *(int *)*sp++ = a;
+      "$SC") : $((_data_$((_data_$sp))=$a)) ; : $((sp++)) ;;  # a = *(char *)*sp++ = a;
       "$PSH") push_stack "$a" ;;                # *--sp = a;
       "$OR")  pop_stack; a=$((res | a)) ;;
       "$XOR") pop_stack; a=$((res ^ a)) ;;
