@@ -1,3 +1,5 @@
 out.sh
 tests/*.sh
 tests/*.err
+*.op
+*.o
