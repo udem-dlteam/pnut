@@ -15,7 +15,7 @@ fast_buffer_len=50 # Length of the fast buffer used by get_char
 
 # Infinite loop breaker.
 # On a M1 CPU, 35518 cycles take 18 seconds to run, so 100000 is a minute of execution.
-MAX_CYCLE=5000000
+MAX_CYCLE=10000000
 
 # Opcodes
 LEA=0; IMM=1; REF=2; JMP=3; JSR=4; BZ=5; BNZ=6; ENT=7; ADJ=8; LEV=9; LI=10; LC=11; SI=12; SC=13; PSH=14; OR=15; XOR=16; AND=17; EQ=18; NE=19; LT=20; GT=21; LE=22; GE=23; SHL=24; SHR=25; ADD=26; SUB=27; MUL=28; DIV=29; MOD=30; OPEN=31; READ=32; CLOS=33; PRTF=34; MALC=35; FREE=36; MSET=37; MCMP=38; EXIT=39;
@@ -24,12 +24,12 @@ INITIAL_STACK_POS=10000000
 INITIAL_HEAP_POS=0
 sp=$INITIAL_STACK_POS
 push_stack() {
-  : $((sp--))
+  : $((sp -= 1))
   : $((_data_$sp=$1))
 }
 pop_stack() {
   : $((res = _data_$sp))
-  : $((sp++))
+  : $((sp += 1))
 }
 at_stack() {
   : $((res = _data_$(($1 + $sp))))
@@ -43,7 +43,7 @@ alloc_memory() {
     ix=$res
     while [ $ix -lt $dat ]; do
       : $((_data_$ix=0))
-      : $((ix++))
+      : $((ix += 1))
     done
   fi
 }
@@ -51,10 +51,10 @@ alloc_memory() {
 dat=$INITIAL_HEAP_POS
 push_data() {
   : $((_data_$dat=$1))
-  : $((dat++))
+  : $((dat += 1))
 }
 pop_data() {
-  : $((dat--))
+  : $((dat -= 1))
   : $((res = _data_$dat))
 }
 
@@ -169,7 +169,7 @@ c_printf() {
               : $((padding_len = $min_len - $len))
             while [ $padding_len -gt 0 ]; do # Pad string so it has at least $min_len characters
               res=" $res"
-                : $((padding_len--))
+                : $((padding_len -= 1))
               done
             str="$str$res"
           else
@@ -253,8 +253,8 @@ read_n_char() {
     esac
 
     : $((_data_$buf_ptr=$code))
-    : $((count--))
-    : $((buf_ptr++))
+    : $((count -= 1))
+    : $((buf_ptr += 1))
   done
 
   : $((_data_$buf_ptr=0))
@@ -367,7 +367,7 @@ read_data() {
     code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code
     fi
     push_data $code
-    : $((count--))
+    : $((count -= 1))
   done
 
   # Read final newline
@@ -497,7 +497,7 @@ read_instructions() {
       "BNZ") patch_next_imm="true" ; patch=$2 ;;
       *)     patch_next_imm="false"; ;;
     esac
-    : $((count++))
+    : $((count += 1))
     get_token
   done
   if [ $debug -eq 1 ] ; then
@@ -513,11 +513,11 @@ print_instructions() {
   while [ $instr -lt $last_instr ]; do
     ix=$instr
     : $((i = _data_$instr))
-    : $((instr++))
+    : $((instr += 1))
 
     if [ $i -le $ADJ ] ; then
       : $((imm = _data_$instr))
-      : $((instr++))
+      : $((instr += 1))
       decode_instruction $i
       echo "$ix: $res  $imm"
     else
@@ -530,12 +530,12 @@ print_instructions() {
 run_instructions() {
   while : ; do
     : $((i = _data_$pc))
-    : $((pc++))
-    : $((cycle++))
+    : $((pc += 1))
+    : $((cycle += 1))
 
     if [ $i -le $ADJ ] ; then
       : $((imm = _data_$pc))
-      : $((pc++))
+      : $((pc += 1))
     fi
 
     if [ $trace -eq 1 ] ; then
@@ -585,8 +585,8 @@ run_instructions() {
         ;;
       "$LI") a=$((_data_$a)) ;;                 # a = *(int *)a;
       "$LC") a=$((_data_$a)) ;;                 # a = *(char *)a;
-      "$SI") : $((_data_$((_data_$sp))=$a)) ; : $((sp++)) ;;  # *(int *)*sp++ = a;
-      "$SC") : $((_data_$((_data_$sp))=$a)) ; : $((sp++)) ;;  # a = *(char *)*sp++ = a;
+      "$SI") : $((_data_$((_data_$sp))=$a)) ; : $((sp += 1)) ;;  # *(int *)*sp++ = a;
+      "$SC") : $((_data_$((_data_$sp))=$a)) ; : $((sp += 1)) ;;  # a = *(char *)*sp++ = a;
       "$PSH") push_stack "$a" ;;                # *--sp = a;
       "$OR")  pop_stack; a=$((res | a)) ;;
       "$XOR") pop_stack; a=$((res ^ a)) ;;
@@ -650,7 +650,7 @@ run_instructions() {
         ix=0
         while [ $ix -lt $len ]; do
           : $((_data_$((dst + ix)) = val))
-          : $((ix++))
+          : $((ix += 1))
         done
         ;;
       "$MCMP")                                  # a = memcmp((char *)sp[2], (char *)sp[1], *sp);
@@ -705,7 +705,7 @@ run() {
   while [ $# -ge 1 ]; do
     unpack_string "$1"
     : $((_data_$argv_ptr = $addr))
-    : $((argv_ptr++))
+    : $((argv_ptr += 1))
     shift
   done
   push_stack $t
@@ -724,7 +724,7 @@ show_stack() {
   echo "    Stack:"
   stack_ix=$INITIAL_STACK_POS
   while [ $stack_ix -gt $sp ]; do
-    : $((stack_ix--))
+    : $((stack_ix -= 1))
     echo "        _data_$stack_ix = $((_data_$stack_ix))"
   done
 }
@@ -739,7 +739,7 @@ show_heap() {
       char=$(printf "\\$(printf "%o" "$ascii")")
     fi
     echo "        _data_$heap_ix = $ascii  ($char)"
-    : $((heap_ix++))
+    : $((heap_ix += 1))
   done
 }
 
