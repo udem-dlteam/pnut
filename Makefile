@@ -39,5 +39,6 @@ test:
 			fi \
 		else \
 			echo "$$filename: ❌ Failed to compile: $$(cat tests/$$filename.err)"; \
-		fi \
+		fi; \
+		rm tests/$$filename.err; \
 	done
