@@ -107,8 +107,8 @@ pack_string() {
 # Shell's printf function cannot be used because it does not support the %.*s
 # format specifier and the strings passed to it need to be unpacked.
 c_printf() {
-  count="$1" shift
-  fmt_ptr="$1" shift
+  count="$1"; shift
+  fmt_ptr=$1; shift
   arg_offset=2 # First argument is at stack position ($count - 2)
   str=""
   mod=0
