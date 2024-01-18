@@ -182,11 +182,14 @@ c_printf() {
       esac
       mod=0
     else
-      if [ "$head_char" = '%' ]; then mod=1
-      else str="$str$head_char" ; fi
+      case $head in
+        10) str="$str\n" ;; # 10 == '\n'
+        37) mod=1 ;; # 37 == '%'
+        *) str="$str$head_char" ;; # Decode
+      esac
     fi
   done
-  echo $str
+  printf "$str"
 }
 
 # Read a character from stdin.
