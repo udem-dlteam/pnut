@@ -7,7 +7,8 @@ void main() {
 
   /* Tests basic boolean equality */
 
-  if (TRUE = TRUE) {
+  int a = TRUE;
+  if (a == TRUE) {
     putchar('t');
   } else {
     putchar('f');
