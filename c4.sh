@@ -11,6 +11,7 @@ strict_mode=1 # Ensures that all variables are initialized before use
 if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
   set -u # Exit on using unset variable
 fi
+fast_buffer_len=50 # Length of the fast buffer used by get_char
 
 # Infinite loop breaker.
 # On a M1 CPU, 35518 cycles take 18 seconds to run, so 100000 is a minute of execution.
@@ -209,14 +210,14 @@ get_char()                           # get next char from source into $char
         char=NEWLINE                 # next get_char call will read next line
         return
       fi
-      src_buf_fast=$(printf "%.50s" "$src_buf") # Copy first 100 chars to fast buffer
+      src_buf_fast=$(printf "%.${fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
       src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
     else
       char=EOF                       # EOF reached when read fails
       return
     fi
   elif [ -z "$src_buf_fast" ] || [ -z "${src_buf_fast#?}" ]; then      # need to refill fast buffer
-    src_buf_fast=$(printf "%.50s" "$src_buf") # Copy first 100 chars to fast buffer
+    src_buf_fast=$(printf "%.${fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
     src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
     if [ -z "$src_buf_fast" ] ; then           # end of line if the buffer is now empty
       char=NEWLINE
