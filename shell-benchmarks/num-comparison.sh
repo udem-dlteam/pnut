@@ -1,3 +1,6 @@
+#! /bin/sh
+# Evaluate impact of fast buffer optimization
+
 if [ $# -lt 1 ]; then
   set ksh dash bash zsh
 fi

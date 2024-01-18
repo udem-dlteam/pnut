@@ -1,3 +1,6 @@
+#! /bin/sh
+# Evaluate performance of concatenating strings.
+
 if [ $# -lt 1 ]; then
   set ksh dash bash zsh
 fi
