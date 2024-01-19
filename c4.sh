@@ -120,22 +120,28 @@ c_printf() {
       case $head_char in
         'd') # 100 = 'd' Decimal integer
           at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); imm=$res
-          str="$str$imm"
+          printf "%d" "$imm"
+          # str="$str$imm"
           ;;
         'c') # 99 = 'c' Character
           at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); char=$res
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          str="$str$(printf "\\$(printf "%o" "$char")")"
+          printf "\\$(printf "%o" "$char")"
+          # str="$str$(printf "\\$(printf "%o" "$char")")"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
           at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); imm=$res
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          str="$str$(printf "%x" "$imm")"
+          printf "%x" "$imm"
+          # str="$str$(printf "%x" "$imm")"
           ;;
         's') # 115 = 's' String
           at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); str_ref=$res
           pack_string "$str_ref" # result in $res
-          str="$str$res"
+          # Note: Using printf "%s" "$res" outputs "\n" if $res contains a newline
+          # but printf "$res" seems to work fine.
+          printf "$res"
+          # str="$str$res"
           ;;
         '.') # String with length
           pack_string $fmt_ptr 0 2 # Read next 2 characters
@@ -144,7 +150,8 @@ c_printf() {
             at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); len=$res
             at_stack $((count - arg_offset)); : $((arg_offset = arg_offset + 1)); str_ref=$res
             pack_string $str_ref 0 $len # result in $res
-            str="$str$res"
+            printf "%s" "$res"
+            # str="$str$res"
           else
             echo "Unknown format specifier: %.$res" ; exit 1
           fi
@@ -171,25 +178,25 @@ c_printf() {
               res=" $res"
                 : $((padding_len -= 1))
               done
-            str="$str$res"
+            printf "%s" "$res"
+            # str="$str$res"
           else
             echo "Unknown format specifier: '%$min_len.$str_len$head_char'" ; exit 1;
           fi
           ;;
         *)
           echo "Unknown format specifier %$head_char"; exit 1
-          str="$str$head_char" ;;
       esac
       mod=0
     else
       case $head in
-        10) str="$str\n" ;; # 10 == '\n'
+        10) printf "\n" ;; # str="$str\n" ;; # 10 == '\n'
         37) mod=1 ;; # 37 == '%'
-        *) str="$str$head_char" ;; # Decode
+        *) printf "$head_char" ;; # str="$str$head_char" ;; # Decode
       esac
     fi
   done
-  printf "%s" "$str"
+  # printf "%s" "$str"
 }
 
 # Read a character from stdin.
