@@ -249,8 +249,9 @@ get_char()                           # get next char from source into $char
 # Used to implement the read instruction.
 # Does not work with NUL characters.
 read_n_char() {
-  count=$1
   buf_ptr=$2
+  count=$1
+  len=0
   while [ "$count" != "0" ] ; do
     get_char
     case "$char" in
@@ -260,8 +261,9 @@ read_n_char() {
     esac
 
     : $((_data_$buf_ptr=$code))
-    : $((count -= 1))
     : $((buf_ptr += 1))
+    : $((count -= 1))
+    : $((len += 1))
   done
 
   : $((_data_$buf_ptr=0))
@@ -626,6 +628,7 @@ run_instructions() {
         at_stack 0; count=$res
         pack_string "$fd"
         read_n_char $count $buf < "$res" # We don't want to use cat because it's not pure Shell
+        a="$len"
         ;;
       "$CLOS")                                  # a = close(*sp);
         # NOP
