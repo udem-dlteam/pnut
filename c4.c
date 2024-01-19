@@ -72,7 +72,7 @@ void next()
     else if ((tk >= 'a' && tk <= 'z') || (tk >= 'A' && tk <= 'Z') || tk == '_') {
       pp = p - 1;
       while ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_')
-        tk = tk * 147 + *p++;
+        tk = tk * 47 + *p++;
       tk = (tk << 6) + (p - pp);
       id = sym;
       while (id[Tk]) {
