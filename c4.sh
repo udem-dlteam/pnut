@@ -1,21 +1,15 @@
 #!/bin/sh
 
-# set -x # Prints all commands run
 set -e # Exit on first error
 
-debug=0       # Print debug information, mostly during initialization
-trace=0       # Trace the execution of the VM
-trace_stack=0 # Trace the stack when tracing instructions
-trace_heap=1  # Trace the heap when tracing instructions
-strict_mode=1 # Ensures that all variables are initialized before use
-if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
-  set -u # Exit on using unset variable
-fi
-fast_buffer_len=50 # Length of the fast buffer used by get_char
-
-# Infinite loop breaker.
-# On a M1 CPU, 35518 cycles take 18 seconds to run, so 100000 is a minute of execution.
-MAX_CYCLE=10000000
+no_exit_trace=0    # Don't print the exit code of the executed program
+debug=0            # Print debug information, mostly during initialization
+trace=0            # Trace the execution of the VM
+trace_stack=0      # Trace the stack when tracing instructions
+trace_heap=0       # Trace the heap when tracing instructions
+strict_mode=0      # Ensures that all variables are initialized before use
+fast_buffer_len=50 # Length of the fast buffer used by get_char. 50 seems to be a good value.
+MAX_CYCLE=10000000 # Infinite loop breaker.
 
 # Opcodes
 LEA=0; IMM=1; REF=2; JMP=3; JSR=4; BZ=5; BNZ=6; ENT=7; ADJ=8; LEV=9; LI=10; LC=11; SI=12; SC=13; PSH=14; OR=15; XOR=16; AND=17; EQ=18; NE=19; LT=20; GT=21; LE=22; GE=23; SHL=24; SHR=25; ADD=26; SUB=27; MUL=28; DIV=29; MOD=30; OPEN=31; READ=32; CLOS=33; PRTF=34; MALC=35; FREE=36; MSET=37; MCMP=38; EXIT=39;
@@ -566,7 +560,7 @@ run_instructions() {
     fi
 
     # Infinite loop breaker
-    if [ $cycle -gt $MAX_CYCLE ] ; then
+    if [ $cycle -ge $MAX_CYCLE ] ; then
       echo "Too many instructions, aborting execution."
       exit 1;
     fi
@@ -678,8 +672,11 @@ run_instructions() {
         done
         ;;
       "$EXIT")                                  # { printf("exit(%d) cycle = %d\n", *sp, cycle); return *sp; }
-        echo "exit($a) cycle = $cycle"
-        exit "$a"
+        at_stack 0; code=$res
+        if [ $no_exit_trace -eq 0 ] ; then
+          echo "exit($code) cycle = $cycle"
+        fi
+        exit "$code"
         ;;
       *)
         echo "unknown instruction = $i! cycle = $cycle"
@@ -690,6 +687,9 @@ run_instructions() {
 }
 
 run() {
+  if [ $trace_stack -eq 0 ] && [ $strict_mode -eq 1 ] ; then
+    set -u # Exit on using unset variable
+  fi
   dat_start=$dat
   read_data
   instr_start=$dat
@@ -719,8 +719,6 @@ run() {
     shift
   done
   push_stack $t
-
-  # exit 1
 
   run_instructions
 }
@@ -752,5 +750,15 @@ show_heap() {
     : $((heap_ix += 1))
   done
 }
+
+if [ $# -gt 0 ] && [ "$1" = "--no-exit" ] ; then no_exit_trace=1 ; shift ; fi
+if [ $# -gt 0 ] && [ "$1" = "--debug" ] ; then debug=1 ; shift ; fi
+if [ $# -gt 0 ] && [ "$1" = "--trace" ] ; then trace=1 ; shift ; fi
+if [ $# -gt 0 ] && [ "$1" = "--trace-stack" ] ; then trace=1 ; trace_stack=1 ; shift ; fi
+if [ $# -gt 0 ] && [ "$1" = "--trace-heap" ] ; then trace=1 ; trace_heap=1 ; shift ; fi
+if [ $# -gt 0 ] && [ "$1" = "--strict-mode" ] ; then strict_mode=1 ; shift ; fi
+if [ $# -gt 0 ] && [ "$1" = "--max-cycles" ] ; then MAX_CYCLE=$2 ; shift 2 ; fi
+if [ $# -lt 1 ] ; then echo "Usage: $0 <file> [args]"; exit 1;  fi
+if [ ! -f "$1" ] ; then echo "File not found: $1"; exit 1 ; fi
 
 run $@ < "$1"
