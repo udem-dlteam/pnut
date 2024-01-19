@@ -189,7 +189,7 @@ c_printf() {
       esac
     fi
   done
-  printf "$str"
+  printf "%s" "$str"
 }
 
 # Read a character from stdin.
