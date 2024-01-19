@@ -3,3 +3,5 @@ tests/*.sh
 tests/*.err
 *.op
 *.o
+vm-tests/*.expected
+vm-tests/*.result
