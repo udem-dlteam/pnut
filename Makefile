@@ -42,3 +42,16 @@ test:
 		fi; \
 		rm tests/$$filename.err; \
 	done
+
+c4.o:
+	gcc -o c4.o c4.c
+
+c4.op: c4.o
+	./c4.o -b -p c4.c > c4.op
+
+c4-2.op: c4.op
+	ksh ./c4.sh --no-exit c4.op -b -p c4.c > c4-2.op
+
+c4-3.op: c4-2.op
+	ksh ./c4.sh --no-exit c4-2.op -b -p c4.c > c4-3.op
+
