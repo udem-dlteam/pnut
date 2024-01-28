@@ -8,10 +8,19 @@
 (define-type ctx
   glo-decls
   loc-env
+  level
   tail?)
 
 (define (ctx-add-glo-decl! ctx decl)
-  (ctx-glo-decls-set! ctx (cons decl (ctx-glo-decls ctx))))
+  (ctx-glo-decls-set! ctx (cons (cons decl (ctx-level ctx)) (ctx-glo-decls ctx))))
+
+(define (nest-level ctx f)
+  (ctx-level-set! ctx (+ (ctx-level ctx) 1))
+  (f)
+  (ctx-level-set! ctx (- (ctx-level ctx) 1)))
+
+(define-macro (nest ctx . body)
+  `(nest-level ,ctx (lambda () ,@body)))
 
 (define (global-var ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -87,7 +96,8 @@
      ctx
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
-    (comp-body ctx body)
+    (nest ctx (comp-body ctx body))
+
     (ctx-add-glo-decl!
      ctx
      (list "}"))))
@@ -123,7 +133,8 @@
            (ctx-add-glo-decl!
             ctx
             (list "while " code-test " ; do"))
-           (comp-statement ctx (caddr ast))
+           (print "Compiling while body\n\n\n")
+           (nest ctx (comp-statement ctx (caddr ast)))
            (ctx-add-glo-decl!
             ctx
             (list "done")))
@@ -140,8 +151,10 @@
          (ctx-add-glo-decl!
           ctx
           (list "while " code-test " ; do"))
-         (comp-statement ctx stat)
-         (if expr3 (comp-statement ctx expr3))
+         (nest ctx
+          (comp-statement ctx stat)
+          (if expr3 (comp-statement ctx expr3))
+         )
          (ctx-add-glo-decl!
           ctx
           (list "done")))))
@@ -152,13 +165,13 @@
          (ctx-add-glo-decl!
           ctx
           (list "if " code-test " ; then"))
-         (comp-statement ctx stat)
+         (nest ctx (comp-statement ctx stat))
          (if (pair? (cdddr ast))
              (begin
                (ctx-add-glo-decl!
                 ctx
                 (list "else"))
-               (comp-statement ctx (cadddr ast))))
+               (nest ctx (comp-statement ctx (cadddr ast)))))
          (ctx-add-glo-decl!
           ctx
           (list "fi")))))
@@ -211,7 +224,7 @@
   (if (pair? ast)
       (let ((decl (car ast)))
         (if (eq? (car decl) 'six.x=y) ;; allow assignments at top level
-            (comp-assignment ctx decl)
+            (comp-assignment ctx decl 0)
             (comp-glo-decl ctx decl))
         (comp-glo-decl-list ctx (cdr ast)))))
 
@@ -281,14 +294,17 @@
      (error "unknown rvalue" ast))))
 
 (define (comp-program ast)
-  (let ((ctx (make-ctx '() '() #f)))
+  (let ((ctx (make-ctx '() '() 0 #f)))
     (comp-glo-decl-list ctx ast)
     (codegen ctx)))
 
 (define (codegen ctx)
   (println runtime-prelude)
   (for-each (lambda (decl)
-              (println decl))
+              (let ((level (cdr decl)))
+                (if (not (zero? level))
+                    (print (make-string (* 2 level) #\space)))
+                (println (car decl))))
             (reverse (ctx-glo-decls ctx)))
   (println runtime-postlude))
 
@@ -324,39 +340,39 @@
 ;;
 ;; $ gsi six-cc.scm winter-pi2.c > winter-pi2.sh ; time dash winter-pi2.sh
 ;; 31415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185
-;; 
+;;
 ;; real	0m2.394s
 ;; user	0m2.143s
 ;; sys	0m0.248s
 ;; $ cat winter-pi2.c
 ;; /* #include <stdio.h> */
-;; 
+;;
 ;; /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
-;; 
-;; 
+;;
+;;
 ;; int r[2801];
 ;; int i;
 ;; int k;
 ;; int b;
 ;; int d;
 ;; int c = 0;
-;; 
+;;
 ;; int main() {
-;; 
+;;
 ;;     for (; i < 2800; i++) {
 ;; 	r[i] = 2000;
 ;;     }
 ;;     r[i] = 0;
-;; 
+;;
 ;;     for (k = 2800; k > 0; k = k - 14) {
-;; 
+;;
 ;; 	d = 0;
-;; 
+;;
 ;; 	i = k;
 ;; 	for (;;) {
 ;; 	    d = d + r[i] * 10000;
 ;; 	    b = 2 * i - 1;
-;; 
+;;
 ;; 	    r[i] = d % b;
 ;; 	    d = d / b;
 ;; 	    i--;
@@ -369,8 +385,8 @@
 ;;         putchar(48 + (c + d / 10000) % 10);
 ;; 	c = d % 10000;
 ;;     }
-;; 
+;;
 ;;     putchar(10);
-;; 
+;;
 ;;     return 0;
 ;; }
