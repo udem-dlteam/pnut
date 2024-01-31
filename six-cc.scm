@@ -1,6 +1,7 @@
 #!/usr/bin/env gsi
 
 (define support-addr-of? #f)
+(define return-with-print? #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -178,9 +179,13 @@
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast))))
+          (if return-with-print?
+            (ctx-add-glo-decl!
+              ctx
+              (list "printf " code-expr ""))
            (ctx-add-glo-decl!
             ctx
-            (list ": $(( _0result = " code-expr " ))"))))
+              (list ": $(( _0result = " code-expr " ))")))))
      (if (not (ctx-tail? ctx))
          (ctx-add-glo-decl!
           ctx
@@ -198,19 +203,50 @@
    (comp-rvalue ctx ast)
    " )) ]"))
 
-(define (comp-statement-expr ctx ast)
-  (case (car ast)
-    ((six.call)
-     (let ((name (cadr ast))
-           (params (cddr ast)))
-       (let ((code-params
-              (map (lambda (p) (string-append "$((" (comp-rvalue ctx p) "))")) params)))
+(define (comp-fun-call ctx ast #!optional (assign_to #f))
+  ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
+  ; - how to preserve value of variables that may be used by the caller (because no local variables).
+  ;   Options:
+  ;    - Caller saves all of its variable and restore them after the call (what we do for now).
+  ;    - Caller saves all variables that may be used by the callee. (requires an analysis of the functions and transitive closure).
+  ;    - Have every variable on a stack.
+  ;    - Let the C code handle the problem
+  ; - how to pass the return value.
+  ;   Options:
+  ;    - Each function returns in a variable called {function_name}_result and the caller must save it if needed.
+  ;    - Each function prints its return value and the caller takes it from stdout: var=$(function_name).
+  ;       This wouldn't work for functions that want to print to stdout.
+  ;    - Functions take an extra parameter that is the address/name of the variable where to store the return value.
+  (let ((name (car ast))
+        (params (cdr ast)))
+    (let* ((code-params
+            (map (lambda (p) (string-append "$((" (comp-rvalue ctx p) "))")) params))
+          (call-code
+            (string-concatenate (cons (function-name name) code-params) " ")))
+
+      (if assign_to
+        (if return-with-print?
+          (ctx-add-glo-decl!
+            ctx
+            (list "assign_to=$(" call-code " )"))
+          (begin
+            (ctx-add-glo-decl!
+              ctx
+              (list call-code))
+            (ctx-add-glo-decl!
+                ctx
+                (list ": $(( " (comp-lvalue ctx assign_to) " = _0result ))"))))
          (ctx-add-glo-decl!
           ctx
           (list
            (string-concatenate
             (cons (function-name name) code-params)
-            " "))))))
+            " ")))))))
+
+(define (comp-statement-expr ctx ast)
+  (case (car ast)
+    ((six.call)
+      (comp-fun-call ctx (cdr ast)))
     ((six.compound)
      (comp-body ctx (cdr ast)))
     ((six.x=y)
@@ -233,9 +269,13 @@
         (rhs (caddr ast)))
     (case (car lhs)
       ((six.identifier six.index)
+       (case (car rhs)
+        ((six.call)
+          (comp-fun-call ctx (cdr rhs) lhs))
+        (else
        (ctx-add-glo-decl!
         ctx
-        (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs) " ))")))
+            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs) " ))")))))
       (else
        (error "unknown lhs" lhs)))))
 
