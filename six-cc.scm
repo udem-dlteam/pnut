@@ -1,7 +1,12 @@
 #!/usr/bin/env gsi
 
 (define support-addr-of? #f)
+; Use printf and var=$(function_name) to get return value
 (define return-with-print? #f)
+; Assign $1, $2, ... to local parameters.
+; If #f, we use the parameters directly when referring to local variables when possible.
+; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.
+(define map-all-param-to-local-var #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -24,7 +29,9 @@
   `(nest-level ,ctx (lambda () ,@body)))
 
 (define (global-var ident)
-  (string-append "_" (symbol->string (cadr ident))))
+  (if (symbol? (cadr ident))
+    (string-append "_" (symbol->string (cadr ident)))
+    (string-append "$" (number->string (cadr ident)))))
 
 (define (global-ref ident)
   (if support-addr-of?
@@ -97,7 +104,23 @@
      ctx
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
-    (nest ctx (comp-body ctx body))
+    (nest ctx
+      ; IDEA: We could also use $1, $2, ... when referring to parameters.
+      ; If map-all-param-to-local-var is #f, we use the parameters directly,
+      ; generating shorter code, but that's harder to read and where we can't
+      ; assign
+      (let ((local-vars-to-map
+              (if map-all-param-to-local-var
+                (map cons parameters (iota (length parameters) 1))
+                (error "not yet supported")))
+            ; (assign-var (lambda (p) (string-append ": $(( "  " = $" (number->string (cdr p)) " ))"))))
+      )
+
+        (for-each
+          (lambda (p)
+            (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
+          local-vars-to-map))
+      (comp-body ctx body))
 
     (ctx-add-glo-decl!
      ctx
@@ -211,6 +234,8 @@
   ;    - Caller saves all variables that may be used by the callee. (requires an analysis of the functions and transitive closure).
   ;    - Have every variable on a stack.
   ;    - Let the C code handle the problem
+  ;    Optimization ideas:
+  ;    - Exploit how $1, $2, ... are scoped locally to the function, and are restored after a function call.
   ; - how to pass the return value.
   ;   Options:
   ;    - Each function returns in a variable called {function_name}_result and the caller must save it if needed.
