@@ -120,18 +120,20 @@
           (lambda (p)
             (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
           local-vars-to-map))
-      (comp-body ctx body))
+      (comp-body ctx body parameters))
 
     (ctx-add-glo-decl!
      ctx
      (list "}"))))
 
-(define (comp-body ctx lst)
+(define (comp-body ctx lst #!optional (parameters '()))
   (let ((start-loc-env (ctx-loc-env ctx)))
+    (ctx-loc-env-set! ctx (append (map car parameters) (ctx-loc-env ctx)))
     (let loop ((lst lst))
       (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
-          (let ((def-var (car lst)))
+          (let ((def-var (cadar lst)))
             (ctx-loc-env-set! ctx (cons def-var (ctx-loc-env ctx)))
+            ; TODO: Initialize var?
             (loop (cdr lst)))
           (begin
             (comp-statement-list ctx lst)
@@ -246,13 +248,30 @@
     (let* ((code-params
             (map (lambda (p) (comp-rvalue-standalone ctx p)) params))
           (call-code
-            (string-concatenate (cons (function-name name) code-params) " ")))
+            (string-concatenate (cons (function-name name) code-params) " "))
+          ; Remove the variable we are assigning to from the list of local variables to save.
+          ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
+          ; Some ideas on how to reduce the number of variables saved:
+          ;   - Only save the variables that are used by the function, or used by functions called transitively.
+          ;   - Only save the variables that have been written to/initialized.
+          (local-vars-to-save (map global-var (filter (lambda (x) (not (equal? assign_to x))) (ctx-loc-env ctx)))))
+
+      ; (display "ctx-loc-env: ") (display (ctx-loc-env ctx)) (newline)
+      ; (display "local-vars: ") (display local-vars) (newline)
+      ; (display "local-vars-to-save: ") (display local-vars-to-save) (newline)
+      ; (display "assign_to: ") (display assign_to) (newline)
+
+      ; Save local variables
+      (if (not (null? local-vars-to-save))
+        (ctx-add-glo-decl!
+          ctx
+          (list "save_loc_var " (string-concatenate (reverse local-vars-to-save) " "))))
 
       (if assign_to
         (if return-with-print?
           (ctx-add-glo-decl!
             ctx
-            (list "assign_to=$(" call-code " )"))
+            (list (comp-lvalue ctx assign_to) "=$(" call-code ")"))
           (begin
             (ctx-add-glo-decl!
               ctx
@@ -265,7 +284,13 @@
           (list
            (string-concatenate
             (cons (function-name name) code-params)
-            " ")))))))
+            " "))))
+
+      ; Restore local variables
+      (if (not (null? local-vars-to-save))
+        (ctx-add-glo-decl!
+          ctx
+          (list "rest_loc_var " (string-concatenate local-vars-to-save " ")))))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -390,6 +415,9 @@
    "_putchar() { printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ; }\n"
    "ALLOC=0\n"
    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }\n"
+   "SP=0\n" ; Note: Stack grows up, not down
+   "save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }\n"
+   "rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }\n"
    (if support-addr-of?
        (string-append
         "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }\n")
