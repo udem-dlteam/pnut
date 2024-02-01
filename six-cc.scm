@@ -157,7 +157,6 @@
            (ctx-add-glo-decl!
             ctx
             (list "while " code-test " ; do"))
-           (print "Compiling while body\n\n\n")
            (nest ctx (comp-statement ctx (caddr ast)))
            (ctx-add-glo-decl!
             ctx
