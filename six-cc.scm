@@ -6,7 +6,7 @@
 ; Assign $1, $2, ... to local parameters.
 ; If #f, we use the parameters directly when referring to local variables when possible.
 ; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.
-(define map-all-param-to-local-var #t)
+(define map-all-param-to-local-var? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -106,11 +106,11 @@
     (ctx-tail?-set! ctx #t)
     (nest ctx
       ; IDEA: We could also use $1, $2, ... when referring to parameters.
-      ; If map-all-param-to-local-var is #f, we use the parameters directly,
+      ; If map-all-param-to-local-var? is #f, we use the parameters directly,
       ; generating shorter code, but that's harder to read and where we can't
       ; assign
       (let ((local-vars-to-map
-              (if map-all-param-to-local-var
+              (if map-all-param-to-local-var?
                 (map cons parameters (iota (length parameters) 1))
                 (error "not yet supported")))
             ; (assign-var (lambda (p) (string-append ": $(( "  " = $" (number->string (cdr p)) " ))"))))
