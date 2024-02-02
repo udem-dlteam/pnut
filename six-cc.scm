@@ -206,7 +206,7 @@
           (if return-with-print?
             (ctx-add-glo-decl!
               ctx
-              (list "printf " code-expr ""))
+              (list "printf $" code-expr ""))
            (ctx-add-glo-decl!
             ctx
               (list ": $(( _0result = " code-expr " ))")))))
