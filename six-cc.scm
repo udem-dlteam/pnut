@@ -249,11 +249,11 @@
           ; Remove the variable we are assigning to from the list of local variables to save.
           ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
           ; Some ideas on how to reduce the number of variables saved:
-          ;   - Only save the variables that are used by the function, or used by functions called transitively.
-          ;   - Only save the variables that have been written to/initialized. (Done)
-          ;   - Only restore variables lazily, so consecutive function calls don't save and restore needlessly
-          ;   - Use a smarter data structure, so we can save and restore variables in different orders.
-          ;   - Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
+          ;  [x] Only save the variables that have been written to/initialized.
+          ;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
+          ;  [ ] Only restore variables lazily, so consecutive function calls don't save and restore needlessly
+          ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
+          ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
           (active-local-vars (map car (filter cdr (table->list (ctx-loc-env ctx)))))
           (local-vars-to-save (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
 
@@ -406,6 +406,7 @@
    "SP=0\n" ; Note: Stack grows up, not down
    "save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }\n"
    "rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }\n"
+   "_exit() { exit $1; }\n"
    (if support-addr-of?
        (string-append
         "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }\n")
