@@ -223,9 +223,9 @@
 
 (define (comp-test ctx ast)
   (string-append
-   "[ 0 != "
-   (comp-rvalue-standalone ctx ast)
-   " ]"))
+   "[ 0 != $(( "
+   (comp-rvalue ctx ast)
+   " )) ]"))
 
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
@@ -246,7 +246,7 @@
   (let ((name (car ast))
         (params (cdr ast)))
     (let* ((code-params
-            (map (lambda (p) (comp-rvalue-standalone ctx p)) params))
+            (map (lambda (p) (string-append "$((" (comp-rvalue ctx p) "))")) params))
           (call-code
             (string-concatenate (cons (function-name name) code-params) " "))
           ; Remove the variable we are assigning to from the list of local variables to save.
@@ -303,7 +303,7 @@
     (else
      (ctx-add-glo-decl!
       ctx
-      (list ": " (comp-rvalue-standalone ctx ast))))))
+      (list ": $(( " (comp-rvalue ctx ast) " ))")))))
 
 (define (comp-glo-decl-list ctx ast)
   (if (pair? ast)
@@ -345,30 +345,17 @@
      (error "unknown array lvalue" ast))))
 
 (define (comp-rvalue ctx ast)
-  (cdr (comp-rvalue-worker ctx ast)))
-
-(define (comp-rvalue-standalone ctx ast)
-  (let ((rvalue (comp-rvalue-worker ctx ast)))
-    (if (car rvalue)
-        (string-append "$(( " (cdr rvalue) " ))")
-        (cdr rvalue))))
-
-; Returns a pair (is-arith . code)
-; is-arith determines if the expression can be used directly, or if it needs to be wrapped in $(( ... ))
-(define (comp-rvalue-worker ctx ast #!optional (standalone #f))
-  (let ((is-arith (lambda (a) (cons #t a)))
-        (not-arith (lambda (x) (cons #f x))))
   (case (car ast)
     ((six.literal)
      (let ((val (cadr ast)))
        (cond ((exact-integer? val)
-                (not-arith (number->string val)))
+              (number->string val))
              (else
               "unknown literal" ast))))
     ((six.identifier)
-        (not-arith (global-ref ast)))
+     (global-ref ast))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
-        (is-arith (string-append "("
+     (string-append "("
                     (comp-rvalue ctx (cadr ast))
                     (case (car ast)
                       ((six.x+y) " + ")
@@ -383,17 +370,17 @@
                       ((six.x<=y) " <= ")
                       ((six.x>=y) " >= "))
                     (comp-rvalue ctx (caddr ast))
-                        ")")))
+                    ")"))
     ((six.index)
-        (is-arith (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast)) "))")))
+     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast)) "))"))
     ((six.x++)
-        (is-arith (string-append (comp-lvalue ctx (cadr ast)) " += 1")))
+     (string-append (comp-lvalue ctx (cadr ast)) " += 1"))
     ((six.x--)
-        (is-arith (string-append (comp-lvalue ctx (cadr ast)) " -= 1")))
+     (string-append (comp-lvalue ctx (cadr ast)) " -= 1"))
     ((six.x+=y)
-        (is-arith (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast)))))
+     (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast))))
     (else
-        (error "unknown rvalue" ast)))))
+     (error "unknown rvalue" ast))))
 
 (define (comp-program ast)
   (let ((ctx (make-ctx '() '() 0 #f)))
