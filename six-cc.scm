@@ -406,7 +406,7 @@
    "SP=0\n" ; Note: Stack grows up, not down
    "save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }\n"
    "rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }\n"
-   "_exit() { exit $1; }\n"
+   "_exit() { echo \"Exiting with code $1\"; exit $1; }\n"
    (if support-addr-of?
        (string-append
         "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }\n")
