@@ -104,35 +104,32 @@
      ctx
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
-    (nest ctx
-      ; IDEA: We could also use $1, $2, ... when referring to parameters.
-      ; If map-all-param-to-local-var? is #f, we use the parameters directly,
-      ; generating shorter code, but that's harder to read and where we can't
-      ; assign
-      (let ((local-vars-to-map
-              (if map-all-param-to-local-var?
-                (map cons parameters (iota (length parameters) 1))
-                (error "not yet supported")))
-            ; (assign-var (lambda (p) (string-append ": $(( "  " = $" (number->string (cdr p)) " ))"))))
-      )
-
-        (for-each
-          (lambda (p)
-            (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
-          local-vars-to-map))
-      (comp-body ctx body parameters))
+    (nest ctx (comp-body ctx body parameters))
 
     (ctx-add-glo-decl!
      ctx
      (list "}"))))
 
 (define (comp-body ctx lst #!optional (parameters '()))
-  (let ((start-loc-env (ctx-loc-env ctx)))
-    (ctx-loc-env-set! ctx (append (map car parameters) (ctx-loc-env ctx)))
+  (let ((start-loc-env (table-copy (ctx-loc-env ctx)))
+        (parameter-table (list->table (map (lambda (p) (cons (car p) #t)) parameters)))) ; Parameters are always initialized
+    (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
+    ; IDEA: We could also use $1, $2, ... when referring to parameters.
+    ; If map-all-param-to-local-var? is #f, we use the parameters directly,
+    ; generating shorter code, but that's harder to read and where we can't
+    ; assign
+    (let ((local-vars-to-map
+            (if map-all-param-to-local-var?
+              (map cons parameters (iota (length parameters) 1))
+              (error "not yet supported"))))
+      (for-each
+        (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
+        local-vars-to-map))
+
     (let loop ((lst lst))
       (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
           (let ((def-var (cadar lst)))
-            (ctx-loc-env-set! ctx (cons def-var (ctx-loc-env ctx)))
+            (table-set! (ctx-loc-env ctx) def-var #f)
             ; TODO: Initialize var?
             (loop (cdr lst)))
           (begin
@@ -253,19 +250,18 @@
           ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
           ; Some ideas on how to reduce the number of variables saved:
           ;   - Only save the variables that are used by the function, or used by functions called transitively.
-          ;   - Only save the variables that have been written to/initialized.
-          (local-vars-to-save (map global-var (filter (lambda (x) (not (equal? assign_to x))) (ctx-loc-env ctx)))))
-
-      ; (display "ctx-loc-env: ") (display (ctx-loc-env ctx)) (newline)
-      ; (display "local-vars: ") (display local-vars) (newline)
-      ; (display "local-vars-to-save: ") (display local-vars-to-save) (newline)
-      ; (display "assign_to: ") (display assign_to) (newline)
+          ;   - Only save the variables that have been written to/initialized. (Done)
+          ;   - Only restore variables lazily, so consecutive function calls don't save and restore needlessly
+          ;   - Use a smarter data structure, so we can save and restore variables in different orders.
+          ;   - Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
+          (active-local-vars (map car (filter cdr (table->list (ctx-loc-env ctx)))))
+          (local-vars-to-save (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
 
       ; Save local variables
       (if (not (null? local-vars-to-save))
         (ctx-add-glo-decl!
           ctx
-          (list "save_loc_var " (string-concatenate (reverse local-vars-to-save) " "))))
+          (list "save_loc_var " (string-concatenate (reverse (map global-var local-vars-to-save)) " "))))
 
       (if assign_to
         (if return-with-print?
@@ -286,11 +282,10 @@
             (cons (function-name name) code-params)
             " "))))
 
-      ; Restore local variables
-      (if (not (null? local-vars-to-save))
+      (if (and (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
-          (list "rest_loc_var " (string-concatenate local-vars-to-save " ")))))))
+          (list "rest_loc_var " (string-concatenate (map global-var local-vars-to-save) " ")))))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -324,7 +319,13 @@
         (else
        (ctx-add-glo-decl!
         ctx
-            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs) " ))")))))
+            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs) " ))"))))
+
+       ; Mark the variable as used written to, used to determine if we need to save and restore it
+       ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
+       ; but this is simple and works for now.
+       (if (eq? (car lhs) 'six.identifier)
+           (table-set! (ctx-loc-env ctx) lhs #t))) ; Mark local var as used)
       (else
        (error "unknown lhs" lhs)))))
 
@@ -383,7 +384,7 @@
      (error "unknown rvalue" ast))))
 
 (define (comp-program ast)
-  (let ((ctx (make-ctx '() '() 0 #f)))
+  (let* ((ctx (make-ctx '() (make-table) '() 0 #f)))
     (comp-glo-decl-list ctx ast)
     (codegen ctx)))
 
