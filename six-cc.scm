@@ -251,7 +251,9 @@
           ; Some ideas on how to reduce the number of variables saved:
           ;  [x] Only save the variables that have been written to/initialized.
           ;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
-          ;  [ ] Only restore variables lazily, so consecutive function calls don't save and restore needlessly
+          ;  [ ] Only restore variables lazily, so consecutive function calls don't save and restore needlessly.
+          ;      This doesn't seem to be worth its complexity, and consecutive function calls may not be that common.
+          ;      Note: on branch laurent/six-cc-lazy-var-restore.
           ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
           ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
           (active-local-vars (map car (filter cdr (table->list (ctx-loc-env ctx)))))
