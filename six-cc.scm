@@ -472,6 +472,8 @@
    (if support-addr-of?
       "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
       "defglo() { : $(($1 = $2)) ; }")
+   "_malloc() { : $((_0result = $ALLOC)) $((ALLOC = ALLOC + $1)) ; }"
+   "_free() { return; }"
    push-data-prog
    unpack-array-prog
    unpack-string-prog

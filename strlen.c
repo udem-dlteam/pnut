@@ -18,10 +18,37 @@ int string_sum(char_ptr s) {
   }
   return sum;
 }
+
+int iota_array(int start, int max) {
+  int i;
+  int_ptr arr;
+  arr = malloc(max);
+  for (i = 0; i + start < max; i++) {
+    arr[i] = i + start;
+   }
+ return arr;
+}
+
+int array_sum(int_ptr arr, int len) {
+    int sum;
+    int i;
+    sum = 0;
+    i = 0;
+    while (i < len) {
+      sum += arr[i];
+      i++;
+    }
+    return sum;
+}
+
 int main() {
   int n1;
   int n2;
+  int n3;
+  int arr;
+  arr = iota_array(1, 50);
   n1 = string_len([1,2,3,4,5,0]);
   n2 = string_sum("Hello, world!");
-  exit(n2);
+  n3 = array_sum(arr, 50);
+  exit(n3);
 }
