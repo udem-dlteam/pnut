@@ -424,7 +424,7 @@
     (comp-program ast)))
 
 (define (read-six port)
-  (##six-types-set! '((void . #f) (char . #f) (int . #f)))
+  (##six-types-set! '((void . #f) (void_ptr . #f) (char . #f) (char_ptr . #f) (int . #f) (int_ptr . #f)))
   (let ((rt (input-port-readtable port)))
     (input-port-readtable-set! port (readtable-start-syntax-set rt 'six))
     (read-all port)))
