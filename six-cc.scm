@@ -14,6 +14,7 @@
 (define-type ctx
   glo-decls
   loc-env
+  data ; The data section
   level
   tail?)
 
@@ -37,6 +38,9 @@
   (if support-addr-of?
       (string-append "_$" (global-var ident))
       (global-var ident)))
+
+(define (obj-ref ident)
+  (string-append "__" (number->string ident)))
 
 (define (comp-glo-decl ctx ast)
   (case (car ast)
@@ -353,8 +357,20 @@
      (let ((val (cadr ast)))
        (cond ((exact-integer? val)
               (number->string val))
+             ((string? val)
+              (ctx-data-set! ctx (cons val (ctx-data ctx)))
+              (obj-ref (length (ctx-data ctx))))
              (else
               "unknown literal" ast))))
+    ((six.list)
+      (let loop ((lst ast) (acc '()))
+        (if (and (pair? lst) (not (equal? 'six.null (car lst))))
+          (if (and (equal? 'six.list (car lst)) (equal? 'six.literal (caadr lst)))
+              (loop (caddr lst) (cons (cadadr lst) acc))
+              (error "List elements must be literals" lst))
+            (begin
+              (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
+              (obj-ref (length (ctx-data ctx)))))))
     ((six.identifier)
      (global-ref ast))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
@@ -382,6 +398,8 @@
      (string-append (comp-lvalue ctx (cadr ast)) " -= 1"))
     ((six.x+=y)
      (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast))))
+    ((six.*x)
+      (string-append "_$((" (comp-rvalue ctx (cadr ast)) "))"))
     (else
      (error "unknown rvalue" ast))))
 
@@ -392,6 +410,8 @@
 
 (define (codegen ctx)
   (println runtime-prelude)
+  (println (heap-prelude ctx))
+
   (for-each (lambda (decl)
               (let ((level (cdr decl)))
                 (if (not (zero? level))
@@ -400,24 +420,89 @@
             (reverse (ctx-glo-decls ctx)))
   (println runtime-postlude))
 
+(define (unlines . lst)
+  (string-concatenate lst "\n"))
+
+(define push-data-prog
+  (unlines
+    "push_data() {"
+    "  : $((_$ALLOC=$1))"
+    "  : $((ALLOC += 1))"
+    "}"))
+
+; Push an array of values to the VM heap. Returns a reference to the array in $addr.
+(define unpack-array-prog
+  (unlines
+    "unpack_array() {"
+    "  addr=$ALLOC"
+    "  while [ $# -gt 0 ] ; do"
+    "    push_data $1"
+    "    shift"
+    "  done"
+    "}"))
+
+; Push a Shell string to the VM heap. Returns a reference to the string in $addr.
+; Could be replaced with a call to unpack-array-prog.
+; Idea: Do string to list of chars conversion in Scheme, and call unpack_string with a Shell list of int?
+(define unpack-string-prog
+  (unlines
+    "unpack_string() {"
+    "  addr=$ALLOC"
+    "  src_buf=\"$1\""
+    "  while [ -n \"$src_buf\" ] ; do"
+    "    char=\"$src_buf\"                    # remember current buffer"
+    "    rest=\"${src_buf#?}\"                # remove the first char"
+    "    char=\"${char%\"$rest\"}\"           # remove all but first char"
+    "    src_buf=\"${src_buf#?}\"             # remove the current char from $src_buf"
+    "    code=$(LC_CTYPE=C printf \"%d\" \"'$char'\")"
+    "    push_data \"$code\""
+    "  done"
+    "  push_data 0"
+    "}"))
+
 (define runtime-prelude
-  (string-append
-   "_putchar() { printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ; }\n"
-   "ALLOC=0\n"
-   "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }\n"
-   "SP=0\n" ; Note: Stack grows up, not down
-   "save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }\n"
-   "rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }\n"
-   "_exit() { echo \"Exiting with code $1\"; exit $1; }\n"
+  (unlines
+   "# Primitives"
+   "_putchar() { printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ; }"
+   "_exit() { echo \"Exiting with code $1\"; exit $1; }"
+   ""
+   "# Memory management"
+   "ALLOC=0"
+   "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
    (if support-addr-of?
-       (string-append
-        "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }\n")
-       (string-append
-        "defglo() { : $(($1 = $2)) ; }\n"))))
+      "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
+      "defglo() { : $(($1 = $2)) ; }")
+   push-data-prog
+   unpack-array-prog
+   unpack-string-prog
+   ""
+   "# Local variables stack"
+   "SP=0" ; Note: Stack grows up, not down
+   "save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }"
+   "rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }"
+   ""))
 
 (define runtime-postlude
   (string-append
    (function-name '(six.identifier main))))
+
+; Initialize the heap, allocating memory for hardcoded strings and arrays.
+(define (heap-prelude ctx)
+  (unlines
+    "# Heap initialization"
+    (apply unlines
+      (map (lambda (datum ix)
+            (cond ((list? datum)
+                    (string-append
+                      "unpack_array " (string-concatenate (map number->string datum) " ")
+                      "; __" (number->string ix) "=$addr"))
+                  ((string? datum)
+                    (string-append
+                      "unpack_string " "\"" datum "\""
+                      "; __" (number->string ix) "=$addr"))))
+        (reverse (ctx-data ctx))
+        (iota (length (ctx-data ctx)))))
+    ""))
 
 (define (comp-file path)
   (let ((ast (call-with-input-file path read-six)))
