@@ -49,8 +49,13 @@
      (comp-glo-define-variable ctx ast))
 
     ((six.define-procedure)
-     (comp-glo-define-procedure ctx ast))
-
+      (case (cadr (caddr ast)) ; Match on the return type to see if struct/enum def
+        ((enum)
+          (comp-glo-define-enum ctx ast))
+        ((struct)
+          (error "Structures not yet supported"))
+        (else
+          (comp-glo-define-procedure ctx ast))))
     (else
      (error "unknown global declaration" ast))))
 
@@ -96,6 +101,44 @@
            (if support-addr-of?
                (list "defglo_pointable " (global-var name) " " val)
                (list "defglo " (global-var name) " " val)))))))
+
+; An enum is defined with a function without parameters returning a value of type `enum`
+; and that has a body containing only assignments or identifiers.
+; Here's an example: enum MyEnum() { A = 128; B; C; }
+(define (comp-glo-define-enum ctx ast)
+  (let* ((name (cadr ast))
+         (proc (caddr ast))
+         (parameters (caddr proc))
+         (body (cdar (cdddr proc)))
+         (enum-value-counter 0))
+    (if (not (null? parameters))
+      (error "enums must have no parameters" proc))
+
+    ; Simple comment
+    (ctx-add-glo-decl!
+      ctx
+      (list "# Defining enum " (cdr name)))
+
+    (ctx-add-glo-decl!
+      ctx
+      (map
+        (lambda (decl)
+          (case (car decl)
+            ((six.x=y)
+              (let ((previous-value enum-value-counter)
+                    (new-value (cadr (caddr decl))))
+                (set! enum-value-counter (+ new-value 1))
+                (list "_" (cdadr decl) "=" (number->string previous-value) "; ")))
+
+            ((six.identifier)
+              (set! enum-value-counter (+ enum-value-counter 1))
+              (list "_" (cdr decl) "=" (number->string (- enum-value-counter 1)) "; "))
+
+            (else
+              (error "Enum definition can only contain identifiers or assigments. Got:" decl))))
+        body))
+
+    (ctx-add-glo-decl! ctx '())))
 
 (define (comp-glo-define-procedure ctx ast)
   (let* ((name (cadr ast))
@@ -467,7 +510,8 @@
    "_exit() { echo \"Exiting with code $1\"; exit $1; }"
    ""
    "# Memory management"
-   "ALLOC=0"
+   "_NULL=0" ; Null pointer, should not be modified. TODO: Make global-var replace NULL with 0?
+   "ALLOC=1" ; Starting heap at 1 because 0 is the null pointer.
    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
    (if support-addr-of?
       "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
@@ -513,7 +557,7 @@
     (comp-program ast)))
 
 (define (read-six port)
-  (##six-types-set! '((void . #f) (void_ptr . #f) (char . #f) (char_ptr . #f) (int . #f) (int_ptr . #f)))
+  (##six-types-set! '((void . #f) (void_ptr . #f) (char . #f) (char_ptr . #f) (int . #f) (int_ptr . #f) (struct . #f) (enum . #f)))
   (let ((rt (input-port-readtable port)))
     (input-port-readtable-set! port (readtable-start-syntax-set rt 'six))
     (read-all port)))
