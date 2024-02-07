@@ -490,20 +490,22 @@
 
 ; Initialize the heap, allocating memory for hardcoded strings and arrays.
 (define (heap-prelude ctx)
-  (unlines
-    "# Heap initialization"
-    (apply unlines
-      (map (lambda (datum ix)
-            (cond ((list? datum)
-                    (string-append
-                      "unpack_array " (string-concatenate (map number->string datum) " ")
-                      "; __" (number->string ix) "=$addr"))
-                  ((string? datum)
-                    (string-append
-                      "unpack_string " "\"" datum "\""
-                      "; __" (number->string ix) "=$addr"))))
-        (reverse (ctx-data ctx))
-        (iota (length (ctx-data ctx)))))
+  (if (not (null? (ctx-data ctx)))
+    (unlines
+      "# Heap initialization"
+      (apply unlines
+        (map (lambda (datum ix)
+              (cond ((list? datum)
+                      (string-append
+                        "unpack_array " (string-concatenate (map number->string datum) " ")
+                        "; __" (number->string ix) "=$addr"))
+                    ((string? datum)
+                      (string-append
+                        "unpack_string " "\"" datum "\""
+                        "; __" (number->string ix) "=$addr"))))
+          (reverse (ctx-data ctx))
+          (iota (length (ctx-data ctx)))))
+      "")
     ""))
 
 (define (comp-file path)
