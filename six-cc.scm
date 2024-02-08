@@ -495,6 +495,14 @@
   (string-append
    (function-name '(six.identifier main))))
 
+(define (escape-string str)
+  (define (escape-char c)
+    (if (char=? c #\\) "\\\\" ; Escape backslash.
+    (if (char=? c #\") "\\\"" ; Escape double quote.
+    ; (if (char=? c #\newline) "\\n"  ; Escape newline.
+    (list->string (list c)))))
+  (string-concatenate (map escape-char (string->list str))))
+
 ; Initialize the heap, allocating memory for hardcoded strings and arrays.
 (define (heap-prelude ctx)
   (if (not (null? (ctx-data ctx)))
@@ -508,7 +516,7 @@
                         "; __" (number->string ix) "=$addr"))
                     ((string? datum)
                       (string-append
-                        "unpack_string " "\"" datum "\""
+                        "unpack_string " "\"" (escape-string datum) "\""
                         "; __" (number->string ix) "=$addr"))))
           (reverse (ctx-data ctx))
           (iota (length (ctx-data ctx)))))
