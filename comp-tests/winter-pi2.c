@@ -2,7 +2,6 @@
 
 /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
 
-
 int r[2801];
 int i;
 int k;
@@ -11,6 +10,9 @@ int d;
 int c = 0;
 
 int main() {
+  int newline;
+  int newline2;
+  newline = identity(10, 2, 3);
 
   for (; i < 2800; i++) {
     r[i] = 2000;
@@ -38,7 +40,11 @@ int main() {
     c = d % 10000;
   }
 
-  putchar(10);
+  putchar(newline);
 
   return 0;
+}
+
+int identity(int x, int y, int z) {
+  return x;
 }
