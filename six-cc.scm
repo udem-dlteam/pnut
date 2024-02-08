@@ -468,6 +468,7 @@
 
 (define runtime-prelude
   (unlines
+   "set -e -u"
    "# Primitives"
    "_putchar() { printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ; }"
    "_exit() { echo \"Exiting with code $1\"; exit $1; }"
