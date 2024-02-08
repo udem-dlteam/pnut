@@ -402,7 +402,7 @@
               (number->string val))
              ((string? val)
               (ctx-data-set! ctx (cons val (ctx-data ctx)))
-              (obj-ref (length (ctx-data ctx))))
+              (obj-ref (- (length (ctx-data ctx)) 1)))
              (else
               "unknown literal" ast))))
     ((six.list)
@@ -413,7 +413,7 @@
               (error "List elements must be literals" lst))
             (begin
               (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
-              (obj-ref (length (ctx-data ctx)))))))
+              (obj-ref (- (length (ctx-data ctx)) 1))))))
     ((six.identifier)
      (global-ref ast))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
