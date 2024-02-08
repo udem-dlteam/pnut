@@ -1,3 +1,28 @@
+
+strict_alloc() {
+  res=$ALLOC
+  : $((ALLOC += $1))
+  # Need to initialize the memory to 0 or else `set -u` will complain
+  ix=$res
+  while [ $ix -lt $ALLOC ]; do
+    : $((_$ix=0))
+    : $((ix += 1))
+  done
+}
+
+make_argv() {
+  argc=$1; shift;
+  strict_alloc $argc ; argv_ptr=$res
+  argv_ptr_ix=$argv_ptr
+
+  while [ $# -ge 1 ]; do
+    unpack_string "$1"
+    : $((_$argv_ptr_ix = $addr))
+    : $((argv_ptr_ix += 1))
+    shift
+  done
+}
+
 push_data() {
   : $((_$ALLOC=$1))
   : $((ALLOC += 1))

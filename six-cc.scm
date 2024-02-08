@@ -484,10 +484,14 @@
    (if support-addr-of?
       "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
       "defglo() { : $(($1 = $2)) ; }")
-   "_malloc() { : $((_0result = $ALLOC)) $((ALLOC = ALLOC + $1)) ; }"
+   "_malloc() { strict_alloc $1 ; : $((_0result = $res)) ; }"
    "_free() { return; }"
    ""
    "source runtime.sh"
+   ""
+   " # Setup argc, argv"
+   "argc=$#;"
+   "make_argv $argc $@"
    ""
    "# Local variables stack"
    "SP=0" ; Note: Stack grows up, not down
@@ -497,7 +501,9 @@
 
 (define runtime-postlude
   (string-append
-   (function-name '(six.identifier main))))
+   (function-name '(six.identifier main))
+   " $argc"
+   " $argv_ptr"))
 
 (define (escape-string str)
   (define (escape-char c)
