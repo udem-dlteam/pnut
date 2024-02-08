@@ -1,3 +1,17 @@
+_show_heap() {
+  set +u
+  heap_ix=1
+  echo "    Heap:"
+  while [ $heap_ix -lt $ALLOC ]; do
+    ascii=$((_$heap_ix))
+    char=""
+    if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
+      char=$(printf "\\$(printf "%o" "$ascii")")
+    fi
+    echo "        _$heap_ix = $ascii  ($char)"
+    : $((heap_ix += 1))
+  done
+}
 
 strict_alloc() {
   res=$ALLOC
