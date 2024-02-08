@@ -135,3 +135,96 @@ _printf() {
   done
   # printf "%s" "$str"
 }
+
+# We represent file descriptors as strings. That means that modes and offsets do not work.
+# These limitations are acceptable since c4.cc does not use them.
+# TODO: Packing and unpacking the string is a lazy way of copying a string
+_open() {
+  pack_string "$1"
+  unpack_string "$res"
+  _0result=$addr
+}
+
+_read() {
+  fd=$1
+  buf=$2
+  count=$3
+  pack_string "$fd"
+  echo "Reading $res"
+  read_n_char $count $buf < "$res" # We don't want to use cat because it's not pure Shell
+  _0result=$len
+}
+
+# File descriptor is just a string, nothing to close
+_close() {
+  return
+}
+
+# Used to implement the read instruction.
+# Does not work with NUL characters.
+read_n_char() {
+  count=$1
+  buf_ptr=$2
+  len=0
+  while [ "$count" != "0" ] ; do
+    get_char
+    case "$char" in
+      EOF) break ;;
+      NEWLINE) code=10 ;; # 10 == '\n'
+      *) code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code ;;
+    esac
+
+    : $((_$buf_ptr=$code))
+    : $((buf_ptr += 1))
+    : $((count -= 1))
+    : $((len += 1))
+  done
+}
+
+# Read a character from stdin.
+# Uses a buffer for the line, and a smaller fixed-sized buffer to speed up
+# reading of long lines. The fixed-sized buffer is refilled from the line buffer
+# when it is empty.
+# This optimization is necessary because the string operations of all shell
+# scale linearly with the size of the string, meaning that removing the head
+# char from a string of length N takes O(N) time. Since get_char is called for
+# every character in the line, reading a line of length N takes O(N^2) time.
+# This optimization doesn't change the complexity but reduces the constant
+# factor.
+src_buf=""
+src_buf_fast=""
+fast_buffer_len=50
+get_char()                           # get next char from source into $char
+{
+  if [ -z "$src_buf_fast" ] && [ -z "$src_buf" ] ; then
+    IFS=                             # don't split input
+    if read -r src_buf ; then        # read next line into $src_buf
+      if [ -z "$src_buf" ] ; then    # an empty line implies a newline character
+        char=NEWLINE                 # next get_char call will read next line
+        return
+      fi
+      src_buf_fast=$(printf "%.${fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
+      src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
+    else
+      char=EOF                       # EOF reached when read fails
+      return
+    fi
+  elif [ -z "$src_buf_fast" ] || [ -z "${src_buf_fast#?}" ]; then      # need to refill fast buffer
+    src_buf_fast=$(printf "%.${fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
+    src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
+    if [ -z "$src_buf_fast" ] ; then           # end of line if the buffer is now empty
+      char=NEWLINE
+      return
+    fi
+    char=$src_buf_fast                    # remember current buffer
+    rest=${src_buf_fast#?}                # remove the first char
+    char=${char%"$rest"}                  # remove all but first char
+  else # src_buf_fast is not empty and doesn't contain only a newline
+    src_buf_fast="${src_buf_fast#?}"      # remove the current char from $src_buf
+  fi
+
+  # current character is at the head of $src_buf_fast
+  char=$src_buf_fast                    # remember current buffer
+  rest=${src_buf_fast#?}                # remove the first char
+  char=${char%"$rest"}                  # remove all but first char
+}
