@@ -189,7 +189,6 @@ _read() {
   buf=$2
   count=$3
   pack_string "$fd"
-  echo "Reading $res"
   read_n_char $count $buf < "$res" # We don't want to use cat because it's not pure Shell
   _0result=$len
 }
@@ -266,4 +265,30 @@ get_char()                           # get next char from source into $char
   char=$src_buf_fast                    # remember current buffer
   rest=${src_buf_fast#?}                # remove the first char
   char=${char%"$rest"}                  # remove all but first char
+}
+
+_memset() {
+  ptr=$1
+  val=$2
+  len=$3
+  ix=0
+  while [ $ix -lt $len ]; do
+    : $((_$((ptr + ix)) = val))
+    : $((ix += 1))
+  done
+}
+
+_memcmp() {
+  op1=$1
+  op2=$2
+  len=$3
+  ix=0; a=0
+  while [ $ix -lt $len ]; do
+    if [ $((_$((op1 + ix)))) -ne $((_$((op2 + ix)))) ] ; then
+      # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
+      : $((_0result = _$((op1 + ix)) - _$((op2 + ix))))
+      break
+    fi
+    : $((ix = ix + 1))
+  done
 }
