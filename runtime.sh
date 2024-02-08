@@ -1,17 +1,8 @@
-_show_heap() {
-  set +u
-  heap_ix=1
-  echo "    Heap:"
-  while [ $heap_ix -lt $ALLOC ]; do
-    ascii=$((_$heap_ix))
-    char=""
-    if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
-      char=$(printf "\\$(printf "%o" "$ascii")")
-    fi
-    echo "        _$heap_ix = $ascii  ($char)"
-    : $((heap_ix += 1))
-  done
-}
+# Memory management
+
+_NULL=0 # Null pointer, should not be modified. TODO: Make global-var replace NULL with 0?
+
+ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 strict_alloc() {
   res=$ALLOC
@@ -84,6 +75,24 @@ pack_string() {
     esac
   done
 }
+
+# Local variables
+
+SP=0 # Note: Stack grows up, not down
+
+save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }
+
+rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }
+
+# Primitives
+
+_putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
+
+_exit() { echo \"Exiting with code $1\"; exit $1; }
+
+_malloc() { strict_alloc $1 ; : $((_0result = $res)) ; }
+
+_free() { return; }
 
 _printf() {
   fmt_ptr=$1; shift
@@ -290,5 +299,22 @@ _memcmp() {
       break
     fi
     : $((ix = ix + 1))
+  done
+}
+
+# Debug
+
+_show_heap() {
+  set +u
+  heap_ix=1
+  echo "    Heap:"
+  while [ $heap_ix -lt $ALLOC ]; do
+    ascii=$((_$heap_ix))
+    char=""
+    if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
+      char=$(printf "\\$(printf "%o" "$ascii")")
+    fi
+    echo "        _$heap_ix = $ascii  ($char)"
+    : $((heap_ix += 1))
   done
 }

@@ -473,30 +473,18 @@
 (define runtime-prelude
   (unlines
    "set -e -u"
-   "# Primitives"
-   "_putchar() { printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ; }"
-   "_exit() { echo \"Exiting with code $1\"; exit $1; }"
    ""
-   "# Memory management"
-   "_NULL=0" ; Null pointer, should not be modified. TODO: Make global-var replace NULL with 0?
-   "ALLOC=1" ; Starting heap at 1 because 0 is the null pointer.
+   "# Load runtime library and primitives"
+   "source runtime.sh"
+   ""
    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
    (if support-addr-of?
       "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
       "defglo() { : $(($1 = $2)) ; }")
-   "_malloc() { strict_alloc $1 ; : $((_0result = $res)) ; }"
-   "_free() { return; }"
    ""
-   "source runtime.sh"
-   ""
-   " # Setup argc, argv"
+   "# Setup argc, argv"
    "argc=$#;"
    "make_argv $argc $@"
-   ""
-   "# Local variables stack"
-   "SP=0" ; Note: Stack grows up, not down
-   "save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }"
-   "rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }"
    ""))
 
 (define runtime-postlude
