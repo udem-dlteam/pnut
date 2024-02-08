@@ -466,43 +466,6 @@
 (define (unlines . lst)
   (string-concatenate lst "\n"))
 
-(define push-data-prog
-  (unlines
-    "push_data() {"
-    "  : $((_$ALLOC=$1))"
-    "  : $((ALLOC += 1))"
-    "}"))
-
-; Push an array of values to the VM heap. Returns a reference to the array in $addr.
-(define unpack-array-prog
-  (unlines
-    "unpack_array() {"
-    "  addr=$ALLOC"
-    "  while [ $# -gt 0 ] ; do"
-    "    push_data $1"
-    "    shift"
-    "  done"
-    "}"))
-
-; Push a Shell string to the VM heap. Returns a reference to the string in $addr.
-; Could be replaced with a call to unpack-array-prog.
-; Idea: Do string to list of chars conversion in Scheme, and call unpack_string with a Shell list of int?
-(define unpack-string-prog
-  (unlines
-    "unpack_string() {"
-    "  addr=$ALLOC"
-    "  src_buf=\"$1\""
-    "  while [ -n \"$src_buf\" ] ; do"
-    "    char=\"$src_buf\"                    # remember current buffer"
-    "    rest=\"${src_buf#?}\"                # remove the first char"
-    "    char=\"${char%\"$rest\"}\"           # remove all but first char"
-    "    src_buf=\"${src_buf#?}\"             # remove the current char from $src_buf"
-    "    code=$(LC_CTYPE=C printf \"%d\" \"'$char'\")"
-    "    push_data \"$code\""
-    "  done"
-    "  push_data 0"
-    "}"))
-
 (define runtime-prelude
   (unlines
    "# Primitives"
@@ -518,9 +481,8 @@
       "defglo() { : $(($1 = $2)) ; }")
    "_malloc() { : $((_0result = $ALLOC)) $((ALLOC = ALLOC + $1)) ; }"
    "_free() { return; }"
-   push-data-prog
-   unpack-array-prog
-   unpack-string-prog
+   ""
+   "source runtime.sh"
    ""
    "# Local variables stack"
    "SP=0" ; Note: Stack grows up, not down
