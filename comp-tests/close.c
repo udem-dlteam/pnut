@@ -19,7 +19,7 @@ int main() {
   int h;
   MAX_SIZE = 5000;
   s = malloc(MAX_SIZE);
-  f = open("close.c", 0);
+  f = open("comp-tests/close.c", 0);
   len = read(f, s, MAX_SIZE - 1);
   s[len] = 0;
   close(f);
