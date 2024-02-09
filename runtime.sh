@@ -5,25 +5,25 @@ _NULL=0 # Null pointer, should not be modified. TODO: Make global-var replace NU
 ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 strict_alloc() {
-  res=$ALLOC
+  strict_alloc_res=$ALLOC
   : $((ALLOC += $1))
   # Need to initialize the memory to 0 or else `set -u` will complain
-  ix=$res
-  while [ $ix -lt $ALLOC ]; do
-    : $((_$ix=0))
-    : $((ix += 1))
+  strict_alloc_ix=$strict_alloc_res
+  while [ $strict_alloc_ix -lt $ALLOC ]; do
+    : $((_$strict_alloc_ix=0))
+    : $((strict_alloc_ix += 1))
   done
 }
 
 make_argv() {
-  argc=$1; shift;
-  strict_alloc $argc ; argv_ptr=$res
-  argv_ptr_ix=$argv_ptr
+  make_argv_argc=$1; shift;
+  strict_alloc $make_argv_argc ; make_argv_ptr=$strict_alloc_res
+  make_argv_ix=$make_argv_ptr
 
   while [ $# -ge 1 ]; do
     unpack_string "$1"
-    : $((_$argv_ptr_ix = $addr))
-    : $((argv_ptr_ix += 1))
+    : $((_$make_argv_ix = $unpack_string_addr))
+    : $((make_argv_ix += 1))
     shift
   done
 }
@@ -34,7 +34,7 @@ push_data() {
 }
 
 unpack_array() {
-  addr=$ALLOC
+  unpack_array_addr=$ALLOC
   while [ $# -gt 0 ] ; do
     push_data $1
     shift
@@ -43,15 +43,15 @@ unpack_array() {
 
 # Push a Shell string to the VM heap. Returns a reference to the string in $addr.
 unpack_string() {
-  addr=$ALLOC
-  src_buf="$1"
-  while [ -n "$src_buf" ] ; do
-    char="$src_buf"                    # remember current buffer
-    rest="${src_buf#?}"                # remove the first char
-    char="${char%"$rest"}"             # remove all but first char
-    src_buf="${src_buf#?}"             # remove the current char from $src_buf
-    code=$(LC_CTYPE=C printf "%d" "'$char'")
-    push_data "$code"
+  unpack_string_addr=$ALLOC
+  unpack_string_src_buf="$1"
+  while [ -n "$unpack_string_src_buf" ] ; do
+    unpack_string_char="$unpack_string_src_buf"                    # remember current buffer
+    unpack_string_rest="${unpack_string_src_buf#?}"                # remove the first char
+    unpack_string_char="${unpack_string_char%"$unpack_string_rest"}"             # remove all but first char
+    unpack_string_src_buf="${unpack_string_src_buf#?}"             # remove the current char from $src_buf
+    unpack_string_code=$(LC_CTYPE=C printf "%d" "'$unpack_string_char'")
+    push_data "$unpack_string_code"
   done
   push_data 0
 }
@@ -59,19 +59,20 @@ unpack_string() {
 # Convert a VM string reference to a Shell string.
 # $res is set to the result, and $len is set to the length of the string.
 pack_string() {
-  addr="$1";  shift
-  max_len=100000000
-  delim=0
-  if [ $# -ge 1 ] ; then delim="$1" ; shift ; fi # Optional end of string delimiter
-  if [ $# -ge 1 ] ; then max_len="$1" ; shift ; fi # Optional max length
-  len=0; res=""
-  while [ "$((_$addr))" -ne $delim ] && [ $max_len -gt $len ] ; do
-    char="$((_$addr))"
-    addr=$((addr + 1))
-    len=$((len + 1))
-    case $char in
-      10) res="$res\n" ;; # 10 == '\n'
-      *) res=$res$(printf "\\$(printf "%o" "$char")") # Decode
+  pack_string_addr="$1";  shift
+  pack_string_max_len=100000000
+  pack_string_delim=0
+  pack_string_len=0
+  pack_string_res=""
+  if [ $# -ge 1 ] ; then pack_string_delim="$1" ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then pack_string_max_len="$1" ; shift ; fi # Optional max length
+  while [ "$((_$pack_string_addr))" -ne $pack_string_delim ] && [ $pack_string_max_len -gt $pack_string_len ] ; do
+    pack_string_char="$((_$pack_string_addr))"
+    pack_string_addr=$((pack_string_addr + 1))
+    pack_string_len=$((pack_string_len + 1))
+    case $pack_string_char in
+      10) pack_string_res="$pack_string_res\n" ;; # 10 == '\n'
+      *) pack_string_res=$pack_string_res$(printf "\\$(printf "%o" "$pack_string_char")") # Decode
     esac
   done
 }
@@ -90,94 +91,94 @@ _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
 _exit() { echo \"Exiting with code $1\"; exit $1; }
 
-_malloc() { strict_alloc $1 ; : $((_0result = $res)) ; }
+_malloc() { strict_alloc $1 ; : $((_0result = $strict_alloc_res)) ; }
 
 _free() { return; }
 
 _printf() {
-  fmt_ptr=$1; shift
-  mod=0
-  while [ "$((_$fmt_ptr))" -ne 0 ] ; do
-    head="$((_$fmt_ptr))"
-    head_char=$(printf "\\$(printf "%o" "$head")") # Decode
-    fmt_ptr=$((fmt_ptr + 1))
-    if [ $mod -eq 1 ] ; then
-      case $head_char in
+  printf_fmt_ptr=$1; shift
+  printf_mod=0
+  while [ "$((_$printf_fmt_ptr))" -ne 0 ] ; do
+    printf_head="$((_$printf_fmt_ptr))"
+    printf_head_char=$(printf "\\$(printf "%o" "$printf_head")") # Decode
+    printf_fmt_ptr=$((printf_fmt_ptr + 1))
+    if [ $printf_mod -eq 1 ] ; then
+      case $printf_head_char in
         'd') # 100 = 'd' Decimal integer
-          imm=$1; shift
-          printf "%d" "$imm"
+          printf_imm=$1; shift
+          printf "%d" "$printf_imm"
           # str="$str$imm"
           ;;
         'c') # 99 = 'c' Character
-          char=$1; shift
+          printf_char=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          printf "\\$(printf "%o" "$char")"
+          printf "\\$(printf "%o" "$printf_char")"
           # str="$str$(printf "\\$(printf "%o" "$char")")"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
-          imm=$1; shift
+          printf_imm=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          printf "%x" "$imm"
+          printf "%x" "$printf_imm"
           # str="$str$(printf "%x" "$imm")"
           ;;
         's') # 115 = 's' String
-          str_ref=$1; shift
-          pack_string "$str_ref" # result in $res
+          printf_str_ref=$1; shift
+          pack_string "$printf_str_ref" # result in $res
           # Note: Using printf "%s" "$res" outputs "\n" if $res contains a newline
           # but printf "$res" seems to work fine.
-          printf "$res"
+          printf "$pack_string_res"
           # str="$str$res"
           ;;
         '.') # String with length
-          pack_string $fmt_ptr 0 2 # Read next 2 characters
-          fmt_ptr=$((fmt_ptr + 2))
-          if [ "$res" = "*s" ]; then
-            len=$1; shift
-            str_ref=$1; shift
-            pack_string $str_ref 0 $len # result in $res
-            printf "%s" "$res"
-            # str="$str$res"
+          pack_string $printf_fmt_ptr 0 2 # Read next 2 characters
+          printf_fmt_ptr=$((printf_fmt_ptr + 2))
+          if [ "$pack_string_res" = "*s" ]; then
+            printf_len=$1; shift
+            printf_str_ref=$1; shift
+            pack_string $printf_str_ref 0 $printf_len # result in $pack_string_res
+            printf "%s" "$pack_string_res"
+            # str="$str$pack_string_res"
           else
-            echo "Unknown format specifier: %.$res" ; exit 1
+            echo "Unknown format specifier: %.$pack_string_res" ; exit 1
           fi
           ;;
         [0-9])                         # parse integer
           # Get max length (with padding)
-          pack_string $fmt_ptr 46 # Read until '.' or end of string
-          fmt_ptr=$((fmt_ptr + len + 1))
-          min_len="$head_char$res" # Don't forget the first digit we've already read
+          pack_string $printf_fmt_ptr 46 # Read until '.' or end of string
+          printf_fmt_ptr=$((printf_fmt_ptr + pack_string_len + 1))
+          printf_min_len="$printf_head_char$pack_string_res" # Don't forget the first digit we've already read
 
           # Get string length
-          pack_string $fmt_ptr 115 # Read until 's' or end of string
-          fmt_ptr=$((fmt_ptr + len))
-          str_len=$res
+          pack_string $printf_fmt_ptr 115 # Read until 's' or end of string
+          printf_fmt_ptr=$((printf_fmt_ptr + pack_string_len))
+          printf_str_len=$pack_string_res
 
-          head="$((_$fmt_ptr))"
-          head_char=$(printf "\\$(printf "%o" "$head")") # Decode
-          fmt_ptr=$((fmt_ptr + 1))
-          if [ "$head_char" = 's' ]; then
-            str_ref=$1; shift
-            pack_string $str_ref 0 $str_len # result in $res
-              : $((padding_len = $min_len - $len))
-            while [ $padding_len -gt 0 ]; do # Pad string so it has at least $min_len characters
-              res=" $res"
-                : $((padding_len -= 1))
+          printf_head="$((_$printf_fmt_ptr))"
+          printf_head_char=$(printf "\\$(printf "%o" "$printf_head")") # Decode
+          printf_fmt_ptr=$((printf_fmt_ptr + 1))
+          if [ "$printf_head_char" = 's' ]; then
+            printf_str_ref=$1; shift
+            pack_string $printf_str_ref 0 $printf_str_len # result in $pack_string_res
+            : $((printf_padding_len = $printf_min_len - $pack_string_len))
+            while [ $printf_padding_len -gt 0 ]; do # Pad string so it has at least $min_len characters
+              pack_string_res=" $pack_string_res"
+              : $((printf_padding_len -= 1))
               done
-            printf "%s" "$res"
-            # str="$str$res"
+            printf "%s" "$pack_string_res"
+            # str="$str$pack_string_res"
           else
-            echo "Unknown format specifier: '%$min_len.$str_len$head_char'" ; exit 1;
+            echo "Unknown format specifier: '%$printf_min_len.$printf_str_len$printf_head_char'" ; exit 1;
           fi
           ;;
         *)
-          echo "Unknown format specifier %$head_char"; exit 1
+          echo "Unknown format specifier %$printf_head_char"; exit 1
       esac
-      mod=0
+      printf_mod=0
     else
-      case $head in
+      case $printf_head in
         10) printf "\n" ;; # str="$str\n" ;; # 10 == '\n'
-        37) mod=1 ;; # 37 == '%'
-        *) printf "$head_char" ;; # str="$str$head_char" ;; # Decode
+        37) printf_mod=1 ;; # 37 == '%'
+        *) printf "$printf_head_char" ;; # str="$str$head_char" ;; # Decode
       esac
     fi
   done
@@ -189,17 +190,17 @@ _printf() {
 # TODO: Packing and unpacking the string is a lazy way of copying a string
 _open() {
   pack_string "$1"
-  unpack_string "$res"
-  _0result=$addr
+  unpack_string "$pack_string_res"
+  _0result=$unpack_string_addr
 }
 
 _read() {
-  fd=$1
-  buf=$2
-  count=$3
-  pack_string "$fd"
-  read_n_char $count $buf < "$res" # We don't want to use cat because it's not pure Shell
-  _0result=$len
+  read_fd=$1
+  read_buf=$2
+  read_count=$3
+  pack_string "$read_fd"
+  read_n_char $read_count $read_buf < "$pack_string_res" # We don't want to use cat because it's not pure Shell
+  _0result=$read_n_char_len
 }
 
 # File descriptor is just a string, nothing to close
@@ -210,21 +211,21 @@ _close() {
 # Used to implement the read instruction.
 # Does not work with NUL characters.
 read_n_char() {
-  count=$1
-  buf_ptr=$2
-  len=0
-  while [ "$count" != "0" ] ; do
+  read_n_char_count=$1
+  read_n_char_buf_ptr=$2
+  read_n_char_len=0
+  while [ "$read_n_char_count" != "0" ] ; do
     get_char
-    case "$char" in
+    case "$get_char_char" in
       EOF) break ;;
       NEWLINE) code=10 ;; # 10 == '\n'
-      *) code=$(LC_CTYPE=C printf "%d" "'$char") # convert to integer code ;;
+      *) read_n_char_code=$(LC_CTYPE=C printf "%d" "'$get_char_char") # convert to integer code ;;
     esac
 
-    : $((_$buf_ptr=$code))
-    : $((buf_ptr += 1))
-    : $((count -= 1))
-    : $((len += 1))
+    : $((_$read_n_char_buf_ptr=$read_n_char_code))
+    : $((read_n_char_buf_ptr += 1))
+    : $((read_n_char_count -= 1))
+    : $((read_n_char_len += 1))
   done
 }
 
@@ -238,67 +239,68 @@ read_n_char() {
 # every character in the line, reading a line of length N takes O(N^2) time.
 # This optimization doesn't change the complexity but reduces the constant
 # factor.
-src_buf=""
-src_buf_fast=""
-fast_buffer_len=50
+get_char_src_buf=""
+get_char_src_buf_fast=""
+get_char_fast_buffer_len=50
 get_char()                           # get next char from source into $char
 {
-  if [ -z "$src_buf_fast" ] && [ -z "$src_buf" ] ; then
+  if [ -z "$get_char_src_buf_fast" ] && [ -z "$get_char_src_buf" ] ; then
     IFS=                             # don't split input
-    if read -r src_buf ; then        # read next line into $src_buf
-      if [ -z "$src_buf" ] ; then    # an empty line implies a newline character
-        char=NEWLINE                 # next get_char call will read next line
+    if read -r get_char_src_buf ; then        # read next line into $src_buf
+      if [ -z "$get_char_src_buf" ] ; then    # an empty line implies a newline character
+        get_char_char=NEWLINE                 # next get_char call will read next line
         return
       fi
-      src_buf_fast=$(printf "%.${fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
-      src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
+      get_char_src_buf_fast=$(printf "%.${get_char_fast_buffer_len}s" "$get_char_src_buf") # Copy first 100 chars to fast buffer
+      get_char_src_buf="${get_char_src_buf#"$get_char_src_buf_fast"}"       # remove first 100 chars from $src_buf
     else
-      char=EOF                       # EOF reached when read fails
+      get_char_char=EOF                       # EOF reached when read fails
       return
     fi
-  elif [ -z "$src_buf_fast" ] || [ -z "${src_buf_fast#?}" ]; then      # need to refill fast buffer
-    src_buf_fast=$(printf "%.${fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
-    src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
-    if [ -z "$src_buf_fast" ] ; then           # end of line if the buffer is now empty
-      char=NEWLINE
+  elif [ -z "$get_char_src_buf_fast" ] || [ -z "${get_char_src_buf_fast#?}" ]; then      # need to refill fast buffer
+    get_char_src_buf_fast=$(printf "%.${get_char_fast_buffer_len}s" "$get_char_src_buf") # Copy first 100 chars to fast buffer
+    get_char_src_buf="${get_char_src_buf#"$get_char_src_buf_fast"}"       # remove first 100 chars from $src_buf
+    if [ -z "$get_char_src_buf_fast" ] ; then           # end of line if the buffer is now empty
+      get_char_char=NEWLINE
       return
     fi
-    char=$src_buf_fast                    # remember current buffer
-    rest=${src_buf_fast#?}                # remove the first char
-    char=${char%"$rest"}                  # remove all but first char
+    get_char_char=$get_char_src_buf_fast                    # remember current buffer
+    get_char_rest=${get_char_src_buf_fast#?}                # remove the first char
+    get_char_char=${get_char_char%"$get_char_rest"}                  # remove all but first char
   else # src_buf_fast is not empty and doesn't contain only a newline
-    src_buf_fast="${src_buf_fast#?}"      # remove the current char from $src_buf
+    get_char_src_buf_fast="${get_char_src_buf_fast#?}"      # remove the current char from $src_buf
   fi
 
   # current character is at the head of $src_buf_fast
-  char=$src_buf_fast                    # remember current buffer
-  rest=${src_buf_fast#?}                # remove the first char
-  char=${char%"$rest"}                  # remove all but first char
+  get_char_char=$get_char_src_buf_fast                    # remember current buffer
+  get_char_rest=${get_char_src_buf_fast#?}                # remove the first char
+  get_char_char=${get_char_char%"$get_char_rest"}                  # remove all but first char
 }
 
 _memset() {
-  ptr=$1
-  val=$2
-  len=$3
-  ix=0
-  while [ $ix -lt $len ]; do
-    : $((_$((ptr + ix)) = val))
-    : $((ix += 1))
+  memset_ptr=$1
+  memset_val=$2
+  memset_len=$3
+  memset_ix=0
+  while [ $memset_ix -lt $memset_len ]; do
+    : $((_$((memset_ptr + memset_ix)) = memset_val))
+    : $((memset_ix += 1))
   done
 }
 
 _memcmp() {
-  op1=$1
-  op2=$2
-  len=$3
-  ix=0; a=0
-  while [ $ix -lt $len ]; do
-    if [ $((_$((op1 + ix)))) -ne $((_$((op2 + ix)))) ] ; then
+  memcmp_op1=$1
+  memcmp_op2=$2
+  memcmp_len=$3
+  memcmp_ix=0
+  memcmp_a=0
+  while [ $memcmp_ix -lt $memcmp_len ]; do
+    if [ $((_$((memcmp_op1 + memcmp_ix)))) -ne $((_$((memcmp_op2 + memcmp_ix)))) ] ; then
       # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
-      : $((_0result = _$((op1 + ix)) - _$((op2 + ix))))
+      : $((_0result = _$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix))))
       break
     fi
-    : $((ix = ix + 1))
+    : $((memcmp_ix = memcmp_ix + 1))
   done
 }
 
@@ -306,15 +308,15 @@ _memcmp() {
 
 _show_heap() {
   set +u
-  heap_ix=1
+  show_heap_ix=1
   echo "    Heap:"
-  while [ $heap_ix -lt $ALLOC ]; do
-    ascii=$((_$heap_ix))
-    char=""
-    if [ $ascii -ge 31 ] && [ $ascii -le 127 ] ; then
-      char=$(printf "\\$(printf "%o" "$ascii")")
+  while [ $show_heap_ix -lt $ALLOC ]; do
+    show_heap_ascii=$((_$show_heap_ix))
+    show_heap_char=""
+    if [ $show_heap_ascii -ge 31 ] && [ $show_heap_ascii -le 127 ] ; then
+      show_heap_char=$(printf "\\$(printf "%o" "$show_heap_ascii")")
     fi
-    echo "        _$heap_ix = $ascii  ($char)"
-    : $((heap_ix += 1))
+    echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
+    : $((show_heap_ix += 1))
   done
 }

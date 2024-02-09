@@ -484,7 +484,7 @@
    ""
    "# Setup argc, argv"
    "argc=$#;"
-   "make_argv $argc $@"
+   "make_argv $argc $@; argv_ptr=make_argv_ptr;"
    ""))
 
 (define runtime-postlude
@@ -511,11 +511,11 @@
               (cond ((list? datum)
                       (string-append
                         "unpack_array " (string-concatenate (map number->string datum) " ")
-                        "; __" (number->string ix) "=$addr"))
+                        "; __" (number->string ix) "=$unpack_array_addr"))
                     ((string? datum)
                       (string-append
                         "unpack_string " "\"" (escape-string datum) "\""
-                        "; __" (number->string ix) "=$addr"))))
+                        "; __" (number->string ix) "=$unpack_string_addr"))))
           (reverse (ctx-data ctx))
           (iota (length (ctx-data ctx)))))
       "")
