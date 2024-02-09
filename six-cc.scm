@@ -271,6 +271,19 @@
    (comp-rvalue ctx ast)
    " )) ]"))
 
+(define runtime-primitives
+  '(putchar
+    exit
+    malloc
+    free
+    printf
+    open
+    read
+    close
+    memset
+    memcmp
+    show_heap))
+
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
   ; - how to preserve value of variables that may be used by the caller (because no local variables).
@@ -293,21 +306,29 @@
             (map (lambda (p) (string-append "$((" (comp-rvalue ctx p) "))")) params))
           (call-code
             (string-concatenate (cons (function-name name) code-params) " "))
+          (is-prim
+            (member (cadr name) runtime-primitives))
           ; Remove the variable we are assigning to from the list of local variables to save.
           ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
           ; Some ideas on how to reduce the number of variables saved:
           ;  [x] Only save the variables that have been written to/initialized.
           ;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
+          ;     - [x] Primitives
+          ;     - [ ] For user-defined functions
           ;  [ ] Only restore variables lazily, so consecutive function calls don't save and restore needlessly.
           ;      This doesn't seem to be worth its complexity, and consecutive function calls may not be that common.
           ;      Note: on branch laurent/six-cc-lazy-var-restore.
           ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
           ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
-          (active-local-vars (map car (filter cdr (table->list (ctx-loc-env ctx)))))
-          (local-vars-to-save (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
+          (active-local-vars
+            (map car (filter cdr (table->list (ctx-loc-env ctx)))))
+          (local-vars-to-save
+            (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
 
       ; Save local variables
-      (if (not (null? local-vars-to-save))
+      ; All primitives uses variables not starting with _, meaning that there can't
+      ; be a conflicts
+      (if (and (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map global-var local-vars-to-save)) " "))))
@@ -331,7 +352,7 @@
             (cons (function-name name) code-params)
             " "))))
 
-      (if (and (not (null? local-vars-to-save)))
+      (if (and (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var " (string-concatenate (map global-var local-vars-to-save) " ")))))))
