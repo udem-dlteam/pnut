@@ -374,7 +374,7 @@
   (if (pair? ast)
       (let ((decl (car ast)))
         (if (eq? (car decl) 'six.x=y) ;; allow assignments at top level
-            (comp-assignment ctx decl 0)
+            (comp-assignment ctx decl)
             (comp-glo-decl ctx decl))
         (comp-glo-decl-list ctx (cdr ast)))))
 
