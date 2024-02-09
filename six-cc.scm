@@ -246,7 +246,7 @@
           (list "fi")))))
     ((six.return)
      (if (pair? (cdr ast))
-         (let ((code-expr (comp-rvalue ctx (cadr ast))))
+         (let ((code-expr (comp-rvalue ctx (cadr ast) 'return)))
           (if return-with-print?
             (ctx-add-glo-decl!
               ctx
@@ -268,7 +268,7 @@
 (define (comp-test ctx ast)
   (string-append
    "[ 0 != $(( "
-   (comp-rvalue ctx ast)
+   (comp-rvalue ctx ast 'test)
    " )) ]"))
 
 (define runtime-primitives
@@ -303,7 +303,7 @@
   (let ((name (car ast))
         (params (cdr ast)))
     (let* ((code-params
-            (map (lambda (p) (string-append "$((" (comp-rvalue ctx p) "))")) params))
+            (map (lambda (p) (string-append "$((" (comp-rvalue ctx p 'argument) "))")) params))
           (call-code
             (string-concatenate (cons (function-name name) code-params) " "))
           (is-prim
@@ -360,7 +360,7 @@
 (define (comp-statement-expr ctx ast)
   (case (car ast)
     ((six.call)
-      (comp-fun-call ctx (cdr ast)))
+     (comp-fun-call ctx (cdr ast)))
     ((six.compound)
      (comp-body ctx (cdr ast)))
     ((six.x=y)
@@ -368,7 +368,7 @@
     (else
      (ctx-add-glo-decl!
       ctx
-      (list ": $(( " (comp-rvalue ctx ast) " ))")))))
+      (list ": $(( " (comp-rvalue ctx ast 'statement-expr) " ))")))))
 
 (define (comp-glo-decl-list ctx ast)
   (if (pair? ast)
@@ -389,7 +389,7 @@
         (else
        (ctx-add-glo-decl!
         ctx
-            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs) " ))"))))
+            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs 'assignment) " ))"))))
 
        ; Mark the variable as used written to, used to determine if we need to save and restore it
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
@@ -404,7 +404,7 @@
     ((six.identifier)
      (global-ref ast))
     ((six.index)
-     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast)) "))"))
+     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) 'index-lvalue) "))"))
     (else
      (error "unknown lvalue" ast))))
 
@@ -415,7 +415,10 @@
     (else
      (error "unknown array lvalue" ast))))
 
-(define (comp-rvalue ctx ast)
+(define (comp-rvalue ctx ast context-tag)
+  (comp-rvalue-go ctx ast))
+
+(define (comp-rvalue-go ctx ast)
   (case (car ast)
     ((six.literal)
      (let ((val (cadr ast)))
@@ -439,7 +442,7 @@
     (global-ref ast))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y six.x&&y |six.x\|\|y| )
      (string-append "("
-                    (comp-rvalue ctx (cadr ast))
+                    (comp-rvalue-go ctx (cadr ast))
                     (case (car ast)
                       ((six.x+y) " + ")
                       ((six.x-y) " - ")
@@ -458,10 +461,10 @@
                       ((six.x&&y)  " && ")
                       ((|six.x\|\|y|)  " || ")
                       )
-                    (comp-rvalue ctx (caddr ast))
+                    (comp-rvalue-go ctx (caddr ast))
                     ")"))
     ((six.index)
-     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast)) "))"))
+     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast)) "))"))
     ((six.x++)
      (string-append "$((" (comp-lvalue ctx (cadr ast)) " += 1, " (comp-lvalue ctx (cadr ast)) " - 1" "))"))
     ((six.x--)
@@ -473,11 +476,11 @@
     ((six.!x)
      (string-append "!" (comp-lvalue ctx (cadr ast))))
     ((six.x+=y)
-     (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast))))
+     (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue-go ctx (caddr ast))))
     ((six.x=y)
-     (string-append (comp-lvalue ctx (cadr ast)) " = " (comp-rvalue ctx (caddr ast))))
+     (string-append (comp-lvalue ctx (cadr ast)) " = " (comp-rvalue-go ctx (caddr ast))))
     ((six.*x)
-     (string-append "_$((" (comp-rvalue ctx (cadr ast)) "))"))
+     (string-append "_$((" (comp-rvalue-go ctx (cadr ast)) "))"))
     (else
      (error "unknown rvalue" ast))))
 
