@@ -251,9 +251,10 @@
             (ctx-add-glo-decl!
               ctx
               (list "printf $((" code-expr "))"))
-           (ctx-add-glo-decl!
-            ctx
-              (list ": $(( _0result = " code-expr " ))")))))
+            (if (not (equal? code-expr "_0result"))
+              (ctx-add-glo-decl!
+                ctx
+                (list ": $(( _0result = " code-expr " ))"))))))
      (if (not (ctx-tail? ctx))
          (ctx-add-glo-decl!
           ctx
@@ -338,10 +339,11 @@
           (ctx-add-glo-decl!
             ctx
             (list (comp-lvalue ctx assign_to) "=$(" call-code ")"))
-          (begin
+          (let ((assign-to-comped (comp-lvalue ctx assign_to)))
             (ctx-add-glo-decl!
               ctx
               (list call-code))
+            ; (if (not (equal? assign-to-comped "_0result"))
             (ctx-add-glo-decl!
                 ctx
                 (list ": $(( " (comp-lvalue ctx assign_to) " = _0result ))"))))
@@ -415,8 +417,76 @@
     (else
      (error "unknown array lvalue" ast))))
 
+(define (replace-fun-calls ast)
+  (define replaced-fun-calls '())
+  (define (alloc-identifier)
+    (let ((id (gensym)))
+      (list 'six.identifier id)))
+  (define (go ast)
+    (case (car ast)
+      ((six.call)
+        (let ((id (alloc-identifier)))
+          (set! replaced-fun-calls (cons (cons id ast) replaced-fun-calls))
+          id))
+      ((six.literal six.list six.identifier)
+        ast)
+      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y six.x&&y |six.x\|\|y| six.index six.x+=y six.x=y)
+        (list (car ast)
+              (go (cadr ast))
+              (go (caddr ast))))
+      ((six.x++ six.x-- six.++x six.--x six.!x six.*x)
+        (list (car ast)
+              (go (cadr ast))))
+      (else
+        (error "unknown ast" ast))))
+  (cons (go ast) replaced-fun-calls))
+
+(define (replace-identifier ast old new)
+  (case (car ast)
+    ((six.identifier)
+      (if (equal? ast old)
+          new
+          ast))
+    ((six.literal six.list)
+      ast)
+    ((six.call six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y six.x&&y |six.x\|\|y| six.index six.x+=y six.x=y)
+      (list (car ast)
+            (replace-identifier (cadr ast) old new)
+            (replace-identifier (caddr ast) old new)))
+    ((six.x++ six.x-- six.++x six.--x six.!x six.*x)
+      (list (car ast)
+            (replace-identifier (cadr ast) old new)))
+    (else
+      (error "unknown ast" ast))))
+
 (define (comp-rvalue ctx ast context-tag)
-  (comp-rvalue-go ctx ast))
+  (let* ((pre-side-effects '())
+         (fun-calls-res (replace-fun-calls ast))
+         (new-ast (car fun-calls-res))
+         (fun-calls-to-replace (cdr fun-calls-res))
+         (post-side-effects '()))
+    (case context-tag
+      ((index-lvalue return argument statement-expr)
+        (if (eq? 1 (length fun-calls-to-replace))
+            (let* ((fun-call (car fun-calls-to-replace))
+                   (ast-with-0result (replace-identifier new-ast (car fun-call) '(six.identifier 0result))))
+              (comp-fun-call ctx (cddr fun-call))
+              (comp-rvalue-go ctx ast-with-0result))
+            (begin
+              (for-each
+                (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
+                fun-calls-to-replace)
+              (comp-rvalue-go ctx new-ast))))
+      ((test)
+        (if (null? fun-calls-to-replace)
+            (comp-rvalue-go ctx new-ast)
+            (error "comp-rvalue: Function calls not supported in condition")))
+      ((assignment)
+        (if (null? fun-calls-to-replace)
+            (comp-rvalue-go ctx new-ast)
+            (error "Not yet supported")))
+      (else
+        (error "unknown context tag" context-tag)))))
 
 (define (comp-rvalue-go ctx ast)
   (case (car ast)
@@ -481,6 +551,8 @@
      (string-append (comp-lvalue ctx (cadr ast)) " = " (comp-rvalue-go ctx (caddr ast))))
     ((six.*x)
      (string-append "_$((" (comp-rvalue-go ctx (cadr ast)) "))"))
+    ((six.call)
+      (error "Function calls not supported in rvalue"))
     (else
      (error "unknown rvalue" ast))))
 
