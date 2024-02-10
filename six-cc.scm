@@ -1,8 +1,12 @@
 #!/usr/bin/env gsi
 
 (define support-addr-of? #f)
-; Use printf and var=$(function_name) to get return value
-(define return-with-print? #f)
+; Determines how to return a value from a function call.
+; Possible values:
+; - 'variable: Each function returns in a variable called _0result and the caller must save it if needed.
+; - 'print: Each function prints its return value and the caller takes it from stdout: var=$(function_name).
+; - 'addr: Functions take an extra parameter that is the name of the variable where to store the return value.
+(define value-return-method 'variable)
 ; Assign $1, $2, ... to local parameters.
 ; If #f, we use the parameters directly when referring to local variables when possible.
 ; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.
@@ -249,14 +253,19 @@
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) 'return)))
-          (if return-with-print?
-            (ctx-add-glo-decl!
+          (case value-return-method
+            ((variable)
+             (ctx-add-glo-decl!
               ctx
-              (list "printf $((" code-expr "))"))
-            (if (not (equal? code-expr "_0result"))
-              (ctx-add-glo-decl!
-                ctx
-                (list ": $(( _0result = " code-expr " ))"))))))
+              (list "_0result=" code-expr)))
+            ((print)
+             (ctx-add-glo-decl!
+              ctx
+              (list "printf $((" code-expr "))")))
+            ((addr)
+             (error "Address value return method not yet supported"))
+            (else
+              (error "Unknown value return method" value-return-method)))))
      (if (not (ctx-tail? ctx))
          (ctx-add-glo-decl!
           ctx
@@ -331,24 +340,33 @@
       ; Save local variables
       ; All primitives uses variables not starting with _, meaning that there can't
       ; be a conflicts
+      ; TODO: Disable save_loc_var/rest_loc_var for tail calls
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map global-var local-vars-to-save)) " "))))
 
       (if assign_to
-        (if return-with-print?
-          (ctx-add-glo-decl!
-            ctx
-            (list (comp-lvalue ctx assign_to) "=$(" call-code ")"))
-          (let ((assign-to-comped (comp-lvalue ctx assign_to)))
-            (ctx-add-glo-decl!
-              ctx
-              (list call-code))
-            ; (if (not (equal? assign-to-comped "_0result"))
-            (ctx-add-glo-decl!
+        (case value-return-method
+            ((variable)
+              (ctx-add-glo-decl!
                 ctx
-                (list ": $(( " (comp-lvalue ctx assign_to) " = _0result ))"))))
+                (list
+                (string-concatenate
+                  (cons (function-name name) code-params)
+                  " ")))
+              (ctx-add-glo-decl!
+                ctx
+                (list ": $(( " (comp-lvalue ctx assign_to) " = _0result ))")))
+            ((print)
+             (ctx-add-glo-decl!
+                ctx
+                (list (comp-lvalue ctx assign_to) "=$(" call-code ")")))
+            ((addr)
+             (error "Address value return method not yet supported"))
+            (else
+              (error "Unknown value return method" value-return-method)))
+            ; (if (not (equal? assign-to-comped "_0result"))
          (ctx-add-glo-decl!
           ctx
           (list
@@ -469,7 +487,7 @@
          (post-side-effects '()))
     (case context-tag
       ((index-lvalue return argument statement-expr)
-        (if (eq? 1 (length fun-calls-to-replace))
+        (if (and (equal? value-return-method 'variable) (eq? 1 (length fun-calls-to-replace)))
             (let* ((fun-call (car fun-calls-to-replace))
                    (ast-with-0result (replace-identifier new-ast (car fun-call) '(six.identifier 0result))))
               (comp-fun-call ctx (cddr fun-call))
