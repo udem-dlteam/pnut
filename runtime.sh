@@ -91,7 +91,11 @@ _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
 _exit() { echo \"Exiting with code $1\"; exit $1; }
 
-_malloc() { strict_alloc $1 ; : $((_0result = $strict_alloc_res)) ; }
+_malloc() {
+  malloc_size=$1
+  strict_alloc $malloc_size
+  prim_return_value $strict_alloc_res
+}
 
 _free() { return; }
 
@@ -191,7 +195,7 @@ _printf() {
 _open() {
   pack_string "$1"
   unpack_string "$pack_string_res"
-  _0result=$unpack_string_addr
+  prim_return_value $unpack_string_addr
 }
 
 _read() {
@@ -200,7 +204,7 @@ _read() {
   read_count=$3
   pack_string "$read_fd"
   read_n_char $read_count $read_buf < "$pack_string_res" # We don't want to use cat because it's not pure Shell
-  _0result=$read_n_char_len
+  prim_return_value $read_n_char_len
 }
 
 # File descriptor is just a string, nothing to close
@@ -297,7 +301,7 @@ _memcmp() {
   while [ $memcmp_ix -lt $memcmp_len ]; do
     if [ $((_$((memcmp_op1 + memcmp_ix)))) -ne $((_$((memcmp_op2 + memcmp_ix)))) ] ; then
       # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
-      : $((_0result = _$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix))))
+      prim_return_value $((_$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix))))
       break
     fi
     : $((memcmp_ix = memcmp_ix + 1))

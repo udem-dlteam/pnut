@@ -603,6 +603,16 @@
    "# Load runtime library and primitives"
    "source runtime.sh"
    ""
+   (case value-return-method
+     ((variable)
+      "prim_return_value() { : $((_0result = $1)) ; }")
+     ((print)
+      "prim_return_value() { : printf $1 ; }")
+     ((addr)
+      (error "Address value return method not yet supported" value-return-method))
+     (else
+      (error "Unknown value return method" value-return-method)))
+   ""
    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
    (if support-addr-of?
       "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
