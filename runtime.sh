@@ -306,6 +306,7 @@ _memcmp() {
     fi
     : $((memcmp_ix = memcmp_ix + 1))
   done
+  prim_return_value 0
 }
 
 # Debug
