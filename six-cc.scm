@@ -7,6 +7,8 @@
 ; If #f, we use the parameters directly when referring to local variables when possible.
 ; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.
 (define map-all-param-to-local-var? #t)
+; Useful for debugging only
+(define disable-save-restore-vars? #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -329,7 +331,7 @@
       ; Save local variables
       ; All primitives uses variables not starting with _, meaning that there can't
       ; be a conflicts
-      (if (and (not is-prim) (not (null? local-vars-to-save)))
+      (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map global-var local-vars-to-save)) " "))))
@@ -354,7 +356,7 @@
             (cons (function-name name) code-params)
             " "))))
 
-      (if (and (not is-prim) (not (null? local-vars-to-save)))
+      (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var " (string-concatenate (map global-var local-vars-to-save) " ")))))))
