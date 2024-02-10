@@ -92,9 +92,14 @@ _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 _exit() { echo \"Exiting with code $1\"; exit $1; }
 
 _malloc() {
+  if [ $# -eq 2 ]; then
+    malloc_return_loc=$1; shift
+  else
+    malloc_return_loc=
+  fi
   malloc_size=$1
   strict_alloc $malloc_size
-  prim_return_value $strict_alloc_res
+  prim_return_value $strict_alloc_res $malloc_return_loc
 }
 
 _free() { return; }
@@ -193,18 +198,28 @@ _printf() {
 # These limitations are acceptable since c4.cc does not use them.
 # TODO: Packing and unpacking the string is a lazy way of copying a string
 _open() {
+  if [ $# -eq 3 ]; then
+    open_return_loc=$1; shift
+  else
+    open_return_loc=
+  fi
   pack_string "$1"
   unpack_string "$pack_string_res"
-  prim_return_value $unpack_string_addr
+  prim_return_value $unpack_string_addr $open_return_loc
 }
 
 _read() {
+  if [ $# -eq 4 ]; then
+    read_return_loc=$1; shift
+  else
+    read_return_loc=
+  fi
   read_fd=$1
   read_buf=$2
   read_count=$3
   pack_string "$read_fd"
   read_n_char $read_count $read_buf < "$pack_string_res" # We don't want to use cat because it's not pure Shell
-  prim_return_value $read_n_char_len
+  prim_return_value $read_n_char_len $read_return_loc
 }
 
 # File descriptor is just a string, nothing to close
@@ -293,6 +308,11 @@ _memset() {
 }
 
 _memcmp() {
+  if [ $# -eq 4 ]; then
+    memcmp_return_loc=$1; shift
+  else
+    memcmp_return_loc=
+  fi
   memcmp_op1=$1
   memcmp_op2=$2
   memcmp_len=$3
@@ -301,12 +321,12 @@ _memcmp() {
   while [ $memcmp_ix -lt $memcmp_len ]; do
     if [ $((_$((memcmp_op1 + memcmp_ix)))) -ne $((_$((memcmp_op2 + memcmp_ix)))) ] ; then
       # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
-      prim_return_value $((_$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix))))
-      break
+      prim_return_value $((_$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix)))) $memcmp_return_loc
+      return
     fi
     : $((memcmp_ix = memcmp_ix + 1))
   done
-  prim_return_value 0
+  prim_return_value 0 $memcmp_return_loc
 }
 
 # Debug

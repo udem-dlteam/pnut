@@ -3,10 +3,12 @@
 (define support-addr-of? #f)
 ; Determines how to return a value from a function call.
 ; Possible values:
-; - 'variable: Each function returns in a variable called _0result and the caller must save it if needed.
-; - 'print: Each function prints its return value and the caller takes it from stdout: var=$(function_name).
-; - 'addr: Functions take an extra parameter that is the name of the variable where to store the return value.
-(define value-return-method 'variable)
+; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
+; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
+; - '(print): Each function prints its return value and the caller takes it from stdout: var=$(function_name).
+; (define value-return-method '(variable 0result))
+; (define value-return-method '(print))
+(define value-return-method '(addr #t))
 ; Assign $1, $2, ... to local parameters.
 ; If #f, we use the parameters directly when referring to local variables when possible.
 ; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.
@@ -163,10 +165,26 @@
      ctx
      (list "}"))))
 
-(define (comp-body ctx lst #!optional (parameters '()))
-  (let ((start-loc-env (table-copy (ctx-loc-env ctx)))
-        (parameter-table (list->table (map (lambda (p) (cons (car p) #t)) parameters)))) ; Parameters are always initialized
+(define (comp-body ctx lst #!optional (function-parameters #f))
+  (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
+         (parameters (or function-parameters '()))
+         (parameter-table (list->table (map (lambda (p) (cons (car p) #t)) parameters)))) ; Parameters are always initialized
     (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
+
+    (if (and function-parameters (equal? 'addr (car value-return-method)))
+      (begin
+        (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) #t)
+        (if (cadr value-return-method) ; return address is always passed?
+          (begin
+            (ctx-add-glo-decl!
+              ctx
+              (list "_result_loc=$1; shift # Remove result_loc param")))
+          (begin
+            ; TODO: Replace _result_loc with a call to local-var when it is implemented
+            (ctx-add-glo-decl!
+              ctx
+              (list "if [ $# -eq " (+ 1 (length parameters)) " ]; then _result_loc=$1; shift ; else _result_loc= ; fi ;"))))))
+
     ; IDEA: We could also use $1, $2, ... when referring to parameters.
     ; If map-all-param-to-local-var? is #f, we use the parameters directly,
     ; generating shorter code, but that's harder to read and where we can't
@@ -253,17 +271,19 @@
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) 'return)))
-          (case value-return-method
+          (case (car value-return-method)
             ((variable)
              (ctx-add-glo-decl!
               ctx
-              (list "_0result=" code-expr)))
+              (list "_" (symbol->string (cadr value-return-method)) "=" code-expr)))
             ((print)
              (ctx-add-glo-decl!
               ctx
               (list "printf $((" code-expr "))")))
             ((addr)
-             (error "Address value return method not yet supported"))
+             (ctx-add-glo-decl!
+              ctx
+              (list "prim_return_value $((" code-expr ")) $" (global-ref '(six.identifier result_loc)))))
             (else
               (error "Unknown value return method" value-return-method)))))
      (if (not (ctx-tail? ctx))
@@ -283,18 +303,19 @@
    (comp-rvalue ctx ast 'test)
    " )) ]"))
 
+; Primitives from the runtime library, and if they return a value or not.
 (define runtime-primitives
-  '(putchar
-    exit
-    malloc
-    free
-    printf
-    open
-    read
-    close
-    memset
-    memcmp
-    show_heap))
+  '((putchar #f)
+    (exit #f)
+    (malloc #t)
+    (free #f)
+    (printf #f)
+    (open #t)
+    (read #t)
+    (close #f)
+    (memset #f)
+    (memcmp #t)
+    (show_heap #f)))
 
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
@@ -312,14 +333,18 @@
   ;    - Each function prints its return value and the caller takes it from stdout: var=$(function_name).
   ;       This wouldn't work for functions that want to print to stdout.
   ;    - Functions take an extra parameter that is the address/name of the variable where to store the return value.
-  (let ((name (car ast))
-        (params (cdr ast)))
-    (let* ((code-params
-            (map (lambda (p) (string-append "$((" (comp-rvalue ctx p 'argument) "))")) params))
-          (call-code
-            (string-concatenate (cons (function-name name) code-params) " "))
-          (is-prim
-            (member (cadr name) runtime-primitives))
+  (let* ((name (car ast))
+         (params (cdr ast))
+         (code-params
+          (map (lambda (p) (string-append "$((" (comp-rvalue ctx p 'argument) "))")) params))
+         (call-code
+          (string-concatenate (cons (function-name name) code-params) " "))
+         (is-prim
+          (member (cadr name) (map car runtime-primitives)))
+         (can-return
+          (if is-prim
+              (cadr (assoc (cadr name) runtime-primitives))
+              #t)) ; We assume that all user-defined functions can return a value
           ; Remove the variable we are assigning to from the list of local variables to save.
           ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
           ; Some ideas on how to reduce the number of variables saved:
@@ -333,9 +358,9 @@
           ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
           ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
           (active-local-vars
-            (map car (filter cdr (table->list (ctx-loc-env ctx)))))
+           (map car (filter cdr (table->list (ctx-loc-env ctx)))))
           (local-vars-to-save
-            (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
+           (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
 
       ; Save local variables
       ; All primitives uses variables not starting with _, meaning that there can't
@@ -346,38 +371,35 @@
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map global-var local-vars-to-save)) " "))))
 
-      (if assign_to
-        (case value-return-method
-            ((variable)
-              (ctx-add-glo-decl!
-                ctx
-                (list
-                (string-concatenate
-                  (cons (function-name name) code-params)
-                  " ")))
-              (ctx-add-glo-decl!
-                ctx
-                (list ": $(( " (comp-lvalue ctx assign_to) " = _0result ))")))
-            ((print)
-             (ctx-add-glo-decl!
-                ctx
-                (list (comp-lvalue ctx assign_to) "=$(" call-code ")")))
-            ((addr)
-             (error "Address value return method not yet supported"))
-            (else
-              (error "Unknown value return method" value-return-method)))
-            ; (if (not (equal? assign-to-comped "_0result"))
-         (ctx-add-glo-decl!
-          ctx
-          (list
-           (string-concatenate
-            (cons (function-name name) code-params)
-            " "))))
+      (if (and (not can-return) assign_to)
+        (error "Function call can't return a value, but we are assigning to a variable"))
+
+      (case (car value-return-method)
+        ((variable)
+          (ctx-add-glo-decl! ctx (list call-code))
+          (if assign_to
+            (ctx-add-glo-decl!
+              ctx
+              (list ": $(( " (comp-lvalue ctx assign_to) " = _" (symbol->string (cadr value-return-method)) " ))"))))
+        ((print)
+          (if assign_to
+            (ctx-add-glo-decl!
+              ctx
+              (list (comp-lvalue ctx assign_to) "=$(" call-code ")"))
+            (ctx-add-glo-decl! ctx (list call-code))))
+        ((addr)
+          (if (and (or assign_to (cadr value-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
+            (ctx-add-glo-decl!
+              ctx
+              (list (string-concatenate (cons (function-name name) (cons (global-ref (or assign_to '(identifier dummy_loc))) code-params)) " ")))
+          (ctx-add-glo-decl! ctx (list call-code))))
+        (else
+          (error "Unknown value return method" value-return-method)))
 
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
-          (list "rest_loc_var " (string-concatenate (map global-var local-vars-to-save) " ")))))))
+          (list "rest_loc_var " (string-concatenate (map global-var local-vars-to-save) " "))))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -409,8 +431,8 @@
         ((six.call)
           (comp-fun-call ctx (cdr rhs) lhs))
         (else
-       (ctx-add-glo-decl!
-        ctx
+          (ctx-add-glo-decl!
+            ctx
             (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs 'assignment) " ))"))))
 
        ; Mark the variable as used written to, used to determine if we need to save and restore it
@@ -487,11 +509,13 @@
          (post-side-effects '()))
     (case context-tag
       ((index-lvalue return argument statement-expr)
-        (if (and (equal? value-return-method 'variable) (eq? 1 (length fun-calls-to-replace)))
+        ; Optimization: If we only replaced one function call, we can use the return location directly
+        ; TODO: Do the same for addr return method
+        (if (and (equal? (car value-return-method) 'variable) (eq? 1 (length fun-calls-to-replace)))
             (let* ((fun-call (car fun-calls-to-replace))
-                   (ast-with-0result (replace-identifier new-ast (car fun-call) '(six.identifier 0result))))
+                   (ast-with-result-identifier (replace-identifier new-ast (car fun-call) `(six.identifier ,(cadr value-return-method)))))
               (comp-fun-call ctx (cddr fun-call))
-              (comp-rvalue-go ctx ast-with-0result))
+              (comp-rvalue-go ctx ast-with-result-identifier))
             (begin
               (for-each
                 (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
@@ -603,13 +627,13 @@
    "# Load runtime library and primitives"
    "source runtime.sh"
    ""
-   (case value-return-method
+   (case (car value-return-method)
      ((variable)
-      "prim_return_value() { : $((_0result = $1)) ; }")
+      (string-append "prim_return_value() { : $((_" (symbol->string (cadr value-return-method)) " = $1)) ; }"))
      ((print)
       "prim_return_value() { : printf $1 ; }")
      ((addr)
-      (error "Address value return method not yet supported" value-return-method))
+      "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
      (else
       (error "Unknown value return method" value-return-method)))
    ""
