@@ -159,44 +159,44 @@
      ctx
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
-    (nest ctx (comp-body ctx body parameters))
+    (nest ctx
+      (let ((start-loc-env (table-copy (ctx-loc-env ctx)))
+            (parameter-table (list->table (map (lambda (p) (cons (car p) #t)) parameters)))) ; Parameters are always initialized
+        (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
+        (if (equal? 'addr (car value-return-method))
+          (begin
+            (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) #t)
+            (if (cadr value-return-method) ; return address is always passed?
+              (begin
+                (ctx-add-glo-decl!
+                  ctx
+                  (list "_result_loc=$1; shift # Remove result_loc param")))
+              (begin
+                ; TODO: Replace _result_loc with a call to local-var when it is implemented
+                (ctx-add-glo-decl!
+                  ctx
+                  (list "if [ $# -eq " (+ 1 (length parameters)) " ]; then _result_loc=$1; shift ; else _result_loc= ; fi ;"))))))
+
+        ; IDEA: We could also use $1, $2, ... when referring to parameters.
+        ; If map-all-param-to-local-var? is #f, we use the parameters directly,
+        ; generating shorter code, but that's harder to read and where we can't
+        ; assign
+        (let ((local-vars-to-map
+                (if map-all-param-to-local-var?
+                  (map cons parameters (iota (length parameters) 1))
+                  (error "not yet supported"))))
+          (for-each
+            (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
+            local-vars-to-map))
+      (comp-body ctx body)
+      (ctx-loc-env-set! ctx start-loc-env)))
 
     (ctx-add-glo-decl!
      ctx
      (list "}"))))
 
-(define (comp-body ctx lst #!optional (function-parameters #f))
-  (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
-         (parameters (or function-parameters '()))
-         (parameter-table (list->table (map (lambda (p) (cons (car p) #t)) parameters)))) ; Parameters are always initialized
-    (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
-
-    (if (and function-parameters (equal? 'addr (car value-return-method)))
-      (begin
-        (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) #t)
-        (if (cadr value-return-method) ; return address is always passed?
-          (begin
-            (ctx-add-glo-decl!
-              ctx
-              (list "_result_loc=$1; shift # Remove result_loc param")))
-          (begin
-            ; TODO: Replace _result_loc with a call to local-var when it is implemented
-            (ctx-add-glo-decl!
-              ctx
-              (list "if [ $# -eq " (+ 1 (length parameters)) " ]; then _result_loc=$1; shift ; else _result_loc= ; fi ;"))))))
-
-    ; IDEA: We could also use $1, $2, ... when referring to parameters.
-    ; If map-all-param-to-local-var? is #f, we use the parameters directly,
-    ; generating shorter code, but that's harder to read and where we can't
-    ; assign
-    (let ((local-vars-to-map
-            (if map-all-param-to-local-var?
-              (map cons parameters (iota (length parameters) 1))
-              (error "not yet supported"))))
-      (for-each
-        (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
-        local-vars-to-map))
-
+(define (comp-body ctx lst)
+  (let ((start-loc-env (table-copy (ctx-loc-env ctx))))
     (let loop ((lst lst))
       (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
           (let ((def-var (cadar lst)))
