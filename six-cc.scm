@@ -293,7 +293,7 @@
             ((variable)
              (ctx-add-glo-decl!
               ctx
-              (list "_" (symbol->string (cadr value-return-method)) "=" code-expr)))
+              (list "_" (symbol->string (cadr value-return-method)) "=$((" code-expr "))")))
             ((print)
              (ctx-add-glo-decl!
               ctx
