@@ -304,10 +304,11 @@
               (list "prim_return_value $((" code-expr ")) $" (env-var ctx '(six.identifier result_loc)))))
             (else
               (error "Unknown value return method" value-return-method)))))
-     (if (not (ctx-tail? ctx))
+    ; Seems broken in while loops
+    ;  (if (not (ctx-tail? ctx))
          (ctx-add-glo-decl!
           ctx
-          (list "return"))))
+          (list "return")))
     ((six.break)
      (ctx-add-glo-decl!
       ctx
