@@ -1,3 +1,4 @@
+/* args: abc def hij */
 int main(int argc, char_ptr argv) {
   int i;
   printf("Number of arguments: %d\n", argc);

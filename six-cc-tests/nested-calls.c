@@ -17,11 +17,12 @@ int decrement(int i) {
 int r[2801];
 
 int main() {
+  abc(123);
   r[abc(123)] = 2000;
+  printf("%d \n", r[abc(123)]);
   /* while (counter = decrement(counter)) { */
   while (counter--) {
     printf("Counter: %d\n", counter);
   }
-  exit(abc(def(123)));
-  return abc(123);
+  return abc(def(123));
 }

@@ -17,9 +17,9 @@ int main() {
   char_ptr s;
   int len;
   int h;
-  MAX_SIZE = 5000;
+  MAX_SIZE = 200;
   s = malloc(MAX_SIZE);
-  f = open("comp-tests/close.c", 0);
+  f = open("six-cc-tests/close.c", 0);
   len = read(f, s, MAX_SIZE - 1);
   s[len] = 0;
   close(f);
@@ -29,7 +29,5 @@ int main() {
   printf("Backslash: \\\n", len);
   printf("Read len: %d\n", len);
   printf("Read result: %.*s\n", len, s);
-  h = hash(s);
-  printf("hash: %d\n", h);
-  return len;
+  printf("hash: %d\n", hash(s));
 }

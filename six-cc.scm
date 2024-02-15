@@ -6,9 +6,9 @@
 ; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
 ; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
 ; - '(print): Each function prints its return value and the caller takes it from stdout: var=$(function_name).
-; (define value-return-method '(variable 0result))
+(define value-return-method '(variable 0result))
 ; (define value-return-method '(print))
-(define value-return-method '(addr #t))
+; (define value-return-method '(addr #t))
 ; Assign $1, $2, ... to local parameters.
 ; If #f, we use the parameters directly when referring to local variables when possible.
 ; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.

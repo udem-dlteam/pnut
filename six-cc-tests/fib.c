@@ -1,7 +1,7 @@
 int main() {
   int n123;
   n123 = fib(15);
-  exit(n123);
+  printf("%d\n", n123);
 }
 
 int fib(int n) {

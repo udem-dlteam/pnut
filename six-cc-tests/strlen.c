@@ -50,5 +50,7 @@ int main() {
   n1 = string_len([1,2,3,4,5,0]);
   n2 = string_sum("Hello, world!");
   n3 = array_sum(arr, 50);
-  exit(n3);
+  printf("n1 = %d\n", n1);
+  printf("n2 = %d\n", n2);
+  printf("n3 = %d\n", n3);
 }
