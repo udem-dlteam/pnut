@@ -37,15 +37,39 @@
 (define-macro (nest ctx . body)
   `(nest-level ,ctx (lambda () ,@body)))
 
+(define-type local-var
+  position
+  initialized)
+
+(define (shift-ctx-loc-env-position ctx)
+  (for-each (lambda (p)
+              (if (local-var-position (cdr p))
+                (local-var-position-set! (cdr p) (+ 1 (local-var-position (cdr p))))))
+            (table->list (ctx-loc-env ctx))))
+
+(define (mark-ctx-loc-env-initialized ctx ident)
+  (let* ((env (ctx-loc-env ctx))
+         (loc (table-ref (ctx-loc-env ctx) ident #f)))
+    (if loc
+      (local-var-initialized-set! loc #t))))
+
+(define (env-var ctx ident)
+  (if (number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
+    (string-append "$" (number->string (cadr ident)))
+    (if (table-ref (ctx-loc-env ctx) ident #f)
+      (format-var ident)
+      (global-ref ident))))
+
 (define (global-var ident)
-  (if (symbol? (cadr ident))
-    (string-append "_" (symbol->string (cadr ident)))
-    (string-append "$" (number->string (cadr ident)))))
+  (string-append "_" (symbol->string (cadr ident))))
 
 (define (global-ref ident)
   (if support-addr-of?
       (string-append "_$" (global-var ident))
       (global-var ident)))
+
+(define (format-var ident)
+  (string-append "_" (symbol->string (cadr ident))))
 
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
@@ -89,20 +113,6 @@
           (ctx-add-glo-decl!
            ctx
            (list "defarr " (global-var name) " " size)))
-        (let ((val (if init (comp-constant ctx init) "0")))
-          (ctx-add-glo-decl!
-           ctx
-           (if support-addr-of?
-               (list "defglo_pointable " (global-var name) " " val)
-               (list "defglo " (global-var name) " " val)))))))
-
-(define (comp-loc-define-variable ctx ast)
-  (let* ((name (cadr ast))
-         (type (caddr ast))
-         (dims (cadddr ast))
-         (init (car (cddddr ast))))
-    (if (pair? dims)
-        (error "arrays not yet supported" dims)
         (let ((val (if init (comp-constant ctx init) "0")))
           (ctx-add-glo-decl!
            ctx
@@ -160,22 +170,29 @@
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
     (nest ctx
-      (let ((start-loc-env (table-copy (ctx-loc-env ctx)))
-            (parameter-table (list->table (map (lambda (p) (cons (car p) #t)) parameters)))) ; Parameters are always initialized
+      (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
+             (mk-param (lambda (p i) (cons (car p) (make-local-var i #t)))) ; Parameters are always initialized
+             (parameters-list (map mk-param parameters (iota (length parameters) 1)))
+             (parameter-table (list->table parameters-list)))
         (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
         (if (equal? 'addr (car value-return-method))
           (begin
-            (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) #t)
+            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
+            (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) (make-local-var 1 #t))
             (if (cadr value-return-method) ; return address is always passed?
               (begin
                 (ctx-add-glo-decl!
                   ctx
-                  (list "_result_loc=$1; shift # Remove result_loc param")))
+                  (list (env-var ctx '(six.identifier result_loc))
+                        "=$1; shift "
+                        "# Remove result_loc param")))
               (begin
                 ; TODO: Replace _result_loc with a call to local-var when it is implemented
                 (ctx-add-glo-decl!
                   ctx
-                  (list "if [ $# -eq " (+ 1 (length parameters)) " ]; then _result_loc=$1; shift ; else _result_loc= ; fi ;"))))))
+                  (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
+                        "then " (env-var ctx '(six.identifier result_loc)) "=$1; shift ; "
+                        "else " (env-var ctx '(six.identifier result_loc)) "= ; fi ;"))))))
 
         ; IDEA: We could also use $1, $2, ... when referring to parameters.
         ; If map-all-param-to-local-var? is #f, we use the parameters directly,
@@ -200,11 +217,12 @@
     (let loop ((lst lst))
       (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
           (let ((def-var (cadar lst)))
-            (table-set! (ctx-loc-env ctx) def-var #f)
+            (table-set! (ctx-loc-env ctx) def-var (make-local-var #f #f))
             ; TODO: Initialize var?
             (loop (cdr lst)))
           (begin
             (comp-statement-list ctx lst)
+            ; Bug: We need to propagate the is_initialized flag of local variables to start-loc-env?
             (ctx-loc-env-set! ctx start-loc-env))))))
 
 (define (comp-statement-list ctx lst)
@@ -283,7 +301,7 @@
             ((addr)
              (ctx-add-glo-decl!
               ctx
-              (list "prim_return_value $((" code-expr ")) $" (global-ref '(six.identifier result_loc)))))
+              (list "prim_return_value $((" code-expr ")) $" (env-var ctx '(six.identifier result_loc)))))
             (else
               (error "Unknown value return method" value-return-method)))))
      (if (not (ctx-tail? ctx))
@@ -357,10 +375,10 @@
           ;      Note: on branch laurent/six-cc-lazy-var-restore.
           ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
           ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
-          (active-local-vars
-           (map car (filter cdr (table->list (ctx-loc-env ctx)))))
+          (initialized-local-vars
+           (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
           (local-vars-to-save
-           (filter (lambda (x) (not (equal? assign_to x))) active-local-vars)))
+           (filter (lambda (x) (not (equal? assign_to x))) initialized-local-vars)))
 
       ; Save local variables
       ; All primitives uses variables not starting with _, meaning that there can't
@@ -369,7 +387,7 @@
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
-          (list "save_loc_var " (string-concatenate (reverse (map global-var local-vars-to-save)) " "))))
+          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))
 
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
@@ -391,7 +409,10 @@
           (if (and (or assign_to (cadr value-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
             (ctx-add-glo-decl!
               ctx
-              (list (string-concatenate (cons (function-name name) (cons (global-ref (or assign_to '(identifier dummy_loc))) code-params)) " ")))
+              (list (string-concatenate (cons (function-name name)
+                                          (cons (env-var ctx (or assign_to '(identifier dummy_loc)))
+                                          code-params))
+                                        " ")))
           (ctx-add-glo-decl! ctx (list call-code))))
         (else
           (error "Unknown value return method" value-return-method)))
@@ -399,7 +420,7 @@
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
-          (list "rest_loc_var " (string-concatenate (map global-var local-vars-to-save) " "))))))
+          (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save) " "))))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -439,14 +460,14 @@
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
        ; but this is simple and works for now.
        (if (eq? (car lhs) 'six.identifier)
-           (table-set! (ctx-loc-env ctx) lhs #t))) ; Mark local var as used)
+        (mark-ctx-loc-env-initialized ctx lhs))) ; Mark local var as initialized
       (else
        (error "unknown lhs" lhs)))))
 
 (define (comp-lvalue ctx ast)
   (case (car ast)
     ((six.identifier)
-     (global-ref ast))
+     (env-var ctx ast))
     ((six.index)
      (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) 'index-lvalue) "))"))
     (else
@@ -455,7 +476,7 @@
 (define (comp-array-lvalue ctx ast)
   (case (car ast)
     ((six.identifier)
-     (global-var ast))
+     (env-var ctx ast))
     (else
      (error "unknown array lvalue" ast))))
 
@@ -553,7 +574,7 @@
               (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
               (obj-ref (- (length (ctx-data ctx)) 1))))))
     ((six.identifier)
-    (global-ref ast))
+     (env-var ctx ast))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y six.x&&y |six.x\|\|y| )
      (string-append "("
                     (comp-rvalue-go ctx (cadr ast))
