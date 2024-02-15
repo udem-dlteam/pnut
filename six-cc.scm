@@ -5,9 +5,7 @@
 ; Possible values:
 ; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
 ; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
-; - '(print): Each function prints its return value and the caller takes it from stdout: var=$(function_name).
 (define value-return-method '(variable 0result))
-; (define value-return-method '(print))
 ; (define value-return-method '(addr #t))
 ; Assign $1, $2, ... to local parameters.
 ; If #f, we use the parameters directly when referring to local variables when possible.
@@ -164,7 +162,6 @@
          (result-type (cadr proc))
          (parameters (caddr proc))
          (body (cdar (cdddr proc))))
-    ;;    (print "#") (write ast) (newline)
     (ctx-add-glo-decl!
      ctx
      (list (function-name name) "() {"))
@@ -294,10 +291,6 @@
              (ctx-add-glo-decl!
               ctx
               (list "_" (symbol->string (cadr value-return-method)) "=$((" code-expr "))")))
-            ((print)
-             (ctx-add-glo-decl!
-              ctx
-              (list "printf $((" code-expr "))")))
             ((addr)
              (ctx-add-glo-decl!
               ctx
@@ -349,8 +342,6 @@
   ; - how to pass the return value.
   ;   Options:
   ;    - Each function returns in a variable called {function_name}_result and the caller must save it if needed.
-  ;    - Each function prints its return value and the caller takes it from stdout: var=$(function_name).
-  ;       This wouldn't work for functions that want to print to stdout.
   ;    - Functions take an extra parameter that is the address/name of the variable where to store the return value.
   (let* ((name (car ast))
          (params (cdr ast))
@@ -400,12 +391,6 @@
             (ctx-add-glo-decl!
               ctx
               (list ": $(( " (comp-lvalue ctx assign_to) " = _" (symbol->string (cadr value-return-method)) " ))"))))
-        ((print)
-          (if assign_to
-            (ctx-add-glo-decl!
-              ctx
-              (list (comp-lvalue ctx assign_to) "=$(" call-code ")"))
-            (ctx-add-glo-decl! ctx (list call-code))))
         ((addr)
           (if (and (or assign_to (cadr value-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
             (ctx-add-glo-decl!
@@ -652,8 +637,6 @@
    (case (car value-return-method)
      ((variable)
       (string-append "prim_return_value() { : $((_" (symbol->string (cadr value-return-method)) " = $1)) ; }"))
-     ((print)
-      "prim_return_value() { : printf $1 ; }")
      ((addr)
       "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
      (else
