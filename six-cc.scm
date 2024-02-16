@@ -285,7 +285,7 @@
           (list "fi")))))
     ((six.return)
      (if (pair? (cdr ast))
-         (let ((code-expr (comp-rvalue ctx (cadr ast) 'return)))
+         (let ((code-expr (comp-rvalue ctx (cadr ast) '(return))))
           (case (car value-return-method)
             ((variable)
              (ctx-add-glo-decl!
@@ -312,7 +312,7 @@
 (define (comp-test ctx ast)
   (string-append
    "[ 0 != $(( "
-   (comp-rvalue ctx ast 'test)
+   (comp-rvalue ctx ast '(test))
    " )) ]"))
 
 ; Primitives from the runtime library, and if they return a value or not.
@@ -345,8 +345,13 @@
   ;    - Functions take an extra parameter that is the address/name of the variable where to store the return value.
   (let* ((name (car ast))
          (params (cdr ast))
+         (func-call-params (filter (lambda (p) (equal? (car p) 'six.call)) params))
          (code-params
-          (map (lambda (p) (string-append "$((" (comp-rvalue ctx p 'argument) "))")) params))
+          (map (lambda (p)
+                  (let* ((params-after (or (member p func-call-params) '()))
+                         (params-after-count (max 0 (- (length params-after) 1))))
+                    (string-append "$((" (comp-rvalue ctx p `(argument ,params-after-count)) "))")))
+               params))
          (call-code
           (string-concatenate (cons (function-name name) code-params) " "))
          (is-prim
@@ -421,7 +426,7 @@
     (else
      (ctx-add-glo-decl!
       ctx
-      (list ": $(( " (comp-rvalue ctx ast 'statement-expr) " ))")))))
+      (list ": $(( " (comp-rvalue ctx ast '(statement-expr)) " ))")))))
 
 (define (comp-glo-decl-list ctx ast)
   (if (pair? ast)
@@ -442,7 +447,7 @@
         (else
           (ctx-add-glo-decl!
             ctx
-            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs 'assignment) " ))"))))
+            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs '(assignment)) " ))"))))
 
        ; Mark the variable as used written to, used to determine if we need to save and restore it
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
@@ -457,7 +462,7 @@
     ((six.identifier)
      (env-var ctx ast))
     ((six.index)
-     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) 'index-lvalue) "))"))
+     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) '(index-lvalue)) "))"))
     (else
      (error "unknown lvalue" ast))))
 
@@ -476,8 +481,12 @@
   (define (go ast)
     (case (car ast)
       ((six.call)
-        (let ((id (alloc-identifier)))
-          (set! replaced-fun-calls (cons (cons id ast) replaced-fun-calls))
+        (let* ((id (alloc-identifier))
+               (fun-name (car ast))
+               (fun-params (cdr ast))
+               (replaced-params (map go fun-params))
+               (new-fun-call (cons fun-name replaced-params)))
+          (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls))
           id))
       ((six.literal six.list six.identifier)
         ast)
@@ -490,7 +499,7 @@
               (go (cadr ast))))
       (else
         (error "unknown ast" ast))))
-  (cons (go ast) replaced-fun-calls))
+  (cons (go ast) (reverse replaced-fun-calls)))
 
 (define (replace-identifier ast old new)
   (case (car ast)
@@ -516,20 +525,48 @@
          (new-ast (car fun-calls-res))
          (fun-calls-to-replace (cdr fun-calls-res))
          (post-side-effects '()))
-    (case context-tag
+    (case (car context-tag)
       ((index-lvalue return argument statement-expr)
-        ; Optimization: If we only replaced one function call, we can use the return location directly
-        ; TODO: Do the same for addr return method
-        (if (and (equal? (car value-return-method) 'variable) (eq? 1 (length fun-calls-to-replace)))
-            (let* ((fun-call (car fun-calls-to-replace))
-                   (ast-with-result-identifier (replace-identifier new-ast (car fun-call) `(six.identifier ,(cadr value-return-method)))))
-              (comp-fun-call ctx (cddr fun-call))
-              (comp-rvalue-go ctx ast-with-result-identifier))
-            (begin
-              (for-each
-                (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
-                fun-calls-to-replace)
-              (comp-rvalue-go ctx new-ast))))
+        ; Optimization: When returning with the variable return method, we can
+        ; use the return location directly when it's used by the next function
+        ; call.
+        ; Also, the return location can be returned directly by comp-rvalue when
+        ; we know that it will be used directly after. This is normally true,
+        ; except when the rvalue is a function call argument and the parent
+        ; function call has multiple function call arguments. In that case, only
+        ; the last function call argument can skip assigning to the return
+        ; location.
+        ; Note: This could maybe be done in a simpler way by moving this logic
+        ; to comp-fun-call but it works for now.
+        (if (and (equal? (car value-return-method) 'variable) (not (null? fun-calls-to-replace)))
+          (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (< 0 (cadr context-tag))))
+                (ast-with-result-identifier
+                  (replace-identifier new-ast
+                                      (car (last fun-calls-to-replace)) ; Location of last function call
+                                      `(six.identifier ,(cadr value-return-method)))))
+            (for-each
+                (lambda (call nextCall)
+                  ; Check if next function call uses the result, if it's the case use the variable directly
+                  (let ((nextCallUsesReturnLoc (and nextCall (member (car call) (cddr nextCall)))))
+                    (if nextCallUsesReturnLoc
+                      (begin
+                        ; Overwrite the argument of next function call with the return location
+                        (set-cdr! (car nextCallUsesReturnLoc) (cdr value-return-method))
+                        (comp-fun-call ctx (cddr call)))
+                      ; We only assign to the return location if it's not the
+                      ; last function call. In that case, it's up to the caller
+                      ; of comp-rvalue to read the value.
+                      (comp-fun-call ctx (cddr call) (and (or nextCall must-assign-to-return-loc) (car call))))))
+                fun-calls-to-replace
+                (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
+            (if must-assign-to-return-loc
+              (comp-rvalue-go ctx new-ast)
+              (comp-rvalue-go ctx ast-with-result-identifier)))
+          (begin
+            (for-each
+              (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
+              fun-calls-to-replace)
+            (comp-rvalue-go ctx new-ast))))
       ((test)
         (if (null? fun-calls-to-replace)
             (comp-rvalue-go ctx new-ast)
