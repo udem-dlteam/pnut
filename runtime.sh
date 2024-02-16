@@ -81,9 +81,27 @@ pack_string() {
 
 SP=0 # Note: Stack grows up, not down
 
-save_loc_var() { while [ $# -gt 0 ]; do : $((SP += 1)) $((_data_$SP=$1)) ; shift ; done }
+_result_loc=0 # This is useful when value-return-method != '(addr #t))
+save_loc_var() {
+  : $((SP += 1))
+  unset "_data_$SP" # For some reason, ksh doesn't like to overwrite the value
+  eval "_data_$SP='$_result_loc'"
+  while [ $# -gt 0 ]; do
+    : $((SP += 1))
+    : $((_data_$SP=$1))
+    shift
+  done
+}
 
-rest_loc_var() { while [ $# -gt 0 ]; do : $(($1=_data_$SP)) $((SP -= 1)) ; shift ; done }
+rest_loc_var() {
+  while [ $# -gt 0 ]; do
+    : $(($1=_data_$SP))
+    : $((SP -= 1))
+    shift
+  done
+  eval "_result_loc=\$_data_$SP"
+  : $((SP -= 1))
+}
 
 # Primitives
 
@@ -343,5 +361,16 @@ _show_heap() {
     fi
     echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
     : $((show_heap_ix += 1))
+  done
+}
+
+_show_arg_stack() {
+  set +u
+  arg_ix=1
+  echo "    Heap:"
+  while [ $arg_ix -le $((SP + 1)) ]; do
+    eval "val=\$_data_$arg_ix"
+    echo "        _$arg_ix = $val"
+    : $((arg_ix += 1))
   done
 }

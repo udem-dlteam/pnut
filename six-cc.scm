@@ -370,7 +370,9 @@
           (initialized-local-vars
            (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
           (local-vars-to-save
-           (filter (lambda (x) (not (equal? assign_to x))) initialized-local-vars)))
+           (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
+          (local-vars-to-save-no-result-loc
+           (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
 
       ; Save local variables
       ; All primitives uses variables not starting with _, meaning that there can't
@@ -379,7 +381,7 @@
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
-          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))
+          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc)) " "))))
 
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
@@ -406,7 +408,7 @@
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
-          (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save) " "))))))
+          (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -655,6 +657,7 @@
 (define runtime-postlude
   (string-append
    (function-name '(six.identifier main))
+   (if (equal? 'addr (car value-return-method)) " _dummy_loc" "")
    " $argc"
    " $argv_ptr"))
 
