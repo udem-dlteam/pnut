@@ -671,7 +671,7 @@
    "set -e -u"
    ""
    "# Load runtime library and primitives"
-   "source runtime.sh"
+   ". $(pwd)/runtime.sh # TODO: Do not use pwd"
    ""
    (case (car value-return-method)
      ((variable)
