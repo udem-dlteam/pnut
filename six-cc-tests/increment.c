@@ -1,4 +1,6 @@
 int main() {
+  int a;
+  int b;
   int x;
   int y;
   int z;
@@ -7,5 +9,11 @@ int main() {
   y = x++;
   x = 3;
   z = ++x;
-  printf("x: %d, y: %d, z: %d\n", x, y, z);
+
+  a = 0;
+  b = 0;
+  while (a < 10) {
+    b += a++;
+  }
+  printf("a: %d, b: %d, x: %d, y: %d, z: %d\n", a, b, x, y, z);
 }

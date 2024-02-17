@@ -310,10 +310,15 @@
      (comp-statement-expr ctx ast))))
 
 (define (comp-test ctx ast)
-  (string-append
-   "[ 0 != $(( "
-   (comp-rvalue ctx ast '(test))
-   " )) ]"))
+  (let* ((rvalue-res (comp-rvalue ctx ast '(test)))
+         (rvalue (car rvalue-res))
+         (pre-side-effects (comp-side-effects ctx (cdr rvalue-res) '(test))))
+
+    (string-append
+      (apply string-append (map (lambda (e) (string-append e "; ")) pre-side-effects))
+      "[ 0 != $(( "
+      rvalue
+      " )) ]")))
 
 ; Primitives from the runtime library, and if they return a value or not.
 (define runtime-primitives
@@ -424,9 +429,8 @@
     ((six.x=y)
      (comp-assignment ctx ast))
     (else
-     (ctx-add-glo-decl!
-      ctx
-      (list ": $(( " (comp-rvalue ctx ast '(statement-expr)) " ))")))))
+     ; Since we don't assign the result of the expression and comp-rvalue does the side-effect, we can drop the result of comp-rvalue
+     (comp-rvalue ctx ast '(statement-expr)))))
 
 (define (comp-glo-decl-list ctx ast)
   (if (pair? ast)
@@ -445,9 +449,16 @@
         ((six.call)
           (comp-fun-call ctx (cdr rhs) lhs))
         (else
+          (let* ((rvalue-res (comp-rvalue ctx rhs '(assignment)))
+                 (rvalue (car rvalue-res))
+                 (pre-side-effects (comp-side-effects ctx (cdr rvalue-res) '(assignment))))
+          (for-each
+            (lambda (p) (ctx-add-glo-decl! ctx p))
+            pre-side-effects)
           (ctx-add-glo-decl!
             ctx
-            (list ": $(( " (comp-lvalue ctx lhs) " = " (comp-rvalue ctx rhs '(assignment)) " ))"))))
+            (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))"))
+          )))
 
        ; Mark the variable as used written to, used to determine if we need to save and restore it
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
@@ -473,8 +484,13 @@
     (else
      (error "unknown array lvalue" ast))))
 
-(define (replace-fun-calls ast)
+; We can't have function calls and other side effects in $(( ... )), so we need to handle them separately.
+; For function calls, this function replaces them with unique identifiers and returns a list of the replaced function calls and their new identifiers.
+; For pre/post-increments/decrements, we map them to a pre-side-effect and replace with the corresponding operation.
+; Note that pre/post-increments/decrements of function calls are not supported.
+(define (handle-side-effects ast)
   (define replaced-fun-calls '())
+  (define pre-side-effect '())
   (define (alloc-identifier)
     (let ((id (gensym)))
       (list 'six.identifier id)))
@@ -490,16 +506,55 @@
           id))
       ((six.literal six.list six.identifier)
         ast)
-      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y six.x&&y |six.x\|\|y| six.index six.x+=y six.x=y)
+      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y six.x&&y |six.x\|\|y| six.index six.x=y)
         (list (car ast)
               (go (cadr ast))
               (go (caddr ast))))
-      ((six.x++ six.x-- six.++x six.--x six.!x six.*x)
+      ((six.!x six.*x)
         (list (car ast)
               (go (cadr ast))))
+      ((six.++x six.--x six.x++ six.x-- six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+        (let ((set-and-return (lambda (r) (set! pre-side-effect (cons r pre-side-effect)) r)))
+          (case (car ast)
+            ((six.++x)
+              (let ((new-op (go (cadr ast))))
+                (set-and-return `(six.++x ,new-op))
+                new-op))
+            ((six.--x)
+              (let ((new-op (go (cadr ast))))
+                (set-and-return `(six.--x ,new-op))
+                new-op))
+            ((six.x++)
+              ; We map post increments to a pre-increment and replace x++ with x - 1 to compensate
+              (let ((new-op (go (cadr ast))))
+                (set-and-return `(six.++x ,new-op))
+                `(six.x-y ,new-op (six.literal 1))))
+            ((six.x--)
+              ; We map post decrements to a pre-decrement and replace x-- with x + 1 to compensate
+              (let ((new-op (go (cadr ast))))
+                (set-and-return `(six.--x ,new-op))
+                `(six.x+y ,new-op (six.literal 1))))
+            ((six.x+=y)
+              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+                (set-and-return `(six.x+=y ,new-op1 ,new-op2))))
+            ((six.x-=y)
+              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+                (set-and-return `(six.x-=y ,new-op1 ,new-op2))))
+            ((six.x*=y)
+              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+                (set-and-return `(six.x*=y ,new-op1 ,new-op2))))
+            ((six.x/=y)
+              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+                (set-and-return `(six.x/=y ,new-op1 ,new-op2))))
+            ((six.x%=y)
+              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+                (set-and-return `(six.x%=y ,new-op1 ,new-op2)))))))
       (else
         (error "unknown ast" ast))))
-  (cons (go ast) (reverse replaced-fun-calls)))
+
+  (list (go ast)
+        (reverse replaced-fun-calls)
+        (reverse pre-side-effect)))
 
 (define (replace-identifier ast old new)
   (case (car ast)
@@ -519,14 +574,35 @@
     (else
       (error "unknown ast" ast))))
 
+(define (comp-side-effects ctx side-effects context-tag)
+  (map
+    (lambda (ast)
+      (case (car ast)
+        ((six.++x)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += 1 ))"))
+        ((six.--x)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= 1 ))"))
+        ((six.x+=y)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+        ((six.x-=y)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+        ((six.x*=y)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " *= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+        ((six.x/=y)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " /= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+        ((six.x%=y)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " %= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+        (else
+          (error "unknown side effect" ast))))
+    side-effects))
+
 (define (comp-rvalue ctx ast context-tag)
-  (let* ((pre-side-effects '())
-         (fun-calls-res (replace-fun-calls ast))
-         (new-ast (car fun-calls-res))
-         (fun-calls-to-replace (cdr fun-calls-res))
-         (post-side-effects '()))
+  (let* ((side-effects-res (handle-side-effects ast))
+         (new-ast (car side-effects-res))
+         (fun-calls-to-replace (cadr side-effects-res))
+         (pre-side-effects (caddr side-effects-res)))
     (case (car context-tag)
-      ((index-lvalue return argument statement-expr)
+      ((return statement-expr index-lvalue argument)
         ; Optimization: When returning with the variable return method, we can
         ; use the return location directly when it's used by the next function
         ; call.
@@ -545,36 +621,47 @@
                                       (car (last fun-calls-to-replace)) ; Location of last function call
                                       `(six.identifier ,(cadr value-return-method)))))
             (for-each
-                (lambda (call nextCall)
-                  ; Check if next function call uses the result, if it's the case use the variable directly
-                  (let ((nextCallUsesReturnLoc (and nextCall (member (car call) (cddr nextCall)))))
-                    (if nextCallUsesReturnLoc
-                      (begin
-                        ; Overwrite the argument of next function call with the return location
-                        (set-cdr! (car nextCallUsesReturnLoc) (cdr value-return-method))
-                        (comp-fun-call ctx (cddr call)))
-                      ; We only assign to the return location if it's not the
-                      ; last function call. In that case, it's up to the caller
-                      ; of comp-rvalue to read the value.
-                      (comp-fun-call ctx (cddr call) (and (or nextCall must-assign-to-return-loc) (car call))))))
-                fun-calls-to-replace
-                (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
+              (lambda (e) (ctx-add-glo-decl! ctx e))
+              (comp-side-effects ctx pre-side-effects context-tag))
+            (for-each
+              (lambda (call nextCall)
+                ; Check if next function call uses the result, if it's the case use the variable directly
+                (let ((nextCallUsesReturnLoc (and nextCall (member (car call) (cddr nextCall)))))
+                  (if nextCallUsesReturnLoc
+                    (begin
+                      ; Overwrite the argument of next function call with the return location
+                      (set-cdr! (car nextCallUsesReturnLoc) (cdr value-return-method))
+                      (comp-fun-call ctx (cddr call)))
+                    ; We only assign to the return location if it's not the
+                    ; last function call. In that case, it's up to the caller
+                    ; of comp-rvalue to read the value.
+                    ; TODO: Add the return location to the list of local vars to save to support recursive function calls
+                    (comp-fun-call ctx (cddr call) (and (or nextCall must-assign-to-return-loc) (car call))))))
+              fun-calls-to-replace
+              (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
             (if must-assign-to-return-loc
               (comp-rvalue-go ctx new-ast)
               (comp-rvalue-go ctx ast-with-result-identifier)))
           (begin
+            (for-each
+              (lambda (e) (ctx-add-glo-decl! ctx e))
+              (comp-side-effects ctx pre-side-effects context-tag))
             (for-each
               (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
               fun-calls-to-replace)
             (comp-rvalue-go ctx new-ast))))
       ((test)
         (if (null? fun-calls-to-replace)
-            (comp-rvalue-go ctx new-ast)
-            (error "comp-rvalue: Function calls not supported in condition")))
+            (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
+            (error "comp-rvalue: Function calls not supported in condition" ast)))
       ((assignment)
         (if (null? fun-calls-to-replace)
+            (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
+            (error "function calls in assignment not supported" ast)))
+      ((default)
+        (if (and (null? fun-calls-to-replace) (null? pre-side-effects))
             (comp-rvalue-go ctx new-ast)
-            (error "Not yet supported")))
+            (error "function calls and side effects in default context not supported" ast)))
       (else
         (error "unknown context tag" context-tag)))))
 
@@ -626,9 +713,9 @@
     ((six.index)
      (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast)) "))"))
     ((six.x++)
-     (string-append "$((" (comp-lvalue ctx (cadr ast)) " += 1, " (comp-lvalue ctx (cadr ast)) " - 1" "))"))
+     (string-append "$((" (comp-lvalue ctx (cadr ast)) " = " (comp-lvalue ctx (cadr ast)) " + 1 , " (comp-lvalue ctx (cadr ast)) " - 1" "))"))
     ((six.x--)
-     (string-append "$((" (comp-lvalue ctx (cadr ast)) " -= 1, " (comp-lvalue ctx (cadr ast)) " + 1" "))"))
+     (string-append "$((" (comp-lvalue ctx (cadr ast)) " = " (comp-lvalue ctx (cadr ast)) " - 1 , " (comp-lvalue ctx (cadr ast)) " + 1" "))"))
     ((six.++x)
      (string-append (comp-lvalue ctx (cadr ast)) " += 1"))
     ((six.--x)
@@ -637,6 +724,8 @@
      (string-append "!" (comp-lvalue ctx (cadr ast))))
     ((six.x+=y)
      (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue-go ctx (caddr ast))))
+    ((six.x-=y)
+     (string-append (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue-go ctx (caddr ast))))
     ((six.x=y)
      (string-append (comp-lvalue ctx (cadr ast)) " = " (comp-rvalue-go ctx (caddr ast))))
     ((six.*x)
