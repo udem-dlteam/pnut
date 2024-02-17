@@ -362,6 +362,7 @@ _show_heap() {
     echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
     : $((show_heap_ix += 1))
   done
+  set -u
 }
 
 _show_arg_stack() {
