@@ -48,31 +48,32 @@ test-six-cc:
 	@echo "Running six-cc tests..."
 	@for file in $(shell find six-cc-tests -type f -name "*.c" | sort); do \
 		filename=$$(basename $$file .c); \
+		/bin/echo -n "$$filename: "; \
 		gsi six-cc.scm $$file > six-cc-tests/$$filename.sh 2>&1; \
 		if [ $$? -eq 0 ]; then \
 			first_line=$$(head -n 1 $$file); \
 			args=$${first_line#"/* args:"}; \
 			args=$${args%"*/"}; \
-			$$SHELL six-cc-tests/$$filename.sh $$args > six-cc-tests/$$filename.result; \
+			timeout 1 $$SHELL six-cc-tests/$$filename.sh $$args > six-cc-tests/$$filename.result; \
 			if [ $$? -eq 0 ]; then \
 				if [ -f "six-cc-tests/$$filename.golden" ]; then \
 					diff_out=$$(diff six-cc-tests/$$filename.golden six-cc-tests/$$filename.result); \
 					if [ $$? -eq 0 ]; then \
-						echo "$$filename: ✅"; \
+						echo "✅"; \
 					else \
-						echo "$$filename: ❌"; \
+						echo "❌"; \
 						echo "diff (output vs expected)"; \
 						echo "$$diff_out"; \
 					fi \
 				else \
 					cp six-cc-tests/$$filename.result six-cc-tests/$$filename.golden; \
-					echo "$$filename: ❌ Generated golden file"; \
+					echo "❌ Generated golden file"; \
 				fi \
 			else \
-				echo "$$filename: ❌ Failed to run: $$(cat six-cc-tests/$$filename.result)"; \
+				echo "❌ Failed to run: $$(cat six-cc-tests/$$filename.result)"; \
 			fi; \
 			rm -f six-cc-tests/$$filename.result; \
 		else \
-			echo "$$filename: ❌ Failed to compile. See six-cc-tests/$$filename.sh for error."; \
+			echo "❌ Failed to compile. See six-cc-tests/$$filename.sh for error."; \
 		fi; \
 	done
