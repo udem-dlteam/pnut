@@ -51,6 +51,9 @@
     (if loc
       (local-var-initialized-set! loc #t))))
 
+(define (is-local-var ctx ident)
+  (table-ref (ctx-loc-env ctx) ident #f))
+
 (define (env-var ctx ident)
   (if (number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
     (string-append "$" (number->string (cadr ident)))
@@ -463,7 +466,7 @@
        ; Mark the variable as used written to, used to determine if we need to save and restore it
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
        ; but this is simple and works for now.
-       (if (eq? (car lhs) 'six.identifier)
+       (if (is-local-var ctx lhs)
         (mark-ctx-loc-env-initialized ctx lhs))) ; Mark local var as initialized
       (else
        (error "unknown lhs" lhs)))))
