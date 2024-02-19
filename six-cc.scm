@@ -13,6 +13,8 @@
 (define map-all-param-to-local-var? #t)
 ; Useful for debugging only
 (define disable-save-restore-vars? #f)
+; Disable for faster execution of programs that allocate a lot of memory
+(define initialize-memory-when-alloc #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -767,6 +769,11 @@
    ""
    "# Load runtime library and primitives"
    ". $(pwd)/runtime.sh # TODO: Do not use pwd"
+   ""
+   (if initialize-memory-when-alloc
+    "STRICT_MODE=1"
+    "STRICT_MODE=0"
+   )
    ""
    (case (car value-return-method)
      ((variable)
