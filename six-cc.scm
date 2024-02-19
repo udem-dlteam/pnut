@@ -713,8 +713,13 @@
        (cond ((exact-integer? val)
               (number->string val))
              ((string? val)
-              (ctx-data-set! ctx (cons val (ctx-data ctx)))
-              (obj-ref (- (length (ctx-data ctx)) 1)))
+              ; Hacky way to detect character literals
+              ; since six doesn't distinguish between " and '
+              (if (equal? 1 (string-length val))
+                (number->string (char->integer (string-ref val 0)))
+                (begin
+                  (ctx-data-set! ctx (cons val (ctx-data ctx)))
+                  (obj-ref (- (length (ctx-data ctx)) 1)))))
              (else
               "unknown literal" ast))))
     ((six.list)
