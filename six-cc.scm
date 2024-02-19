@@ -332,8 +332,8 @@
     (printf #f)
     (open #t)
     (read #t)
-    (close #f)
-    (memset #f)
+    (close #t)
+    (memset #t)
     (memcmp #t)
     (show_heap #f)))
 

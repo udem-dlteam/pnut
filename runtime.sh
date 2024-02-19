@@ -242,6 +242,12 @@ _read() {
 
 # File descriptor is just a string, nothing to close
 _close() {
+  if [ $# -eq 2 ]; then
+    close_return_loc=$1; shift
+  else
+    close_return_loc=
+  fi
+  prim_return_value 0 $close_return_loc
   return
 }
 
@@ -315,6 +321,11 @@ get_char()                           # get next char from source into $char
 }
 
 _memset() {
+  if [ $# -eq 4 ]; then
+    memset_return_loc=$1; shift
+  else
+    memset_return_loc=
+  fi
   memset_ptr=$1
   memset_val=$2
   memset_len=$3
@@ -323,6 +334,7 @@ _memset() {
     : $((_$((memset_ptr + memset_ix)) = memset_val))
     : $((memset_ix += 1))
   done
+  prim_return_value $memset_ptr $memset_return_loc
 }
 
 _memcmp() {
