@@ -774,7 +774,7 @@
     ((six.--x)
      (string-append (comp-lvalue ctx (cadr ast)) " -= 1"))
     ((six.!x)
-     (string-append "!" (comp-lvalue ctx (cadr ast))))
+     (string-append "!(" (comp-rvalue-go ctx (cadr ast)) ")" ))
     ((six.x+=y)
      (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue-go ctx (caddr ast))))
     ((six.x-=y)
