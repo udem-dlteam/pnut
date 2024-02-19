@@ -403,9 +403,7 @@
         ((variable)
           (ctx-add-glo-decl! ctx (list call-code))
           (if assign_to
-            (ctx-add-glo-decl!
-              ctx
-              (list ": $(( " (comp-lvalue ctx assign_to) " = _" (symbol->string (cadr value-return-method)) " ))"))))
+            (comp-assignment ctx `(six.x=y ,assign_to (six.identifier ,(cadr value-return-method))))))
         ((addr)
           (if (and (or assign_to (cadr value-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
             (ctx-add-glo-decl!
@@ -730,7 +728,7 @@
     ((six.x-=y)
      (string-append (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue-go ctx (caddr ast))))
     ((six.x=y)
-     (string-append (comp-lvalue ctx (cadr ast)) " = " (comp-rvalue-go ctx (caddr ast))))
+     (comp-assignment ctx `(six.x=y ,(cadr ast) ,(caddr ast))))
     ((six.*x)
      (string-append "_$((" (comp-rvalue-go ctx (cadr ast)) "))"))
     ((six.call)
