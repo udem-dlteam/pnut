@@ -217,7 +217,7 @@
     (let loop ((lst lst))
       (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
           (let ((def-var (cadar lst)))
-            (table-set! (ctx-loc-env ctx) def-var (make-local-var #f #f))
+            (table-set! (ctx-loc-env ctx) def-var (make-local-var (+ 1 (table-length (ctx-loc-env ctx))) #f))
             ; TODO: Initialize var?
             (loop (cdr lst)))
           (begin
