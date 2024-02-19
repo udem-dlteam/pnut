@@ -261,7 +261,7 @@ read_n_char() {
     get_char
     case "$get_char_char" in
       EOF) break ;;
-      NEWLINE) code=10 ;; # 10 == '\n'
+      NEWLINE) read_n_char_code=10 ;; # 10 == '\n'
       *) read_n_char_code=$(LC_CTYPE=C printf "%d" "'$get_char_char") # convert to integer code ;;
     esac
 
