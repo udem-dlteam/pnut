@@ -243,7 +243,7 @@
   (case (car ast)
     ((six.while)
      (if #t ;; simple-expression
-         (let ((code-test (comp-test ctx (cadr ast))))
+         (let ((code-test (comp-loop-test ctx (cadr ast))))
            (ctx-add-glo-decl!
             ctx
             (list "while " code-test " ; do"))
@@ -260,7 +260,7 @@
            (stat (car (cddddr ast))))
        (comp-statement ctx expr1)
        ;; TODO: support "continue"
-       (let ((code-test (if expr2 (comp-test ctx expr2) ":")))
+       (let ((code-test (if expr2 (comp-loop-test ctx expr2) ":")))
          (ctx-add-glo-decl!
           ctx
           (list "while " code-test " ; do"))
@@ -274,7 +274,7 @@
     ((six.if)
      (let ((test (cadr ast))
            (stat (caddr ast)))
-       (let ((code-test (comp-test ctx test)))
+       (let ((code-test (comp-if-test ctx test)))
          (ctx-add-glo-decl!
           ctx
           (list "if " code-test " ; then"))
@@ -314,7 +314,14 @@
     (else
      (comp-statement-expr ctx ast))))
 
-(define (comp-test ctx ast)
+(define (comp-if-test ctx ast)
+  (let* ((rvalue (comp-rvalue ctx ast '(test-if))))
+    (string-append
+      "[ 0 != $(( "
+      rvalue
+      " )) ]")))
+
+(define (comp-loop-test ctx ast)
   (let* ((rvalue-res (comp-rvalue ctx ast '(test)))
          (rvalue (car rvalue-res))
          (pre-side-effects (comp-side-effects ctx (cdr rvalue-res))))
@@ -660,8 +667,16 @@
             (comp-rvalue-go ctx new-ast))))
       ((test)
         (if (null? fun-calls-to-replace)
-            (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
-            (error "comp-rvalue: Function calls not supported in condition" ast)))
+          (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
+          (error "comp-rvalue: Function calls not supported in condition" ast)))
+      ((test-if)
+        (for-each
+          (lambda (e) (ctx-add-glo-decl! ctx e))
+          (comp-side-effects ctx pre-side-effects))
+        (for-each
+          (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
+          fun-calls-to-replace)
+        (comp-rvalue-go ctx new-ast))
       ((assignment)
         (if (null? fun-calls-to-replace)
             (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
