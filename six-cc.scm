@@ -785,7 +785,9 @@
     ((six.x-=y)
      (string-append (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue-go ctx (caddr ast))))
     ((six.x=y)
-     (comp-assignment ctx `(six.x=y ,(cadr ast) ,(caddr ast))))
+     ; Can't use comp-assignment here because it modifies the context and we instead want to return the code
+     ; (comp-assignment ctx `(six.x=y ,(cadr ast) ,(caddr ast))))
+     (string-append "(" (comp-rvalue-go ctx (cadr ast)) " = " (comp-rvalue-go ctx (caddr ast)) ")"))
     ((six.*x)
      (string-append "_$((" (comp-rvalue-go ctx (cadr ast)) "))"))
     ((six.**x)
