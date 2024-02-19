@@ -8,11 +8,13 @@ strict_alloc() {
   strict_alloc_res=$ALLOC
   : $((ALLOC += $1))
   # Need to initialize the memory to 0 or else `set -u` will complain
-  strict_alloc_ix=$strict_alloc_res
-  while [ $strict_alloc_ix -lt $ALLOC ]; do
-    : $((_$strict_alloc_ix=0))
-    : $((strict_alloc_ix += 1))
-  done
+  if [ $STRICT_MODE -eq 1 ]; then
+    strict_alloc_ix=$strict_alloc_res
+    while [ $strict_alloc_ix -lt $ALLOC ]; do
+      : $((_$strict_alloc_ix=0))
+      : $((strict_alloc_ix += 1))
+    done
+  fi
 }
 
 make_argv() {
@@ -364,14 +366,26 @@ _memcmp() {
 _show_heap() {
   set +u
   show_heap_ix=1
+  elided=0
   echo "    Heap:"
   while [ $show_heap_ix -lt $ALLOC ]; do
-    show_heap_ascii=$((_$show_heap_ix))
-    show_heap_char=""
-    if [ $show_heap_ascii -ge 31 ] && [ $show_heap_ascii -le 127 ] ; then
-      show_heap_char=$(printf "\\$(printf "%o" "$show_heap_ascii")")
+    location="_$show_heap_ix"
+    eval "if [[ -z \${$location+x} ]]; then undefined=1; else undefined=0; fi"
+    if [[ $undefined -eq 1 ]]; then
+      elided=1
+    else
+      if [ $elided -eq 1 ]; then
+        echo "        ..."
+        elided=0
+      fi
+
+      show_heap_ascii=$((_$show_heap_ix))
+      show_heap_char=""
+      if [ $show_heap_ascii -ge 31 ] && [ $show_heap_ascii -le 127 ] ; then
+        show_heap_char=$(printf "\\$(printf "%o" "$show_heap_ascii")")
+      fi
+      echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
     fi
-    echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
     : $((show_heap_ix += 1))
   done
   set -u
