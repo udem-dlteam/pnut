@@ -315,7 +315,7 @@
 (define (comp-test ctx ast)
   (let* ((rvalue-res (comp-rvalue ctx ast '(test)))
          (rvalue (car rvalue-res))
-         (pre-side-effects (comp-side-effects ctx (cdr rvalue-res) '(test))))
+         (pre-side-effects (comp-side-effects ctx (cdr rvalue-res))))
 
     (string-append
       (apply string-append (map (lambda (e) (string-append e "; ")) pre-side-effects))
@@ -454,7 +454,7 @@
         (else
           (let* ((rvalue-res (comp-rvalue ctx rhs '(assignment)))
                  (rvalue (car rvalue-res))
-                 (pre-side-effects (comp-side-effects ctx (cdr rvalue-res) '(assignment))))
+                 (pre-side-effects (comp-side-effects ctx (cdr rvalue-res))))
           (for-each
             (lambda (p) (ctx-add-glo-decl! ctx p))
             pre-side-effects)
@@ -575,29 +575,29 @@
       (list (car ast)
             (replace-identifier (cadr ast) old new)))
     (else
-      (error "unknown ast" ast))))
+      (error "unknown ast identifier" ast))))
 
-(define (comp-side-effects ctx side-effects context-tag)
-  (map
-    (lambda (ast)
+(define (comp-side-effects ctx side-effects)
+  (define (comp-side-effect ast)
       (case (car ast)
         ((six.++x)
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += 1 ))"))
         ((six.--x)
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= 1 ))"))
         ((six.x+=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         ((six.x-=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         ((six.x*=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " *= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " *= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         ((six.x/=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " /= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " /= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         ((six.x%=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " %= " (comp-rvalue ctx (caddr ast) context-tag) "))"))
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " %= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         (else
           (error "unknown side effect" ast))))
-    side-effects))
+
+  (map comp-side-effect side-effects))
 
 (define (comp-rvalue ctx ast context-tag)
   (let* ((side-effects-res (handle-side-effects ast))
@@ -625,7 +625,7 @@
                                       `(six.identifier ,(cadr value-return-method)))))
             (for-each
               (lambda (e) (ctx-add-glo-decl! ctx e))
-              (comp-side-effects ctx pre-side-effects context-tag))
+              (comp-side-effects ctx pre-side-effects))
             (for-each
               (lambda (call nextCall)
                 ; Check if next function call uses the result, if it's the case use the variable directly
@@ -648,7 +648,7 @@
           (begin
             (for-each
               (lambda (e) (ctx-add-glo-decl! ctx e))
-              (comp-side-effects ctx pre-side-effects context-tag))
+              (comp-side-effects ctx pre-side-effects))
             (for-each
               (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
               fun-calls-to-replace)
@@ -661,10 +661,10 @@
         (if (null? fun-calls-to-replace)
             (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
             (error "function calls in assignment not supported" ast)))
-      ((default)
+      ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects))
             (comp-rvalue-go ctx new-ast)
-            (error "function calls and side effects in default context not supported" ast)))
+            (error "function calls and side effects in pure context not supported" ast)))
       (else
         (error "unknown context tag" context-tag)))))
 
