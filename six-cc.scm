@@ -819,7 +819,9 @@
 
 (define runtime-prelude
   (unlines
-   "set -e -u"
+   (if (and (equal? (car value-return-method) 'addr) (cadr value-return-method))
+     "set -e"
+     "set -e -u")
    ""
    "# Load runtime library and primitives"
    ". $(pwd)/runtime.sh # TODO: Do not use pwd"
