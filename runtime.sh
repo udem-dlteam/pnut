@@ -79,6 +79,26 @@ pack_string() {
   done
 }
 
+# Emit a C-string character by character so that printf doesn't interpret % and \ as format specifiers.
+print_string() {
+  print_string_addr="$1";  shift
+  print_string_max_len=100000000
+  print_string_delim=0
+  print_string_len=0
+  print_string_res=""
+  if [ $# -ge 1 ] ; then print_string_delim="$1" ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then print_string_max_len="$1" ; shift ; fi # Optional max length
+  while [ "$((_$print_string_addr))" -ne $print_string_delim ] && [ $print_string_max_len -gt $print_string_len ] ; do
+    print_string_char="$((_$print_string_addr))"
+    print_string_addr=$((print_string_addr + 1))
+    print_string_len=$((print_string_len + 1))
+    case $print_string_char in
+      10) printf "\n" ;; # 10 == '\n'
+      *) printf "\\$(printf "%o" "$print_string_char")" ;; # Decode
+    esac
+  done
+}
+
 # Local variables
 
 SP=0 # Note: Stack grows up, not down
@@ -152,20 +172,15 @@ _printf() {
           ;;
         's') # 115 = 's' String
           printf_str_ref=$1; shift
-          pack_string "$printf_str_ref" # result in $res
-          # Note: Using printf "%s" "$res" outputs "\n" if $res contains a newline
-          # but printf "$res" seems to work fine.
-          printf "$pack_string_res"
-          # str="$str$res"
+          print_string "$printf_str_ref"
           ;;
-        '.') # String with length
+        '.') # String with length. %.*s will print the first 4 characters of the string
           pack_string $printf_fmt_ptr 0 2 # Read next 2 characters
           printf_fmt_ptr=$((printf_fmt_ptr + 2))
           if [ "$pack_string_res" = "*s" ]; then
             printf_len=$1; shift
             printf_str_ref=$1; shift
-            pack_string $printf_str_ref 0 $printf_len # result in $pack_string_res
-            printf "%s" "$pack_string_res"
+            print_string $printf_str_ref 0 $printf_len
             # str="$str$pack_string_res"
           else
             echo "Unknown format specifier: %.$pack_string_res" ; exit 1
@@ -187,14 +202,16 @@ _printf() {
           printf_fmt_ptr=$((printf_fmt_ptr + 1))
           if [ "$printf_head_char" = 's' ]; then
             printf_str_ref=$1; shift
-            pack_string $printf_str_ref 0 $printf_str_len # result in $pack_string_res
+            # Count length of string with pack_string but don't use packed string
+            pack_string $printf_str_ref 0 $printf_str_len
+            printf_str_padding=""
             : $((printf_padding_len = $printf_min_len - $pack_string_len))
             while [ $printf_padding_len -gt 0 ]; do # Pad string so it has at least $min_len characters
-              pack_string_res=" $pack_string_res"
+              printf_str_padding=" $printf_str_padding"
               : $((printf_padding_len -= 1))
               done
-            printf "%s" "$pack_string_res"
-            # str="$str$pack_string_res"
+            printf "%s" "$printf_str_padding" # Pad string
+            print_string $printf_str_ref 0 $printf_str_len # Print string
           else
             echo "Unknown format specifier: '%$printf_min_len.$printf_str_len$printf_head_char'" ; exit 1;
           fi
