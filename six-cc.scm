@@ -14,7 +14,7 @@
 ; Useful for debugging only
 (define disable-save-restore-vars? #f)
 ; Disable for faster execution of programs that allocate a lot of memory
-(define initialize-memory-when-alloc #f)
+(define initialize-memory-when-alloc #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -904,7 +904,7 @@
     (comp-program ast)))
 
 (define (read-six port)
-  (##six-types-set! '((void . #f) (void_ptr . #f) (char . #f) (char_ptr . #f) (int . #f) (int_ptr . #f) (struct . #f) (enum . #f)))
+  (##six-types-set! '((void . #f) (void_ptr . #f) (char . #f) (char_ptr . #f) (char_ptr_ptr . #f) (int . #f) (int_ptr . #f) (struct . #f) (enum . #f)))
   (let ((rt (input-port-readtable port)))
     (input-port-readtable-set! port (readtable-start-syntax-set rt 'six))
     (read-all port)))
