@@ -1,12 +1,10 @@
 /* args: abc def hij */
 int main(int argc, char_ptr argv) {
-  int i;
+  int i = 0;
   printf("Number of arguments: %d\n", argc);
-  printf("Arguments: ");
-
-  for (i = 0; i < argc; i++) {
-    printf("%s ", argv[i]);
+  printf("Arguments:\n");
+  while (i < argc) {
+    printf("argv[%d] = %s\n", i, argv[i]);
+    i++;
   }
-
-  printf("\n");
 }

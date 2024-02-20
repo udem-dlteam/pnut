@@ -854,8 +854,8 @@
       "defglo() { : $(($1 = $2)) ; }")
    ""
    "# Setup argc, argv"
-   "argc=$#;"
-   "make_argv $argc $@; argv_ptr=make_argv_ptr;"
+   "argc=$(($# + 1));"
+   "make_argv $argc \"$0\" $@; argv_ptr=make_argv_ptr;"
    ""))
 
 (define runtime-postlude
