@@ -248,7 +248,7 @@
             (loop (cdr lst)))
           (ctx-tail?-set! ctx start-tail?)))))
 
-(define (comp-statement ctx ast)
+(define (comp-statement ctx ast #!optional (else-if? #f))
   (case (car ast)
     ((six.while)
      (if #t ;; simple-expression
@@ -285,18 +285,25 @@
            (stat (caddr ast)))
        (let ((code-test (comp-if-test ctx test)))
          (ctx-add-glo-decl!
-          ctx
-          (list "if " code-test " ; then"))
+            ctx
+            (list (if else-if? "elif " "if ") code-test " ; then"))
          (nest ctx (comp-statement ctx stat))
          (if (pair? (cdddr ast))
-             (begin
-               (ctx-add-glo-decl!
-                ctx
-                (list "else"))
-               (nest ctx (comp-statement ctx (cadddr ast)))))
-         (ctx-add-glo-decl!
-          ctx
-          (list "fi")))))
+             (let ((else-block (cadddr ast)))
+               (if (equal? (car else-block) 'six.if)
+                   (begin
+                    ; Next statement is if, so compiling to elif
+                    (comp-statement ctx else-block #t))
+                   (begin
+                    ; Normal case
+                    (ctx-add-glo-decl!
+                      ctx
+                      (list "else"))
+                    (nest ctx (comp-statement ctx else-block))))))
+         (if (not else-if?)
+          (ctx-add-glo-decl!
+            ctx
+            (list "fi"))))))
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) '(return))))
