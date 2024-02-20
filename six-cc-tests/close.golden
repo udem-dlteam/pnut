@@ -1,7 +1,21 @@
-Read content: int hash(char_ptr s) {{  int hash;;  int ix;;  hash = 0;;  ix = 0;;  while (s[ix] != 0) {{    hash = s[ix] + (hash << 6) + (hash << 16) - hash;;    hash = hash & 65535; /* Most shells have 32-bit int
+Read content: int hash(char_ptr s) {
+  int hash;
+  int ix;
+  hash = 0;
+  ix = 0;
+  while (s[ix] != 0) {
+    hash = s[ix] + (hash << 6) + (hash << 16) - hash;
+    hash = hash & 65535; /* Most shells have 32-bit int
 File descriptor: six-cc-tests/close.c
 Quote: "
 Backslash: \
 Read len: 199
-Read result: int hash(char_ptr s) {{  int hash;;  int ix;;  hash = 0;;  ix = 0;;  while (s[ix] != 0) {{    hash = s[ix] + (hash << 6) + (hash << 16) - hash;;    hash = hash & 65535; /* Most shells have 32-bit int
+Read result: int hash(char_ptr s) {
+  int hash;
+  int ix;
+  hash = 0;
+  ix = 0;
+  while (s[ix] != 0) {
+    hash = s[ix] + (hash << 6) + (hash << 16) - hash;
+    hash = hash & 65535; /* Most shells have 32-bit int
 hash: 199
