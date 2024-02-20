@@ -146,10 +146,9 @@
         (lambda (decl)
           (case (car decl)
             ((six.x=y)
-              (let ((previous-value enum-value-counter)
-                    (new-value (cadr (caddr decl))))
+              (let ((new-value (cadr (caddr decl))))
                 (set! enum-value-counter (+ new-value 1))
-                (list "_" (cdadr decl) "=" (number->string previous-value) "; ")))
+                (list "_" (cdadr decl) "=" (number->string new-value) "; ")))
 
             ((six.identifier)
               (set! enum-value-counter (+ enum-value-counter 1))
