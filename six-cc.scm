@@ -216,13 +216,22 @@
 
 (define (comp-body ctx lst)
   (let ((start-loc-env (table-copy (ctx-loc-env ctx))))
-    (let loop ((lst lst))
+    (let loop ((lst lst) (new-local-vars '()))
       (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
-          (let ((def-var (cadar lst)))
-            (table-set! (ctx-loc-env ctx) def-var (make-local-var (+ 1 (table-length (ctx-loc-env ctx))) #f))
-            ; TODO: Initialize var?
-            (loop (cdr lst)))
+          (let* ((def-var (car lst))
+                 (var-name (cadr def-var))
+                 (var-init (car (cddddr def-var))))
+            (table-set! (ctx-loc-env ctx)
+                        var-name
+                        (make-local-var (+ 1 (table-length (ctx-loc-env ctx))) var-init))
+            (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
           (begin
+            (for-each
+              (lambda (new-local-var)
+                (if (cdr new-local-var)
+                  (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+                  (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+              new-local-vars)
             (comp-statement-list ctx lst)
             ; Bug: We need to propagate the is_initialized flag of local variables to start-loc-env?
             (ctx-loc-env-set! ctx start-loc-env))))))
