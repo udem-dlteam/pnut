@@ -4,9 +4,9 @@ Changes to make it compatible with six-cc.scm
 2. split global declarations and replace (char/int)* with char_ptr/int_ptr
 3. Define ops_string once
 4. Change PRTF instruction because printf can't return (hardcode `a = 0`)
+5. Replace sizeof(char/int) with 1
 -- After that, we're breaking compatibility with the C standard
-5. Enums
-6. Replace sizeof(char/int) with 1
+6. Enums
 7. Remove casts
 */
 
@@ -38,6 +38,9 @@ int src;
 int debug;
 int ops;
 int portable;
+
+int sizeof_int = 8;
+int sizeof_char = 1;
 
 char_ptr ops_string = "LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
 
@@ -148,14 +151,14 @@ void expr(int lev)
   else if (tk == '"') {
     *++e = REF; *++e = ival; next();
     while (tk == '"') next();
-    data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR;
+    data = (char *)((int)data + sizeof_int & -sizeof_int); ty = PTR;
   }
   else if (tk == Sizeof) {
     next(); if (tk == '(') next(); else { printf("%d: open paren expected in sizeof\n", line); exit(-1); }
     ty = INT; if (tk == Int) next(); else if (tk == Char) { next(); ty = CHAR; }
     while (tk == Mul) { next(); ty = ty + PTR; }
     if (tk == ')') next(); else { printf("%d: close paren expected in sizeof\n", line); exit(-1); }
-    *++e = IMM; *++e = portable ? 1 : (ty == CHAR) ? sizeof(char) : sizeof(int);
+    *++e = IMM; *++e = portable ? 1 : (ty == CHAR) ? sizeof_char : sizeof_int;
     ty = INT;
   }
   else if (tk == Id) {
@@ -217,7 +220,7 @@ void expr(int lev)
     else if (*e == LI) { *e = PSH; *++e = LI; }
     else { printf("%d: bad lvalue in pre-increment\n", line); exit(-1); }
     *++e = PSH;
-    *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof(int) : sizeof(char);
+    *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof_int : sizeof_char;
     *++e = (t == Inc) ? ADD : SUB;
     *++e = (ty == CHAR) ? SC : SI;
   }
@@ -254,13 +257,13 @@ void expr(int lev)
     else if (tk == Shr) { next(); *++e = PSH; expr(Add); *++e = SHR; ty = INT; }
     else if (tk == Add) {
       next(); *++e = PSH; expr(Mul);
-      if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = MUL;  }
+      if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof_int; *++e = MUL;  }
       *++e = ADD;
     }
     else if (tk == Sub) {
       next(); *++e = PSH; expr(Mul);
-      if (t > PTR && t == ty) { *++e = SUB; *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = DIV; ty = INT; }
-      else if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = MUL; *++e = SUB; }
+      if (t > PTR && t == ty) { *++e = SUB; *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof_int; *++e = DIV; ty = INT; }
+      else if ((ty = t) > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof_int; *++e = MUL; *++e = SUB; }
       else *++e = SUB;
     }
     else if (tk == Mul) { next(); *++e = PSH; expr(Inc); *++e = MUL; ty = INT; }
@@ -270,17 +273,17 @@ void expr(int lev)
       if (*e == LC) { *e = PSH; *++e = LC; }
       else if (*e == LI) { *e = PSH; *++e = LI; }
       else { printf("%d: bad lvalue in post-increment\n", line); exit(-1); }
-      *++e = PSH; *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof(int) : sizeof(char);
+      *++e = PSH; *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof_int : sizeof_char;
       *++e = (tk == Inc) ? ADD : SUB;
       *++e = (ty == CHAR) ? SC : SI;
-      *++e = PSH; *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof(int) : sizeof(char);
+      *++e = PSH; *++e = IMM; *++e = portable ? 1 : (ty > PTR) ? sizeof_int : sizeof_char;
       *++e = (tk == Inc) ? SUB : ADD;
       next();
     }
     else if (tk == Brak) {
       next(); *++e = PSH; expr(Assign);
       if (tk == ']') next(); else { printf("%d: close bracket expected\n", line); exit(-1); }
-      if (t > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof(int); *++e = MUL;  }
+      if (t > PTR) { *++e = PSH; *++e = IMM; *++e = portable ? 1 : sizeof_int; *++e = MUL;  }
       else if (t < PTR) { printf("%d: pointer type expected\n", line); exit(-1); }
       *++e = ADD;
       *++e = ((ty = t - PTR) == CHAR) ? LC : LI;
@@ -478,7 +481,7 @@ int main(int argc, char_ptr_ptr argv)
       else {
         id[Class] = Glo;
         id[Val] = (int)data;
-        data = data + sizeof(int);
+        data = data + sizeof_int;
       }
       if (tk == ',') next();
     }
@@ -517,7 +520,7 @@ int main(int argc, char_ptr_ptr argv)
       i = *le;
       if (i == JMP || i == JSR || i == BZ || i == BNZ) {
         printf("%4.4s", &ops_string[i * 5]);
-        if (*le <= ADJ) printf(" %d\n", ((*++le) - (int) estart) / sizeof(int)); else printf("\n");
+        if (*le <= ADJ) printf(" %d\n", ((*++le) - (int) estart) / sizeof_int); else printf("\n");
       } else if (i == REF) {
         printf("REF  %d\n", (*++le - (int) datastart));
       } else {
