@@ -1,10 +1,13 @@
-// c4.c - C in four functions
-
-// char, int, and pointer types
-// if, while, return, and expression statements
-// just enough features to allow self-compilation and a bit more
-
-// Written by Robert Swierczek
+/*
+Changes to make it compatible with six-cc.scm
+1. Replace //.*\n with \n
+2. split global declarations and replace (char/int)* with char_ptr/int_ptr
+3. Enums
+4. Replace sizeof(char/int) with 1
+5. Define instruction_str once
+6. Remove casts
+7. Change PRTF instruction because printf can't return (hardcode `a = 0`)
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,43 +16,45 @@
 #include <fcntl.h>
 #define int long long
 
-char *p, *lp, // current position in source code
-     *data;   // data/bss pointer
+typedef typeof(char*) char_ptr;
+typedef typeof(char**) char_ptr_ptr;
+typedef typeof(int*) int_ptr;
 
-int *e, *le,  // current position in emitted code
-    *id,      // currently parsed identifier
-    *sym,     // symbol table (simple list of identifiers)
-    tk,       // current token
-    ival,     // current token value
-    ty,       // current expression type
-    loc,      // local variable offset
-    line,     // current line number
-    src,      // print source and assembly flag
-    debug,    // print executed instructions
-    ops,      // print opcodes
-    portable; // generate portable code by making ptr, int and char the same size (1)
+char_ptr p;
+char_ptr lp;
+char_ptr data;
 
-// tokens and classes (operators last and in precedence order)
+int *e;
+int *le;
+int *id;
+int *sym;
+int tk;
+int ival;
+int ty;
+int loc;
+int line;
+int src;
+int debug;
+int ops;
+int portable;
+
 enum {
   Num = 128, Fun, Sys, Glo, Loc, Id,
   Char, Else, Enum, If, Int, Return, Sizeof, While,
   Assign, Cond, Lor, Lan, Or, Xor, And, Eq, Ne, Lt, Gt, Le, Ge, Shl, Shr, Add, Sub, Mul, Div, Mod, Inc, Dec, Brak
 };
 
-// opcodes
 enum { LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,
        OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,
        OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT };
 
-// types
 enum { CHAR, INT, PTR };
 
-// identifier offsets (since we can't create an ident struct)
 enum { Tk, Hash, Name, Class, Type, Val, HClass, HType, HVal, Idsz };
 
 void next()
 {
-  char *pp;
+  char_ptr pp;
 
   while (tk = *p) {
     ++p;
@@ -142,7 +147,7 @@ void expr(int lev)
   else if (tk == '"') {
     *++e = REF; *++e = ival; next();
     while (tk == '"') next();
-    data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR; // Not sure if this needs to check portable here
+    data = (char *)((int)data + sizeof(int) & -sizeof(int)); ty = PTR;
   }
   else if (tk == Sizeof) {
     next(); if (tk == '(') next(); else { printf("%d: open paren expected in sizeof\n", line); exit(-1); }
@@ -168,7 +173,7 @@ void expr(int lev)
     else if (d[Class] == Num) { *++e = IMM; *++e = d[Val]; ty = INT; }
     else {
       if (d[Class] == Loc) { *++e = LEA; *++e = loc - d[Val]; }
-      else if (d[Class] == Glo) { *++e = REF; *++e = d[Val]; } // TODO
+      else if (d[Class] == Glo) { *++e = REF; *++e = d[Val]; }
       else { printf("%d: undefined variable\n", line); exit(-1); }
       *++e = ((ty = d[Type]) == CHAR) ? LC : LI;
     }
@@ -217,7 +222,7 @@ void expr(int lev)
   }
   else { printf("%d: bad expression\n", line); exit(-1); }
 
-  while (tk >= lev) { // "precedence climbing" or "Top Down Operator Precedence" method
+  while (tk >= lev) {
     t = ty;
     if (tk == Assign) {
       next();
@@ -285,7 +290,8 @@ void expr(int lev)
 
 void stmt()
 {
-  int *a, *b;
+  int *a;
+  int *b;
 
   if (tk == If) {
     next();
@@ -332,14 +338,26 @@ void stmt()
   }
 }
 
-int main(int argc, char **argv)
+int main(int argc, char_ptr_ptr argv)
 {
-  int fd, bt, ty, poolsz, *idmain;
-  int *pc, *sp, *bp, a, cycle; // vm registers
-  int i, *t, *spstart, *stack_ix; // temps
+  int fd;
+  int bt;
+  int ty;
+  int poolsz;
+  int *idmain;
+  int *pc;
+  int *sp;
+  int *bp;
+  int a;
+  int cycle;
+  int i;
+  int *t;
+  int *spstart;
+  int *stack_ix;
 
-  int *estart;  // start of emitted code
-  char *datastart, *datastart2; // start of data/bss
+  int *estart;
+  char_ptr datastart;
+  char_ptr datastart2;
 
   --argc; ++argv;
   if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
@@ -350,7 +368,7 @@ int main(int argc, char **argv)
 
   if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
 
-  poolsz = 256*1024; // arbitrary size
+  poolsz = 256*1024;
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
   if (!(estart = le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
   if (!(datastart = data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
@@ -362,21 +380,20 @@ int main(int argc, char **argv)
 
   p = "char else enum if int return sizeof while "
       "open read close printf malloc free memset memcmp exit void main";
-  i = Char; while (i <= While) { next(); id[Tk] = i++; } // add keywords to symbol table
-  i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; } // add library to symbol table
-  next(); id[Tk] = Char; // handle void type
-  next(); idmain = id; // keep track of main
+  i = Char; while (i <= While) { next(); id[Tk] = i++; }
+  i = OPEN; while (i <= EXIT) { next(); id[Class] = Sys; id[Type] = INT; id[Val] = i++; }
+  next(); id[Tk] = Char;
+  next(); idmain = id;
 
   if (!(lp = p = malloc(poolsz))) { printf("could not malloc(%d) source area\n", poolsz); return -1; }
   if ((i = read(fd, p, poolsz-1)) <= 0) { printf("read() returned %d\n", i); return -1; }
   p[i] = 0;
   close(fd);
 
-  // parse declarations
   line = 1;
   next();
   while (tk) {
-    bt = INT; // basetype
+    bt = INT;
     if (tk == Int) next();
     else if (tk == Char) { next(); bt = CHAR; }
     else if (tk == Enum) {
@@ -407,7 +424,7 @@ int main(int argc, char **argv)
       if (id[Class]) { printf("%d: duplicate global definition\n", line); return -1; }
       next();
       id[Type] = ty;
-      if (tk == '(') { // function
+      if (tk == '(') {
         id[Class] = Fun;
         id[Val] = (int)(e + 1);
         next(); i = 0;
@@ -447,7 +464,7 @@ int main(int argc, char **argv)
         *++e = ENT; *++e = i - loc;
         while (tk != '}') stmt();
         *++e = LEV;
-        id = sym; // unwind symbol table locals
+        id = sym;
         while (id[Tk]) {
           if (id[Class] == Loc) {
             id[Class] = id[HClass];
@@ -470,29 +487,19 @@ int main(int argc, char **argv)
   if (!(pc = (int *)idmain[Val])) { printf("main() not defined\n"); return -1; }
   if (src) return 0;
 
-  // setup stack
   bp = sp = (int *)((int)sp + poolsz);
   spstart = sp;
-  *--sp = EXIT; // call exit if main returns
+  *--sp = EXIT;
   *--sp = PSH; t = sp;
   *--sp = argc;
   *--sp = (int)argv;
   *--sp = (int)t;
 
-  // Dump the heap and op codes
-  // The format is:
-  //  <data size>
-  //  <data>
-  //  <main address>
-  //  <opcodes> \n <opcodes> \n ...
   if (ops) {
-    estart++; // Instructions start being encoded at position 1. See line containing: *++e = ENT; *++e = i - loc;
-    // <data size>
+    estart++;
     printf("%d\n", data - datastart);
-    // <data>
-    datastart2 = datastart; // Saving this to compute reference offset
+    datastart2 = datastart;
     while (datastart < data) {
-      // Escape non-printable characters and '\'
       if (*datastart <= 31 || *datastart >= 127 || *datastart == '\\') {
         printf("\\%x%x", *datastart / 16, *datastart % 16);
       } else {
@@ -503,13 +510,10 @@ int main(int argc, char **argv)
     datastart = datastart2;
     printf("\n");
 
-    // <main address>
     printf("%d\n", (pc - (int *)estart));
-    // <opcodes>
     le = estart;
     while (le <= e) {
       i = *le;
-      // Relocate addresses
       if (i == JMP || i == JSR || i == BZ || i == BNZ) {
         printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
                               "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
@@ -528,7 +532,6 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  // run...
   cycle = 0;
   while (1) {
     i = *pc++; ++cycle;
@@ -541,28 +544,27 @@ int main(int argc, char **argv)
 
       printf("    pc = %d, sp = %d, bp = %d, a = %d\n", pc, sp, bp, a);
 
-      // Print stack
       stack_ix = spstart;
       while (stack_ix > sp) {
         stack_ix--;
         printf("    _stack_%d = %d\n", stack_ix, *stack_ix);
       }
     }
-    if      (i == LEA) a = (int)(bp + *pc++);                             // load local address
-    else if (i == IMM) a = *pc++;                                         // load global address or immediate
-    else if (i == REF) a = *pc++;                                         // load global address
-    else if (i == JMP) pc = (int *)*pc;                                   // jump
-    else if (i == JSR) { *--sp = (int)(pc + 1); pc = (int *)*pc; }        // jump to subroutine
-    else if (i == BZ)  pc = a ? pc + 1 : (int *)*pc;                      // branch if zero
-    else if (i == BNZ) pc = a ? (int *)*pc : pc + 1;                      // branch if not zero
-    else if (i == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }     // enter subroutine
-    else if (i == ADJ) sp = sp + *pc++;                                   // stack adjust
-    else if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // leave subroutine
-    else if (i == LI)  a = *(int *)a;                                     // load int
-    else if (i == LC)  a = *(char *)a;                                    // load char
-    else if (i == SI)  *(int *)*sp++ = a;                                 // store int
-    else if (i == SC)  a = *(char *)*sp++ = a;                            // store char
-    else if (i == PSH) *--sp = a;                                         // push
+    if      (i == LEA) a = (int)(bp + *pc++);
+    else if (i == IMM) a = *pc++;
+    else if (i == REF) a = *pc++;
+    else if (i == JMP) pc = (int *)*pc;
+    else if (i == JSR) { *--sp = (int)(pc + 1); pc = (int *)*pc; }
+    else if (i == BZ)  pc = a ? pc + 1 : (int *)*pc;
+    else if (i == BNZ) pc = a ? (int *)*pc : pc + 1;
+    else if (i == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }
+    else if (i == ADJ) sp = sp + *pc++;
+    else if (i == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; }
+    else if (i == LI)  a = *(int *)a;
+    else if (i == LC)  a = *(char *)a;
+    else if (i == SI)  *(int *)*sp++ = a;
+    else if (i == SC)  a = *(char *)*sp++ = a;
+    else if (i == PSH) *--sp = a;
 
     else if (i == OR)  a = *sp++ |  a;
     else if (i == XOR) a = *sp++ ^  a;
