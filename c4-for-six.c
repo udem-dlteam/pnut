@@ -2,11 +2,12 @@
 Changes to make it compatible with six-cc.scm
 1. Replace //.*\n with \n
 2. split global declarations and replace (char/int)* with char_ptr/int_ptr
-3. Enums
-4. Replace sizeof(char/int) with 1
-5. Define instruction_str once
-6. Remove casts
-7. Change PRTF instruction because printf can't return (hardcode `a = 0`)
+3. Define ops_string once
+4. Change PRTF instruction because printf can't return (hardcode `a = 0`)
+-- After that, we're breaking compatibility with the C standard
+5. Enums
+6. Replace sizeof(char/int) with 1
+7. Remove casts
 */
 
 #include <stdio.h>
@@ -38,6 +39,8 @@ int debug;
 int ops;
 int portable;
 
+char_ptr ops_string = "LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
+
 enum {
   Num = 128, Fun, Sys, Glo, Loc, Id,
   Char, Else, Enum, If, Int, Return, Sizeof, While,
@@ -63,9 +66,7 @@ void next()
         printf("%d: %.*s", line, p - lp, lp);
         lp = p;
         while (le < e) {
-          printf("%8.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
-                           "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
-                           "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[*++le * 5]);
+          printf("%8.4s", &ops_string[*++le * 5]);
           if (*le <= ADJ) printf(" %d\n", *++le); else printf("\n");
         }
       }
@@ -515,16 +516,12 @@ int main(int argc, char_ptr_ptr argv)
     while (le <= e) {
       i = *le;
       if (i == JMP || i == JSR || i == BZ || i == BNZ) {
-        printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
-                              "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
-                              "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
+        printf("%4.4s", &ops_string[i * 5]);
         if (*le <= ADJ) printf(" %d\n", ((*++le) - (int) estart) / sizeof(int)); else printf("\n");
       } else if (i == REF) {
         printf("REF  %d\n", (*++le - (int) datastart));
       } else {
-        printf("%4.4s", &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
-                              "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
-                              "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
+        printf("%4.4s", &ops_string[i * 5]);
         if (*le <= ADJ) printf(" %d\n", *++le); else printf("\n");
       }
       le++;
@@ -536,10 +533,7 @@ int main(int argc, char_ptr_ptr argv)
   while (1) {
     i = *pc++; ++cycle;
     if (debug) {
-      printf("%d> %.4s", cycle,
-        &"LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,"
-         "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
-         "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"[i * 5]);
+      printf("%d> %.4s", cycle, &ops_string[i * 5]);
       if (i <= ADJ) printf(" %d\n", *pc); else printf("\n");
 
       printf("    pc = %d, sp = %d, bp = %d, a = %d\n", pc, sp, bp, a);
@@ -586,7 +580,7 @@ int main(int argc, char_ptr_ptr argv)
     else if (i == OPEN) a = open((char *)sp[1], *sp);
     else if (i == READ) a = read(sp[2], (char *)sp[1], *sp);
     else if (i == CLOS) a = close(*sp);
-    else if (i == PRTF) { t = sp + pc[1]; a = printf((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
+    else if (i == PRTF) { t = sp + pc[1]; a = 0; printf((char *)t[-1], t[-2], t[-3], t[-4], t[-5], t[-6]); }
     else if (i == MALC) a = (int)malloc(*sp);
     else if (i == FREE) free((void *)*sp);
     else if (i == MSET) a = (int)memset((char *)sp[2], sp[1], *sp);
