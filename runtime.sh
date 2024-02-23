@@ -52,7 +52,7 @@ unpack_string() {
     unpack_string_rest="${unpack_string_src_buf#?}"                # remove the first char
     unpack_string_char="${unpack_string_char%"$unpack_string_rest"}"             # remove all but first char
     unpack_string_src_buf="${unpack_string_src_buf#?}"             # remove the current char from $src_buf
-    unpack_string_code=$(LC_CTYPE=C printf "%d" "'$unpack_string_char'")
+    char_to_int "$unpack_string_char"; unpack_string_code=$char_to_int_code
     push_data "$unpack_string_code"
   done
   push_data 0
@@ -74,7 +74,7 @@ pack_string() {
     pack_string_len=$((pack_string_len + 1))
     case $pack_string_char in
       10) pack_string_res="$pack_string_res\n" ;; # 10 == '\n'
-      *) pack_string_res=$pack_string_res$(printf "\\$(printf "%o" "$pack_string_char")") # Decode
+      *)  int_to_char "$pack_string_char"; pack_string_res="$pack_string_res$int_to_char_char" ;;
     esac
   done
 }
@@ -94,9 +94,211 @@ print_string() {
     print_string_len=$((print_string_len + 1))
     case $print_string_char in
       10) printf "\n" ;; # 10 == '\n'
-      *) printf "\\$(printf "%o" "$print_string_char")" ;; # Decode
+      *)  int_to_char "$print_string_char"; printf "%s" "$int_to_char_char" ;;
     esac
   done
+}
+
+char_to_int() {
+  case $1 in
+    "0") char_to_int_code=48 ;;
+    "1") char_to_int_code=49 ;;
+    "2") char_to_int_code=50 ;;
+    "3") char_to_int_code=51 ;;
+    "4") char_to_int_code=52 ;;
+    "5") char_to_int_code=53 ;;
+    "6") char_to_int_code=54 ;;
+    "7") char_to_int_code=55 ;;
+    "8") char_to_int_code=56 ;;
+    "9") char_to_int_code=57 ;;
+    "a") char_to_int_code=97 ;;
+    "b") char_to_int_code=98 ;;
+    "c") char_to_int_code=99 ;;
+    "d") char_to_int_code=100 ;;
+    "e") char_to_int_code=101 ;;
+    "f") char_to_int_code=102 ;;
+    "g") char_to_int_code=103 ;;
+    "h") char_to_int_code=104 ;;
+    "i") char_to_int_code=105 ;;
+    "j") char_to_int_code=106 ;;
+    "k") char_to_int_code=107 ;;
+    "l") char_to_int_code=108 ;;
+    "m") char_to_int_code=109 ;;
+    "n") char_to_int_code=110 ;;
+    "o") char_to_int_code=111 ;;
+    "p") char_to_int_code=112 ;;
+    "q") char_to_int_code=113 ;;
+    "r") char_to_int_code=114 ;;
+    "s") char_to_int_code=115 ;;
+    "t") char_to_int_code=116 ;;
+    "u") char_to_int_code=117 ;;
+    "v") char_to_int_code=118 ;;
+    "w") char_to_int_code=119 ;;
+    "x") char_to_int_code=120 ;;
+    "y") char_to_int_code=121 ;;
+    "z") char_to_int_code=122 ;;
+    "A") char_to_int_code=65 ;;
+    "B") char_to_int_code=66 ;;
+    "C") char_to_int_code=67 ;;
+    "D") char_to_int_code=68 ;;
+    "E") char_to_int_code=69 ;;
+    "F") char_to_int_code=70 ;;
+    "G") char_to_int_code=71 ;;
+    "H") char_to_int_code=72 ;;
+    "I") char_to_int_code=73 ;;
+    "J") char_to_int_code=74 ;;
+    "K") char_to_int_code=75 ;;
+    "L") char_to_int_code=76 ;;
+    "M") char_to_int_code=77 ;;
+    "N") char_to_int_code=78 ;;
+    "O") char_to_int_code=79 ;;
+    "P") char_to_int_code=80 ;;
+    "Q") char_to_int_code=81 ;;
+    "R") char_to_int_code=82 ;;
+    "S") char_to_int_code=83 ;;
+    "T") char_to_int_code=84 ;;
+    "U") char_to_int_code=85 ;;
+    "V") char_to_int_code=86 ;;
+    "W") char_to_int_code=87 ;;
+    "X") char_to_int_code=88 ;;
+    "Y") char_to_int_code=89 ;;
+    "Z") char_to_int_code=90 ;;
+    " ") char_to_int_code=32 ;;
+    "!") char_to_int_code=33 ;;
+    "\"") char_to_int_code=34 ;;
+    "#") char_to_int_code=35 ;;
+    "$") char_to_int_code=36 ;;
+    "%") char_to_int_code=37 ;;
+    "\&") char_to_int_code=38 ;;
+    "'") char_to_int_code=39 ;;
+    "(") char_to_int_code=40 ;;
+    ")") char_to_int_code=41 ;;
+    "\*") char_to_int_code=42 ;;
+    "+") char_to_int_code=43 ;;
+    ",") char_to_int_code=44 ;;
+    "-") char_to_int_code=45 ;;
+    ".") char_to_int_code=46 ;;
+    "/") char_to_int_code=47 ;;
+    ":") char_to_int_code=58 ;;
+    ";") char_to_int_code=59 ;;
+    "<") char_to_int_code=60 ;;
+    "=") char_to_int_code=61 ;;
+    ">") char_to_int_code=62 ;;
+    "?") char_to_int_code=63 ;;
+    "@") char_to_int_code=64 ;;
+    "[") char_to_int_code=91 ;;
+    "\\") char_to_int_code=92 ;;
+    "]") char_to_int_code=93 ;;
+    "^") char_to_int_code=94 ;;
+    "_") char_to_int_code=95 ;;
+    "\`") char_to_int_code=96 ;;
+    "{") char_to_int_code=123 ;;
+    "|") char_to_int_code=124 ;;
+    "}") char_to_int_code=125 ;;
+    "~") char_to_int_code=126 ;;
+    *)   char_to_int_code=$(LC_CTYPE=C printf "%d" "'$1") ;;
+  esac
+}
+
+int_to_char() {
+  case $1 in
+    48)  int_to_char_char="0" ;;
+    49)  int_to_char_char="1" ;;
+    50)  int_to_char_char="2" ;;
+    51)  int_to_char_char="3" ;;
+    52)  int_to_char_char="4" ;;
+    53)  int_to_char_char="5" ;;
+    54)  int_to_char_char="6" ;;
+    55)  int_to_char_char="7" ;;
+    56)  int_to_char_char="8" ;;
+    57)  int_to_char_char="9" ;;
+    97)  int_to_char_char="a" ;;
+    98)  int_to_char_char="b" ;;
+    99)  int_to_char_char="c" ;;
+    100) int_to_char_char="d" ;;
+    101) int_to_char_char="e" ;;
+    102) int_to_char_char="f" ;;
+    103) int_to_char_char="g" ;;
+    104) int_to_char_char="h" ;;
+    105) int_to_char_char="i" ;;
+    106) int_to_char_char="j" ;;
+    107) int_to_char_char="k" ;;
+    108) int_to_char_char="l" ;;
+    109) int_to_char_char="m" ;;
+    110) int_to_char_char="n" ;;
+    111) int_to_char_char="o" ;;
+    112) int_to_char_char="p" ;;
+    113) int_to_char_char="q" ;;
+    114) int_to_char_char="r" ;;
+    115) int_to_char_char="s" ;;
+    116) int_to_char_char="t" ;;
+    117) int_to_char_char="u" ;;
+    118) int_to_char_char="v" ;;
+    119) int_to_char_char="w" ;;
+    120) int_to_char_char="x" ;;
+    121) int_to_char_char="y" ;;
+    122) int_to_char_char="z" ;;
+    65)  int_to_char_char="A" ;;
+    66)  int_to_char_char="B" ;;
+    67)  int_to_char_char="C" ;;
+    68)  int_to_char_char="D" ;;
+    69)  int_to_char_char="E" ;;
+    70)  int_to_char_char="F" ;;
+    71)  int_to_char_char="G" ;;
+    72)  int_to_char_char="H" ;;
+    73)  int_to_char_char="I" ;;
+    74)  int_to_char_char="J" ;;
+    75)  int_to_char_char="K" ;;
+    76)  int_to_char_char="L" ;;
+    77)  int_to_char_char="M" ;;
+    78)  int_to_char_char="N" ;;
+    79)  int_to_char_char="O" ;;
+    80)  int_to_char_char="P" ;;
+    81)  int_to_char_char="Q" ;;
+    82)  int_to_char_char="R" ;;
+    83)  int_to_char_char="S" ;;
+    84)  int_to_char_char="T" ;;
+    85)  int_to_char_char="U" ;;
+    86)  int_to_char_char="V" ;;
+    87)  int_to_char_char="W" ;;
+    88)  int_to_char_char="X" ;;
+    89)  int_to_char_char="Y" ;;
+    90)  int_to_char_char="Z" ;;
+    32)  int_to_char_char=" " ;;
+    33)  int_to_char_char="!" ;;
+    34)  int_to_char_char="\"" ;;
+    35)  int_to_char_char="#" ;;
+    36)  int_to_char_char="$" ;;
+    37)  int_to_char_char="%" ;;
+    38)  int_to_char_char="&" ;;
+    39)  int_to_char_char="'" ;;
+    40)  int_to_char_char="(" ;;
+    41)  int_to_char_char=")" ;;
+    42)  int_to_char_char="*" ;;
+    43)  int_to_char_char="+" ;;
+    44)  int_to_char_char="," ;;
+    45)  int_to_char_char="-" ;;
+    46)  int_to_char_char="." ;;
+    47)  int_to_char_char="/" ;;
+    58)  int_to_char_char=":" ;;
+    59)  int_to_char_char=";" ;;
+    60)  int_to_char_char="<" ;;
+    61)  int_to_char_char="=" ;;
+    62)  int_to_char_char=">" ;;
+    63)  int_to_char_char="?" ;;
+    64)  int_to_char_char="@" ;;
+    91)  int_to_char_char="[" ;;
+    92)  int_to_char_char="\\" ;;
+    93)  int_to_char_char="]" ;;
+    94)  int_to_char_char="^" ;;
+    95)  int_to_char_char="_" ;;
+    96)  int_to_char_char="\`" ;;
+    123) int_to_char_char="{" ;;
+    124) int_to_char_char="|" ;;
+    125) int_to_char_char="}" ;;
+    126) int_to_char_char="~" ;;
+    *)   int_to_char_char=$(printf "\\$(printf "%o" "$1")") ;;
+  esac
 }
 
 # Local variables
@@ -149,26 +351,24 @@ _printf() {
   printf_mod=0
   while [ "$((_$printf_fmt_ptr))" -ne 0 ] ; do
     printf_head="$((_$printf_fmt_ptr))"
-    printf_head_char=$(printf "\\$(printf "%o" "$printf_head")") # Decode
+    int_to_char "$printf_head"; printf_head_char=$int_to_char_char
     printf_fmt_ptr=$((printf_fmt_ptr + 1))
     if [ $printf_mod -eq 1 ] ; then
       case $printf_head_char in
         'd') # 100 = 'd' Decimal integer
           printf_imm=$1; shift
           printf "%d" "$printf_imm"
-          # str="$str$imm"
           ;;
         'c') # 99 = 'c' Character
           printf_char=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          printf "\\$(printf "%o" "$printf_char")"
-          # str="$str$(printf "\\$(printf "%o" "$char")")"
+          int_to_char "$printf_char"
+          printf "%s" "$int_to_char_char"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
           printf_imm=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
           printf "%x" "$printf_imm"
-          # str="$str$(printf "%x" "$imm")"
           ;;
         's') # 115 = 's' String
           printf_str_ref=$1; shift
@@ -181,7 +381,6 @@ _printf() {
             printf_len=$1; shift
             printf_str_ref=$1; shift
             print_string $printf_str_ref 0 $printf_len
-            # str="$str$pack_string_res"
           else
             echo "Unknown format specifier: %.$pack_string_res" ; exit 1
           fi
@@ -222,9 +421,9 @@ _printf() {
       printf_mod=0
     else
       case $printf_head in
-        10) printf "\n" ;; # str="$str\n" ;; # 10 == '\n'
+        10) printf "\n" ;;  # 10 == '\n'
         37) printf_mod=1 ;; # 37 == '%'
-        *) printf "$printf_head_char" ;; # str="$str$head_char" ;; # Decode
+        *) printf "$printf_head_char" ;; # Decode
       esac
     fi
   done
@@ -281,7 +480,7 @@ read_n_char() {
     case "$get_char_char" in
       EOF) break ;;
       NEWLINE) read_n_char_code=10 ;; # 10 == '\n'
-      *) read_n_char_code=$(LC_CTYPE=C printf "%d" "'$get_char_char") # convert to integer code ;;
+      *) char_to_int "$get_char_char"; read_n_char_code=$char_to_int_code ;;
     esac
 
     : $((_$read_n_char_buf_ptr=$read_n_char_code))
@@ -367,7 +566,7 @@ read_all_char() {
     case "$get_char_char" in
       EOF) break ;;
       NEWLINE) read_all_char_code=10 ;; # 10 == '\n'
-      *) read_all_char_code=$(LC_CTYPE=C printf "%d" "'$get_char_char") # convert to integer code ;;
+      *) char_to_int "$get_char_char"; read_all_char_code=$char_to_int_code ;;
     esac
 
     : $((_$read_all_char_buf_ptr=$read_all_char_code))
@@ -472,6 +671,7 @@ _show_heap() {
   echo "    Heap:"
   while [ $show_heap_ix -lt $ALLOC ]; do
     location="_$show_heap_ix"
+    # Safe way of checking if the variable is defined or not. With +u, we could also check if it's empty.
     eval "if [[ -z \${$location+x} ]]; then undefined=1; else undefined=0; fi"
     if [[ $undefined -eq 1 ]]; then
       elided=1
@@ -484,7 +684,8 @@ _show_heap() {
       show_heap_ascii=$((_$show_heap_ix))
       show_heap_char=""
       if [ $show_heap_ascii -ge 31 ] && [ $show_heap_ascii -le 127 ] ; then
-        show_heap_char=$(printf "\\$(printf "%o" "$show_heap_ascii")")
+        int_to_char "$show_heap_ascii"
+        show_heap_char=$int_to_char_char
       fi
       echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
     fi
