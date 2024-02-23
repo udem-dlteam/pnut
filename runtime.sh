@@ -79,13 +79,13 @@ pack_string() {
   done
 }
 
-# Emit a C-string character by character so that printf doesn't interpret % and \ as format specifiers.
+# Emit a C-string line by line so that whitespace isn't mangled
 print_string() {
   print_string_addr="$1";  shift
   print_string_max_len=100000000
   print_string_delim=0
   print_string_len=0
-  print_string_res=""
+  print_string_acc=""
   if [ $# -ge 1 ] ; then print_string_delim="$1" ; shift ; fi # Optional end of string delimiter
   if [ $# -ge 1 ] ; then print_string_max_len="$1" ; shift ; fi # Optional max length
   while [ "$((_$print_string_addr))" -ne $print_string_delim ] && [ $print_string_max_len -gt $print_string_len ] ; do
@@ -93,10 +93,15 @@ print_string() {
     print_string_addr=$((print_string_addr + 1))
     print_string_len=$((print_string_len + 1))
     case $print_string_char in
-      10) printf "\n" ;; # 10 == '\n'
-      *)  int_to_char "$print_string_char"; printf "%s" "$int_to_char_char" ;;
+      10) # 10 == '\n'
+        printf "%s\n" "$print_string_acc"
+        print_string_acc="" ;;
+      *)
+        int_to_char "$print_string_char"
+        print_string_acc="$print_string_acc$int_to_char_char" ;;
     esac
   done
+  printf "%s" "$print_string_acc"
 }
 
 char_to_int() {
@@ -363,7 +368,7 @@ _printf() {
           printf_char=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
           int_to_char "$printf_char"
-          printf "%s" "$int_to_char_char"
+          printf "%c" "$int_to_char_char"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
           printf_imm=$1; shift
