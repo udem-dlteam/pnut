@@ -1,0 +1,7029 @@
+2273
+\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00%d: %.*s\00%8.4s\00LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,\00 %d\0a\00\0a\00%d: unexpected eof in expression\0a\00%d: open paren expected in sizeof\0a\00%d: close paren expected in sizeof\0a\00%d: bad function call\0a\00%d: undefined variable\0a\00%d: bad cast\0a\00%d: close paren expected\0a\00%d: bad dereference\0a\00%d: bad address-of\0a\00%d: bad lvalue in pre-increment\0a\00%d: bad expression\0a\00%d: bad lvalue in assignment\0a\00%d: conditional missing colon\0a\00%d: bad lvalue in post-increment\0a\00%d: close bracket expected\0a\00%d: pointer type expected\0a\00%d: compiler error tk=%d\0a\00%d: open paren expected\0a\00%d: close paren expected\0a\00%d: open paren expected\0a\00%d: close paren expected\0a\00%d: semicolon expected\0a\00%d: semicolon expected\0a\00usage: c4 [-s] [-d] file ...\0a\00could not open(%s)\0a\00could not malloc(%d) symbol area\0a\00could not malloc(%d) text area\0a\00could not malloc(%d) data area\0a\00could not malloc(%d) stack area\0a\00char else enum if int return sizeof while open read close printf malloc free memset memcmp exit void main\00could not malloc(%d) source area\0a\00read() returned %d\0a\00%d: bad enum identifier %d\0a\00%d: bad enum initializer\0a\00%d: bad global declaration\0a\00%d: duplicate global definition\0a\00%d: bad parameter declaration\0a\00%d: duplicate parameter definition\0a\00%d: bad function definition\0a\00%d: bad local declaration\0a\00%d: duplicate local definition\0a\00main() not defined\0a\00%d\0a\00\5c%x%x\00%c\00\0a\00%d\0a\00%4.4s\00LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,\00 %d\0a\00\0a\00REF  %d\0a\00%4.4s\00LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,\00 %d\0a\00\0a\00%d> %.4s\00LEA ,IMM ,REF ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,\00 %d\0a\00\0a\00    pc = %d, sp = %d, bp = %d, a = %d\0a\00    _stack_%d = %d\0a\00exit(%d) cycle = %d\0a\00unknown instruction = %d! cycle = %d\0a\00 
+5801
+ENT  1
+REF  7
+PSH  
+REF  0
+LI   
+LC   
+SI   
+BZ   1623
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+LI   
+PSH  
+IMM  10
+EQ   
+BZ   148
+REF  12
+LI   
+BZ   137
+REF  16
+PSH  
+REF  11
+LI   
+PSH  
+REF  0
+LI   
+PSH  
+REF  1
+LI   
+SUB  
+PSH  
+REF  1
+LI   
+PSH  
+PRTF 
+ADJ  4
+REF  1
+PSH  
+REF  0
+LI   
+SI   
+REF  4
+LI   
+PSH  
+REF  3
+LI   
+LT   
+BZ   137
+REF  25
+PSH  
+REF  31
+PSH  
+REF  4
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LI   
+PSH  
+IMM  5
+MUL  
+ADD  
+PSH  
+PRTF 
+ADJ  2
+REF  4
+LI   
+LI   
+PSH  
+IMM  8
+LE   
+BZ   129
+REF  232
+PSH  
+REF  4
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LI   
+PSH  
+PRTF 
+ADJ  2
+JMP  135
+REF  237
+PSH  
+PRTF 
+ADJ  1
+JMP  65
+REF  11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  35
+EQ   
+BZ   190
+REF  0
+LI   
+LC   
+PSH  
+IMM  0
+NE   
+BZ   175
+REF  0
+LI   
+LC   
+PSH  
+IMM  10
+NE   
+BZ   188
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+JMP  157
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  97
+GE   
+BZ   206
+REF  7
+LI   
+PSH  
+IMM  122
+LE   
+BNZ  224
+REF  7
+LI   
+PSH  
+IMM  65
+GE   
+BZ   224
+REF  7
+LI   
+PSH  
+IMM  90
+LE   
+BNZ  233
+REF  7
+LI   
+PSH  
+IMM  95
+EQ   
+BZ   529
+LEA  -1
+PSH  
+REF  0
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+REF  0
+LI   
+LC   
+PSH  
+IMM  97
+GE   
+BZ   264
+REF  0
+LI   
+LC   
+PSH  
+IMM  122
+LE   
+BNZ  284
+REF  0
+LI   
+LC   
+PSH  
+IMM  65
+GE   
+BZ   284
+REF  0
+LI   
+LC   
+PSH  
+IMM  90
+LE   
+BNZ  304
+REF  0
+LI   
+LC   
+PSH  
+IMM  48
+GE   
+BZ   304
+REF  0
+LI   
+LC   
+PSH  
+IMM  57
+LE   
+BNZ  314
+REF  0
+LI   
+LC   
+PSH  
+IMM  95
+EQ   
+BZ   345
+REF  7
+PSH  
+REF  7
+LI   
+PSH  
+IMM  47
+MUL  
+PSH  
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LC   
+ADD  
+SI   
+JMP  246
+REF  7
+PSH  
+REF  7
+LI   
+PSH  
+IMM  6
+SHL  
+PSH  
+REF  0
+LI   
+PSH  
+LEA  -1
+LI   
+SUB  
+ADD  
+SI   
+REF  5
+PSH  
+REF  6
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  0
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+BZ   475
+REF  7
+LI   
+PSH  
+REF  5
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+EQ   
+BZ   439
+REF  5
+LI   
+PSH  
+IMM  2
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -1
+LI   
+PSH  
+REF  0
+LI   
+PSH  
+LEA  -1
+LI   
+SUB  
+PSH  
+MCMP 
+ADJ  3
+PSH  
+IMM  0
+EQ   
+BZ   458
+REF  7
+PSH  
+REF  5
+LI   
+PSH  
+IMM  0
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+LEV  
+REF  5
+PSH  
+REF  5
+LI   
+PSH  
+IMM  9
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  373
+REF  5
+LI   
+PSH  
+IMM  2
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -1
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  7
+LI   
+SI   
+REF  7
+PSH  
+REF  5
+LI   
+PSH  
+IMM  0
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  133
+SI   
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  48
+GE   
+BZ   545
+REF  7
+LI   
+PSH  
+IMM  57
+LE   
+BZ   808
+REF  8
+PSH  
+REF  7
+LI   
+PSH  
+IMM  48
+SUB  
+SI   
+BZ   615
+REF  0
+LI   
+LC   
+PSH  
+IMM  48
+GE   
+BZ   578
+REF  0
+LI   
+LC   
+PSH  
+IMM  57
+LE   
+BZ   613
+REF  8
+PSH  
+REF  8
+LI   
+PSH  
+IMM  10
+MUL  
+PSH  
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LC   
+ADD  
+PSH  
+IMM  48
+SUB  
+SI   
+JMP  560
+JMP  799
+REF  0
+LI   
+LC   
+PSH  
+IMM  120
+EQ   
+BNZ  633
+REF  0
+LI   
+LC   
+PSH  
+IMM  88
+EQ   
+BZ   746
+REF  7
+PSH  
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LC   
+SI   
+BZ   703
+REF  7
+LI   
+PSH  
+IMM  48
+GE   
+BZ   667
+REF  7
+LI   
+PSH  
+IMM  57
+LE   
+BNZ  685
+REF  7
+LI   
+PSH  
+IMM  97
+GE   
+BZ   685
+REF  7
+LI   
+PSH  
+IMM  102
+LE   
+BNZ  703
+REF  7
+LI   
+PSH  
+IMM  65
+GE   
+BZ   703
+REF  7
+LI   
+PSH  
+IMM  70
+LE   
+BZ   744
+REF  8
+PSH  
+REF  8
+LI   
+PSH  
+IMM  16
+MUL  
+PSH  
+REF  7
+LI   
+PSH  
+IMM  15
+AND  
+ADD  
+PSH  
+REF  7
+LI   
+PSH  
+IMM  65
+GE   
+BZ   738
+IMM  9
+JMP  740
+IMM  0
+ADD  
+SI   
+JMP  635
+JMP  799
+REF  0
+LI   
+LC   
+PSH  
+IMM  48
+GE   
+BZ   764
+REF  0
+LI   
+LC   
+PSH  
+IMM  55
+LE   
+BZ   799
+REF  8
+PSH  
+REF  8
+LI   
+PSH  
+IMM  8
+MUL  
+PSH  
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LC   
+ADD  
+PSH  
+IMM  48
+SUB  
+SI   
+JMP  746
+REF  7
+PSH  
+IMM  128
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  47
+EQ   
+BZ   878
+REF  0
+LI   
+LC   
+PSH  
+IMM  47
+EQ   
+BZ   869
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  0
+LI   
+LC   
+PSH  
+IMM  0
+NE   
+BZ   854
+REF  0
+LI   
+LC   
+PSH  
+IMM  10
+NE   
+BZ   867
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+JMP  836
+JMP  876
+REF  7
+PSH  
+IMM  160
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  39
+EQ   
+BNZ  894
+REF  7
+LI   
+PSH  
+IMM  34
+EQ   
+BZ   1043
+LEA  -1
+PSH  
+REF  2
+LI   
+SI   
+REF  0
+LI   
+LC   
+PSH  
+IMM  0
+NE   
+BZ   922
+REF  0
+LI   
+LC   
+PSH  
+REF  7
+LI   
+NE   
+BZ   1007
+REF  8
+PSH  
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LC   
+SI   
+PSH  
+IMM  92
+EQ   
+BZ   978
+REF  8
+PSH  
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LC   
+SI   
+PSH  
+IMM  110
+EQ   
+BZ   978
+REF  8
+PSH  
+IMM  10
+SI   
+REF  7
+LI   
+PSH  
+IMM  34
+EQ   
+BZ   1005
+REF  2
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+PSH  
+REF  8
+LI   
+SC   
+JMP  903
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+LI   
+PSH  
+IMM  34
+EQ   
+BZ   1034
+REF  8
+PSH  
+LEA  -1
+LI   
+SI   
+JMP  1040
+REF  7
+PSH  
+IMM  128
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  61
+EQ   
+BZ   1088
+REF  0
+LI   
+LC   
+PSH  
+IMM  61
+EQ   
+BZ   1079
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  149
+SI   
+JMP  1085
+REF  7
+PSH  
+IMM  142
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  43
+EQ   
+BZ   1133
+REF  0
+LI   
+LC   
+PSH  
+IMM  43
+EQ   
+BZ   1124
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  162
+SI   
+JMP  1130
+REF  7
+PSH  
+IMM  157
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  45
+EQ   
+BZ   1178
+REF  0
+LI   
+LC   
+PSH  
+IMM  45
+EQ   
+BZ   1169
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  163
+SI   
+JMP  1175
+REF  7
+PSH  
+IMM  158
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  33
+EQ   
+BZ   1215
+REF  0
+LI   
+LC   
+PSH  
+IMM  61
+EQ   
+BZ   1212
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  150
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  60
+EQ   
+BZ   1287
+REF  0
+LI   
+LC   
+PSH  
+IMM  61
+EQ   
+BZ   1251
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  153
+SI   
+JMP  1284
+REF  0
+LI   
+LC   
+PSH  
+IMM  60
+EQ   
+BZ   1278
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  155
+SI   
+JMP  1284
+REF  7
+PSH  
+IMM  151
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  62
+EQ   
+BZ   1359
+REF  0
+LI   
+LC   
+PSH  
+IMM  61
+EQ   
+BZ   1323
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  154
+SI   
+JMP  1356
+REF  0
+LI   
+LC   
+PSH  
+IMM  62
+EQ   
+BZ   1350
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  156
+SI   
+JMP  1356
+REF  7
+PSH  
+IMM  152
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  124
+EQ   
+BZ   1404
+REF  0
+LI   
+LC   
+PSH  
+IMM  124
+EQ   
+BZ   1395
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  144
+SI   
+JMP  1401
+REF  7
+PSH  
+IMM  146
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  38
+EQ   
+BZ   1449
+REF  0
+LI   
+LC   
+PSH  
+IMM  38
+EQ   
+BZ   1440
+REF  0
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+PSH  
+IMM  145
+SI   
+JMP  1446
+REF  7
+PSH  
+IMM  148
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  94
+EQ   
+BZ   1467
+REF  7
+PSH  
+IMM  147
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  37
+EQ   
+BZ   1485
+REF  7
+PSH  
+IMM  161
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  42
+EQ   
+BZ   1503
+REF  7
+PSH  
+IMM  159
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  91
+EQ   
+BZ   1521
+REF  7
+PSH  
+IMM  164
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  63
+EQ   
+BZ   1539
+REF  7
+PSH  
+IMM  143
+SI   
+LEV  
+JMP  1621
+REF  7
+LI   
+PSH  
+IMM  126
+EQ   
+BNZ  1555
+REF  7
+LI   
+PSH  
+IMM  59
+EQ   
+BNZ  1564
+REF  7
+LI   
+PSH  
+IMM  123
+EQ   
+BNZ  1573
+REF  7
+LI   
+PSH  
+IMM  125
+EQ   
+BNZ  1582
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BNZ  1591
+REF  7
+LI   
+PSH  
+IMM  41
+EQ   
+BNZ  1600
+REF  7
+LI   
+PSH  
+IMM  93
+EQ   
+BNZ  1609
+REF  7
+LI   
+PSH  
+IMM  44
+EQ   
+BNZ  1618
+REF  7
+LI   
+PSH  
+IMM  58
+EQ   
+BZ   1621
+LEV  
+JMP  2
+LEV  
+ENT  2
+REF  7
+LI   
+PSH  
+IMM  0
+EQ   
+BZ   1653
+REF  239
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  128
+EQ   
+BZ   1699
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  8
+LI   
+SI   
+JSR  0
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  34
+EQ   
+BZ   1777
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  2
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  8
+LI   
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  34
+EQ   
+BZ   1750
+JSR  0
+JMP  1737
+REF  2
+PSH  
+REF  2
+LI   
+PSH  
+IMM  1
+ADD  
+PSH  
+IMM  -1
+PSH  
+IMM  1
+MUL  
+AND  
+SI   
+REF  9
+PSH  
+IMM  2
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  140
+EQ   
+BZ   1962
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BZ   1801
+JSR  0
+JMP  1817
+REF  273
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  9
+PSH  
+IMM  1
+SI   
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BZ   1836
+JSR  0
+JMP  1853
+REF  7
+LI   
+PSH  
+IMM  134
+EQ   
+BZ   1853
+JSR  0
+REF  9
+PSH  
+IMM  0
+SI   
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   1877
+JSR  0
+REF  9
+PSH  
+REF  9
+LI   
+PSH  
+IMM  2
+ADD  
+SI   
+JMP  1853
+REF  7
+LI   
+PSH  
+IMM  41
+EQ   
+BZ   1890
+JSR  0
+JMP  1906
+REF  308
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   1938
+IMM  1
+JMP  1953
+REF  9
+LI   
+PSH  
+IMM  0
+EQ   
+BZ   1951
+IMM  1
+JMP  1953
+IMM  1
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  133
+EQ   
+BZ   2451
+LEA  -2
+PSH  
+REF  5
+LI   
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BZ   2215
+JSR  0
+LEA  -1
+PSH  
+IMM  0
+SI   
+REF  7
+LI   
+PSH  
+IMM  41
+NE   
+BZ   2048
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+LEA  -1
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+LI   
+PSH  
+IMM  44
+EQ   
+BZ   2046
+JSR  0
+JMP  1997
+JSR  0
+LEA  -2
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  130
+EQ   
+BZ   2093
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+JMP  2165
+LEA  -2
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  129
+EQ   
+BZ   2149
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  4
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+JMP  2165
+REF  344
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+LEA  -1
+LI   
+BZ   2197
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  8
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -1
+LI   
+SI   
+REF  9
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+JMP  2449
+LEA  -2
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  128
+EQ   
+BZ   2277
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  2449
+LEA  -2
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  132
+EQ   
+BZ   2338
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  0
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  10
+LI   
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SUB  
+SI   
+JMP  2410
+LEA  -2
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  131
+EQ   
+BZ   2394
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  2
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+JMP  2410
+REF  367
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  9
+PSH  
+LEA  -2
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   2446
+IMM  11
+JMP  2448
+IMM  10
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BZ   2608
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BNZ  2478
+REF  7
+LI   
+PSH  
+IMM  134
+EQ   
+BZ   2570
+LEA  -1
+PSH  
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BZ   2496
+IMM  1
+JMP  2498
+IMM  0
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   2525
+JSR  0
+LEA  -1
+PSH  
+LEA  -1
+LI   
+PSH  
+IMM  2
+ADD  
+SI   
+JMP  2501
+REF  7
+LI   
+PSH  
+IMM  41
+EQ   
+BZ   2538
+JSR  0
+JMP  2554
+REF  391
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  9
+PSH  
+LEA  -1
+LI   
+SI   
+JMP  2606
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  7
+LI   
+PSH  
+IMM  41
+EQ   
+BZ   2590
+JSR  0
+JMP  2606
+REF  405
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   2692
+JSR  0
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  9
+LI   
+PSH  
+IMM  1
+GT   
+BZ   2648
+REF  9
+PSH  
+REF  9
+LI   
+PSH  
+IMM  2
+SUB  
+SI   
+JMP  2664
+REF  431
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  9
+LI   
+PSH  
+IMM  0
+EQ   
+BZ   2687
+IMM  11
+JMP  2689
+IMM  10
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  148
+EQ   
+BZ   2770
+JSR  0
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+LI   
+LI   
+PSH  
+IMM  11
+EQ   
+BNZ  2728
+REF  3
+LI   
+LI   
+PSH  
+IMM  10
+EQ   
+BZ   2741
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+JMP  2757
+REF  452
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  9
+PSH  
+REF  9
+LI   
+PSH  
+IMM  2
+ADD  
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  33
+EQ   
+BZ   2848
+JSR  0
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  0
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  18
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  126
+EQ   
+BZ   2926
+JSR  0
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  -1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  16
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  157
+EQ   
+BZ   2952
+JSR  0
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  158
+EQ   
+BZ   3061
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  7
+LI   
+PSH  
+IMM  128
+EQ   
+BZ   3007
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  -1
+PSH  
+REF  8
+LI   
+MUL  
+SI   
+JSR  0
+JMP  3053
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  -1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  28
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  3306
+REF  7
+LI   
+PSH  
+IMM  162
+EQ   
+BNZ  3077
+REF  7
+LI   
+PSH  
+IMM  163
+EQ   
+BZ   3290
+LEA  -1
+PSH  
+REF  7
+LI   
+SI   
+JSR  0
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+LI   
+LI   
+PSH  
+IMM  11
+EQ   
+BZ   3127
+REF  3
+LI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  11
+SI   
+JMP  3175
+REF  3
+LI   
+LI   
+PSH  
+IMM  10
+EQ   
+BZ   3159
+REF  3
+LI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  10
+SI   
+JMP  3175
+REF  472
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   3220
+IMM  1
+JMP  3235
+REF  9
+LI   
+PSH  
+IMM  2
+GT   
+BZ   3233
+IMM  1
+JMP  3235
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -1
+LI   
+PSH  
+IMM  162
+EQ   
+BZ   3259
+IMM  26
+JMP  3261
+IMM  27
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  9
+LI   
+PSH  
+IMM  0
+EQ   
+BZ   3285
+IMM  13
+JMP  3287
+IMM  12
+SI   
+JMP  3306
+REF  505
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  7
+LI   
+PSH  
+LEA  2
+LI   
+GE   
+BZ   5308
+LEA  -1
+PSH  
+REF  9
+LI   
+SI   
+REF  7
+LI   
+PSH  
+IMM  142
+EQ   
+BZ   3418
+JSR  0
+REF  3
+LI   
+LI   
+PSH  
+IMM  11
+EQ   
+BNZ  3352
+REF  3
+LI   
+LI   
+PSH  
+IMM  10
+EQ   
+BZ   3363
+REF  3
+LI   
+PSH  
+IMM  14
+SI   
+JMP  3379
+REF  525
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  9
+PSH  
+LEA  -1
+LI   
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   3413
+IMM  13
+JMP  3415
+IMM  12
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  143
+EQ   
+BZ   3558
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  5
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  7
+LI   
+PSH  
+IMM  58
+EQ   
+BZ   3475
+JSR  0
+JMP  3491
+REF  555
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  3
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+IMM  143
+PSH  
+JSR  1624
+ADJ  1
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  144
+EQ   
+BZ   3626
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  6
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+IMM  145
+PSH  
+JSR  1624
+ADJ  1
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  145
+EQ   
+BZ   3694
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  5
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+IMM  146
+PSH  
+JSR  1624
+ADJ  1
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  146
+EQ   
+BZ   3746
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  147
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  15
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  147
+EQ   
+BZ   3798
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  148
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  16
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  148
+EQ   
+BZ   3850
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  149
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  17
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  149
+EQ   
+BZ   3902
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  151
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  18
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  150
+EQ   
+BZ   3954
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  151
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  19
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  151
+EQ   
+BZ   4006
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  155
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  20
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  152
+EQ   
+BZ   4058
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  155
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  21
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  153
+EQ   
+BZ   4110
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  155
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  22
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  154
+EQ   
+BZ   4162
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  155
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  23
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  155
+EQ   
+BZ   4214
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  157
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  24
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  156
+EQ   
+BZ   4266
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  157
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  25
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  157
+EQ   
+BZ   4386
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  159
+PSH  
+JSR  1624
+ADJ  1
+REF  9
+PSH  
+LEA  -1
+LI   
+SI   
+PSH  
+IMM  2
+GT   
+BZ   4371
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   4355
+IMM  1
+JMP  4357
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  28
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  26
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  158
+EQ   
+BZ   4622
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  159
+PSH  
+JSR  1624
+ADJ  1
+LEA  -1
+LI   
+PSH  
+IMM  2
+GT   
+BZ   4434
+LEA  -1
+LI   
+PSH  
+REF  9
+LI   
+EQ   
+BZ   4518
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  27
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   4494
+IMM  1
+JMP  4496
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  29
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  4620
+REF  9
+PSH  
+LEA  -1
+LI   
+SI   
+PSH  
+IMM  2
+GT   
+BZ   4607
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   4576
+IMM  1
+JMP  4578
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  28
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  27
+SI   
+JMP  4620
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  27
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   4674
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  28
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  160
+EQ   
+BZ   4726
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  29
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  161
+EQ   
+BZ   4778
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  162
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  30
+SI   
+REF  9
+PSH  
+IMM  1
+SI   
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  162
+EQ   
+BNZ  4794
+REF  7
+LI   
+PSH  
+IMM  163
+EQ   
+BZ   5080
+REF  3
+LI   
+LI   
+PSH  
+IMM  11
+EQ   
+BZ   4828
+REF  3
+LI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  11
+SI   
+JMP  4876
+REF  3
+LI   
+LI   
+PSH  
+IMM  10
+EQ   
+BZ   4860
+REF  3
+LI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  10
+SI   
+JMP  4876
+REF  586
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   4921
+IMM  1
+JMP  4936
+REF  9
+LI   
+PSH  
+IMM  2
+GT   
+BZ   4934
+IMM  1
+JMP  4936
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  7
+LI   
+PSH  
+IMM  162
+EQ   
+BZ   4960
+IMM  26
+JMP  4962
+IMM  27
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  9
+LI   
+PSH  
+IMM  0
+EQ   
+BZ   4986
+IMM  13
+JMP  4988
+IMM  12
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   5034
+IMM  1
+JMP  5049
+REF  9
+LI   
+PSH  
+IMM  2
+GT   
+BZ   5047
+IMM  1
+JMP  5049
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  7
+LI   
+PSH  
+IMM  162
+EQ   
+BZ   5073
+IMM  27
+JMP  5075
+IMM  26
+SI   
+JSR  0
+JMP  5306
+REF  7
+LI   
+PSH  
+IMM  164
+EQ   
+BZ   5286
+JSR  0
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  7
+LI   
+PSH  
+IMM  93
+EQ   
+BZ   5124
+JSR  0
+JMP  5140
+REF  620
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+LEA  -1
+LI   
+PSH  
+IMM  2
+GT   
+BZ   5212
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  14
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  15
+LI   
+BZ   5194
+IMM  1
+JMP  5196
+IMM  1
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  28
+SI   
+JMP  5237
+LEA  -1
+LI   
+PSH  
+IMM  2
+LT   
+BZ   5237
+REF  648
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  26
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+REF  9
+PSH  
+LEA  -1
+LI   
+PSH  
+IMM  2
+SUB  
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   5281
+IMM  11
+JMP  5283
+IMM  10
+SI   
+JMP  5306
+REF  675
+PSH  
+REF  11
+LI   
+PSH  
+REF  7
+LI   
+PSH  
+PRTF 
+ADJ  3
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+JMP  3306
+LEV  
+ENT  2
+REF  7
+LI   
+PSH  
+IMM  137
+EQ   
+BZ   5488
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BZ   5335
+JSR  0
+JMP  5351
+REF  701
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  7
+LI   
+PSH  
+IMM  41
+EQ   
+BZ   5371
+JSR  0
+JMP  5387
+REF  726
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  5
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+JSR  5309
+REF  7
+LI   
+PSH  
+IMM  135
+EQ   
+BZ   5470
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  3
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+JSR  0
+JSR  5309
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  5800
+REF  7
+LI   
+PSH  
+IMM  141
+EQ   
+BZ   5652
+JSR  0
+LEA  -1
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BZ   5527
+JSR  0
+JMP  5543
+REF  752
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  7
+LI   
+PSH  
+IMM  41
+EQ   
+BZ   5563
+JSR  0
+JMP  5579
+REF  777
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  5
+SI   
+LEA  -2
+PSH  
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+JSR  5309
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  3
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -1
+LI   
+SI   
+LEA  -2
+LI   
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  5800
+REF  7
+LI   
+PSH  
+IMM  139
+EQ   
+BZ   5723
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  59
+NE   
+BZ   5679
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  9
+SI   
+REF  7
+LI   
+PSH  
+IMM  59
+EQ   
+BZ   5705
+JSR  0
+JMP  5721
+REF  803
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+JMP  5800
+REF  7
+LI   
+PSH  
+IMM  123
+EQ   
+BZ   5751
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  125
+NE   
+BZ   5747
+JSR  5309
+JMP  5734
+JSR  0
+JMP  5800
+REF  7
+LI   
+PSH  
+IMM  59
+EQ   
+BZ   5764
+JSR  0
+JMP  5800
+IMM  142
+PSH  
+JSR  1624
+ADJ  1
+REF  7
+LI   
+PSH  
+IMM  59
+EQ   
+BZ   5784
+JSR  0
+JMP  5800
+REF  827
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+PSH  
+EXIT 
+ADJ  1
+LEV  
+ENT  17
+LEA  3
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+LEA  2
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LEA  3
+LI   
+PSH  
+IMM  0
+GT   
+BZ   5839
+LEA  2
+LI   
+LI   
+LC   
+PSH  
+IMM  45
+EQ   
+BZ   5854
+LEA  2
+LI   
+LI   
+PSH  
+IMM  1
+ADD  
+LC   
+PSH  
+IMM  115
+EQ   
+BZ   5880
+REF  12
+PSH  
+IMM  1
+SI   
+LEA  3
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+LEA  2
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LEA  3
+LI   
+PSH  
+IMM  0
+GT   
+BZ   5898
+LEA  2
+LI   
+LI   
+LC   
+PSH  
+IMM  45
+EQ   
+BZ   5913
+LEA  2
+LI   
+LI   
+PSH  
+IMM  1
+ADD  
+LC   
+PSH  
+IMM  100
+EQ   
+BZ   5939
+REF  13
+PSH  
+IMM  1
+SI   
+LEA  3
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+LEA  2
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LEA  3
+LI   
+PSH  
+IMM  0
+GT   
+BZ   5957
+LEA  2
+LI   
+LI   
+LC   
+PSH  
+IMM  45
+EQ   
+BZ   5972
+LEA  2
+LI   
+LI   
+PSH  
+IMM  1
+ADD  
+LC   
+PSH  
+IMM  98
+EQ   
+BZ   5998
+REF  14
+PSH  
+IMM  1
+SI   
+LEA  3
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+LEA  2
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LEA  3
+LI   
+PSH  
+IMM  0
+GT   
+BZ   6016
+LEA  2
+LI   
+LI   
+LC   
+PSH  
+IMM  45
+EQ   
+BZ   6031
+LEA  2
+LI   
+LI   
+PSH  
+IMM  1
+ADD  
+LC   
+PSH  
+IMM  112
+EQ   
+BZ   6057
+REF  15
+PSH  
+IMM  1
+SI   
+LEA  3
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+LEA  2
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LEA  3
+LI   
+PSH  
+IMM  1
+LT   
+BZ   6075
+REF  851
+PSH  
+PRTF 
+ADJ  1
+IMM  -1
+LEV  
+LEA  -1
+PSH  
+LEA  2
+LI   
+LI   
+PSH  
+IMM  0
+PSH  
+OPEN 
+ADJ  2
+SI   
+PSH  
+IMM  0
+LT   
+BZ   6110
+REF  881
+PSH  
+LEA  2
+LI   
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+LEA  -4
+PSH  
+IMM  256
+PSH  
+IMM  1024
+MUL  
+SI   
+REF  6
+PSH  
+LEA  -4
+LI   
+PSH  
+MALC 
+ADJ  1
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   6150
+REF  901
+PSH  
+LEA  -4
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+LEA  -15
+PSH  
+REF  4
+PSH  
+REF  3
+PSH  
+LEA  -4
+LI   
+PSH  
+MALC 
+ADJ  1
+SI   
+SI   
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   6188
+REF  935
+PSH  
+LEA  -4
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+LEA  -16
+PSH  
+REF  2
+PSH  
+LEA  -4
+LI   
+PSH  
+MALC 
+ADJ  1
+SI   
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   6222
+REF  967
+PSH  
+LEA  -4
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+LEA  -7
+PSH  
+LEA  -4
+LI   
+PSH  
+MALC 
+ADJ  1
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   6252
+REF  999
+PSH  
+LEA  -4
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  6
+LI   
+PSH  
+IMM  0
+PSH  
+LEA  -4
+LI   
+PSH  
+MSET 
+ADJ  3
+REF  3
+LI   
+PSH  
+IMM  0
+PSH  
+LEA  -4
+LI   
+PSH  
+MSET 
+ADJ  3
+REF  2
+LI   
+PSH  
+IMM  0
+PSH  
+LEA  -4
+LI   
+PSH  
+MSET 
+ADJ  3
+REF  0
+PSH  
+REF  1032
+SI   
+LEA  -11
+PSH  
+IMM  134
+SI   
+LEA  -11
+LI   
+PSH  
+IMM  141
+LE   
+BZ   6345
+JSR  0
+REF  5
+LI   
+PSH  
+IMM  0
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+SI   
+JMP  6306
+LEA  -11
+PSH  
+IMM  31
+SI   
+LEA  -11
+LI   
+PSH  
+IMM  39
+LE   
+BZ   6420
+JSR  0
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  130
+SI   
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  1
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+SI   
+JMP  6351
+JSR  0
+REF  5
+LI   
+PSH  
+IMM  0
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  134
+SI   
+JSR  0
+LEA  -5
+PSH  
+REF  5
+LI   
+SI   
+REF  1
+PSH  
+REF  0
+PSH  
+LEA  -4
+LI   
+PSH  
+MALC 
+ADJ  1
+SI   
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   6480
+REF  1138
+PSH  
+LEA  -4
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+LEA  -11
+PSH  
+LEA  -1
+LI   
+PSH  
+REF  0
+LI   
+PSH  
+LEA  -4
+LI   
+PSH  
+IMM  1
+SUB  
+PSH  
+READ 
+ADJ  3
+SI   
+PSH  
+IMM  0
+LE   
+BZ   6522
+REF  1172
+PSH  
+LEA  -11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  0
+LI   
+PSH  
+LEA  -11
+LI   
+ADD  
+PSH  
+IMM  0
+SC   
+LEA  -1
+LI   
+PSH  
+CLOS 
+ADJ  1
+REF  11
+PSH  
+IMM  1
+SI   
+JSR  0
+REF  7
+LI   
+BZ   7790
+LEA  -2
+PSH  
+IMM  1
+SI   
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BZ   6573
+JSR  0
+JMP  6781
+REF  7
+LI   
+PSH  
+IMM  134
+EQ   
+BZ   6592
+JSR  0
+LEA  -2
+PSH  
+IMM  0
+SI   
+JMP  6781
+REF  7
+LI   
+PSH  
+IMM  136
+EQ   
+BZ   6781
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  123
+NE   
+BZ   6614
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  123
+EQ   
+BZ   6781
+JSR  0
+LEA  -11
+PSH  
+IMM  0
+SI   
+REF  7
+LI   
+PSH  
+IMM  125
+NE   
+BZ   6779
+REF  7
+LI   
+PSH  
+IMM  133
+NE   
+BZ   6666
+REF  1192
+PSH  
+REF  11
+LI   
+PSH  
+REF  7
+LI   
+PSH  
+PRTF 
+ADJ  3
+IMM  -1
+LEV  
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  142
+EQ   
+BZ   6710
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  128
+NE   
+BZ   6701
+REF  1220
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+LEA  -11
+PSH  
+REF  8
+LI   
+SI   
+JSR  0
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  128
+SI   
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  1
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+SI   
+REF  7
+LI   
+PSH  
+IMM  44
+EQ   
+BZ   6777
+JSR  0
+JMP  6631
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  59
+NE   
+BZ   6797
+REF  7
+LI   
+PSH  
+IMM  125
+NE   
+BZ   7786
+LEA  -3
+PSH  
+LEA  -2
+LI   
+SI   
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   6830
+JSR  0
+LEA  -3
+PSH  
+LEA  -3
+LI   
+PSH  
+IMM  2
+ADD  
+SI   
+JMP  6806
+REF  7
+LI   
+PSH  
+IMM  133
+NE   
+BZ   6852
+REF  1246
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+BZ   6879
+REF  1274
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+JSR  0
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -3
+LI   
+SI   
+REF  7
+LI   
+PSH  
+IMM  40
+EQ   
+BZ   7731
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  129
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  3
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JSR  0
+LEA  -11
+PSH  
+IMM  0
+SI   
+REF  7
+LI   
+PSH  
+IMM  41
+NE   
+BZ   7222
+LEA  -3
+PSH  
+IMM  1
+SI   
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BZ   6981
+JSR  0
+JMP  6998
+REF  7
+LI   
+PSH  
+IMM  134
+EQ   
+BZ   6998
+JSR  0
+LEA  -3
+PSH  
+IMM  0
+SI   
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   7022
+JSR  0
+LEA  -3
+PSH  
+LEA  -3
+LI   
+PSH  
+IMM  2
+ADD  
+SI   
+JMP  6998
+REF  7
+LI   
+PSH  
+IMM  133
+NE   
+BZ   7044
+REF  1307
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  132
+EQ   
+BZ   7075
+REF  1338
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  5
+LI   
+PSH  
+IMM  6
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  132
+SI   
+REF  5
+LI   
+PSH  
+IMM  7
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -3
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  8
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  44
+EQ   
+BZ   7220
+JSR  0
+JMP  6953
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  123
+NE   
+BZ   7246
+REF  1374
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  10
+PSH  
+LEA  -11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BNZ  7277
+REF  7
+LI   
+PSH  
+IMM  134
+EQ   
+BZ   7540
+LEA  -2
+PSH  
+REF  7
+LI   
+PSH  
+IMM  138
+EQ   
+BZ   7295
+IMM  1
+JMP  7297
+IMM  0
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  59
+NE   
+BZ   7536
+LEA  -3
+PSH  
+LEA  -2
+LI   
+SI   
+REF  7
+LI   
+PSH  
+IMM  159
+EQ   
+BZ   7340
+JSR  0
+LEA  -3
+PSH  
+LEA  -3
+LI   
+PSH  
+IMM  2
+ADD  
+SI   
+JMP  7316
+REF  7
+LI   
+PSH  
+IMM  133
+NE   
+BZ   7362
+REF  1403
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  132
+EQ   
+BZ   7393
+REF  1430
+PSH  
+REF  11
+LI   
+PSH  
+PRTF 
+ADJ  2
+IMM  -1
+LEV  
+REF  5
+LI   
+PSH  
+IMM  6
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  132
+SI   
+REF  5
+LI   
+PSH  
+IMM  7
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -3
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  8
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+LEA  -11
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+SI   
+JSR  0
+REF  7
+LI   
+PSH  
+IMM  44
+EQ   
+BZ   7534
+JSR  0
+JMP  7300
+JSR  0
+JMP  7261
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  7
+SI   
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+LEA  -11
+LI   
+PSH  
+REF  10
+LI   
+SUB  
+SI   
+REF  7
+LI   
+PSH  
+IMM  125
+NE   
+BZ   7585
+JSR  5309
+JMP  7572
+REF  3
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  9
+SI   
+REF  5
+PSH  
+REF  6
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  0
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+BZ   7729
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  132
+EQ   
+BZ   7712
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  6
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  4
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  7
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  5
+LI   
+PSH  
+IMM  8
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+REF  5
+PSH  
+REF  5
+LI   
+PSH  
+IMM  9
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  7605
+JMP  7773
+REF  5
+LI   
+PSH  
+IMM  3
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+IMM  131
+SI   
+REF  5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+PSH  
+REF  2
+LI   
+SI   
+REF  2
+PSH  
+REF  2
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  7
+LI   
+PSH  
+IMM  44
+EQ   
+BZ   7784
+JSR  0
+JMP  6781
+JSR  0
+JMP  6549
+LEA  -6
+PSH  
+LEA  -5
+LI   
+PSH  
+IMM  5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+SI   
+PSH  
+IMM  0
+EQ   
+BZ   7821
+REF  1462
+PSH  
+PRTF 
+ADJ  1
+IMM  -1
+LEV  
+REF  12
+LI   
+BZ   7829
+IMM  0
+LEV  
+LEA  -8
+PSH  
+LEA  -7
+PSH  
+LEA  -7
+LI   
+PSH  
+LEA  -4
+LI   
+ADD  
+SI   
+SI   
+LEA  -13
+PSH  
+LEA  -7
+LI   
+SI   
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+IMM  39
+SI   
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+IMM  14
+SI   
+LEA  -12
+PSH  
+LEA  -7
+LI   
+SI   
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+LEA  3
+LI   
+SI   
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+LEA  2
+LI   
+SI   
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+LEA  -12
+LI   
+SI   
+REF  14
+LI   
+BZ   8320
+LEA  -15
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+REF  1482
+PSH  
+REF  2
+LI   
+PSH  
+LEA  -16
+LI   
+SUB  
+PSH  
+PRTF 
+ADJ  2
+LEA  -17
+PSH  
+LEA  -16
+LI   
+SI   
+LEA  -16
+LI   
+PSH  
+REF  2
+LI   
+LT   
+BZ   8059
+LEA  -16
+LI   
+LC   
+PSH  
+IMM  31
+LE   
+BNZ  7995
+LEA  -16
+LI   
+LC   
+PSH  
+IMM  127
+GE   
+BNZ  8005
+LEA  -16
+LI   
+LC   
+PSH  
+IMM  92
+EQ   
+BZ   8033
+REF  1486
+PSH  
+LEA  -16
+LI   
+LC   
+PSH  
+IMM  16
+DIV  
+PSH  
+LEA  -16
+LI   
+LC   
+PSH  
+IMM  16
+MOD  
+PSH  
+PRTF 
+ADJ  3
+JMP  8044
+REF  1492
+PSH  
+LEA  -16
+LI   
+LC   
+PSH  
+PRTF 
+ADJ  2
+LEA  -16
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+JMP  7967
+LEA  -16
+PSH  
+LEA  -17
+LI   
+SI   
+REF  1495
+PSH  
+PRTF 
+ADJ  1
+REF  1497
+PSH  
+LEA  -6
+LI   
+PSH  
+LEA  -15
+LI   
+SUB  
+PSH  
+IMM  1
+DIV  
+PSH  
+PRTF 
+ADJ  2
+REF  4
+PSH  
+LEA  -15
+LI   
+SI   
+REF  4
+LI   
+PSH  
+REF  3
+LI   
+LE   
+BZ   8317
+LEA  -11
+PSH  
+REF  4
+LI   
+LI   
+SI   
+LEA  -11
+LI   
+PSH  
+IMM  3
+EQ   
+BNZ  8132
+LEA  -11
+LI   
+PSH  
+IMM  4
+EQ   
+BNZ  8141
+LEA  -11
+LI   
+PSH  
+IMM  5
+EQ   
+BNZ  8150
+LEA  -11
+LI   
+PSH  
+IMM  6
+EQ   
+BZ   8216
+REF  1501
+PSH  
+REF  1507
+PSH  
+LEA  -11
+LI   
+PSH  
+IMM  5
+MUL  
+ADD  
+PSH  
+PRTF 
+ADJ  2
+REF  4
+LI   
+LI   
+PSH  
+IMM  8
+LE   
+BZ   8208
+REF  1708
+PSH  
+REF  4
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LI   
+PSH  
+LEA  -15
+LI   
+SUB  
+PSH  
+IMM  1
+DIV  
+PSH  
+PRTF 
+ADJ  2
+JMP  8214
+REF  1713
+PSH  
+PRTF 
+ADJ  1
+JMP  8302
+LEA  -11
+LI   
+PSH  
+IMM  2
+EQ   
+BZ   8249
+REF  1715
+PSH  
+REF  4
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LI   
+PSH  
+LEA  -16
+LI   
+SUB  
+PSH  
+PRTF 
+ADJ  2
+JMP  8302
+REF  1724
+PSH  
+REF  1730
+PSH  
+LEA  -11
+LI   
+PSH  
+IMM  5
+MUL  
+ADD  
+PSH  
+PRTF 
+ADJ  2
+REF  4
+LI   
+LI   
+PSH  
+IMM  8
+LE   
+BZ   8296
+REF  1931
+PSH  
+REF  4
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+LI   
+PSH  
+PRTF 
+ADJ  2
+JMP  8302
+REF  1936
+PSH  
+PRTF 
+ADJ  1
+REF  4
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+JMP  8098
+IMM  0
+LEV  
+LEA  -10
+PSH  
+IMM  0
+SI   
+IMM  1
+BZ   9952
+LEA  -11
+PSH  
+LEA  -6
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+SI   
+LEA  -10
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+REF  13
+LI   
+BZ   8481
+REF  1938
+PSH  
+LEA  -10
+LI   
+PSH  
+REF  1947
+PSH  
+LEA  -11
+LI   
+PSH  
+IMM  5
+MUL  
+ADD  
+PSH  
+PRTF 
+ADJ  3
+LEA  -11
+LI   
+PSH  
+IMM  8
+LE   
+BZ   8406
+REF  2148
+PSH  
+LEA  -6
+LI   
+LI   
+PSH  
+PRTF 
+ADJ  2
+JMP  8412
+REF  2153
+PSH  
+PRTF 
+ADJ  1
+REF  2155
+PSH  
+LEA  -6
+LI   
+PSH  
+LEA  -7
+LI   
+PSH  
+LEA  -8
+LI   
+PSH  
+LEA  -9
+LI   
+PSH  
+PRTF 
+ADJ  5
+LEA  -14
+PSH  
+LEA  -13
+LI   
+SI   
+LEA  -14
+LI   
+PSH  
+LEA  -7
+LI   
+GT   
+BZ   8481
+LEA  -14
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+IMM  1
+ADD  
+REF  2194
+PSH  
+LEA  -14
+LI   
+PSH  
+LEA  -14
+LI   
+LI   
+PSH  
+PRTF 
+ADJ  3
+JMP  8441
+LEA  -11
+LI   
+PSH  
+IMM  0
+EQ   
+BZ   8519
+LEA  -9
+PSH  
+LEA  -8
+LI   
+PSH  
+LEA  -6
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  1
+EQ   
+BZ   8548
+LEA  -9
+PSH  
+LEA  -6
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  2
+EQ   
+BZ   8577
+LEA  -9
+PSH  
+LEA  -6
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  3
+EQ   
+BZ   8596
+LEA  -6
+PSH  
+LEA  -6
+LI   
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  4
+EQ   
+BZ   8637
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+LEA  -6
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+LEA  -6
+PSH  
+LEA  -6
+LI   
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  5
+EQ   
+BZ   8674
+LEA  -6
+PSH  
+LEA  -9
+LI   
+BZ   8667
+LEA  -6
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+JMP  8671
+LEA  -6
+LI   
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  6
+EQ   
+BZ   8711
+LEA  -6
+PSH  
+LEA  -9
+LI   
+BZ   8697
+LEA  -6
+LI   
+LI   
+JMP  8708
+LEA  -6
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  7
+EQ   
+BZ   8770
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+LEA  -8
+LI   
+SI   
+LEA  -8
+PSH  
+LEA  -7
+LI   
+SI   
+LEA  -7
+PSH  
+LEA  -7
+LI   
+PSH  
+LEA  -6
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+IMM  1
+MUL  
+SUB  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  8
+EQ   
+BZ   8808
+LEA  -7
+PSH  
+LEA  -7
+LI   
+PSH  
+LEA  -6
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  9
+EQ   
+BZ   8862
+LEA  -7
+PSH  
+LEA  -8
+LI   
+SI   
+LEA  -8
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+SI   
+LEA  -6
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  10
+EQ   
+BZ   8881
+LEA  -9
+PSH  
+LEA  -9
+LI   
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  11
+EQ   
+BZ   8900
+LEA  -9
+PSH  
+LEA  -9
+LI   
+LC   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  12
+EQ   
+BZ   8930
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  13
+EQ   
+BZ   8964
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+SC   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  14
+EQ   
+BZ   8989
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+SUB  
+SI   
+PSH  
+LEA  -9
+LI   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  15
+EQ   
+BZ   9023
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+OR   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  16
+EQ   
+BZ   9057
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+XOR  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  17
+EQ   
+BZ   9091
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+AND  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  18
+EQ   
+BZ   9125
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+EQ   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  19
+EQ   
+BZ   9159
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+NE   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  20
+EQ   
+BZ   9193
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+LT   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  21
+EQ   
+BZ   9227
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+GT   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  22
+EQ   
+BZ   9261
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+LE   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  23
+EQ   
+BZ   9295
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+GE   
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  24
+EQ   
+BZ   9329
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+SHL  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  25
+EQ   
+BZ   9363
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+SHR  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  26
+EQ   
+BZ   9397
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+ADD  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  27
+EQ   
+BZ   9431
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+SUB  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  28
+EQ   
+BZ   9465
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+MUL  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  29
+EQ   
+BZ   9499
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+DIV  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  30
+EQ   
+BZ   9533
+LEA  -9
+PSH  
+LEA  -7
+PSH  
+LI   
+PSH  
+IMM  1
+ADD  
+SI   
+PSH  
+IMM  1
+SUB  
+LI   
+PSH  
+LEA  -9
+LI   
+MOD  
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  31
+EQ   
+BZ   9569
+LEA  -9
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+OPEN 
+ADJ  2
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  32
+EQ   
+BZ   9618
+LEA  -9
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  2
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+READ 
+ADJ  3
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  33
+EQ   
+BZ   9641
+LEA  -9
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+CLOS 
+ADJ  1
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  34
+EQ   
+BZ   9762
+LEA  -12
+PSH  
+LEA  -7
+LI   
+PSH  
+LEA  -6
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+IMM  1
+MUL  
+ADD  
+SI   
+LEA  -9
+PSH  
+LEA  -12
+LI   
+PSH  
+IMM  -1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -12
+LI   
+PSH  
+IMM  -2
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -12
+LI   
+PSH  
+IMM  -3
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -12
+LI   
+PSH  
+IMM  -4
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -12
+LI   
+PSH  
+IMM  -5
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -12
+LI   
+PSH  
+IMM  -6
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+PRTF 
+ADJ  6
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  35
+EQ   
+BZ   9785
+LEA  -9
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+MALC 
+ADJ  1
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  36
+EQ   
+BZ   9804
+LEA  -7
+LI   
+LI   
+PSH  
+FREE 
+ADJ  1
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  37
+EQ   
+BZ   9853
+LEA  -9
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  2
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+MSET 
+ADJ  3
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  38
+EQ   
+BZ   9902
+LEA  -9
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  2
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+PSH  
+IMM  1
+PSH  
+IMM  1
+MUL  
+ADD  
+LI   
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+MCMP 
+ADJ  3
+SI   
+JMP  9950
+LEA  -11
+LI   
+PSH  
+IMM  39
+EQ   
+BZ   9933
+REF  2214
+PSH  
+LEA  -7
+LI   
+LI   
+PSH  
+LEA  -10
+LI   
+PSH  
+PRTF 
+ADJ  3
+LEA  -7
+LI   
+LI   
+LEV  
+JMP  9950
+REF  2235
+PSH  
+LEA  -11
+LI   
+PSH  
+LEA  -10
+LI   
+PSH  
+PRTF 
+ADJ  3
+IMM  -1
+LEV  
+JMP  8326
+LEV  

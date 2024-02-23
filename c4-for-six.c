@@ -93,7 +93,7 @@ void next()
         printf("%d: %.*s", line, p - lp, lp);
         lp = p;
         while (le < e) {
-          printf("%8.4s", ops_string[*++le * 5]);
+          printf("%8.4s", ops_string + (*++le * 5));
           if (*le <= ADJ) printf(" %d\n", *++le); else printf(" \n");
         }
       }
@@ -543,13 +543,13 @@ int main(int argc, char_ptr_ptr argv)
     while (le <= e) {
       i = *le;
       if (i == JMP || i == JSR || i == BZ || i == BNZ) {
-        printf("%4.4s", (ops_string + i * 5));
+        printf("%4.4s", ops_string + i * 5);
         if (*le <= ADJ) { printf(" %d\n", ((*++le) -  estart) / sizeof_int); }
         else { printf(" \n"); }
       } else if (i == REF) {
         printf("REF  %d\n", (*++le -  datastart));
       } else {
-        printf("%4.4s", (ops_string + i * 5));
+        printf("%4.4s", ops_string + i * 5);
         if (*le <= ADJ) printf(" %d\n", *++le); else printf(" \n");
       }
       le++;
@@ -561,7 +561,7 @@ int main(int argc, char_ptr_ptr argv)
   while (1) {
     i = *pc++; ++cycle;
     if (debug) {
-      printf("%d> %0.4s", cycle, ops_string[i * 5]);
+      printf("%d> %0.4s", cycle, ops_string + i * 5);
       if (i <= ADJ) printf(" %d\n", *pc); else printf(" \n");
 
       printf("    pc = %d, sp = %d, bp = %d, a = %d\n", pc, sp, bp, a);
