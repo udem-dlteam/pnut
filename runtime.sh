@@ -291,6 +291,91 @@ read_n_char() {
   done
 }
 
+# Read the file, and return a file descriptor to the file. The file descriptor is
+# just a string, nothing to close.
+_fopen() {
+  if [ $# -eq 3 ]; then
+    fopen_return_loc=$1; shift
+  else
+    fopen_return_loc=
+  fi
+  pack_string "$1"
+
+  fopen_fd=$ALLOC                          # Allocate new FD
+  : $((_$((fopen_fd)) = 0))                # Initialize cursor to 0
+  fopen_buffer=$((fopen_fd + 1))           # Buffer starts after cursor
+  read_all_char $fopen_buffer < "$pack_string_res"
+  : $((_$((fopen_buffer + read_all_char_len + 1))=0)) # Terminate buffer with NUL character
+  ALLOC=$((ALLOC + read_all_char_len + 2)) # Update ALLOC to the new end of the heap
+  prim_return_value $fopen_fd $fopen_return_loc
+}
+
+_fclose() {
+  if [ $# -eq 2 ]; then
+    fclose_return_loc=$1; shift
+  else
+    fclose_return_loc=
+  fi
+  _free $1 # Release file descriptor buffer
+  prim_return_value 0 $fclose_return_loc
+}
+
+_fread() {
+  if [ $# -eq 4 ]; then
+    fread_return_loc=$1; shift
+  else
+    fread_return_loc=
+  fi
+  fread_fd=$1
+  fread_buf=$2
+  fread_count=$3
+  fread_len=0
+  fread_fd_buffer=$((fread_fd + 1)) # Buffer starts at fd + 1
+  while [ "$fread_count" != "0" ] ; do
+    : $((_$fread_buf=_$fread_fd_buffer))
+    : $((fread_buf += 1))
+    : $((fread_fd_buffer += 1))
+    : $((fread_count -= 1))
+    : $((fread_len += 1))
+  done
+  # Update cursor
+  : $((_$fread_fd = $fread_len))
+  prim_return_value $fread_len $fread_return_loc
+}
+
+_fgetc() { # $1: File descriptor
+  if [ $# -eq 2 ]; then
+    fgetc_return_loc=$1; shift
+  else
+    fgetc_return_loc=
+  fi
+  fgetc_fd=$1
+  fgetc_cursor=$((_$fgetc_fd))
+  fgetc_fd_buffer=$((fgetc_fd + 1)) # Buffer starts at fd + 1
+  fgetc_char=$((_$((fgetc_fd_buffer + fgetc_cursor))))
+  # echo "fgetc"
+  # _show_fd $fgetc_fd
+  : $((_$fgetc_fd += 1)) # Update cursor
+  prim_return_value $fgetc_char $fgetc_return_loc
+}
+
+read_all_char() {
+  read_all_char_buf_ptr=$1
+  read_all_char_len=0
+  while : ; do
+    get_char
+    case "$get_char_char" in
+      EOF) break ;;
+      NEWLINE) read_all_char_code=10 ;; # 10 == '\n'
+      *) read_all_char_code=$(LC_CTYPE=C printf "%d" "'$get_char_char") # convert to integer code ;;
+    esac
+
+    : $((_$read_all_char_buf_ptr=$read_all_char_code))
+    : $((read_all_char_buf_ptr += 1))
+    : $((read_all_char_len += 1))
+  done
+}
+
 # Read a character from stdin.
 # Uses a buffer for the line, and a smaller fixed-sized buffer to speed up
 # reading of long lines. The fixed-sized buffer is refilled from the line buffer
@@ -417,4 +502,15 @@ _show_arg_stack() {
     echo "        _$arg_ix = $val"
     : $((arg_ix += 1))
   done
+}
+
+_show_fd() {
+  if [ $# -eq 2 ]; then
+    shift
+  fi
+  echo "==== File descriptor ===="
+  echo "Address: $1"
+  echo "Cursor: $((_$1))"
+  # echo "=====    Content    ====="
+  # print_string $((_$(($1 + 1))))
 }
