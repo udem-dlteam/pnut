@@ -15,6 +15,8 @@
 (define disable-save-restore-vars? #f)
 ; Disable for faster execution of programs that allocate a lot of memory
 (define initialize-memory-when-alloc #t)
+; Inline += -= operations?
+(define inline-inplace-arithmetic-ops #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -524,9 +526,20 @@
 (define (handle-side-effects ast)
   (define replaced-fun-calls '())
   (define pre-side-effect '())
+  (define contains-side-effect #f)
   (define (alloc-identifier)
     (let ((id (gensym)))
       (list 'six.identifier id)))
+
+  (define (go-inplace-arithmetic-op assigned-op inplace-arith #!optional (side-effect #f))
+    (if inline-inplace-arithmetic-ops
+      (begin
+        (set! contains-side-effect #t)
+        inplace-arith)
+      (begin
+        (set! pre-side-effect (cons (or side-effect inplace-arith) pre-side-effect))
+        assigned-op)))
+
   (define (go ast)
     (case (car ast)
       ((six.call)
@@ -552,52 +565,54 @@
         (list (car ast)
               (go (cadr ast))))
       ((six.++x six.--x six.x++ six.x-- six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
-        (let ((set-and-return (lambda (r) (set! pre-side-effect (cons r pre-side-effect)) r)))
-          (case (car ast)
-            ((six.++x)
-              (let ((new-op (go (cadr ast))))
-                (set-and-return `(six.++x ,new-op))
-                new-op))
-            ((six.--x)
-              (let ((new-op (go (cadr ast))))
-                (set-and-return `(six.--x ,new-op))
-                new-op))
-            ((six.x++)
-              ; We map post increments to a pre-increment and replace x++ with x - 1 to compensate
-              (let ((new-op (go (cadr ast))))
-                (set-and-return `(six.++x ,new-op))
-                `(six.x-y ,new-op (six.literal 1))))
-            ((six.x--)
-              ; We map post decrements to a pre-decrement and replace x-- with x + 1 to compensate
-              (let ((new-op (go (cadr ast))))
-                (set-and-return `(six.--x ,new-op))
-                `(six.x+y ,new-op (six.literal 1))))
-            ((six.x+=y)
-              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-                (set-and-return `(six.x+=y ,new-op1 ,new-op2))
-                new-op1))
-            ((six.x-=y)
-              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-                (set-and-return `(six.x-=y ,new-op1 ,new-op2))
-                new-op1))
-            ((six.x*=y)
-              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-                (set-and-return `(six.x*=y ,new-op1 ,new-op2))
-                new-op1))
-            ((six.x/=y)
-              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-                (set-and-return `(six.x/=y ,new-op1 ,new-op2))
-                new-op1))
-            ((six.x%=y)
-              (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-                (set-and-return `(six.x%=y ,new-op1 ,new-op2))
-                new-op1)))))
+        (case (car ast)
+          ((six.++x)
+            (let ((new-op (go (cadr ast))))
+              (go-inplace-arithmetic-op new-op
+                                        `(six.++x ,new-op))))
+          ((six.--x)
+            (let ((new-op (go (cadr ast))))
+              (go-inplace-arithmetic-op new-op
+                                        `(six.--x ,new-op))))
+          ((six.x++)
+            ; We map post increments to a pre-increment and replace x++ with x - 1 to compensate
+            (let ((new-op (go (cadr ast))))
+              (go-inplace-arithmetic-op `(six.x-y ,new-op (six.literal 1))
+                                        `(six.x-y (six.++x ,new-op) (six.literal 1))
+                                        `(six.++x ,new-op))))
+          ((six.x--)
+            ; We map post decrements to a pre-decrement and replace x-- with x + 1 to compensate
+            (let ((new-op (go (cadr ast))))
+              (go-inplace-arithmetic-op `(six.x+y ,new-op (six.literal 1))
+                                        `(six.x+y (six.--x ,new-op) (six.literal 1))
+                                        `(six.--x ,new-op))))
+          ((six.x+=y)
+            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+              (go-inplace-arithmetic-op new-op1
+                                        `(six.x+=y ,new-op1 ,new-op2))))
+          ((six.x-=y)
+            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+              (go-inplace-arithmetic-op new-op1
+                                        `(six.x-=y ,new-op1 ,new-op2))))
+          ((six.x*=y)
+            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+              (go-inplace-arithmetic-op new-op1
+                                        `(six.x*=y ,new-op1 ,new-op2))))
+          ((six.x/=y)
+            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+              (go-inplace-arithmetic-op new-op1
+                                        `(six.x/=y ,new-op1 ,new-op2))))
+          ((six.x%=y)
+            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+              (go-inplace-arithmetic-op new-op1
+                                        `(six.x%=y ,new-op1 ,new-op2))))))
       (else
         (error "unknown ast" ast))))
 
   (list (go ast)
         (reverse replaced-fun-calls)
-        (reverse pre-side-effect)))
+        (reverse pre-side-effect)
+        contains-side-effect))
 
 (define (replace-identifier ast old new)
   (case (car ast)
@@ -648,56 +663,64 @@
   (let* ((side-effects-res (handle-side-effects ast))
          (new-ast (car side-effects-res))
          (fun-calls-to-replace (cadr side-effects-res))
-         (pre-side-effects (caddr side-effects-res)))
+         (pre-side-effects (caddr side-effects-res))
+         (contains-side-effect (cadddr side-effects-res)))
+    (define (comp-side-effects-then-rvalue)
+      ; Optimization: When returning with the variable return method, we can
+      ; use the return location directly when it's used by the next function
+      ; call.
+      ; Also, the return location can be returned directly by comp-rvalue when
+      ; we know that it will be used directly after. This is normally true,
+      ; except when the rvalue is a function call argument and the parent
+      ; function call has multiple function call arguments. In that case, only
+      ; the last function call argument can skip assigning to the return
+      ; location.
+      ; Note: This could maybe be done in a simpler way by moving this logic
+      ; to comp-fun-call but it works for now.
+      (if (and (equal? (car value-return-method) 'variable) (not (null? fun-calls-to-replace)))
+        (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (< 0 (cadr context-tag))))
+              (ast-with-result-identifier
+                (replace-identifier new-ast
+                                    (car (last fun-calls-to-replace)) ; Location of last function call
+                                    `(six.identifier ,(cadr value-return-method)))))
+          (for-each
+            (lambda (e) (ctx-add-glo-decl! ctx e))
+            (comp-side-effects ctx pre-side-effects))
+          (for-each
+            (lambda (call nextCall)
+              ; Check if next function call uses the result, if it's the case use the variable directly
+              (let ((nextCallUsesReturnLoc (and nextCall (member (car call) (cddr nextCall)))))
+                (if nextCallUsesReturnLoc
+                  (begin
+                    ; Overwrite the argument of next function call with the return location
+                    (set-cdr! (car nextCallUsesReturnLoc) (cdr value-return-method))
+                    (comp-fun-call ctx (cddr call)))
+                  ; We only assign to the return location if it's not the
+                  ; last function call. In that case, it's up to the caller
+                  ; of comp-rvalue to read the value.
+                  ; TODO: Add the return location to the list of local vars to save to support recursive function calls
+                  (comp-fun-call ctx (cddr call) (and (or nextCall must-assign-to-return-loc) (car call))))))
+            fun-calls-to-replace
+            (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
+          (if must-assign-to-return-loc
+            (comp-rvalue-go ctx new-ast)
+            (comp-rvalue-go ctx ast-with-result-identifier)))
+        (begin
+          (for-each
+            (lambda (e) (ctx-add-glo-decl! ctx e))
+            (comp-side-effects ctx pre-side-effects))
+          (for-each
+            (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
+            fun-calls-to-replace)
+          (comp-rvalue-go ctx new-ast))))
     (case (car context-tag)
-      ((return statement-expr index-lvalue argument)
-        ; Optimization: When returning with the variable return method, we can
-        ; use the return location directly when it's used by the next function
-        ; call.
-        ; Also, the return location can be returned directly by comp-rvalue when
-        ; we know that it will be used directly after. This is normally true,
-        ; except when the rvalue is a function call argument and the parent
-        ; function call has multiple function call arguments. In that case, only
-        ; the last function call argument can skip assigning to the return
-        ; location.
-        ; Note: This could maybe be done in a simpler way by moving this logic
-        ; to comp-fun-call but it works for now.
-        (if (and (equal? (car value-return-method) 'variable) (not (null? fun-calls-to-replace)))
-          (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (< 0 (cadr context-tag))))
-                (ast-with-result-identifier
-                  (replace-identifier new-ast
-                                      (car (last fun-calls-to-replace)) ; Location of last function call
-                                      `(six.identifier ,(cadr value-return-method)))))
-            (for-each
-              (lambda (e) (ctx-add-glo-decl! ctx e))
-              (comp-side-effects ctx pre-side-effects))
-            (for-each
-              (lambda (call nextCall)
-                ; Check if next function call uses the result, if it's the case use the variable directly
-                (let ((nextCallUsesReturnLoc (and nextCall (member (car call) (cddr nextCall)))))
-                  (if nextCallUsesReturnLoc
-                    (begin
-                      ; Overwrite the argument of next function call with the return location
-                      (set-cdr! (car nextCallUsesReturnLoc) (cdr value-return-method))
-                      (comp-fun-call ctx (cddr call)))
-                    ; We only assign to the return location if it's not the
-                    ; last function call. In that case, it's up to the caller
-                    ; of comp-rvalue to read the value.
-                    ; TODO: Add the return location to the list of local vars to save to support recursive function calls
-                    (comp-fun-call ctx (cddr call) (and (or nextCall must-assign-to-return-loc) (car call))))))
-              fun-calls-to-replace
-              (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
-            (if must-assign-to-return-loc
-              (comp-rvalue-go ctx new-ast)
-              (comp-rvalue-go ctx ast-with-result-identifier)))
-          (begin
-            (for-each
-              (lambda (e) (ctx-add-glo-decl! ctx e))
-              (comp-side-effects ctx pre-side-effects))
-            (for-each
-              (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
-              fun-calls-to-replace)
-            (comp-rvalue-go ctx new-ast))))
+      ((return index-lvalue argument) (comp-side-effects-then-rvalue))
+      ((statement-expr)
+        (if contains-side-effect
+          (ctx-add-glo-decl!
+            ctx
+            (list ": $(( " (comp-side-effects-then-rvalue) " ))"))
+          (comp-side-effects-then-rvalue)))
       ((test)
         (if (null? fun-calls-to-replace)
           (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
@@ -790,15 +813,21 @@
     ((six.x--)
      (error "x-- should have been replaced with (x + 1) (and --x side effect) by comp-rvalue"))
     ((six.++x)
-     (string-append (comp-lvalue ctx (cadr ast)) " += 1"))
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " += 1)"))
     ((six.--x)
-     (string-append (comp-lvalue ctx (cadr ast)) " -= 1"))
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " -= 1)"))
     ((six.!x)
      (string-append "!(" (comp-rvalue-go ctx (cadr ast)) ")" ))
     ((six.x+=y)
-     (string-append (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue-go ctx (caddr ast))))
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue-go ctx (caddr ast)) ")"))
     ((six.x-=y)
-     (string-append (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue-go ctx (caddr ast))))
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue-go ctx (caddr ast)) ")"))
+    ((six.x*=y)
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " *= " (comp-rvalue-go ctx (caddr ast)) ")"))
+    ((six.x/=y)
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " /= " (comp-rvalue-go ctx (caddr ast)) ")"))
+    ((six.x%=y)
+     (string-append "(" (comp-lvalue ctx (cadr ast)) " %= " (comp-rvalue-go ctx (caddr ast)) ")"))
     ((six.x=y)
      ; Can't use comp-assignment here because it modifies the context and we instead want to return the code
      ; (comp-assignment ctx `(six.x=y ,(cadr ast) ,(caddr ast))))
