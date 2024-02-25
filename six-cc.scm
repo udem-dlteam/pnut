@@ -5,12 +5,8 @@
 ; Possible values:
 ; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
 ; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
-(define value-return-method '(variable 0result))
-; (define value-return-method '(addr #t))
-; Assign $1, $2, ... to local parameters.
-; If #f, we use the parameters directly when referring to local variables when possible.
-; This generates shorter code, but it may be harder to read and $1, $2, ... can't be assigned.
-(define map-all-param-to-local-var? #t)
+; (define function-return-method '(variable 0result))
+(define function-return-method '(addr #t))
 ; Useful for debugging only
 (define disable-save-restore-vars? #f)
 ; Disable for faster execution of programs that allocate a lot of memory
@@ -178,11 +174,11 @@
              (parameters-list (map mk-param parameters (iota (length parameters) 1)))
              (parameter-table (list->table parameters-list)))
         (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
-        (if (equal? 'addr (car value-return-method))
+        (if (equal? 'addr (car function-return-method))
           (begin
             (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
             (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) (make-local-var 1 #t))
-            (if (cadr value-return-method) ; return address is always passed?
+            (if (cadr function-return-method) ; return address is always passed?
               (begin
                 (ctx-add-glo-decl!
                   ctx
@@ -197,14 +193,8 @@
                         "then " (env-var ctx '(six.identifier result_loc)) "=$1; shift ; "
                         "else " (env-var ctx '(six.identifier result_loc)) "= ; fi ;"))))))
 
-        ; IDEA: We could also use $1, $2, ... when referring to parameters.
-        ; If map-all-param-to-local-var? is #f, we use the parameters directly,
-        ; generating shorter code, but that's harder to read and where we can't
-        ; assign
         (let ((local-vars-to-map
-                (if map-all-param-to-local-var?
-                  (map cons parameters (iota (length parameters) 1))
-                  (error "not yet supported"))))
+                (map cons parameters (iota (length parameters) 1))))
           (for-each
             (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
             local-vars-to-map))
@@ -308,17 +298,17 @@
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) '(return))))
-          (case (car value-return-method)
+          (case (car function-return-method)
             ((variable)
              (ctx-add-glo-decl!
               ctx
-              (list "_" (symbol->string (cadr value-return-method)) "=$((" code-expr "))")))
+              (list "_" (symbol->string (cadr function-return-method)) "=$((" code-expr "))")))
             ((addr)
              (ctx-add-glo-decl!
               ctx
               (list "prim_return_value $((" code-expr ")) $" (env-var ctx '(six.identifier result_loc)))))
             (else
-              (error "Unknown value return method" value-return-method)))))
+              (error "Unknown value return method" function-return-method)))))
     ; Seems broken in while loops
     ;  (if (not (ctx-tail? ctx))
          (ctx-add-glo-decl!
@@ -429,13 +419,13 @@
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
 
-      (case (car value-return-method)
+      (case (car function-return-method)
         ((variable)
           (ctx-add-glo-decl! ctx (list call-code))
           (if assign_to
-            (comp-assignment ctx `(six.x=y ,assign_to (six.identifier ,(cadr value-return-method))))))
+            (comp-assignment ctx `(six.x=y ,assign_to (six.identifier ,(cadr function-return-method))))))
         ((addr)
-          (if (and (or assign_to (cadr value-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
+          (if (and (or assign_to (cadr function-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
             (ctx-add-glo-decl!
               ctx
               (list (string-concatenate (cons (function-name name)
@@ -444,7 +434,7 @@
                                         " ")))
           (ctx-add-glo-decl! ctx (list call-code))))
         (else
-          (error "Unknown value return method" value-return-method)))
+          (error "Unknown value return method" function-return-method)))
 
       (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
@@ -681,12 +671,12 @@
       ; location.
       ; Note: This could maybe be done in a simpler way by moving this logic
       ; to comp-fun-call but it works for now.
-      (if (and (equal? (car value-return-method) 'variable) (not (null? fun-calls-to-replace)))
+      (if (and (equal? (car function-return-method) 'variable) (not (null? fun-calls-to-replace)))
         (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (< 0 (cadr context-tag))))
               (ast-with-result-identifier
                 (replace-identifier new-ast
                                     (car (last fun-calls-to-replace)) ; Location of last function call
-                                    `(six.identifier ,(cadr value-return-method)))))
+                                    `(six.identifier ,(cadr function-return-method)))))
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
             (comp-side-effects ctx pre-side-effects))
@@ -697,7 +687,7 @@
                 (if nextCallUsesReturnLoc
                   (begin
                     ; Overwrite the argument of next function call with the return location
-                    (set-cdr! (car nextCallUsesReturnLoc) (cdr value-return-method))
+                    (set-cdr! (car nextCallUsesReturnLoc) (cdr function-return-method))
                     (comp-fun-call ctx (cddr call)))
                   ; We only assign to the return location if it's not the
                   ; last function call. In that case, it's up to the caller
@@ -867,7 +857,7 @@
 
 (define runtime-prelude
   (unlines
-   (if (and (equal? (car value-return-method) 'addr) (cadr value-return-method))
+   (if (and (equal? (car function-return-method) 'addr) (cadr function-return-method))
      "set -e"
      "set -e -u")
    ""
@@ -879,13 +869,13 @@
     "STRICT_MODE=0"
    )
    ""
-   (case (car value-return-method)
+   (case (car function-return-method)
      ((variable)
-      (string-append "prim_return_value() { : $((_" (symbol->string (cadr value-return-method)) " = $1)) ; }"))
+      (string-append "prim_return_value() { : $((_" (symbol->string (cadr function-return-method)) " = $1)) ; }"))
      ((addr)
       "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
      (else
-      (error "Unknown value return method" value-return-method)))
+      (error "Unknown value return method" function-return-method)))
    ""
    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
    (if support-addr-of?
@@ -900,7 +890,7 @@
 (define runtime-postlude
   (string-append
    (function-name '(six.identifier main))
-   (if (equal? 'addr (car value-return-method)) " _dummy_loc" "")
+   (if (equal? 'addr (car function-return-method)) " _dummy_loc" "")
    " $argc"
    " $argv_ptr"))
 
