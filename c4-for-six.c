@@ -10,7 +10,8 @@ Changes to make it compatible with six-cc.scm
 7. Remove casts
 8. Remove #include and typedefs
 9. Fix 1-character string bug
-10. *datastart / 16 is parsed as *(datastart / 16), so add parenthesis
+10. Add parens around x in `*x * y` expressions to work-around six parsing bug:
+    - See *datastart / 16, and MUL/DIV/MOD instructions in VM
 11. Fix ops_string access
 12. Replace %.4s with %0.4s
 */
@@ -588,22 +589,22 @@ int main(int argc, char_ptr_ptr argv)
     else if (i == SC)  a = **sp++ = a;
     else if (i == PSH) *--sp = a;
 
-    else if (i == OR)  a = *sp++ |  a;
-    else if (i == XOR) a = *sp++ ^  a;
-    else if (i == AND) a = *sp++ &  a;
-    else if (i == EQ)  a = *sp++ == a;
-    else if (i == NE)  a = *sp++ != a;
-    else if (i == LT)  a = *sp++ <  a;
-    else if (i == GT)  a = *sp++ >  a;
-    else if (i == LE)  a = *sp++ <= a;
-    else if (i == GE)  a = *sp++ >= a;
-    else if (i == SHL) a = *sp++ << a;
-    else if (i == SHR) a = *sp++ >> a;
-    else if (i == ADD) a = *sp++ +  a;
-    else if (i == SUB) a = *sp++ -  a;
-    else if (i == MUL) a = *sp++ *  a;
-    else if (i == DIV) a = *sp++ /  a;
-    else if (i == MOD) a = *sp++ %  a;
+    else if (i == OR)  a = (*sp++) |  a;
+    else if (i == XOR) a = (*sp++) ^  a;
+    else if (i == AND) a = (*sp++) &  a;
+    else if (i == EQ)  a = (*sp++) == a;
+    else if (i == NE)  a = (*sp++) != a;
+    else if (i == LT)  a = (*sp++) <  a;
+    else if (i == GT)  a = (*sp++) >  a;
+    else if (i == LE)  a = (*sp++) <= a;
+    else if (i == GE)  a = (*sp++) >= a;
+    else if (i == SHL) a = (*sp++) << a;
+    else if (i == SHR) a = (*sp++) >> a;
+    else if (i == ADD) a = (*sp++) +  a;
+    else if (i == SUB) a = (*sp++) -  a;
+    else if (i == MUL) a = (*sp++) *  a;
+    else if (i == DIV) a = (*sp++) /  a;
+    else if (i == MOD) a = (*sp++) %  a;
 
     else if (i == OPEN) a = open(sp[1], *sp);
     else if (i == READ) a = read(sp[2], sp[1], *sp);
