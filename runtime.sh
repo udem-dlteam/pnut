@@ -509,7 +509,7 @@ _fopen() {
   : $((_$((fopen_fd)) = 0))                # Initialize cursor to 0
   fopen_buffer=$((fopen_fd + 1))           # Buffer starts after cursor
   read_all_char $fopen_buffer < "$pack_string_res"
-  : $((_$((fopen_buffer + read_all_char_len + 1))=0)) # Terminate buffer with NUL character
+  : $((_$((fopen_buffer + read_all_char_len))=0)) # Terminate buffer with NUL character
   ALLOC=$((ALLOC + read_all_char_len + 2)) # Update ALLOC to the new end of the heap
   prim_return_value $fopen_fd $fopen_return_loc
 }
@@ -557,8 +557,6 @@ _fgetc() { # $1: File descriptor
   fgetc_cursor=$((_$fgetc_fd))
   fgetc_fd_buffer=$((fgetc_fd + 1)) # Buffer starts at fd + 1
   fgetc_char=$((_$((fgetc_fd_buffer + fgetc_cursor))))
-  # echo "fgetc"
-  # _show_fd $fgetc_fd
   : $((_$fgetc_fd += 1)) # Update cursor
   prim_return_value $fgetc_char $fgetc_return_loc
 }
