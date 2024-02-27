@@ -670,18 +670,18 @@ _memcmp() {
 _show_heap() {
   set +u
   show_heap_ix=1
-  elided=0
+  show_heap_elided=0
   echo "    Heap:"
   while [ $show_heap_ix -lt $ALLOC ]; do
     location="_$show_heap_ix"
     # Safe way of checking if the variable is defined or not. With +u, we could also check if it's empty.
     eval "if [[ -z \${$location+x} ]]; then undefined=1; else undefined=0; fi"
     if [[ $undefined -eq 1 ]]; then
-      elided=1
+      show_heap_elided=1
     else
-      if [ $elided -eq 1 ]; then
+      if [ $show_heap_elided -eq 1 ]; then
         echo "        ..."
-        elided=0
+        show_heap_elided=0
       fi
 
       show_heap_ascii=$((_$show_heap_ix))
@@ -699,12 +699,12 @@ _show_heap() {
 
 _show_arg_stack() {
   set +u
-  arg_ix=1
+  show_arg_stack_ix=1
   echo "    Heap:"
-  while [ $arg_ix -le $((SP + 1)) ]; do
-    eval "val=\$_data_$arg_ix"
-    echo "        _$arg_ix = $val"
-    : $((arg_ix += 1))
+  while [ $show_arg_stack_ix -le $((SP + 1)) ]; do
+    eval "val=\$_data_$show_arg_stack_ix"
+    echo "        _$show_arg_stack_ix = $val"
+    : $((show_arg_stack_ix += 1))
   done
 }
 
