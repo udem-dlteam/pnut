@@ -306,31 +306,6 @@ int_to_char() {
   esac
 }
 
-# Local variables
-
-SP=0 # Note: Stack grows up, not down
-
-_result_loc=0 # This is useful when value-return-method != '(addr #t))
-save_loc_var() {
-  : $((SP += 1))
-  unset "_data_$SP" # For some reason, ksh doesn't like to overwrite the value
-  eval "_data_$SP='$_result_loc'"
-  while [ $# -gt 0 ]; do
-    : $((SP += 1))
-    : $((_data_$SP=$1))
-    shift
-  done
-}
-
-rest_loc_var() {
-  while [ $# -gt 0 ]; do
-    : $(($1=_data_$SP))
-    : $((SP -= 1))
-    shift
-  done
-  eval "_result_loc=\$_data_$SP"
-  : $((SP -= 1))
-}
 
 # Primitives
 

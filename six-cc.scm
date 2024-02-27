@@ -13,6 +13,8 @@
 (define initialize-memory-when-alloc #t)
 ; Inline += -= operations?
 (define inline-inplace-arithmetic-ops #t)
+; Local variables start with _?
+(define prefix-local-vars #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -70,7 +72,9 @@
       (global-var ident)))
 
 (define (format-var ident)
-  (string-append "_" (symbol->string (cadr ident))))
+  (if prefix-local-vars
+    (string-append "_" (symbol->string (cadr ident)))
+    (symbol->string (cadr ident))))
 
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
@@ -158,6 +162,51 @@
 
     (ctx-add-glo-decl! ctx '())))
 
+(define reserved-variable-prefix
+  (map symbol->string
+  '(result_loc   ; Variable storing the variable name where to return the value from a function call
+    dummy_loc    ; Location used when returning a value from a function call that's not used
+    ; Runtime library variables
+    strict_alloc
+    make_argv
+    push_data
+    unpack_array
+    unpack_string
+    pack_string
+    print_string
+    char_to_int
+    int_to_char
+    malloc
+    printf
+    open
+    read
+    close
+    read_n_char
+    fopen
+    fclose
+    fread
+    fgetc
+    read_all_char
+    get_char
+    memset
+    memcmp
+    show_heap
+    show_arg_stack
+    show_fd
+    )))
+
+(define (is-name-reserved name)
+  (any (lambda (prefix) (string-prefix? prefix name)) reserved-variable-prefix))
+
+(define (assert-variable-name-is-safe name)
+  (if (and (not prefix-local-vars) (string-prefix? "_" (symbol->string (cadr name))))
+    (error "Variable name can't start with _:" (cadr name))
+    (if (is-name-reserved (symbol->string (cadr name)))
+      (error "Variable name is reserved:" (cadr name)))))
+
+(define (assert-variable-names-are-safe names)
+  (for-each assert-variable-name-is-safe names))
+
 (define (comp-glo-define-procedure ctx ast)
   (let* ((name (cadr ast))
          (proc (caddr ast))
@@ -173,6 +222,7 @@
              (mk-param (lambda (p i) (cons (car p) (make-local-var i #t)))) ; Parameters are always initialized
              (parameters-list (map mk-param parameters (iota (length parameters) 1)))
              (parameter-table (list->table parameters-list)))
+        (assert-variable-names-are-safe (map car parameters))
         (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
         (if (equal? 'addr (car function-return-method))
           (begin
@@ -186,7 +236,6 @@
                         "=$1; shift "
                         "# Remove result_loc param")))
               (begin
-                ; TODO: Replace _result_loc with a call to local-var when it is implemented
                 (ctx-add-glo-decl!
                   ctx
                   (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
@@ -217,6 +266,7 @@
                         (make-local-var (+ 1 (table-length (ctx-loc-env ctx))) var-init))
             (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
           (begin
+            (assert-variable-names-are-safe (map car new-local-vars))
             (for-each
               (lambda (new-local-var)
                 (if (cdr new-local-var)
@@ -860,14 +910,48 @@
    (if (and (equal? (car function-return-method) 'addr) (cadr function-return-method))
      "set -e"
      "set -e -u")
+
+    "# Local variables"
+    ""
+    "SP=0 # Note: Stack grows up, not down"
+    ""
+    "save_loc_var() {"
+    (if (equal? 'addr (car function-return-method))
+    (unlines
+    "  : $((SP += 1))"
+    "  unset \"_data_$SP\" # For some reason, ksh doesn't like to overwrite the value"
+    (if prefix-local-vars
+    "  eval \"_data_$SP='$_result_loc'\" # We must use eval to set a string to a dynamic variable"
+    "  eval \"_data_$SP='$result_loc'\" # We must use eval to set a string to a dynamic variable"
+    )
+    ))
+    "  while [ $# -gt 0 ]; do"
+    "    : $((SP += 1))"
+    "    : $((_data_$SP=$1))"
+    "    shift"
+    "  done"
+    "}"
+    ""
+    "rest_loc_var() {"
+    "  while [ $# -gt 0 ]; do"
+    "    : $(($1=_data_$SP))"
+    "    : $((SP -= 1))"
+    "    shift"
+    "  done"
+    (if (equal? 'addr (car function-return-method))
+    (unlines
+    (if prefix-local-vars
+    "  eval \"_result_loc=\\$_data_$SP\""
+    "  eval \"result_loc=\\$_data_$SP\""
+    )
+    "  : $((SP -= 1))"
+    ))
+    "}"
    ""
    "# Load runtime library and primitives"
    ". $(pwd)/runtime.sh # TODO: Do not use pwd"
    ""
-   (if initialize-memory-when-alloc
-    "STRICT_MODE=1"
-    "STRICT_MODE=0"
-   )
+   (if initialize-memory-when-alloc "STRICT_MODE=1" "STRICT_MODE=0")
    ""
    (case (car function-return-method)
      ((variable)
