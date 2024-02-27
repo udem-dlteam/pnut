@@ -306,6 +306,36 @@ int_to_char() {
   esac
 }
 
+# This may be a bit slow if used in a loop.
+# Maybe it could take a list of characters as argument to remove that step from hash computation
+init_string() { # $1 = variable to assign address of string, $2 = string
+  djb2 "$2"
+  # FIXME: Replace eval call with check != 0 when `set +u``
+  eval "if [[ -z \${init_string_$djb2_hash+x} ]]; then init_string_undefined=1; else init_string_undefined=0; fi"
+  if [[ "$init_string_undefined" -eq 1 ]]; then
+    unpack_string "$2"
+    : $(( init_string_$((djb2_hash)) = unpack_string_addr ))
+    : $(( $1 = unpack_string_addr ))
+  else
+    : $(( $1 = init_string_$((djb2_hash)) ))
+  fi
+}
+
+# djb2 hash algorithm from http://www.cse.yorku.ca/~oz/hash.html
+# The hash is truncated to 32 bits to fit in most Shell integers.
+djb2() {
+  djb2_str=$1
+  djb2_hash=5381
+  djb2_c=0
+  while [ -n "$djb2_str" ] ; do
+    djb2_char="$djb2_str"                 # remember current buffer
+    djb2_rest="${djb2_str#?}"             # remove the first char
+    djb2_char="${djb2_char%"$djb2_rest"}" # remove all but first char
+    djb2_str="${djb2_str#?}"              # remove the current char from $src_buf
+    char_to_int "$djb2_char"
+    : $(( djb2_hash = (((djb2_hash << 5) + djb2_hash) + char_to_int_code) & 4294967295 )) # 2^32 - 1
+  done
+}
 
 # Primitives
 

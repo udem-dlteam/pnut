@@ -176,6 +176,9 @@
     print_string
     char_to_int
     int_to_char
+    init_string
+    djb2
+    ; Primitives
     malloc
     printf
     open
@@ -999,8 +1002,7 @@
                         "; __" (number->string ix) "=$unpack_array_addr"))
                     ((string? datum)
                       (string-append
-                        "unpack_string " "\"" (escape-string datum) "\""
-                        "; __" (number->string ix) "=$unpack_string_addr"))))
+                        "init_string __" (number->string ix) " \"" (escape-string datum) "\""))))
           (reverse (ctx-data ctx))
           (iota (length (ctx-data ctx)))))
       "")
