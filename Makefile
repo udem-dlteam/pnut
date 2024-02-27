@@ -1,4 +1,4 @@
-.PHONY: watch clean test vm-tests vm-tests-ksh vm-tests-dash vm-tests-bash vm-tests-zsh vm-tests-posix vm-tests-all test-six-cc c4-bootstrap-with-six-cc
+.PHONY: watch clean test vm-tests vm-tests-ksh vm-tests-dash vm-tests-bash vm-tests-zsh vm-tests-posix vm-tests-all test-six-cc c4-bootstrap-with-six-cc c4_by_c4-for-six-op.golden six-cc-c4-bootstrap-on-vm c4-bootstrap-with-six-cc
 
 watch:
 	# TODO: Replace watch with an inotifywait-like loop
@@ -145,12 +145,10 @@ c4-for-six.sh: six-cc.scm c4-for-six.c
 
 c4_by_c4-for-six-op.golden: c4-for-six.sh c4.c
 	ksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden
-# Remove trailing whitespace. Not sure if `sed -i ''` is portable
-	sed -i '' 's/[[:space:]]\{1,\}$//' c4_by_c4-for-six-op.golden
 
 # Run bytecode using C4 Shell VM to compile c4.c again, to confirm that the bytecode produced works
-six-cc-c4-bootstrap-on-vm:
+six-cc-c4-bootstrap-on-vm: c4_by_c4-for-six-op.golden
 	ksh c4.sh c4_by_c4-for-six-op.golden -b -p c4.c > c4_by_c4-for-six-op-bootstrap.golden
 
-c4-bootstrap-with-six-cc:
+c4-bootstrap-with-six-cc: c4-for-six.sh
 	ksh c4-for-six.sh c4.c -b -p c4.c > c4_by_c4-for-six-op-bootstrap2.golden
