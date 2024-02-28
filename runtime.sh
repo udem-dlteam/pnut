@@ -48,12 +48,12 @@ unpack_string() {
   unpack_string_addr=$ALLOC
   unpack_string_src_buf="$1"
   while [ -n "$unpack_string_src_buf" ] ; do
-    unpack_string_char="$unpack_string_src_buf"                    # remember current buffer
-    unpack_string_rest="${unpack_string_src_buf#?}"                # remove the first char
-    unpack_string_char="${unpack_string_char%"$unpack_string_rest"}"             # remove all but first char
-    unpack_string_src_buf="${unpack_string_src_buf#?}"             # remove the current char from $src_buf
-    char_to_int "$unpack_string_char"; unpack_string_code=$char_to_int_code
-    push_data "$unpack_string_code"
+    unpack_string_char="$unpack_string_src_buf"                      # remember current buffer
+    unpack_string_rest="${unpack_string_src_buf#?}"                  # remove the first char
+    unpack_string_char="${unpack_string_char%"$unpack_string_rest"}" # remove all but first char
+    unpack_string_src_buf="${unpack_string_src_buf#?}"               # remove the current char from $src_buf
+    char_to_int "$unpack_string_char"
+    push_data "$char_to_int_code"
   done
   push_data 0
 }
@@ -678,13 +678,13 @@ _show_heap() {
   show_heap_elided=0
   echo "    Heap:"
   while [ $show_heap_ix -lt $ALLOC ]; do
-    location="_$show_heap_ix"
+    show_heap_location="_$show_heap_ix"
     # Safe way of checking if the variable is defined or not. With +u, we could also check if it's empty.
-    eval "if [[ -z \${$location+x} ]]; then undefined=1; else undefined=0; fi"
-    if [[ $undefined -eq 1 ]]; then
+    eval "if [[ -z \${$show_heap_location+x} ]]; then show_heap_undefined=1; else show_heap_undefined=0; fi"
+    if [[ "$show_heap_undefined" -eq 1 ]]; then
       show_heap_elided=1
     else
-      if [ $show_heap_elided -eq 1 ]; then
+      if [ "$show_heap_elided" -eq 1 ]; then
         echo "        ..."
         show_heap_elided=0
       fi
