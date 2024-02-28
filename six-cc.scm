@@ -18,6 +18,8 @@
 ; Unpack strings where they are used instead of at program initialization
 ; This can slow down programs because the initialization may be done multiple times
 (define inline-string-init #t)
+; If it's the caller or calle that should save local variables
+(define calle-save? #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -414,6 +416,45 @@
     (memcmp #t)
     (show_heap #f)))
 
+; Remove the variable we are assigning to from the list of local variables to save.
+; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
+; Some ideas on how to reduce the number of variables saved:
+;  [x] Only save the variables that have been written to/initialized.
+;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
+;     - [x] Primitives
+;     - [ ] For user-defined functions
+;  [ ] Only restore variables lazily, so consecutive function calls don't save and restore needlessly.
+;      This doesn't seem to be worth its complexity, and consecutive function calls may not be that common.
+;      Note: on branch laurent/six-cc-lazy-var-restore.
+;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
+;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
+(define (save-local-variables ctx #!optional (assign_to #f))
+  (let* ((initialized-local-vars
+          (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
+         (local-vars-to-save
+          (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
+         (local-vars-to-save-no-result-loc
+          (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
+
+      ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
+      (if (and (not calle-save?) (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
+        (ctx-add-glo-decl!
+          ctx
+          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc)) " "))))))
+
+(define (restore-local-variables ctx #!optional (assign_to #f))
+  (let* ((initialized-local-vars
+          (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
+         (local-vars-to-save
+          (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
+         (local-vars-to-save-no-result-loc
+          (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
+
+      (if (and (not calle-save?) (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
+        (ctx-add-glo-decl!
+          ctx
+          (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
+
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
   ; - how to preserve value of variables that may be used by the caller (because no local variables).
@@ -444,37 +485,13 @@
          (can-return
           (if is-prim
               (cadr (assoc (cadr name) runtime-primitives))
-              #t)) ; We assume that all user-defined functions can return a value
-          ; Remove the variable we are assigning to from the list of local variables to save.
-          ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
-          ; Some ideas on how to reduce the number of variables saved:
-          ;  [x] Only save the variables that have been written to/initialized.
-          ;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
-          ;     - [x] Primitives
-          ;     - [ ] For user-defined functions
-          ;  [ ] Only restore variables lazily, so consecutive function calls don't save and restore needlessly.
-          ;      This doesn't seem to be worth its complexity, and consecutive function calls may not be that common.
-          ;      Note: on branch laurent/six-cc-lazy-var-restore.
-          ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
-          ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
-          (initialized-local-vars
-           (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
-          (local-vars-to-save
-           (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
-          (local-vars-to-save-no-result-loc
-           (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
-
-      ; Save local variables
-      ; All primitives uses variables not starting with _, meaning that there can't
-      ; be a conflicts
-      ; TODO: Disable save_loc_var/rest_loc_var for tail calls
-      (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
-        (ctx-add-glo-decl!
-          ctx
-          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc)) " "))))
+              #t)))
 
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
+
+      ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
+      (if (not is-prim) (save-local-variables ctx assign_to))
 
       (case (car function-return-method)
         ((variable)
@@ -493,10 +510,9 @@
         (else
           (error "Unknown value return method" function-return-method)))
 
-      (if (and (not disable-save-restore-vars?) (not is-prim) (not (null? local-vars-to-save)))
-        (ctx-add-glo-decl!
-          ctx
-          (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
+
+      ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
+      (if (not is-prim) (restore-local-variables ctx assign_to))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
