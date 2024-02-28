@@ -949,7 +949,7 @@
     (codegen ctx)))
 
 (define (codegen ctx)
-  (println runtime-prelude)
+  (println (runtime-prelude))
   (println (heap-prelude ctx))
 
   (for-each (lambda (decl)
@@ -958,12 +958,12 @@
                     (print (make-string (* 2 level) #\space)))
                 (println (car decl))))
             (reverse (ctx-glo-decls ctx)))
-  (println runtime-postlude))
+  (println (runtime-postlude)))
 
 (define (unlines . lst)
   (string-concatenate lst "\n"))
 
-(define runtime-prelude
+(define (runtime-prelude)
   (unlines
    (if (and (equal? (car function-return-method) 'addr) (cadr function-return-method))
      "set -e"
@@ -1031,7 +1031,7 @@
    "make_argv $argc \"$0\" $@; argv_ptr=make_argv_ptr;"
    ""))
 
-(define runtime-postlude
+(define (runtime-postlude)
   (string-append
    (function-name '(six.identifier main))
    (if (equal? 'addr (car function-return-method)) " _dummy_loc" "")
@@ -1103,4 +1103,44 @@
     (read-all port)))
 
 (define (main . args)
-  (for-each comp-file args))
+  (for-each comp-file (parse-cmd-line args)))
+
+; function-return-method: addr | variable
+; initialize-memory-when-alloc: boolean
+; inline-inplace-arithmetic-ops: boolean
+; prefix-local-vars: boolean
+; inline-string-init: boolean
+(define (parse-cmd-line args)
+  (let loop ((args args) (files '()))
+    (if (null? args)
+        files
+        (let ((arg (car args))
+              (rest (cdr args)))
+          (cond ((and (member arg '("--function-return-method-variable")))
+                  (set! function-return-method '(variable 0result))
+                  (loop rest files))
+                ((and (pair? rest) (member arg '("--function-return-method-arg-loc")))
+                  (set! function-return-method `(addr ,(not (equal? "false" (car rest)))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--inline-inplace-arithmetic-ops")))
+                  (set! inline-inplace-arithmetic-ops (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--initialize-memory-when-alloc")))
+                  (set! initialize-memory-when-alloc (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--prefix-local-vars")))
+                  (set! prefix-local-vars (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--inline-string-init")))
+                  (set! inline-string-init `(addr ,(equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                (else
+                  (if (and (>= (string-length arg) 2)
+                           (string=? (substring arg 0 1) "-"))
+                      (begin
+                        (display "*** unknown option ")
+                        (display arg)
+                        (newline)
+                        (exit 1))
+                    (begin
+                      (loop rest (cons arg files))))))))))
