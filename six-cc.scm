@@ -982,7 +982,8 @@
     "  eval \"_data_$SP='$_result_loc'\" # We must use eval to set a string to a dynamic variable"
     "  eval \"_data_$SP='$result_loc'\" # We must use eval to set a string to a dynamic variable"
     )
-    ))
+    )
+    "")
     "  while [ $# -gt 0 ]; do"
     "    : $((SP += 1))"
     "    : $((_data_$SP=$1))"
@@ -1003,7 +1004,8 @@
     "  eval \"result_loc=\\$_data_$SP\""
     )
     "  : $((SP -= 1))"
-    ))
+    )
+    "")
     "}"
    ""
    "# Load runtime library and primitives"
