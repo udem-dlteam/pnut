@@ -106,12 +106,23 @@ vm-tests-posix: c4.o c4.sh
 
 vm-tests-all: vm-tests-bash vm-tests-zsh vm-tests-dash vm-tests-ksh vm-tests-posix
 
+test-six-cc-all-shells:
+	SHELL=ksh  make test-six-cc
+	SHELL=dash make test-six-cc
+	SHELL=bash make test-six-cc
+	SHELL=zsh  make test-six-cc
+
+test-six-cc-all-options:
+	python3 test-six-cc-all-options.py
+
 test-six-cc:
-	@echo "Running six-cc tests..."
+ifndef QUIET
+	echo "Running six-cc tests..."
+endif
 	@for file in $(shell find six-cc-tests -type f -name "*.c" | sort); do \
 		filename=$$(basename $$file .c); \
-		/bin/echo -n "$$filename: "; \
-		gsi six-cc.scm $$file > six-cc-tests/$$filename.sh 2>&1; \
+		[ -z "$$QUIET" ] && /bin/echo -n "$$filename: "; \
+		gsi six-cc.scm $$SIX_CC_OPTIONS $$file > six-cc-tests/$$filename.sh 2>&1; \
 		if [ $$? -eq 0 ]; then \
 			first_line=$$(head -n 1 $$file); \
 			args=$${first_line#"/* args:"}; \
@@ -121,21 +132,25 @@ test-six-cc:
 				if [ -f "six-cc-tests/$$filename.golden" ]; then \
 					diff_out=$$(diff six-cc-tests/$$filename.golden six-cc-tests/$$filename.result); \
 					if [ $$? -eq 0 ]; then \
-						echo "✅"; \
+						[ -z "$$QUIET" ] && echo "✅"; \
 					else \
+						[ -z "$$QUIET" ] && /bin/echo -n "$$filename: "; \
 						echo "❌"; \
 						echo "diff (output vs expected)"; \
 						echo "$$diff_out"; \
 					fi \
 				else \
 					cp six-cc-tests/$$filename.result six-cc-tests/$$filename.golden; \
+					[ -z "$$QUIET" ] && /bin/echo -n "$$filename: "; \
 					echo "❌ Generated golden file"; \
 				fi \
 			else \
+				[ -z "$$QUIET" ] && /bin/echo -n "$$filename: "; \
 				echo "❌ Failed to run: $$(cat six-cc-tests/$$filename.result)"; \
 			fi; \
 			rm -f six-cc-tests/$$filename.result; \
 		else \
+			[ -z "$$QUIET" ] && /bin/echo -n "$$filename: "; \
 			echo "❌ Failed to compile. See six-cc-tests/$$filename.sh for error."; \
 		fi; \
 	done
