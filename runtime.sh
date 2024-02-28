@@ -311,8 +311,8 @@ int_to_char() {
 init_string() { # $1 = variable to assign address of string, $2 = string
   djb2 "$2"
   # FIXME: Replace eval call with check != 0 when `set +u``
-  eval "if [[ -z \${init_string_$djb2_hash+x} ]]; then init_string_undefined=1; else init_string_undefined=0; fi"
-  if [[ "$init_string_undefined" -eq 1 ]]; then
+  eval "if [ -z \${init_string_$djb2_hash+x} ]; then init_string_undefined=1; else init_string_undefined=0; fi"
+  if [ "$init_string_undefined" -eq 1 ]; then
     unpack_string "$2"
     : $(( init_string_$((djb2_hash)) = unpack_string_addr ))
     : $(( $1 = unpack_string_addr ))
@@ -680,8 +680,8 @@ _show_heap() {
   while [ $show_heap_ix -lt $ALLOC ]; do
     show_heap_location="_$show_heap_ix"
     # Safe way of checking if the variable is defined or not. With +u, we could also check if it's empty.
-    eval "if [[ -z \${$show_heap_location+x} ]]; then show_heap_undefined=1; else show_heap_undefined=0; fi"
-    if [[ "$show_heap_undefined" -eq 1 ]]; then
+    eval "if [ -z \${$show_heap_location+x} ]; then show_heap_undefined=1; else show_heap_undefined=0; fi"
+    if [ "$show_heap_undefined" -eq 1 ]; then
       show_heap_elided=1
     else
       if [ "$show_heap_elided" -eq 1 ]; then
