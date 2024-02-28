@@ -15,6 +15,9 @@
 (define inline-inplace-arithmetic-ops #t)
 ; Local variables start with _?
 (define prefix-local-vars #f)
+; Unpack strings where they are used instead of at program initialization
+; This can slow down programs because the initialization may be done multiple times
+(define inline-string-init #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -166,6 +169,7 @@
   (map symbol->string
   '(result_loc   ; Variable storing the variable name where to return the value from a function call
     dummy_loc    ; Location used when returning a value from a function call that's not used
+    str_      ; Prefix of variables used to store the address of a string
     ; Runtime library variables
     strict_alloc
     make_argv
@@ -525,10 +529,12 @@
         (else
           (let* ((rvalue-res (comp-rvalue ctx rhs '(assignment)))
                  (rvalue (car rvalue-res))
-                 (pre-side-effects (comp-side-effects ctx (cdr rvalue-res))))
+                 (pre-side-effects (comp-side-effects ctx (cadr rvalue-res)))
+                 (literal-inits (caddr rvalue-res)))
           (for-each
             (lambda (p) (ctx-add-glo-decl! ctx p))
             pre-side-effects)
+          (comp-literal-inits ctx literal-inits)
           (ctx-add-glo-decl!
             ctx
             (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))"))
@@ -573,6 +579,7 @@
 (define (handle-side-effects ast)
   (define replaced-fun-calls '())
   (define pre-side-effect '())
+  (define literal-inits (make-table))
   (define contains-side-effect #f)
   (define (alloc-identifier)
     (let ((id (gensym)))
@@ -597,7 +604,25 @@
                (new-fun-call (cons fun-name replaced-params)))
           (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls))
           id))
-      ((six.literal six.list six.identifier six.-x)
+      ((six.literal)
+        (let ((val (cadr ast)))
+          (if (and inline-string-init
+                  (string? val)
+                  (not (equal? 1 (string-length val)))) ; We don't inline single character strings because those are interpreted as characters
+            (let* ((string-variable (string->variable-name val))
+                   (table-val (table-ref literal-inits string-variable #f)))
+              ; FIXME: If a string is passed to a function multiple times, this caching mechanism won't work because
+              ; function arguments are processed separately.
+              (if table-val
+                (if (equal? val table-val)
+                  string-variable
+                  (error "Two different string literals map to same variable" string-variable val))
+                (begin
+                  (table-set! literal-inits string-variable val)
+                  string-variable))
+              )
+            ast)))
+      ((six.list six.identifier six.-x)
         ast)
       ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.x=y)
         (list (car ast)
@@ -659,6 +684,7 @@
   (list (go ast)
         (reverse replaced-fun-calls)
         (reverse pre-side-effect)
+        (table->list literal-inits)
         contains-side-effect))
 
 (define (replace-identifier ast old new)
@@ -706,12 +732,20 @@
 
   (map comp-side-effect side-effects))
 
+(define (comp-literal-inits ctx literal-inits)
+  (define (comp-literal-init literal-init)
+    (let ((id (car literal-init))
+          (val (cdr literal-init)))
+      (ctx-add-glo-decl! ctx (list "init_string " (env-var ctx id) " \"" (escape-string val) "\""))))
+  (for-each comp-literal-init literal-inits))
+
 (define (comp-rvalue ctx ast context-tag)
   (let* ((side-effects-res (handle-side-effects ast))
          (new-ast (car side-effects-res))
          (fun-calls-to-replace (cadr side-effects-res))
          (pre-side-effects (caddr side-effects-res))
-         (contains-side-effect (cadddr side-effects-res)))
+         (literal-inits (cadddr side-effects-res))
+         (contains-side-effect (car (cddddr side-effects-res))))
     (define (comp-side-effects-then-rvalue)
       ; Optimization: When returning with the variable return method, we can
       ; use the return location directly when it's used by the next function
@@ -733,6 +767,7 @@
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
             (comp-side-effects ctx pre-side-effects))
+          (comp-literal-inits ctx literal-inits)
           (for-each
             (lambda (call nextCall)
               ; Check if next function call uses the result, if it's the case use the variable directly
@@ -756,12 +791,15 @@
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
             (comp-side-effects ctx pre-side-effects))
+          (comp-literal-inits ctx literal-inits)
           (for-each
             (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
             fun-calls-to-replace)
           (comp-rvalue-go ctx new-ast))))
+
     (case (car context-tag)
-      ((return index-lvalue argument) (comp-side-effects-then-rvalue))
+      ((return index-lvalue argument)
+        (comp-side-effects-then-rvalue))
       ((statement-expr)
         (if contains-side-effect
           (ctx-add-glo-decl!
@@ -776,18 +814,19 @@
         (for-each
           (lambda (e) (ctx-add-glo-decl! ctx e))
           (comp-side-effects ctx pre-side-effects))
+        (comp-literal-inits ctx literal-inits)
         (for-each
           (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
           fun-calls-to-replace)
         (comp-rvalue-go ctx new-ast))
       ((assignment)
         (if (null? fun-calls-to-replace)
-            (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
-            (error "function calls in assignment not supported" ast)))
+          (list (comp-rvalue-go ctx new-ast) pre-side-effects literal-inits)
+          (error "function calls in assignment not supported" ast)))
       ((pure)
-        (if (and (null? fun-calls-to-replace) (null? pre-side-effects))
-            (comp-rvalue-go ctx new-ast)
-            (error "function calls and side effects in pure context not supported" ast)))
+        (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
+          (comp-rvalue-go ctx new-ast)
+          (error "function calls, side effects and string literals in pure context not supported" ast)))
       (else
         (error "unknown context tag" context-tag)))))
 
@@ -988,6 +1027,33 @@
     ; (if (char=? c #\newline) "\\n"  ; Escape newline.
     (list->string (list c)))))
   (string-concatenate (map escape-char (string->list str))))
+
+(define (string->variable-name str)
+  (define (alphabetize c)
+    (if (or (char-alphabetic? c) (char-numeric? c)) c
+    (if (member c '(#\space #\newline #\, #\_ #\- #\( #\) #\[ #\] #\% #\* #\.)) #\_
+    ; (if (member c '(#\newline)) "_newline_"
+    #f)))
+
+  (define (remove-consecutive-underscores xs underscore-before?)
+    (if (null? xs)
+      '()
+      (if (and underscore-before? (equal? (car xs) #\_))
+        (remove-consecutive-underscores (cdr xs) #t)
+        (cons (car xs)
+              (remove-consecutive-underscores (cdr xs) (equal? (car xs) #\_))))))
+
+  (let* ((len (min (string-length str) 20))
+         (first-n (take (string->list str) len))
+         (alphabetized (filter identity (map alphabetize first-n)))
+         (to-var (lambda (c) (list 'six.identifier (string->symbol (list->string (remove-consecutive-underscores c #f)))))))
+
+    (if (null? alphabetized)
+      (error "string->variable-name: string map to empty string" str)
+      (to-var (append (string->list "str_") alphabetized)))))
+      ; Optionaly prefix str?
+      ; (if (member (car alphabetized) '(#\_ 0 1 2 3 4 5 6 7 8 9))
+      ;   (to-var alphabetized)))))
 
 ; Initialize the heap, allocating memory for hardcoded strings and arrays.
 (define (heap-prelude ctx)
