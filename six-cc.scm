@@ -61,6 +61,13 @@
     (if loc
       (local-var-initialized-set! loc #t))))
 
+(define (add-new-local-var ctx ident initialized #!optional (position #f))
+  (table-set! (ctx-loc-env ctx)
+              ident
+              (make-local-var
+                (or position (+ 1 (table-length (ctx-loc-env ctx))))
+                initialized)))
+
 (define (is-local-var ctx ident)
   (table-ref (ctx-loc-env ctx) ident #f))
 
@@ -244,16 +251,18 @@
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
     (nest ctx
-      (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
-             (mk-param (lambda (p i) (cons (car p) (make-local-var i #t)))) ; Parameters are always initialized
-             (parameters-list (map mk-param parameters (iota (length parameters) 1)))
-             (parameter-table (list->table parameters-list)))
+      (let* ((start-loc-env (table-copy (ctx-loc-env ctx))))
         (assert-variable-names-are-safe (map car parameters))
-        (ctx-loc-env-set! ctx (table-merge parameter-table (ctx-loc-env ctx)))
+
+        (for-each
+          (lambda (param pos) (add-new-local-var ctx (car param) #t pos)) ; Parameters are always initialized
+          parameters
+          (iota (length parameters) 1))
+
         (if (equal? 'addr (car function-return-method))
           (begin
-            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-            (table-set! (ctx-loc-env ctx) '(six.identifier result_loc) (make-local-var 1 #t))
+            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var at position 1
+            (add-new-local-var ctx '(six.identifier result_loc) #t 1)
             (if (cadr function-return-method) ; return address is always passed?
               (begin
                 (ctx-add-glo-decl!
@@ -287,9 +296,7 @@
           (let* ((def-var (car lst))
                  (var-name (cadr def-var))
                  (var-init (car (cddddr def-var))))
-            (table-set! (ctx-loc-env ctx)
-                        var-name
-                        (make-local-var (+ 1 (table-length (ctx-loc-env ctx))) var-init))
+            (add-new-local-var ctx var-name var-init)
             (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
           (begin
             (assert-variable-names-are-safe (map car new-local-vars))
