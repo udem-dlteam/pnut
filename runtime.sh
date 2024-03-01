@@ -307,17 +307,31 @@ int_to_char() {
 }
 
 # This may be a bit slow if used in a loop.
-# Maybe it could take a list of characters as argument to remove that step from hash computation
-init_string() { # $1 = variable to assign address of string, $2 = string
-  djb2 "$2"
-  # FIXME: Replace eval call with check != 0 when `set +u``
-  eval "if [ -z \${init_string_$djb2_hash+x} ]; then init_string_undefined=1; else init_string_undefined=0; fi"
-  if [ "$init_string_undefined" -eq 1 ]; then
-    unpack_string "$2"
-    : $(( init_string_$((djb2_hash)) = unpack_string_addr ))
-    : $(( $1 = unpack_string_addr ))
+# This function can be called in 2 ways:
+# $1 = variable to assign address of string, $2 = string
+# $1 = variable to assign address of string, $2 = hash, $3 = string
+# Passing the hash makes it faster, but introduces "magic" numbers in the generated code.
+init_string() {
+  # Check if we are passing a hash
+  if [ $# -eq 2 ]; then
+    djb2 "$2"
+    init_string_return_var=$1
+    init_string_hash=$djb2_hash
+    init_string_str=$2
   else
-    : $(( $1 = init_string_$((djb2_hash)) ))
+    init_string_return_var=$1
+    init_string_hash=$2
+    init_string_str=$3
+  fi
+
+  # FIXME: Replace eval call with check != 0 when `set +u``
+  eval "if [ -z \${init_string_$init_string_hash+x} ]; then init_string_undefined=1; else init_string_undefined=0; fi"
+  if [ "$init_string_undefined" -eq 1 ]; then
+    unpack_string "$init_string_str"
+    : $(( init_string_$((init_string_hash)) = unpack_string_addr ))
+    : $(( $init_string_return_var = unpack_string_addr ))
+  else
+    : $(( $init_string_return_var = init_string_$((init_string_hash)) ))
   fi
 }
 

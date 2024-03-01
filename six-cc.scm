@@ -17,7 +17,10 @@
 (define prefix-local-vars #f)
 ; Unpack strings where they are used instead of at program initialization
 ; This can slow down programs because the initialization may be done multiple times
-(define inline-string-init #t)
+(define inline-string-init #f)
+; Pass precomputed hash to init_string as an optimization? Speeds up compiling
+; c4 by c4-for-six.sh by 7% for ksh.
+(define init-string-precompute-hash? #t)
 ; If it's the caller or calle that should save local variables
 (define calle-save? #f)
 
@@ -83,6 +86,20 @@
 
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
+
+(define (djb2 str)
+  (let loop ((hash 5381) (chars (string->list str)))
+    (if (null? chars)
+      hash
+      (loop (bitwise-and #xffffffff (+ (arithmetic-shift hash 5) hash (char->integer (car chars))))
+            (cdr chars)))))
+
+(define (init_string_code var_str str)
+  (string-append
+    "init_string "
+    var_str
+    (if init-string-precompute-hash? (string-append " " (number->string (djb2 str))) "")
+    " \"" (escape-string str) "\""))
 
 (define (comp-glo-decl ctx ast)
   (case (car ast)
@@ -752,7 +769,7 @@
   (define (comp-literal-init literal-init)
     (let ((id (car literal-init))
           (val (cdr literal-init)))
-      (ctx-add-glo-decl! ctx (list "init_string " (env-var ctx id) " \"" (escape-string val) "\""))))
+      (ctx-add-glo-decl! ctx (init_string_code (env-var ctx id) val))))
   (for-each comp-literal-init literal-inits))
 
 (define (comp-rvalue ctx ast context-tag)
@@ -1085,8 +1102,7 @@
                         "unpack_array " (string-concatenate (map number->string datum) " ")
                         "; __" (number->string ix) "=$unpack_array_addr"))
                     ((string? datum)
-                      (string-append
-                        "init_string __" (number->string ix) " \"" (escape-string datum) "\""))))
+                      (init_string_code (string-append "__" (number->string ix)) datum))))
           (reverse (ctx-data ctx))
           (iota (length (ctx-data ctx)))))
       "")
@@ -1105,11 +1121,13 @@
 (define (main . args)
   (for-each comp-file (parse-cmd-line args)))
 
+; Code generation options:
 ; function-return-method: addr | variable
 ; initialize-memory-when-alloc: boolean
 ; inline-inplace-arithmetic-ops: boolean
 ; prefix-local-vars: boolean
 ; inline-string-init: boolean
+; init-string-precompute-hash: boolean
 (define (parse-cmd-line args)
   (let loop ((args args) (files '()))
     (if (null? args)
@@ -1132,7 +1150,10 @@
                   (set! prefix-local-vars (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--inline-string-init")))
-                  (set! inline-string-init `(addr ,(equal? "false" (car rest))))
+                  (set! inline-string-init (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--init-string-precompute-hash")))
+                  (set! init-string-precompute-hash? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)
