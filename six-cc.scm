@@ -17,12 +17,12 @@
 (define prefix-local-vars #f)
 ; Unpack strings where they are used instead of at program initialization
 ; This can slow down programs because the initialization may be done multiple times
-(define inline-string-init #f)
+(define inline-string-init #t)
 ; Pass precomputed hash to init_string as an optimization? Speeds up compiling
 ; c4 by c4-for-six.sh by 7% for ksh.
 (define init-string-precompute-hash? #t)
-; If it's the caller or calle that should save local variables
-(define calle-save? #f)
+; If it's the caller or callee that should save local variables
+(define callee-save? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -30,6 +30,7 @@
 (define-type ctx
   glo-decls
   loc-env
+  all-variables ; Set similated using a table
   data ; The data section
   level
   tail?)
@@ -66,7 +67,11 @@
               ident
               (make-local-var
                 (or position (+ 1 (table-length (ctx-loc-env ctx))))
-                initialized)))
+                initialized))
+  ; Gather the list of all local variables.
+  ; Used to initialize them all at the beginning of the execution so
+  ; save_loc_var doesn't crash when saving an unitialized variable.
+  (table-set! (ctx-all-variables ctx) ident '()))
 
 (define (is-local-var ctx ident)
   (table-ref (ctx-loc-env ctx) ident #f))
@@ -240,6 +245,15 @@
 (define (assert-variable-names-are-safe names)
   (for-each assert-variable-name-is-safe names))
 
+(define (get-body-declarations lst)
+  (let loop ((lst lst) (new-local-vars '()))
+      (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
+        (let* ((def-var (car lst))
+               (var-name (cadr def-var))
+               (var-init (car (cddddr def-var))))
+          (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
+        (cons lst new-local-vars))))
+
 (define (comp-glo-define-procedure ctx ast)
   (let* ((name (cadr ast))
          (proc (caddr ast))
@@ -251,17 +265,29 @@
      (list (function-name name) "() {"))
     (ctx-tail?-set! ctx #t)
     (nest ctx
-      (let* ((start-loc-env (table-copy (ctx-loc-env ctx))))
-        (assert-variable-names-are-safe (map car parameters))
+      (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
+             (body-decls (get-body-declarations body))
+             (body-rest (car body-decls))
+             (new-local-vars (cdr body-decls)))
+
+        (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
+        (assert-variable-names-are-safe (map car new-local-vars))
 
         (for-each
-          (lambda (param pos) (add-new-local-var ctx (car param) #t pos)) ; Parameters are always initialized
+          (lambda (param pos) (add-new-local-var ctx (car param) #t pos))
           parameters
           (iota (length parameters) 1))
 
+        ; Add local variables to the environment
+        (for-each
+          (lambda (param) (add-new-local-var ctx (car param) (cdr param)))
+          new-local-vars)
+
+        (if callee-save? (save-local-variables ctx))
+
         (if (equal? 'addr (car function-return-method))
           (begin
-            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var at position 1
+            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
             (add-new-local-var ctx '(six.identifier result_loc) #t 1)
             (if (cadr function-return-method) ; return address is always passed?
               (begin
@@ -282,7 +308,21 @@
           (for-each
             (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
             local-vars-to-map))
-      (comp-body ctx body)
+
+
+        (for-each
+          (lambda (new-local-var)
+            (if (cdr new-local-var)
+              (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+              (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+          new-local-vars)
+
+      (comp-body ctx body-rest)
+
+      (if (and callee-save?
+               (not (equal? (car (last body-rest)) 'six.return)))
+        (restore-local-variables ctx))
+
       (ctx-loc-env-set! ctx start-loc-env)))
 
     (ctx-add-glo-decl!
@@ -290,25 +330,32 @@
      (list "}"))))
 
 (define (comp-body ctx lst)
-  (let ((start-loc-env (table-copy (ctx-loc-env ctx))))
-    (let loop ((lst lst) (new-local-vars '()))
-      (if (and (pair? lst) (eq? (caar lst) 'six.define-variable))
-          (let* ((def-var (car lst))
-                 (var-name (cadr def-var))
-                 (var-init (car (cddddr def-var))))
-            (add-new-local-var ctx var-name var-init)
-            (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
-          (begin
-            (assert-variable-names-are-safe (map car new-local-vars))
-            (for-each
-              (lambda (new-local-var)
-                (if (cdr new-local-var)
-                  (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
-                  (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
-              new-local-vars)
-            (comp-statement-list ctx lst)
-            ; Bug: We need to propagate the is_initialized flag of local variables to start-loc-env?
-            (ctx-loc-env-set! ctx start-loc-env))))))
+  (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
+         (body-decls (get-body-declarations lst))
+         (body-rest (car body-decls))
+         (new-local-vars (cdr body-decls)))
+
+    ; This limitation is a arbitrary and simply to make it easier to
+    ; save/restore local variables.
+    ; One way to solve this would be to traverse the body AST and find all local
+    ; variable declared and save them at the beginning of the function, but
+    ; traversing the AST multiple times may complicate the C implementation.
+    (if (not (null? new-local-vars))
+      (error "Variables must be defined at the top of the function"))
+
+    (for-each
+      (lambda (new-local-var)
+        (add-new-local-var ctx (car new-local-var) (cdr new-local-var))
+
+        (if (cdr new-local-var)
+          (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+          (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+      new-local-vars)
+
+    (comp-statement-list ctx body-rest)
+
+    ; Bug: We need to propagate the is_initialized flag of local variables to start-loc-env?
+    (ctx-loc-env-set! ctx start-loc-env)))
 
 (define (comp-statement-list ctx lst)
   (let ((start-tail? (ctx-tail? ctx)))
@@ -381,22 +428,21 @@
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) '(return))))
-          (case (car function-return-method)
-            ((variable)
-             (ctx-add-glo-decl!
-              ctx
-              (list "_" (symbol->string (cadr function-return-method)) "=$((" code-expr "))")))
-            ((addr)
-             (ctx-add-glo-decl!
-              ctx
-              (list "prim_return_value $((" code-expr ")) $" (env-var ctx '(six.identifier result_loc)))))
-            (else
-              (error "Unknown value return method" function-return-method)))))
+              (case (car function-return-method)
+                ((variable)
+                (ctx-add-glo-decl!
+                  ctx
+                  (list "_" (symbol->string (cadr function-return-method)) "=$((" code-expr "))")))
+                ((addr)
+                (ctx-add-glo-decl!
+                  ctx
+                  (list "prim_return_value $((" code-expr ")) $" (env-var ctx '(six.identifier result_loc)))))
+                (else
+                  (error "Unknown value return method" function-return-method)))))
     ; Seems broken in while loops
     ;  (if (not (ctx-tail? ctx))
-         (ctx-add-glo-decl!
-          ctx
-          (list "return")))
+     (if callee-save? (restore-local-variables ctx))
+     (ctx-add-glo-decl! ctx (list "return")))
     ((six.break)
      (ctx-add-glo-decl!
       ctx
@@ -453,28 +499,36 @@
 ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
 ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
 (define (save-local-variables ctx #!optional (assign_to #f))
-  (let* ((initialized-local-vars
-          (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
+  (let* ((sorted-local-vars
+          (list-sort (lambda (v1 v2) (< (local-var-position (cdr v1)) (local-var-position (cdr v2)))) (table->list (ctx-loc-env ctx))))
+         (initialized-local-vars
+          (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
+            (map car sorted-local-vars)
+            (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
          (local-vars-to-save
           (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
          (local-vars-to-save-no-result-loc
           (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (and (not calle-save?) (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
+      (if (and (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc)) " "))))))
 
 (define (restore-local-variables ctx #!optional (assign_to #f))
-  (let* ((initialized-local-vars
-          (map car (filter (lambda (l) (local-var-initialized (cdr l))) (table->list (ctx-loc-env ctx)))))
+  (let* ((sorted-local-vars
+          (list-sort (lambda (v1 v2) (< (local-var-position (cdr v1)) (local-var-position (cdr v2)))) (table->list (ctx-loc-env ctx))))
+         (initialized-local-vars
+          (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
+            (map car sorted-local-vars)
+            (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
          (local-vars-to-save
           (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
          (local-vars-to-save-no-result-loc
           (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
 
-      (if (and (not calle-save?) (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
+      (if (and (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
@@ -515,7 +569,7 @@
         (error "Function call can't return a value, but we are assigning to a variable"))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (not is-prim) (save-local-variables ctx assign_to))
+      (if (and (not is-prim) (not callee-save?)) (save-local-variables ctx assign_to))
 
       (case (car function-return-method)
         ((variable)
@@ -534,9 +588,8 @@
         (else
           (error "Unknown value return method" function-return-method)))
 
-
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (not is-prim) (restore-local-variables ctx assign_to))))
+      (if (and (not is-prim) (not callee-save?)) (restore-local-variables ctx assign_to))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -968,12 +1021,12 @@
      (error "unknown rvalue" ast))))
 
 (define (comp-program ast)
-  (let* ((ctx (make-ctx '() (make-table) '() 0 #f)))
+  (let* ((ctx (make-ctx '() (make-table) (make-table) '() 0 #f)))
     (comp-glo-decl-list ctx ast)
     (codegen ctx)))
 
 (define (codegen ctx)
-  (println (runtime-prelude))
+  (println (runtime-prelude ctx))
   (println (heap-prelude ctx))
 
   (for-each (lambda (decl)
@@ -985,29 +1038,35 @@
   (println (runtime-postlude)))
 
 (define (unlines . lst)
-  (string-concatenate lst "\n"))
+  (string-concatenate (filter (lambda (p) (string? p)) lst) "\n"))
 
-(define (runtime-prelude)
+(define (runtime-prelude ctx)
   (unlines
    (if (and (equal? (car function-return-method) 'addr) (cadr function-return-method))
      "set -e"
      "set -e -u")
-
+    ""
     "# Local variables"
     ""
     "SP=0 # Note: Stack grows up, not down"
+    (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
+      (if (not (null? local-vars))
+        (unlines
+          ""
+          "# Initialize local vars so set -u can be used"
+          (string-append ": $(( "
+                        (string-concatenate (map (lambda (l) (format-var l)) local-vars) " = ")
+                        " = 0 ))"))))
     ""
     "save_loc_var() {"
     (if (equal? 'addr (car function-return-method))
-    (unlines
-    "  : $((SP += 1))"
-    "  unset \"_data_$SP\" # For some reason, ksh doesn't like to overwrite the value"
-    (if prefix-local-vars
-    "  eval \"_data_$SP='$_result_loc'\" # We must use eval to set a string to a dynamic variable"
-    "  eval \"_data_$SP='$result_loc'\" # We must use eval to set a string to a dynamic variable"
-    )
-    )
-    "")
+      (unlines
+      "  : $((SP += 1))"
+      "  unset \"_data_$SP\" # For some reason, ksh doesn't like to overwrite the value"
+        (if prefix-local-vars
+        "  eval \"_data_$SP='$_result_loc'\" # We must use eval to set a string to a dynamic variable"
+        "  eval \"_data_$SP='$result_loc'\" # We must use eval to set a string to a dynamic variable"
+        )))
     "  while [ $# -gt 0 ]; do"
     "    : $((SP += 1))"
     "    : $((_data_$SP=$1))"
@@ -1016,20 +1075,30 @@
     "}"
     ""
     "rest_loc_var() {"
-    "  while [ $# -gt 0 ]; do"
-    "    : $(($1=_data_$SP))"
-    "    : $((SP -= 1))"
-    "    shift"
+
+    (if (equal? 'addr (car function-return-method))
+      (unlines
+      "  while [ $# -gt 0 ]; do"
+      "    # Make we we don't overwrite the result_loc"
+      "    if [ $1 != \"$result_loc\" ]; then : $(($1=_data_$SP)); fi"
+      "    : $((SP -= 1))"
+      "    shift"
+      )
+      (unlines
+      "  while [ $# -gt 0 ]; do"
+      "    : $(($1=_data_$SP))"
+      "    : $((SP -= 1))"
+      "    shift"
+      ))
     "  done"
     (if (equal? 'addr (car function-return-method))
-    (unlines
-    (if prefix-local-vars
-    "  eval \"_result_loc=\\$_data_$SP\""
-    "  eval \"result_loc=\\$_data_$SP\""
-    )
-    "  : $((SP -= 1))"
-    )
-    "")
+      (unlines
+        (if prefix-local-vars
+        "  eval \"_result_loc=\\$_data_$SP\""
+        "  eval \"result_loc=\\$_data_$SP\""
+        )
+      "  : $((SP -= 1))"
+      ))
     "}"
    ""
    "# Load runtime library and primitives"
@@ -1135,6 +1204,7 @@
 ; prefix-local-vars: boolean
 ; inline-string-init: boolean
 ; init-string-precompute-hash: boolean
+; callee-save: boolean
 (define (parse-cmd-line args)
   (let loop ((args args) (files '()))
     (if (null? args)
@@ -1161,6 +1231,9 @@
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--init-string-precompute-hash")))
                   (set! init-string-precompute-hash? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--callee-save")))
+                  (set! callee-save? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)

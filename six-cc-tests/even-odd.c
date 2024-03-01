@@ -1,0 +1,26 @@
+int abs(int number)
+{
+  if(number < 0) return -number;
+  return number;
+}
+
+int even(int number)
+{
+  if(number == 0) return 1;
+  return odd(abs(number)-1);
+}
+
+int odd(int number)
+{
+  if( number == 0 ) return 0;
+  return even(abs(number)-1);
+}
+
+int main() {
+  int n1;
+  int n2;
+  n1 = even(10);
+  n2 = odd(10);
+  printf("n1 = %d\n", n1);
+  printf("n2 = %d\n", n2);
+}
