@@ -14,6 +14,7 @@ Changes to make it compatible with six-cc.scm
     - See *datastart / 16, and MUL/DIV/MOD instructions in VM
 11. Fix ops_string access
 12. Replace %.4s with %0.4s
+13. Rename argv to args
 */
 
 /*
@@ -368,7 +369,7 @@ void stmt()
   }
 }
 
-int main(int argc, char_ptr_ptr argv)
+int main(int argc, char_ptr_ptr args)
 {
   int fd;
   int bt;
@@ -389,14 +390,14 @@ int main(int argc, char_ptr_ptr argv)
   char_ptr datastart;
   char_ptr datastart2;
 
-  --argc; ++argv;
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 's') { src = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'd') { debug = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'b') { ops = 1; --argc; ++argv; }
-  if (argc > 0 && **argv == '-' && (*argv)[1] == 'p') { portable = 1; --argc; ++argv; }
+  --argc; ++args;
+  if (argc > 0 && **args == '-' && (*args)[1] == 's') { src = 1; --argc; ++args; }
+  if (argc > 0 && **args == '-' && (*args)[1] == 'd') { debug = 1; --argc; ++args; }
+  if (argc > 0 && **args == '-' && (*args)[1] == 'b') { ops = 1; --argc; ++args; }
+  if (argc > 0 && **args == '-' && (*args)[1] == 'p') { portable = 1; --argc; ++args; }
   if (argc < 1) { printf("usage: c4 [-s] [-d] file ...\n"); return -1; }
 
-  if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
+  if ((fd = open(*args, 0)) < 0) { printf("could not open(%s)\n", *args); return -1; }
 
   poolsz = 256*1024;
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
@@ -521,7 +522,7 @@ int main(int argc, char_ptr_ptr argv)
   *--sp = EXIT;
   *--sp = PSH; t = sp;
   *--sp = argc;
-  *--sp = argv;
+  *--sp = args;
   *--sp = t;
 
   if (ops) {

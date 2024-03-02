@@ -1,4 +1,4 @@
-int main(int argc, char_ptr argv) {
+int main() {
   int x;
   int y;
   int z;

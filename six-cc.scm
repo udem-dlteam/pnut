@@ -73,7 +73,9 @@
   ; Gather the list of all local variables.
   ; Used to initialize them all at the beginning of the execution so
   ; save_loc_var doesn't crash when saving an unitialized variable.
-  (table-set! (ctx-all-variables ctx) ident '()))
+  ; result_loc is always initialized, so we don't need to add it to the list.
+  (if (not (equal? (cadr ident) 'result_loc))
+    (table-set! (ctx-all-variables ctx) ident '())))
 
 (define (is-local-var ctx ident)
   (table-ref (ctx-loc-env ctx) ident #f))
@@ -202,7 +204,13 @@
   (map symbol->string
   '(result_loc   ; Variable storing the variable name where to return the value from a function call
     dummy_loc    ; Location used when returning a value from a function call that's not used
-    str_      ; Prefix of variables used to store the address of a string
+    str_         ; Prefix of variables used to store the address of a string
+    ; Special variable for zsh. If we initialize the local variables before
+    ; handling $# $@, writing to argv will overwrite the arguments those values.
+    argv
+    ; Variables storing the argc/argv during program initialization (before main function call)
+    argc_for_main
+    argv_for_main
     ; Runtime library variables
     strict_alloc
     make_argv
@@ -1122,14 +1130,77 @@
   (string-concatenate (filter (lambda (p) (string? p)) lst) "\n"))
 
 (define (runtime-prelude ctx)
+  (define result_loc_var (format-var '(six.identifier result_loc)))
   (unlines
-   (if (and (equal? (car function-return-method) 'addr) (cadr function-return-method))
-     "set -e"
-     "set -e -u")
+    "set -e -u"
+    ""
+    (if initialize-memory-when-alloc "STRICT_MODE=1" "STRICT_MODE=0")
+    ""
+    "# Load runtime library and primitives"
+    ". ./runtime.sh"
     ""
     "# Local variables"
     ""
     "SP=0 # Note: Stack grows up, not down"
+    ""
+    "save_loc_var() {"
+    (if (equal? 'addr (car function-return-method))
+      (unlines
+      "  : $((SP += 1))"
+      ; "  unset \"save_loc_var_$SP\" # For some reason, ksh doesn't like to overwrite the value"
+      "  # We must use eval to set a string to a dynamic variable"
+      (string-append
+      "  eval \"save_loc_var_$SP=\\$" result_loc_var "\"")))
+    "  while [ $# -gt 0 ]; do"
+    "    : $((SP += 1))"
+    "    : $((save_loc_var_$SP=$1))"
+    "    shift"
+    "  done"
+    "}"
+    ""
+    "rest_loc_var() {"
+    (if (equal? 'addr (car function-return-method))
+      (unlines
+      "  while [ $# -gt 0 ]; do"
+      "    # Make we we don't overwrite the result_loc"
+      (string-append
+      "    if [ $1 != \"$" result_loc_var "\" ]; then : $(($1=save_loc_var_$SP)); fi")
+      "    : $((SP -= 1))"
+      "    shift"
+      )
+      (unlines
+      "  while [ $# -gt 0 ]; do"
+      "    : $(($1=save_loc_var_$SP))"
+      "    : $((SP -= 1))"
+      "    shift"
+      ))
+    "  done"
+    (if (equal? 'addr (car function-return-method))
+      (unlines
+      (string-append
+      "  eval \"" result_loc_var "=\\$save_loc_var_$SP\"")
+      "  : $((SP -= 1))"
+      ))
+    "}"
+    ""
+    (case (car function-return-method)
+      ((variable)
+        (string-append "prim_return_value() { : $((_" (symbol->string (cadr function-return-method)) " = $1)) ; }"))
+      ((addr)
+        "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
+      (else
+        (error "Unknown value return method" function-return-method)))
+    ""
+    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
+    (if support-addr-of?
+        "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
+        "defglo() { : $(($1 = $2)) ; }")
+    ""
+    "# Setup argc, argv"
+    "argc_for_main=$(($# + 1));"
+    "make_argv $argc_for_main \"$0\" $@; argv_for_main=make_argv_ptr;"
+    ; This must be after make_argv because if one of the local variable is argv,
+    ; writing to it will overwrite the $@ array in zsh.
     (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
       (if (not (null? local-vars))
         (unlines
@@ -1139,78 +1210,16 @@
                         (string-concatenate (map (lambda (l) (format-var l)) local-vars) " = ")
                         " = 0 ))"))))
     ""
-    "save_loc_var() {"
-    (if (equal? 'addr (car function-return-method))
-      (unlines
-      "  : $((SP += 1))"
-      "  unset \"_data_$SP\" # For some reason, ksh doesn't like to overwrite the value"
-        (if prefix-local-vars
-        "  eval \"_data_$SP='$_result_loc'\" # We must use eval to set a string to a dynamic variable"
-        "  eval \"_data_$SP='$result_loc'\" # We must use eval to set a string to a dynamic variable"
-        )))
-    "  while [ $# -gt 0 ]; do"
-    "    : $((SP += 1))"
-    "    : $((_data_$SP=$1))"
-    "    shift"
-    "  done"
-    "}"
+    (string-append result_loc_var "=_dummy_loc # Dummy result location")
     ""
-    "rest_loc_var() {"
-
-    (if (equal? 'addr (car function-return-method))
-      (unlines
-      "  while [ $# -gt 0 ]; do"
-      "    # Make we we don't overwrite the result_loc"
-      "    if [ $1 != \"$result_loc\" ]; then : $(($1=_data_$SP)); fi"
-      "    : $((SP -= 1))"
-      "    shift"
-      )
-      (unlines
-      "  while [ $# -gt 0 ]; do"
-      "    : $(($1=_data_$SP))"
-      "    : $((SP -= 1))"
-      "    shift"
-      ))
-    "  done"
-    (if (equal? 'addr (car function-return-method))
-      (unlines
-        (if prefix-local-vars
-        "  eval \"_result_loc=\\$_data_$SP\""
-        "  eval \"result_loc=\\$_data_$SP\""
-        )
-      "  : $((SP -= 1))"
-      ))
-    "}"
-   ""
-   "# Load runtime library and primitives"
-   ". $(pwd)/runtime.sh # TODO: Do not use pwd"
-   ""
-   (if initialize-memory-when-alloc "STRICT_MODE=1" "STRICT_MODE=0")
-   ""
-   (case (car function-return-method)
-     ((variable)
-      (string-append "prim_return_value() { : $((_" (symbol->string (cadr function-return-method)) " = $1)) ; }"))
-     ((addr)
-      "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
-     (else
-      (error "Unknown value return method" function-return-method)))
-   ""
-   "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
-   (if support-addr-of?
-      "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
-      "defglo() { : $(($1 = $2)) ; }")
-   ""
-   "# Setup argc, argv"
-   "argc=$(($# + 1));"
-   "make_argv $argc \"$0\" $@; argv_ptr=make_argv_ptr;"
-   ""))
+    ))
 
 (define (runtime-postlude)
   (string-append
    (function-name '(six.identifier main))
    (if (equal? 'addr (car function-return-method)) " _dummy_loc" "")
-   " $argc"
-   " $argv_ptr"))
+   " $argc_for_main"
+   " $argv_for_main"))
 
 (define (escape-string str)
   (define (escape-char c)

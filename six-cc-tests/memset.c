@@ -1,4 +1,4 @@
-int main(int argc, char_ptr argv) {
+int main() {
   int MAX_SIZE;
   char_ptr s;
   char_ptr s2;
