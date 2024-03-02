@@ -285,12 +285,11 @@
           (lambda (param) (add-new-local-var ctx (car param) (cdr param)))
           new-local-vars)
 
-        (if callee-save? (save-local-variables ctx))
-
         (if (equal? 'addr (car function-return-method))
           (begin
             (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
             (add-new-local-var ctx '(six.identifier result_loc) #t 1)
+            (if callee-save? (save-local-variables ctx))
             (if (cadr function-return-method) ; return address is always passed?
               (begin
                 (ctx-add-glo-decl!
@@ -303,7 +302,9 @@
                   ctx
                   (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
                         "then " (env-var ctx '(six.identifier result_loc)) "=$1; shift ; "
-                        "else " (env-var ctx '(six.identifier result_loc)) "= ; fi ;"))))))
+                        "else " (env-var ctx '(six.identifier result_loc)) "= ; fi ;")))))
+          (begin
+            (if callee-save? (save-local-variables ctx))))
 
         (let ((local-vars-to-map
                 (map cons parameters (iota (length parameters) 1))))
