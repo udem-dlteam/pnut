@@ -23,6 +23,8 @@
 (define init-string-precompute-hash? #t)
 ; If it's the caller or callee that should save local variables
 (define callee-save? #t)
+; Always use arithmetic expansion to do if/while conditions?
+(define arithmetic-conditions? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -305,10 +307,10 @@
 
         (let ((local-vars-to-map
                 (map cons parameters (iota (length parameters) 1))))
+
           (for-each
             (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
             local-vars-to-map))
-
 
         (for-each
           (lambda (new-local-var)
@@ -452,10 +454,12 @@
 
 (define (comp-if-test ctx ast)
   (let* ((rvalue (comp-rvalue ctx ast '(test-if))))
+  (if arithmetic-conditions?
     (string-append
-      "[ 0 != $(( "
+      "[ 0 != "
       rvalue
-      " )) ]")))
+      " ]")
+    rvalue)))
 
 (define (comp-loop-test ctx ast)
   (let* ((rvalue-res (comp-rvalue ctx ast '(test)))
@@ -464,9 +468,13 @@
 
     (string-append
       (apply string-append (map (lambda (e) (string-append e "; ")) pre-side-effects))
-      "[ 0 != $(( "
-      rvalue
-      " )) ]")))
+
+      (if arithmetic-conditions?
+        (string-append
+          "[ 0 != "
+          rvalue
+          " ]")
+        rvalue))))
 
 ; Primitives from the runtime library, and if they return a value or not.
 (define runtime-primitives
@@ -554,7 +562,7 @@
           (map (lambda (p)
                   (let* ((params-after (or (member p func-call-params) '()))
                          (params-after-count (max 0 (- (length params-after) 1))))
-                    (string-append "$((" (comp-rvalue ctx p `(argument ,params-after-count)) "))")))
+                    (comp-rvalue ctx p `(argument ,params-after-count))))
                params))
          (call-code
           (string-concatenate (cons (function-name name) code-params) " "))
@@ -839,7 +847,7 @@
          (pre-side-effects (caddr side-effects-res))
          (literal-inits (cadddr side-effects-res))
          (contains-side-effect (car (cddddr side-effects-res))))
-    (define (comp-side-effects-then-rvalue)
+    (define (comp-side-effects-then-rvalue wrapped)
       ; Optimization: When returning with the variable return method, we can
       ; use the return location directly when it's used by the next function
       ; call.
@@ -878,8 +886,8 @@
             fun-calls-to-replace
             (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
           (if must-assign-to-return-loc
-            (comp-rvalue-go ctx new-ast)
-            (comp-rvalue-go ctx ast-with-result-identifier)))
+            (comp-rvalue-go ctx new-ast wrapped #f)
+            (comp-rvalue-go ctx ast-with-result-identifier wrapped #f)))
         (begin
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
@@ -888,20 +896,22 @@
           (for-each
             (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
             fun-calls-to-replace)
-          (comp-rvalue-go ctx new-ast))))
+          (comp-rvalue-go ctx new-ast wrapped #f))))
 
     (case (car context-tag)
-      ((return index-lvalue argument)
-        (comp-side-effects-then-rvalue))
+      ((return index-lvalue)
+        (comp-side-effects-then-rvalue #t))
+      ((argument)
+        (comp-side-effects-then-rvalue #f))
       ((statement-expr)
         (if contains-side-effect
           (ctx-add-glo-decl!
             ctx
-            (list ": $(( " (comp-side-effects-then-rvalue) " ))"))
-          (comp-side-effects-then-rvalue)))
+            (list ": $(( " (comp-side-effects-then-rvalue #t) " ))"))
+          (comp-side-effects-then-rvalue #f))) ; Wrapped flag doesn't matter
       ((test)
         (if (null? fun-calls-to-replace)
-          (cons (comp-rvalue-go ctx new-ast) pre-side-effects)
+          (cons (comp-rvalue-go ctx new-ast #f (not arithmetic-conditions?)) pre-side-effects)
           (error "comp-rvalue: Function calls not supported in condition" ast)))
       ((test-if)
         (for-each
@@ -911,32 +921,84 @@
         (for-each
           (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
           fun-calls-to-replace)
-        (comp-rvalue-go ctx new-ast))
+        (comp-rvalue-go ctx new-ast #f (not arithmetic-conditions?)))
       ((assignment)
         (if (null? fun-calls-to-replace)
-          (list (comp-rvalue-go ctx new-ast) pre-side-effects literal-inits)
+          (list (comp-rvalue-go ctx new-ast #t #f) pre-side-effects literal-inits)
           (error "function calls in assignment not supported" ast)))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
-          (comp-rvalue-go ctx new-ast)
+          (comp-rvalue-go ctx new-ast #t #f)
           (error "function calls, side effects and string literals in pure context not supported" ast)))
       (else
         (error "unknown context tag" context-tag)))))
 
-(define (comp-rvalue-go ctx ast)
+(define (six-op-string op #!optional (test-operand #f))
+  (case op
+    ((six.x+y) " + ")
+    ((six.x-y) " - ")
+    ((six.x*y) " * ")
+    ((six.x/y) " / ")
+    ((six.x%y) " % ")
+    ((six.x>>y) " >> ")
+    ((six.x<<y) " << ")
+    ((six.x&y)  " & ")
+    ((|six.x\|y|) " | ")
+    ((six.x^y) " ^ ")
+    ((six.x+=y) " += ")
+    ((six.x-=y) " -= ")
+    ((six.x*=y) " *= ")
+    ((six.x/=y) " /= ")
+    ((six.x%=y) " %= ")
+    ((six.x=y)  " = ")
+    ((six.x==y) (if test-operand " -eq " " == "))
+    ((six.x!=y) (if test-operand " -ne " " != "))
+    ((six.x<y)  (if test-operand " -lt " " < "))
+    ((six.x>y)  (if test-operand " -gt " " > "))
+    ((six.x<=y) (if test-operand " -le " " <= "))
+    ((six.x>=y) (if test-operand " -ge " " >= "))
+    ((six.x&&y)  " && ")
+    ((|six.x\|\|y|)  " || ")
+    (else
+      (error "unknown six op" op))))
+
+; TODO: Distinguish between wrapped in $(( ... )) and wrapped in ( ... )?
+(define (comp-rvalue-go ctx ast wrapped compiling-test)
+  (define (wrap-if-needed parens-otherwise? . lines)
+    (if (not wrapped)
+      (if compiling-test
+        (string-append "[ $((" (apply string-append lines) ")) -ne 0 ]")
+        (string-append "$((" (apply string-append lines) "))"))
+      (if parens-otherwise?
+        (string-append "(" (apply string-append lines) ")")
+        (apply string-append lines))))
+
+  ; Used to supports the case `if/while (c) { ... }`, where c is a variable.
+  ; This is otherwise handled by wrap-if-needed, but we don't want to wrap
+  ; in $(( ... )) here.
+  (define (wrap-in-condition-if-needed . lines)
+    (if compiling-test
+      (string-append "[ " (apply string-append lines) " -ne 0 ]")
+      (apply string-append lines)))
+
+  (if (and wrapped compiling-test)
+    (error "Can't be compiling in a test context and wrapped in $(( ... ))" ast))
+
   (case (car ast)
     ((six.literal)
      (let ((val (cadr ast)))
        (cond ((exact-integer? val)
-              (number->string val))
+              (wrap-in-condition-if-needed (number->string val)))
              ((string? val)
               ; Hacky way to detect character literals
               ; since six doesn't distinguish between " and '
               (if (equal? 1 (string-length val))
-                (number->string (char->integer (string-ref val 0)))
+                (wrap-in-condition-if-needed (number->string (char->integer (string-ref val 0))))
                 (begin
                   (ctx-data-set! ctx (cons val (ctx-data ctx)))
-                  (obj-ref (- (length (ctx-data ctx)) 1)))))
+                  (wrap-in-condition-if-needed (if wrapped
+                    (obj-ref (- (length (ctx-data ctx)) 1))
+                    (string-append "$" (obj-ref (- (length (ctx-data ctx)) 1))))))))
              (else
               "unknown literal" ast))))
     ((six.list)
@@ -947,74 +1009,92 @@
               (error "List elements must be literals" lst))
             (begin
               (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
-              (obj-ref (- (length (ctx-data ctx)) 1))))))
+              (string-append "$" (obj-ref (- (length (ctx-data ctx)) 1)))))))
     ((six.identifier)
-     (env-var ctx ast))
-    ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| )
-     (string-append "("
-                    (comp-rvalue-go ctx (cadr ast))
-                    (case (car ast)
-                      ((six.x+y) " + ")
-                      ((six.x-y) " - ")
-                      ((six.x*y) " * ")
-                      ((six.x/y) " / ")
-                      ((six.x%y) " % ")
-                      ((six.x==y) " == ")
-                      ((six.x!=y) " != ")
-                      ((six.x<y) " < ")
-                      ((six.x>y) " > ")
-                      ((six.x<=y) " <= ")
-                      ((six.x>=y) " >= ")
-                      ((six.x>>y) " >> ")
-                      ((six.x<<y) " << ")
-                      ((six.x&y)  " & ")
-                      ((|six.x\|y|) " | ")
-                      ((six.x^y) " ^ ")
-                      ((six.x&&y)  " && ")
-                      ((|six.x\|\|y|)  " || ")
-                      )
-                    (comp-rvalue-go ctx (caddr ast))
-                    ")"))
+      (if wrapped
+        (env-var ctx ast)
+        (wrap-in-condition-if-needed "\"$" (env-var ctx ast) "\"")))
+    ((six.x&&y |six.x\|\|y|)
+      ; Note, this could also be compiled in a single [ ] block using -a and -o,
+      ; which I think are POSIX compliant but are deprecated.
+      (if compiling-test
+        (let ((wrap-left (and (member (caadr ast) '(six.x&&y |six.x\|\|y|))
+                              (not (equal? (car ast) (caadr ast)))))
+              (wrap-right (and (member (caaddr ast) '(six.x&&y |six.x\|\|y|))
+                                  (not (equal? (car ast) (caaddr ast))))))
+          (string-append
+                        ; Something very important to know is that the
+                        ; precendence of && and || in Shell is equal, instead of
+                        ; && grouping more tightly than || in C. This means that
+                        ; some parenthesis that wouldn't be needed in C are needed.
+                        ; As a simple heuristic, whenever the left or right hand
+                        ; side of the expression is a different conditional, we
+                        ; wrap it in parenthesis. It adds parenthesis that
+                        ; sometimes aren't needed, but it hopefully helps readability.
+                        (if wrap-left "(" "")
+                        (comp-rvalue-go ctx (cadr ast) wrapped #t)
+                        (if wrap-left ")" "")
+                        (six-op-string (car ast) #t)
+                        (if wrap-right "(" "")
+                        (comp-rvalue-go ctx (caddr ast) wrapped #t)
+                        (if wrap-right ")" "")))
+        (wrap-if-needed #f
+                        (comp-rvalue-go ctx (cadr ast) #t #f)
+                        (six-op-string (car ast) #t)
+                        (comp-rvalue-go ctx (caddr ast) #t #f))))
+    ((six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
+     (if compiling-test
+         (string-append "[ "
+                        (comp-rvalue-go ctx (cadr ast) wrapped #f)
+                        (six-op-string (car ast) #t)
+                        (comp-rvalue-go ctx (caddr ast) wrapped #f)
+                        " ]")
+         (wrap-if-needed #t
+                        (comp-rvalue-go ctx (cadr ast) #t #f)
+                        (six-op-string (car ast))
+                        (comp-rvalue-go ctx (caddr ast) #t #f))))
+    ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y)
+     (wrap-if-needed #t
+                    (comp-rvalue-go ctx (cadr ast) #t #f)
+                    (six-op-string (car ast))
+                    (comp-rvalue-go ctx (caddr ast) #t #f)))
     ((six.-x)
-     (string-append "-(" (comp-rvalue-go ctx (cadr ast)) ")"))
+     ; Check if the rest of ast is a literal, if so directly return the negated value
+     (if (and (equal? 'six.literal (caadr ast)) (exact-integer? (cadadr ast)))
+       (wrap-if-needed #f (string-append (number->string (- (cadadr ast)))))
+       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) wrapped #f) ")"))))
     ((six.x?y:z)
-      (string-append "("
-                    (comp-rvalue-go ctx (cadr ast))
-                    " ? "
-                    (comp-rvalue-go ctx (caddr ast))
-                    " : "
-                    (comp-rvalue-go ctx (cadddr ast))
-                    " ) "))
+      (wrap-if-needed #t
+                      (comp-rvalue-go ctx (cadr ast) #t #f)
+                      " ? "
+                      (comp-rvalue-go ctx (caddr ast) #t #f)
+                      " : "
+                      (comp-rvalue-go ctx (cadddr ast) #t #f)))
     ((six.index)
-     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast)) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f) "))"))
+    ((six.++x)
+     (wrap-if-needed #t (comp-lvalue ctx (cadr ast)) " += 1"))
+    ((six.--x)
+     (wrap-if-needed #t (comp-lvalue ctx (cadr ast)) " -= 1"))
+    ((six.!x)
+     ; This part could be improved by propagating the negation and applying
+     ; De Morgan's law. For now, we can do the transformation by hand if we want
+     ; to generate clearer code.
+     ; Case where it would be useful: !(a == b && b == c) is compiled as
+     ; [ $(( a == b && b == c)) -ne 0 ] instead of [ $a -ne $b ] [ $b -ne $c ].
+     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) #t #f)))
+    ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x=y)
+     (wrap-if-needed #t (comp-lvalue ctx (cadr ast))
+                        (six-op-string (car ast))
+                        (comp-rvalue-go ctx (caddr ast) #t #f)))
+    ((six.*x)
+     (wrap-if-needed #f "_$((" (comp-rvalue-go ctx (cadr ast) #t #f) "))"))
+    ((six.**x)
+     (wrap-if-needed #f "_$(( _$((" (comp-rvalue-go ctx (cadr ast) #t #f) ")) ))"))
     ((six.x++)
      (error "x++ should have been replaced with x - 1 (and ++x side effect) by comp-rvalue"))
     ((six.x--)
      (error "x-- should have been replaced with (x + 1) (and --x side effect) by comp-rvalue"))
-    ((six.++x)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " += 1)"))
-    ((six.--x)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " -= 1)"))
-    ((six.!x)
-     (string-append "!(" (comp-rvalue-go ctx (cadr ast)) ")" ))
-    ((six.x+=y)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue-go ctx (caddr ast)) ")"))
-    ((six.x-=y)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue-go ctx (caddr ast)) ")"))
-    ((six.x*=y)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " *= " (comp-rvalue-go ctx (caddr ast)) ")"))
-    ((six.x/=y)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " /= " (comp-rvalue-go ctx (caddr ast)) ")"))
-    ((six.x%=y)
-     (string-append "(" (comp-lvalue ctx (cadr ast)) " %= " (comp-rvalue-go ctx (caddr ast)) ")"))
-    ((six.x=y)
-     ; Can't use comp-assignment here because it modifies the context and we instead want to return the code
-     ; (comp-assignment ctx `(six.x=y ,(cadr ast) ,(caddr ast))))
-     (string-append "(" (comp-rvalue-go ctx (cadr ast)) " = " (comp-rvalue-go ctx (caddr ast)) ")"))
-    ((six.*x)
-     (string-append "_$((" (comp-rvalue-go ctx (cadr ast)) "))"))
-    ((six.**x)
-     (string-append "_$(( _$((" (comp-rvalue-go ctx (cadr ast)) ")) ))"))
     ((six.call)
       (error "Function calls not supported in rvalue"))
     (else
@@ -1198,13 +1278,14 @@
   (for-each comp-file (parse-cmd-line args)))
 
 ; Code generation options:
-; function-return-method: addr | variable
-; initialize-memory-when-alloc: boolean
-; inline-inplace-arithmetic-ops: boolean
-; prefix-local-vars: boolean
-; inline-string-init: boolean
-; init-string-precompute-hash: boolean
-; callee-save: boolean
+; - function-return-method: addr | variable
+; - initialize-memory-when-alloc: boolean
+; - inline-inplace-arithmetic-ops: boolean
+; - prefix-local-vars: boolean
+; - inline-string-init: boolean
+; - init-string-precompute-hash: boolean
+; - callee-save: boolean
+; - arithmetic-conditions: boolean
 (define (parse-cmd-line args)
   (let loop ((args args) (files '()))
     (if (null? args)
@@ -1234,6 +1315,9 @@
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--callee-save")))
                   (set! callee-save? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--arithmetic-conditions")))
+                  (set! arithmetic-conditions? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)
