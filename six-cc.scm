@@ -262,7 +262,7 @@
                (var-name (cadr def-var))
                (var-init (car (cddddr def-var))))
           (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
-        (cons lst new-local-vars))))
+        (cons lst (reverse new-local-vars)))))
 
 (define (comp-glo-define-procedure ctx ast)
   (let* ((name (cadr ast))
