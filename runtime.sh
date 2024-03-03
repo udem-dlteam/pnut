@@ -58,6 +58,43 @@ unpack_string() {
   push_data 0
 }
 
+# See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences
+unpack_escaped_string() {
+  unpack_string_addr=$ALLOC
+  unpack_string_src_buf="$1"
+  while [ -n "$unpack_string_src_buf" ] ; do
+    unpack_string_char="$unpack_string_src_buf"                      # remember current buffer
+    unpack_string_rest="${unpack_string_src_buf#?}"                  # remove the first char
+    unpack_string_char="${unpack_string_char%"$unpack_string_rest"}" # remove all but first char
+    unpack_string_src_buf="${unpack_string_src_buf#?}"               # remove the current char from $src_buf
+    if [ '\' = "$unpack_string_char" ] ; then
+      unpack_string_char="$unpack_string_src_buf"                      # remember current buffer
+      unpack_string_rest="${unpack_string_src_buf#?}"                  # remove the first char
+      unpack_string_char="${unpack_string_char%"$unpack_string_rest"}" # remove all but first char
+      unpack_string_src_buf="${unpack_string_src_buf#?}"               # remove the current char from $src_buf
+      case "$unpack_string_char" in
+        'a') char_to_int_code=7 ;;
+        'b') char_to_int_code=8 ;;
+        'f') char_to_int_code=12 ;;
+        'n') char_to_int_code=10 ;;
+        'r') char_to_int_code=13 ;;
+        't') char_to_int_code=9 ;;
+        'v') char_to_int_code=11 ;;
+        '\') char_to_int_code=92 ;;
+        '"') char_to_int_code=34 ;;
+        "'") char_to_int_code=39 ;;
+        '?') char_to_int_code=63 ;;
+        *) syntax_error "invalid escape in string" ;;
+      esac
+      push_data "$char_to_int_code"
+    else
+      char_to_int "$unpack_string_char"
+      push_data "$char_to_int_code"
+    fi
+  done
+  push_data 0
+}
+
 # Convert a VM string reference to a Shell string.
 # $res is set to the result, and $len is set to the length of the string.
 pack_string() {
@@ -327,7 +364,7 @@ init_string() {
   # FIXME: Replace eval call with check != 0 when `set +u``
   eval "if [ -z \${init_string_$init_string_hash+x} ]; then init_string_undefined=1; else init_string_undefined=0; fi"
   if [ "$init_string_undefined" -eq 1 ]; then
-    unpack_string "$init_string_str"
+    unpack_escaped_string "$init_string_str"
     : $(( init_string_$((init_string_hash)) = unpack_string_addr ))
     : $(( $init_string_return_var = unpack_string_addr ))
   else

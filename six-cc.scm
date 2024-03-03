@@ -111,11 +111,12 @@
             (cdr chars)))))
 
 (define (init_string_code var_str str)
-  (string-append
-    "init_string "
-    var_str
-    (if init-string-precompute-hash? (string-append " " (number->string (djb2 str))) "")
-    " \"" (escape-string str) "\""))
+  (let ((escaped-str (escape-string str)))
+    (string-append
+      "init_string "
+      var_str
+      (if init-string-precompute-hash? (string-append " " (number->string (djb2 escaped-str))) "")
+      " '" escaped-str "'")))
 
 (define (comp-glo-decl ctx ast)
   (case (car ast)
@@ -1221,12 +1222,21 @@
    " $argc_for_main"
    " $argv_for_main"))
 
+(define escape-string-table
+  (list->table '((#\alarm    . "\\a")
+                (#\backspace . "\\b")
+                (#\page      . "\\f")
+                (#\newline   . "\\n")
+                (#\return    . "\\r")
+                (#\tab       . "\\t")
+                (#\vtab      . "\\v")
+                (#\\         . "\\\\")
+                (#\"         . "\\\"")
+                (#\'         . "\\\'")
+                (#\?         . "\\\?"))))
+
 (define (escape-string str)
-  (define (escape-char c)
-    (if (char=? c #\\) "\\\\" ; Escape backslash.
-    (if (char=? c #\") "\\\"" ; Escape double quote.
-    ; (if (char=? c #\newline) "\\n"  ; Escape newline.
-    (list->string (list c)))))
+  (define (escape-char c) (table-ref escape-string-table c (list->string (list c))))
   (string-concatenate (map escape-char (string->list str))))
 
 (define (string->variable-name str)
