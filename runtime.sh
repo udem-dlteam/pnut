@@ -384,7 +384,7 @@ djb2() {
     djb2_char="${djb2_char%"$djb2_rest"}" # remove all but first char
     djb2_str="${djb2_str#?}"              # remove the current char from $src_buf
     char_to_int "$djb2_char"
-    : $(( djb2_hash = (((djb2_hash << 5) + djb2_hash) + char_to_int_code) & 4294967295 )) # 2^32 - 1
+    : $(( djb2_hash = (((djb2_hash << 5) + djb2_hash) + char_to_int_code) & 2147483647 )) # 2^31 - 1. Not 2^32 - 1 because some shells use signed 32 bits.
   done
 }
 

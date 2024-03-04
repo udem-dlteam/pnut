@@ -107,7 +107,7 @@
   (let loop ((hash 5381) (chars (string->list str)))
     (if (null? chars)
       hash
-      (loop (bitwise-and #xffffffff (+ (arithmetic-shift hash 5) hash (char->integer (car chars))))
+      (loop (bitwise-and #x7fffffff (+ (arithmetic-shift hash 5) hash (char->integer (car chars))))
             (cdr chars)))))
 
 (define (init_string_code var_str str)

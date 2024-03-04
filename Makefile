@@ -111,6 +111,8 @@ test-six-cc-all-shells:
 	SHELL=dash make test-six-cc
 	SHELL=bash make test-six-cc
 	SHELL=zsh  make test-six-cc
+	SHELL=yash make test-six-cc
+	SHELL=mksh make test-six-cc
 
 test-six-cc-all-options:
 	python3 test-six-cc-all-options.py
@@ -170,6 +172,10 @@ c4_by_c4-for-six-op.golden-all: c4-for-six.sh c4.c
 	time dash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.dash
 # Takes ~3min30s
 	time zsh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.zsh
+# Takes ~40s
+	time yash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.yash
+# Takes ~3min30s
+	time mksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.mksh
 
 # Run bytecode using C4 Shell VM to compile c4.c again, to confirm that the bytecode produced works
 six-cc-c4-bootstrap-on-vm: c4_by_c4-for-six-op.golden
