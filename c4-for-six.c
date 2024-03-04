@@ -399,11 +399,10 @@ int main(int argc, char_ptr_ptr args)
 
   if ((fd = open(*args, 0)) < 0) { printf("could not open(%s)\n", *args); return -1; }
 
-  poolsz = 256*1024;
+  poolsz = 32*1024;
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
   if (!(estart = le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
   if (!(datastart = data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
-  if (!(sp = malloc(poolsz))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }
 
   memset(sym,  0, poolsz);
   memset(e,    0, poolsz);
@@ -517,14 +516,6 @@ int main(int argc, char_ptr_ptr args)
   if (!(pc = idmain[Val])) { printf("main() not defined\n"); return -1; }
   if (src) return 0;
 
-  bp = sp = (sp + poolsz);
-  spstart = sp;
-  *--sp = EXIT;
-  *--sp = PSH; t = sp;
-  *--sp = argc;
-  *--sp = args;
-  *--sp = t;
-
   if (ops) {
     estart++;
     printf("%d\n", data - datastart);
@@ -558,6 +549,16 @@ int main(int argc, char_ptr_ptr args)
     }
     return 0;
   }
+
+  if (!(sp = malloc(256 * 1024))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }
+
+  bp = sp = (sp + poolsz);
+  spstart = sp;
+  *--sp = EXIT;
+  *--sp = PSH; t = sp;
+  *--sp = argc;
+  *--sp = args;
+  *--sp = t;
 
   cycle = 0;
   while (1) {
