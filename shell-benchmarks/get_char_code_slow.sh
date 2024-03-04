@@ -39,4 +39,12 @@ read_n_char_slow() {
   # echo $acc
 }
 
-read_n_char_slow $1 < $2
+# Add some variables to the environment so subshells take longer to start
+env_size=$1; shift
+i=0
+while [ $i -lt "$env_size" ]; do
+  i=$((i+1))
+  : $((acc_$i = 1))
+done
+
+time read_n_char_slow $1 < $2

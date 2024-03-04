@@ -10,6 +10,7 @@
 # factor.
 src_buf=
 src_buf_fast=
+get_char_fast_buffer_len=10
 get_char()                           # get next char from source into $char
 {
   if [ -z "$src_buf_fast" ] && [ -z "$src_buf" ] ; then
@@ -19,14 +20,14 @@ get_char()                           # get next char from source into $char
         char=NEWLINE                 # next get_char call will read next line
         return
       fi
-      src_buf_fast=$(printf "%.40s" "$src_buf") # Copy first 100 chars to fast buffer
+      src_buf_fast=$(printf "%.${get_char_fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
       src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
     else
       char=EOF                       # EOF reached when read fails
       return
     fi
   elif [ -z "$src_buf_fast" ] || [ -z "${src_buf_fast#?}" ]; then      # need to refill fast buffer
-    src_buf_fast=$(printf "%.40s" "$src_buf") # Copy first 100 chars to fast buffer
+    src_buf_fast=$(printf "%.${get_char_fast_buffer_len}s" "$src_buf") # Copy first 100 chars to fast buffer
     src_buf="${src_buf#"$src_buf_fast"}"       # remove first 100 chars from $src_buf
     if [ -z "$src_buf_fast" ] ; then           # end of line if the buffer is now empty
       char=NEWLINE
@@ -57,4 +58,12 @@ read_n_char() {
   # echo $acc
 }
 
-read_n_char $1 < $2
+# Add some variables to the environment so subshells take longer to start
+env_size=$1; shift
+i=0
+while [ $i -lt $env_size ]; do
+  i=$((i+1))
+  : $((acc_$i = 1))
+done
+
+time read_n_char $1 < $2
