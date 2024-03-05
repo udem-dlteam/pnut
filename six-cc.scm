@@ -25,6 +25,12 @@
 (define callee-save? #t)
 ; Always use arithmetic expansion to do if/while conditions?
 (define arithmetic-conditions? #t)
+; Always use arithmetic expansion to do assignments?
+; Warning: Assignment using arithmetic expansion doesn't overflow while regular
+; assignment to an overflowing expression does in ksh. The overflow breaks c4's
+; hashing algorithm, and prevents it from compiling itself.
+; ** Do not use this option if you want to compile c4 with c4 **
+(define arithmetic-assignment? #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -80,9 +86,9 @@
 (define (is-local-var ctx ident)
   (table-ref (ctx-loc-env ctx) ident #f))
 
-(define (env-var ctx ident)
+(define (env-var ctx ident #!optional (prefixed-by-dollar #f))
   (if (number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
-    (string-append "$" (number->string (cadr ident)))
+    (string-append (if (not prefixed-by-dollar) "$" "") (number->string (cadr ident)))
     (if (table-ref (ctx-loc-env ctx) ident #f)
       (format-var ident)
       (global-ref ident))))
@@ -304,7 +310,7 @@
                 (ctx-add-glo-decl!
                   ctx
                   (list (env-var ctx '(six.identifier result_loc))
-                        "=$1; shift "
+                        "=\"$1\"; shift "
                         "# Remove result_loc param")))
               (begin
                 (ctx-add-glo-decl!
@@ -638,7 +644,8 @@
         ((six.call)
           (comp-fun-call ctx (cdr rhs) lhs))
         (else
-          (let* ((rvalue-res (comp-rvalue ctx rhs '(assignment)))
+          (let* ((simple-assignment (and (equal? (car lhs) 'six.identifier) arithmetic-assignment?))
+                 (rvalue-res (comp-rvalue ctx rhs `(assignment ,(not simple-assignment))))
                  (rvalue (car rvalue-res))
                  (pre-side-effects (comp-side-effects ctx (cadr rvalue-res)))
                  (literal-inits (caddr rvalue-res)))
@@ -646,10 +653,14 @@
             (lambda (p) (ctx-add-glo-decl! ctx p))
             pre-side-effects)
           (comp-literal-inits ctx literal-inits)
-          (ctx-add-glo-decl!
-            ctx
-            (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))"))
-          )))
+          (if simple-assignment
+            (ctx-add-glo-decl!
+              ctx
+              (list (comp-lvalue ctx lhs) "=" rvalue))
+            (ctx-add-glo-decl!
+              ctx
+              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))")))
+              )))
 
        ; Mark the variable as used written to, used to determine if we need to save and restore it
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
@@ -934,7 +945,7 @@
         (comp-rvalue-go ctx new-ast #f (not arithmetic-conditions?)))
       ((assignment)
         (if (null? fun-calls-to-replace)
-          (list (comp-rvalue-go ctx new-ast #t #f) pre-side-effects literal-inits)
+          (list (comp-rvalue-go ctx new-ast (cadr context-tag) #f) pre-side-effects literal-inits)
           (error "function calls in assignment not supported" ast)))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
@@ -1023,7 +1034,7 @@
     ((six.identifier)
       (if wrapped
         (env-var ctx ast)
-        (wrap-in-condition-if-needed "\"$" (env-var ctx ast) "\"")))
+        (wrap-in-condition-if-needed "\"$" (env-var ctx ast arithmetic-assignment?) "\"")))
     ((six.x&&y |six.x\|\|y|)
       ; Note, this could also be compiled in a single [ ] block using -a and -o,
       ; which I think are POSIX compliant but are deprecated.
@@ -1338,6 +1349,9 @@
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--arithmetic-conditions")))
                   (set! arithmetic-conditions? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--arithmetic-assignment")))
+                  (set! arithmetic-assignment? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)

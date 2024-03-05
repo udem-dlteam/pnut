@@ -6,11 +6,17 @@ if [ $# -lt 1 ]; then
 fi
 
 while [ $# -gt 0 ]; do
+  echo "\n$1: Assignment outside without arithmetic expansion"
+  time $1 -c 'acc=""; i=0 ; while [ $i -lt 100000 ]; do i=$((i+1)); acc=$acc; done'
+
+  echo "\n$1: Assignment outside without arithmetic expansion with quotes"
+  time $1 -c 'acc=""; i=0 ; while [ $i -lt 100000 ]; do i=$((i+1)); acc="$acc"; done'
+
   echo "\n$1: Assignment outside of \$(())"
   time $1 -c 'acc=""; i=0 ; while [ $i -lt 100000 ]; do i=$((i+1)); acc=$((acc + 1)); done'
 
   echo "\n$1: Assignment outside of \$(()) with quotes"
-  time $1 -c 'acc=""; i=0 ; while [ $i -lt 100000 ]; do i=$((i+1)); acc=$"((acc + 1))"; done'
+  time $1 -c 'acc=""; i=0 ; while [ $i -lt 100000 ]; do i=$((i+1)); acc="$((acc + 1))"; done'
 
   echo "\n$1: Assignment in \$(())"
   time $1 -c 'acc=""; i=0 ; while [ $i -lt 100000 ]; do i=$((i+1)); : $((acc = acc + 1)); done'
