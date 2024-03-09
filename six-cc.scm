@@ -95,8 +95,8 @@
   (cond
     ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
       (string-append (if (not prefixed-by-dollar) "$" "") (number->string (cadr ident))))
-    ((equal? '_ (cadr ident))
-      "_")
+    ((equal? '__ (cadr ident)) ; We don't want to prefix __ with another _
+      "__")
     ((table-ref (ctx-loc-env ctx) ident #f)
       (format-var ident))
     (else
@@ -608,7 +608,7 @@
             (ctx-add-glo-decl!
               ctx
               (list (string-concatenate (cons (function-name name)
-                                          (cons (env-var ctx (or assign_to '(six.identifier _)))
+                                          (cons (env-var ctx (or assign_to '(six.identifier __)))
                                           code-params))
                                         " ")))
           (ctx-add-glo-decl! ctx (list call-code))))
@@ -1226,14 +1226,14 @@
                         (string-concatenate (map (lambda (l) (format-var l)) local-vars) " = ")
                         " = 0 ))"))))
     ""
-    (string-append result_loc_var "=_ # Dummy result location")
+    (string-append result_loc_var "=__ # Dummy result location")
     ""
     ))
 
 (define (runtime-postlude)
   (string-append
    (function-name '(six.identifier main))
-   (if (equal? 'addr (car function-return-method)) " _" "")
+   (if (equal? 'addr (car function-return-method)) " __" "")
    " $argc_for_main"
    " $argv_for_main"))
 
