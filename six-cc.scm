@@ -196,11 +196,11 @@
             ((six.x=y)
               (let ((new-value (cadr (caddr decl))))
                 (set! enum-value-counter (+ new-value 1))
-                (list "_" (cdadr decl) "=" (number->string new-value) "; ")))
+                (list "_" (cdadr decl) "=" (number->string new-value) " ")))
 
             ((six.identifier)
               (set! enum-value-counter (+ enum-value-counter 1))
-              (list "_" (cdr decl) "=" (number->string (- enum-value-counter 1)) "; "))
+              (list "_" (cdr decl) "=" (number->string (- enum-value-counter 1)) " "))
 
             (else
               (error "Enum definition can only contain identifiers or assigments. Got:" decl))))
