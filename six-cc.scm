@@ -1085,7 +1085,7 @@
     ((six.-x)
      ; Check if the rest of ast is a literal, if so directly return the negated value
      (if (and (equal? 'six.literal (caadr ast)) (exact-integer? (cadadr ast)))
-       (wrap-if-needed #f (string-append (number->string (- (cadadr ast)))))
+       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) wrapped #f)
        (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) wrapped #f) ")"))))
     ((six.x?y:z)
       (wrap-if-needed #t
