@@ -5,6 +5,10 @@ _NULL=0 # Null pointer, should not be modified. TODO: Make global-var replace NU
 ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 strict_alloc() {
+  if [ $FREE_UNSETS_VARS -eq 1 ]; then
+    : $((_$ALLOC = $1)) # Save allocation size
+    : $((ALLOC += 1))
+  fi
   strict_alloc_res=$ALLOC
   : $((ALLOC += $1))
   # Need to initialize the memory to 0 or else `set -u` will complain
@@ -405,7 +409,23 @@ _malloc() {
   prim_return_value $strict_alloc_res $malloc_return_loc
 }
 
-_free() { return; }
+_free() {
+  if [ $# -eq 2 ]; then
+    free_return_loc=$1; shift
+  else
+    free_return_loc=
+  fi
+  if [ $FREE_UNSETS_VARS -eq 1 ]; then
+    free_ptr=$1
+    free_size=$((_$((free_ptr - 1)))) # Get size of allocation
+    while [ $free_size -gt 0 ]; do
+      unset "_$free_ptr"
+      : $((free_ptr += 1))
+      : $((free_size -= 1))
+    done
+  fi
+  prim_return_value 0 $free_return_loc
+}
 
 _printf() {
   printf_fmt_ptr=$1; shift
@@ -527,7 +547,6 @@ _close() {
     close_return_loc=
   fi
   prim_return_value 0 $close_return_loc
-  return
 }
 
 # Used to implement the read instruction.

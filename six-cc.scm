@@ -10,7 +10,14 @@
 ; Useful for debugging only
 (define disable-save-restore-vars? #f)
 ; Disable for faster execution of programs that allocate a lot of memory
-(define initialize-memory-when-alloc #t)
+(define initialize-memory-when-alloc? #t)
+; free function is noop or unsets the variables?
+; Some shell implementations get significantly slower when the environment is large
+; so it can be useful to have free be a NOOP or have it unset variables depending
+; of the shell that's used.
+; Fast shells: ksh, bash
+; Slow shells: dash, zsh
+(define free-unsets-variables? #t)
 ; Inline += -= operations?
 (define inline-inplace-arithmetic-ops #t)
 ; Local variables start with _?
@@ -218,6 +225,10 @@
     ; Variables storing the argc/argv during program initialization (before main function call)
     argc_for_main
     argv_for_main
+    ; Determine if malloc initializes the memory it allocates to 0
+    STRICT_MODE
+    ; Determine if malloc initializes the memory it allocates to 0
+    FREE_UNSETS_VARS
     ; Runtime library variables
     strict_alloc
     make_argv
@@ -1146,7 +1157,8 @@
   (unlines
     "set -e -u"
     ""
-    (if initialize-memory-when-alloc "STRICT_MODE=1" "STRICT_MODE=0")
+    (if initialize-memory-when-alloc? "STRICT_MODE=1" "STRICT_MODE=0")
+    (if free-unsets-variables? "FREE_UNSETS_VARS=1" "FREE_UNSETS_VARS=0")
     ""
     "# Load runtime library and primitives"
     ". ./runtime.sh"
@@ -1311,12 +1323,14 @@
 ; Code generation options:
 ; - function-return-method: addr | variable
 ; - initialize-memory-when-alloc: boolean
+; - free-unsets-variables: boolean
 ; - inline-inplace-arithmetic-ops: boolean
 ; - prefix-local-vars: boolean
 ; - inline-string-init: boolean
 ; - init-string-precompute-hash: boolean
 ; - callee-save: boolean
 ; - arithmetic-conditions: boolean
+; - arithmetic-assignment: boolean
 (define (parse-cmd-line args)
   (let loop ((args args) (files '()))
     (if (null? args)
@@ -1333,7 +1347,10 @@
                   (set! inline-inplace-arithmetic-ops (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--initialize-memory-when-alloc")))
-                  (set! initialize-memory-when-alloc (not (equal? "false" (car rest))))
+                  (set! initialize-memory-when-alloc? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--free-unsets-variables")))
+                  (set! free-unsets-variables? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--prefix-local-vars")))
                   (set! prefix-local-vars (not (equal? "false" (car rest))))
