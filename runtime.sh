@@ -57,7 +57,7 @@ unpack_string() {
     unpack_string_char="${unpack_string_char%"$unpack_string_rest"}" # remove all but first char
     unpack_string_src_buf="${unpack_string_src_buf#?}"               # remove the current char from $src_buf
     char_to_int "$unpack_string_char"
-    push_data "$char_to_int_code"
+    push_data $char_to_int_code
   done
   push_data 0
 }
@@ -91,10 +91,10 @@ unpack_escaped_string() {
         '$') char_to_int_code=36 ;; # Not in C, used to escape variable expansion between double quotes
         *) echo "invalid escape in string: $unpack_string_char"; exit 1 ;;
       esac
-      push_data "$char_to_int_code"
+      push_data $char_to_int_code
     else
       char_to_int "$unpack_string_char"
-      push_data "$char_to_int_code"
+      push_data $char_to_int_code
     fi
   done
   push_data 0
@@ -103,15 +103,15 @@ unpack_escaped_string() {
 # Convert a VM string reference to a Shell string.
 # $res is set to the result, and $len is set to the length of the string.
 pack_string() {
-  pack_string_addr="$1";  shift
+  pack_string_addr=$1; shift
   pack_string_max_len=100000000
   pack_string_delim=0
   pack_string_len=0
   pack_string_res=""
-  if [ $# -ge 1 ] ; then pack_string_delim="$1" ; shift ; fi # Optional end of string delimiter
-  if [ $# -ge 1 ] ; then pack_string_max_len="$1" ; shift ; fi # Optional max length
-  while [ "$((_$pack_string_addr))" -ne $pack_string_delim ] && [ $pack_string_max_len -gt $pack_string_len ] ; do
-    pack_string_char="$((_$pack_string_addr))"
+  if [ $# -ge 1 ] ; then pack_string_delim=$1   ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then pack_string_max_len=$1 ; shift ; fi # Optional max length
+  while [ $((_$pack_string_addr)) -ne $pack_string_delim ] && [ $pack_string_max_len -gt $pack_string_len ] ; do
+    pack_string_char=$((_$pack_string_addr))
     pack_string_addr=$((pack_string_addr + 1))
     pack_string_len=$((pack_string_len + 1))
     case $pack_string_char in
@@ -123,15 +123,15 @@ pack_string() {
 
 # Emit a C-string line by line so that whitespace isn't mangled
 print_string() {
-  print_string_addr="$1";  shift
+  print_string_addr=$1; shift
   print_string_max_len=100000000
   print_string_delim=0
   print_string_len=0
   print_string_acc=""
-  if [ $# -ge 1 ] ; then print_string_delim="$1" ; shift ; fi # Optional end of string delimiter
-  if [ $# -ge 1 ] ; then print_string_max_len="$1" ; shift ; fi # Optional max length
-  while [ "$((_$print_string_addr))" -ne $print_string_delim ] && [ $print_string_max_len -gt $print_string_len ] ; do
-    print_string_char="$((_$print_string_addr))"
+  if [ $# -ge 1 ] ; then print_string_delim=$1   ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then print_string_max_len=$1 ; shift ; fi # Optional max length
+  while [ $((_$print_string_addr)) -ne $print_string_delim ] && [ $print_string_max_len -gt $print_string_len ] ; do
+    print_string_char=$((_$print_string_addr))
     print_string_addr=$((print_string_addr + 1))
     print_string_len=$((print_string_len + 1))
     case $print_string_char in
@@ -139,7 +139,7 @@ print_string() {
         printf "%s\n" "$print_string_acc"
         print_string_acc="" ;;
       *)
-        int_to_char "$print_string_char"
+        int_to_char $print_string_char
         print_string_acc="$print_string_acc$int_to_char_char" ;;
     esac
   done
@@ -357,7 +357,7 @@ defstr() {
   defstr_str=$2
 
   set +u # Necessary to allow $defstr_return_var to be empty
-  if [ "$(($defstr_return_var))" -eq 0 ]; then
+  if [ $(($defstr_return_var)) -eq 0 ]; then
     unpack_escaped_string "$defstr_str"
     : $(( $defstr_return_var = unpack_string_addr ))
   fi
@@ -403,29 +403,29 @@ _printf() {
   printf_fmt_ptr=$1; shift
   printf_mod=0
   while [ "$((_$printf_fmt_ptr))" -ne 0 ] ; do
-    printf_head="$((_$printf_fmt_ptr))"
-    int_to_char "$printf_head"; printf_head_char=$int_to_char_char
+    printf_head=$((_$printf_fmt_ptr))
+    int_to_char $printf_head; printf_head_char=$int_to_char_char
     printf_fmt_ptr=$((printf_fmt_ptr + 1))
     if [ $printf_mod -eq 1 ] ; then
       case $printf_head_char in
         'd') # 100 = 'd' Decimal integer
           printf_imm=$1; shift
-          printf "%d" "$printf_imm"
+          printf "%d" $printf_imm
           ;;
         'c') # 99 = 'c' Character
           printf_char=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          int_to_char "$printf_char"
+          int_to_char $printf_char
           printf "%c" "$int_to_char_char"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
           printf_imm=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          printf "%x" "$printf_imm"
+          printf "%x" $printf_imm
           ;;
         's') # 115 = 's' String
           printf_str_ref=$1; shift
-          print_string "$printf_str_ref"
+          print_string $printf_str_ref
           ;;
         '.') # String with length. %.*s will print the first 4 characters of the string
           pack_string $printf_fmt_ptr 0 2 # Read next 2 characters
@@ -449,7 +449,7 @@ _printf() {
           printf_fmt_ptr=$((printf_fmt_ptr + pack_string_len))
           printf_str_len=$pack_string_res
 
-          printf_head="$((_$printf_fmt_ptr))"
+          printf_head=$((_$printf_fmt_ptr))
           printf_head_char=$(printf "\\$(printf "%o" "$printf_head")") # Decode
           printf_fmt_ptr=$((printf_fmt_ptr + 1))
           if [ "$printf_head_char" = 's' ]; then
@@ -480,7 +480,6 @@ _printf() {
       esac
     fi
   done
-  # printf "%s" "$str"
 }
 
 # We represent file descriptors as strings. That means that modes and offsets do not work.
@@ -492,7 +491,7 @@ _open() {
   else
     open_return_loc=
   fi
-  pack_string "$1"
+  pack_string $1
   unpack_string "$pack_string_res"
   prim_return_value $unpack_string_addr $open_return_loc
 }
@@ -506,7 +505,7 @@ _read() {
   read_fd=$1
   read_buf=$2
   read_count=$3
-  pack_string "$read_fd"
+  pack_string $read_fd
   read_n_char $read_count $read_buf < "$pack_string_res" # We don't want to use cat because it's not pure Shell
   prim_return_value $read_n_char_len $read_return_loc
 }
@@ -527,7 +526,7 @@ read_n_char() {
   read_n_char_count=$1
   read_n_char_buf_ptr=$2
   read_n_char_len=0
-  while [ "$read_n_char_count" != "0" ] ; do
+  while [ $read_n_char_count -ne 0 ] ; do
     get_char
     case "$get_char_char" in
       EOF) break ;;
@@ -550,7 +549,7 @@ _fopen() {
   else
     fopen_return_loc=
   fi
-  pack_string "$1"
+  pack_string $1
 
   fopen_fd=$ALLOC                          # Allocate new FD
   : $((_$((fopen_fd)) = 0))                # Initialize cursor to 0
@@ -582,7 +581,7 @@ _fread() {
   fread_count=$3
   fread_len=0
   fread_fd_buffer=$((fread_fd + 1)) # Buffer starts at fd + 1
-  while [ "$fread_count" != "0" ] ; do
+  while [ $fread_count -ne 0 ] ; do
     : $((_$fread_buf=_$fread_fd_buffer))
     : $((fread_buf += 1))
     : $((fread_fd_buffer += 1))
@@ -701,10 +700,10 @@ _show_heap() {
   show_heap_elided=0
   echo "    Heap:"
   while [ $show_heap_ix -lt $ALLOC ]; do
-    show_heap_location="_$show_heap_ix"
+    show_heap_location=_$show_heap_ix
     # Safe way of checking if the variable is defined or not. With +u, we could also check if it's empty.
     eval "if [ -z \${$show_heap_location+x} ]; then show_heap_undefined=1; else show_heap_undefined=0; fi"
-    if [ "$show_heap_undefined" -eq 1 ]; then
+    if [ $show_heap_undefined -eq 1 ]; then
       show_heap_elided=1
     else
       if [ "$show_heap_elided" -eq 1 ]; then
@@ -715,7 +714,7 @@ _show_heap() {
       show_heap_ascii=$((_$show_heap_ix))
       show_heap_char=""
       if [ $show_heap_ascii -ge 31 ] && [ $show_heap_ascii -le 127 ] ; then
-        int_to_char "$show_heap_ascii"
+        int_to_char $show_heap_ascii
         show_heap_char=$int_to_char_char
       fi
       echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"

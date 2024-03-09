@@ -1037,7 +1037,7 @@
     ((six.identifier)
       (if wrapped
         (env-var ctx ast)
-        (wrap-in-condition-if-needed "\"$" (env-var ctx ast arithmetic-assignment?) "\"")))
+        (wrap-in-condition-if-needed "$" (env-var ctx ast arithmetic-assignment?) "")))
     ((six.x&&y |six.x\|\|y|)
       ; Note, this could also be compiled in a single [ ] block using -a and -o,
       ; which I think are POSIX compliant but are deprecated.
