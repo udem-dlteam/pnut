@@ -94,10 +94,14 @@
   (table-ref (ctx-loc-env ctx) ident #f))
 
 (define (env-var ctx ident #!optional (prefixed-by-dollar #f))
-  (if (number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
-    (string-append (if (not prefixed-by-dollar) "$" "") (number->string (cadr ident)))
-    (if (table-ref (ctx-loc-env ctx) ident #f)
-      (format-var ident)
+  (cond
+    ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
+      (string-append (if (not prefixed-by-dollar) "$" "") (number->string (cadr ident))))
+    ((equal? '_ (cadr ident))
+      "_")
+    ((table-ref (ctx-loc-env ctx) ident #f)
+      (format-var ident))
+    (else
       (global-ref ident))))
 
 (define (global-var ident)
@@ -217,8 +221,7 @@
 (define reserved-variable-prefix
   (map symbol->string
   '(result_loc   ; Variable storing the variable name where to return the value from a function call
-    dummy_loc    ; Location used when returning a value from a function call that's not used
-    str_         ; Prefix of variables used to store the address of a string
+    str_         ; Prefix of variables used to store the address of a string literals
     ; Special variable for zsh. If we initialize the local variables before
     ; handling $# $@, writing to argv will overwrite the arguments those values.
     argv
@@ -616,7 +619,7 @@
             (ctx-add-glo-decl!
               ctx
               (list (string-concatenate (cons (function-name name)
-                                          (cons (env-var ctx (or assign_to '(identifier dummy_loc)))
+                                          (cons (env-var ctx (or assign_to '(six.identifier _)))
                                           code-params))
                                         " ")))
           (ctx-add-glo-decl! ctx (list call-code))))
@@ -1234,14 +1237,14 @@
                         (string-concatenate (map (lambda (l) (format-var l)) local-vars) " = ")
                         " = 0 ))"))))
     ""
-    (string-append result_loc_var "=_dummy_loc # Dummy result location")
+    (string-append result_loc_var "=_ # Dummy result location")
     ""
     ))
 
 (define (runtime-postlude)
   (string-append
    (function-name '(six.identifier main))
-   (if (equal? 'addr (car function-return-method)) " _dummy_loc" "")
+   (if (equal? 'addr (car function-return-method)) " _" "")
    " $argc_for_main"
    " $argv_for_main"))
 
