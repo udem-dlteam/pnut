@@ -25,9 +25,6 @@
 ; Unpack strings where they are used instead of at program initialization
 ; This can slow down programs because the initialization may be done multiple times
 (define inline-string-init #t)
-; Pass precomputed hash to init_string as an optimization? Speeds up compiling
-; c4 by c4-for-six.sh by 7% for ksh.
-(define init-string-precompute-hash? #t)
 ; If it's the caller or callee that should save local variables
 (define callee-save? #t)
 ; Always use arithmetic expansion to do if/while conditions?
@@ -45,8 +42,9 @@
 (define-type ctx
   glo-decls
   loc-env
-  all-variables ; Set similated using a table
-  data ; The data section
+  all-variables ; Set represented as a table
+  literals      ; Literals that have been assigned to a variable
+  data          ; The data section
   level
   tail?)
 
@@ -120,20 +118,12 @@
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
 
-(define (djb2 str)
-  (let loop ((hash 5381) (chars (string->list str)))
-    (if (null? chars)
-      hash
-      (loop (bitwise-and #x7fffffff (+ (arithmetic-shift hash 5) hash (char->integer (car chars))))
-            (cdr chars)))))
-
-(define (init_string_code var_str str)
+(define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
     (string-append
-      "init_string "
+      "defstr "
       var_str
-      (if init-string-precompute-hash? (string-append " " (number->string (djb2 escaped-str))) "")
-      " '" escaped-str "'")))
+      " \"" escaped-str "\"")))
 
 (define (comp-glo-decl ctx ast)
   (case (car ast)
@@ -242,8 +232,7 @@
     print_string
     char_to_int
     int_to_char
-    init_string
-    djb2
+    defstr
     ; Primitives
     malloc
     printf
@@ -712,7 +701,7 @@
 ; For function calls, this function replaces them with unique identifiers and returns a list of the replaced function calls and their new identifiers.
 ; For pre/post-increments/decrements, we map them to a pre-side-effect and replace with the corresponding operation.
 ; Note that pre/post-increments/decrements of function calls are not supported.
-(define (handle-side-effects ast)
+(define (handle-side-effects ctx ast)
   (define replaced-fun-calls '())
   (define pre-side-effect '())
   (define literal-inits (make-table))
@@ -745,7 +734,7 @@
           (if (and inline-string-init
                   (string? val)
                   (not (equal? 1 (string-length val)))) ; We don't inline single character strings because those are interpreted as characters
-            (let* ((string-variable (string->variable-name val))
+            (let* ((string-variable (string->variable-name ctx val))
                    (table-val (table-ref literal-inits string-variable #f)))
               ; FIXME: If a string is passed to a function multiple times, this caching mechanism won't work because
               ; function arguments are processed separately.
@@ -872,11 +861,11 @@
   (define (comp-literal-init literal-init)
     (let ((id (car literal-init))
           (val (cdr literal-init)))
-      (ctx-add-glo-decl! ctx (init_string_code (env-var ctx id) val))))
+      (ctx-add-glo-decl! ctx (def_str_code (env-var ctx id) val))))
   (for-each comp-literal-init literal-inits))
 
 (define (comp-rvalue ctx ast context-tag)
-  (let* ((side-effects-res (handle-side-effects ast))
+  (let* ((side-effects-res (handle-side-effects ctx ast))
          (new-ast (car side-effects-res))
          (fun-calls-to-replace (cadr side-effects-res))
          (pre-side-effects (caddr side-effects-res))
@@ -1136,7 +1125,7 @@
      (error "unknown rvalue" ast))))
 
 (define (comp-program ast)
-  (let* ((ctx (make-ctx '() (make-table) (make-table) '() 0 #f)))
+  (let* ((ctx (make-ctx '() (make-table) (make-table) (make-table) '() 0 #f)))
     (comp-glo-decl-list ctx ast)
     (codegen ctx)))
 
@@ -1250,47 +1239,30 @@
 
 (define escape-string-table
   (list->table '((#\alarm    . "\\a")
-                (#\backspace . "\\b")
-                (#\page      . "\\f")
-                (#\newline   . "\\n")
-                (#\return    . "\\r")
-                (#\tab       . "\\t")
-                (#\vtab      . "\\v")
-                (#\\         . "\\\\")
-                (#\"         . "\\\"")
-                (#\'         . "\\\'")
-                (#\?         . "\\\?"))))
+                 (#\backspace . "\\b")
+                 (#\page      . "\\f")
+                 (#\newline   . "\\n")
+                 (#\return    . "\\r")
+                 (#\tab       . "\\t")
+                 (#\vtab      . "\\v")
+                 (#\\         . "\\\\\\\\")
+                 (#\"         . "\\\"")
+                 (#\'         . "\\\'")
+                 (#\?         . "\\\?")
+                 (#\$         . "\\$")
+                 )))
 
 (define (escape-string str)
   (define (escape-char c) (table-ref escape-string-table c (list->string (list c))))
   (string-concatenate (map escape-char (string->list str))))
 
-(define (string->variable-name str)
-  (define (alphabetize c)
-    (if (or (char-alphabetic? c) (char-numeric? c)) c
-    (if (member c '(#\space #\newline #\, #\_ #\- #\( #\) #\[ #\] #\% #\* #\.)) #\_
-    ; (if (member c '(#\newline)) "_newline_"
-    #f)))
-
-  (define (remove-consecutive-underscores xs underscore-before?)
-    (if (null? xs)
-      '()
-      (if (and underscore-before? (equal? (car xs) #\_))
-        (remove-consecutive-underscores (cdr xs) #t)
-        (cons (car xs)
-              (remove-consecutive-underscores (cdr xs) (equal? (car xs) #\_))))))
-
-  (let* ((len (min (string-length str) 20))
-         (first-n (take (string->list str) len))
-         (alphabetized (filter identity (map alphabetize first-n)))
-         (to-var (lambda (c) (list 'six.identifier (string->symbol (list->string (remove-consecutive-underscores c #f)))))))
-
-    (if (null? alphabetized)
-      (error "string->variable-name: string map to empty string" str)
-      (to-var (append (string->list "str_") alphabetized)))))
-      ; Optionaly prefix str?
-      ; (if (member (car alphabetized) '(#\_ 0 1 2 3 4 5 6 7 8 9))
-      ;   (to-var alphabetized)))))
+(define (string->variable-name ctx str)
+  (let ((var-name (table-ref (ctx-literals ctx) str #f)))
+    (if var-name
+      var-name
+      (let ((new-var-name `(six.identifier ,(string->symbol (string-append "str_" (number->string (table-length (ctx-literals ctx))))))))
+        (table-set! (ctx-literals ctx) str new-var-name)
+        new-var-name))))
 
 ; Initialize the heap, allocating memory for hardcoded strings and arrays.
 (define (heap-prelude ctx)
@@ -1304,7 +1276,7 @@
                         "unpack_array " (string-concatenate (map number->string datum) " ")
                         "; __" (number->string ix) "=$unpack_array_addr"))
                     ((string? datum)
-                      (init_string_code (string-append "__" (number->string ix)) datum))))
+                      (def_str_code (string-append "__" (number->string ix)) datum))))
           (reverse (ctx-data ctx))
           (iota (length (ctx-data ctx)))))
       "")

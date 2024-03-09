@@ -88,7 +88,8 @@ unpack_escaped_string() {
         '"') char_to_int_code=34 ;;
         "'") char_to_int_code=39 ;;
         '?') char_to_int_code=63 ;;
-        *) syntax_error "invalid escape in string" ;;
+        '$') char_to_int_code=36 ;; # Not in C, used to escape variable expansion between double quotes
+        *) echo "invalid escape in string: $unpack_string_char"; exit 1 ;;
       esac
       push_data "$char_to_int_code"
     else
@@ -347,49 +348,20 @@ int_to_char() {
   esac
 }
 
-# This may be a bit slow if used in a loop.
-# This function can be called in 2 ways:
-# $1 = variable to assign address of string, $2 = string
-# $1 = variable to assign address of string, $2 = hash, $3 = string
-# Passing the hash makes it faster, but introduces "magic" numbers in the generated code.
-init_string() {
+# Define a string, and return a reference to it in $defstr_return_var.
+# If $defstr_return_var is already defined, return the reference to the string in $defstr_return_var.
+# Note that it's up to the caller of defstr to ensure that for each variable, there is only one unique string.
+defstr() {
   # Check if we are passing a hash
-  if [ $# -eq 2 ]; then
-    djb2 "$2"
-    init_string_return_var=$1
-    init_string_hash=$djb2_hash
-    init_string_str=$2
-  else
-    init_string_return_var=$1
-    init_string_hash=$2
-    init_string_str=$3
-  fi
+  defstr_return_var=$1
+  defstr_str=$2
 
-  # FIXME: Replace eval call with check != 0 when `set +u``
-  eval "if [ -z \${init_string_$init_string_hash+x} ]; then init_string_undefined=1; else init_string_undefined=0; fi"
-  if [ "$init_string_undefined" -eq 1 ]; then
-    unpack_escaped_string "$init_string_str"
-    : $(( init_string_$((init_string_hash)) = unpack_string_addr ))
-    : $(( $init_string_return_var = unpack_string_addr ))
-  else
-    : $(( $init_string_return_var = init_string_$((init_string_hash)) ))
+  set +u # Necessary to allow $defstr_return_var to be empty
+  if [ "$(($defstr_return_var))" -eq 0 ]; then
+    unpack_escaped_string "$defstr_str"
+    : $(( $defstr_return_var = unpack_string_addr ))
   fi
-}
-
-# djb2 hash algorithm from http://www.cse.yorku.ca/~oz/hash.html
-# The hash is truncated to 32 bits to fit in most Shell integers.
-djb2() {
-  djb2_str=$1
-  djb2_hash=5381
-  djb2_c=0
-  while [ -n "$djb2_str" ] ; do
-    djb2_char="$djb2_str"                 # remember current buffer
-    djb2_rest="${djb2_str#?}"             # remove the first char
-    djb2_char="${djb2_char%"$djb2_rest"}" # remove all but first char
-    djb2_str="${djb2_str#?}"              # remove the current char from $src_buf
-    char_to_int "$djb2_char"
-    : $(( djb2_hash = (((djb2_hash << 5) + djb2_hash) + char_to_int_code) & 2147483647 )) # 2^31 - 1. Not 2^32 - 1 because some shells use signed 32 bits.
-  done
+  set -u
 }
 
 # Primitives
