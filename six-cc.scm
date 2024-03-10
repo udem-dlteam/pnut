@@ -44,9 +44,25 @@
   loc-env
   all-variables ; Set represented as a table
   literals      ; Literals that have been assigned to a variable
+  enums         ; Enums that have been defined.
+  structs       ; Structures that have been defined
   data          ; The data section
   level
   tail?)
+
+
+; (make-ctx '() (make-table) (make-table) (make-table) (make-table) (make-table) '() 0 #f)))
+(define (empty-ctx)
+  (make-ctx
+    '() ; global declarations
+    (make-table) ; local environment
+    (make-table) ; all variables
+    (make-table) ; literals
+    (make-table) ; enums
+    (make-table) ; structs
+    '() ; data
+    0 ; level
+    #f)) ; tail?
 
 (define (ctx-add-glo-decl! ctx decl)
   (ctx-glo-decls-set! ctx (cons (cons decl (ctx-level ctx)) (ctx-glo-decls ctx))))
@@ -167,7 +183,7 @@
         ((enum)
           (comp-glo-define-enum ctx ast))
         ((struct)
-          (error "Structures not yet supported"))
+          (comp-glo-define-struct ctx ast))
         (else
           (comp-glo-define-procedure ctx ast))))
     (else
@@ -202,40 +218,111 @@
                (list "defglo_pointable " (global-var name) " " val)
                (list "defglo " (global-var name) " " val)))))))
 
-; An enum is defined with a function without parameters returning a value of type `enum`
-; and that has a body containing only assignments or identifiers.
+; An enum is defined with a function without parameters returning a value of
+; type `enum` and that has a body containing only assignments or identifiers.
 ; Here's an example: enum MyEnum() { A = 128; B; C; }
 (define (comp-glo-define-enum ctx ast)
+  (define (enum-values lst)
+    (let loop ((lst lst) (counter 0) (new-local-vars '()))
+      (if (pair? lst)
+        (let ((decl (car lst)))
+          (case (car decl)
+            ((six.x=y)
+              (let ((new-counter (cadr (caddr decl))))
+                (loop (cdr lst) (+ new-counter 1) (cons (cons (cadadr decl) new-counter) new-local-vars))))
+            ((six.identifier)
+              (loop (cdr lst) (+ counter 1) (cons (cons (cadr decl) counter) new-local-vars)))
+            (else
+              (error "Struct definition can only contain variable declarations. Got:" decl))))
+        (reverse new-local-vars))))
+
   (let* ((name (cadr ast))
          (proc (caddr ast))
          (parameters (caddr proc))
          (body (cdar (cdddr proc)))
-         (enum-value-counter 0))
-    (if (not (null? parameters))
-      (error "enums must have no parameters" proc))
+         (values (enum-values body)))
 
-    ; Simple comment
+    (if (not (null? parameters))
+      (error "Enums can't have parameters" proc))
+
+    ; Check that there are no conflicts with other enums
+    (for-each
+      (lambda (enum)
+        (let ((val (table-ref (ctx-enums ctx) (car enum) #f)))
+          (if (and val (not (equal? val (cdr enum))))
+            (error "Enum is already defined" enum))))
+      values)
+
+    ; Check that there are no conflicts with structs
+    (for-each
+      (lambda (enum)
+        (let ((val (table-ref (ctx-structs ctx) (car enum) #f)))
+          (if (and val (not (equal? val (cdr enum))))
+            (error "Enum conflicts with struct field" enum))))
+      values)
+
+    (ctx-enums-set! ctx (table-merge (list->table values) (ctx-enums ctx)))
+
     (ctx-add-glo-decl!
       ctx
       (list "# Defining enum " (cdr name)))
 
     (ctx-add-glo-decl!
       ctx
-      (map
-        (lambda (decl)
+      (map (lambda (decl) (list "_" (car decl) "=" (number->string (cdr decl)) " ")) values))
+
+    (ctx-add-glo-decl! ctx '())))
+
+; An struct is defined with a function without parameters returning a value of
+; type `struct` and that has a body containing only assignments or identifiers.
+; Here's an example: struct MyStruct() { int a; int b; char c; }
+(define (comp-glo-define-struct ctx ast)
+  (define (enum-values lst)
+    (let loop ((lst lst) (counter 0) (new-local-vars '()))
+      (if (pair? lst)
+        (let ((decl (car lst)))
           (case (car decl)
-            ((six.x=y)
-              (let ((new-value (cadr (caddr decl))))
-                (set! enum-value-counter (+ new-value 1))
-                (list "_" (cdadr decl) "=" (number->string new-value) " ")))
-
-            ((six.identifier)
-              (set! enum-value-counter (+ enum-value-counter 1))
-              (list "_" (cdr decl) "=" (number->string (- enum-value-counter 1)) " "))
-
+            ; (six.define-variable (six.identifier val) void () #f)
+            ((six.define-variable)
+              (loop (cdr lst) (+ counter 1) (cons (cons (cadadr decl) counter) new-local-vars)))
             (else
-              (error "Enum definition can only contain identifiers or assigments. Got:" decl))))
-        body))
+              (error "Struct definition can only contain variable declarations. Got:" decl))))
+        (reverse new-local-vars))))
+
+  (let* ((name (cadr ast))
+         (proc (caddr ast))
+         (parameters (caddr proc))
+         (body (cdar (cdddr proc)))
+         (values (enum-values body)))
+
+    (if (not (null? parameters))
+      (error "Struct can't have parameters" proc))
+
+    ; Check that there aren' no conflicts with enums
+    (for-each
+      (lambda (struct)
+        (let ((val (table-ref (ctx-enums ctx) (car struct) #f)))
+          (if (and val (not (equal? val (cdr struct))))
+            (error "Struct field conflicts with enum" struct))))
+      values)
+
+    ; Check that there are no conflicts with other structs
+    (for-each
+      (lambda (struct)
+        (let ((val (table-ref (ctx-structs ctx) (car struct) #f)))
+          (if (and val (not (equal? val (cdr struct))))
+            (error "Struct field is already defined" struct))))
+      values)
+
+    (ctx-structs-set! ctx (table-merge (list->table values) (ctx-structs ctx)))
+
+    (ctx-add-glo-decl!
+      ctx
+      (list "# Defining struct fields of " (cdr name)))
+
+    (ctx-add-glo-decl!
+      ctx
+      (map (lambda (decl) (list "_" (car decl) "=" (number->string (cdr decl)) " ")) values))
 
     (ctx-add-glo-decl! ctx '())))
 
@@ -675,7 +762,7 @@
   (let ((lhs (cadr ast))
         (rhs (caddr ast)))
     (case (car lhs)
-      ((six.identifier six.index six.*x six.**x)
+      ((six.identifier six.index six.*x six.**x six.arrow)
        (case (car rhs)
         ((six.call)
           (comp-fun-call ctx (cdr rhs) lhs))
@@ -718,6 +805,8 @@
     ((six.**x)
      ; Not sure if comp-rvalue is right here
      (string-append "_$(( _$((" (comp-rvalue ctx (cadr ast) '(index-lvalue)) ")) ))"))
+    ((six.arrow)
+     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (env-var ctx (caddr ast)) "))"))
     (else
      (error "unknown lvalue" ast))))
 
@@ -781,7 +870,7 @@
             ast)))
       ((six.list six.identifier six.internal-identifier six.-x)
         ast)
-      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.x=y)
+      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.arrow six.x=y)
         (list (car ast)
               (go (cadr ast))
               (go (caddr ast))))
@@ -852,7 +941,7 @@
           ast))
     ((six.literal six.list)
       ast)
-    ((six.call six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.x+=y six.x=y)
+    ((six.call six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.arrow six.x+=y six.x=y)
       (list (car ast)
             (replace-identifier (cadr ast) old new)
             (replace-identifier (caddr ast) old new)))
@@ -1128,6 +1217,8 @@
                       (comp-rvalue-go ctx (cadddr ast) #t #f)))
     ((six.index)
      (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f) "))"))
+    ((six.arrow)
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f) "))"))
     ((six.++x)
      (wrap-if-needed #t (comp-lvalue ctx (cadr ast)) " += 1"))
     ((six.--x)
@@ -1157,7 +1248,7 @@
      (error "unknown rvalue" ast))))
 
 (define (comp-program ast)
-  (let* ((ctx (make-ctx '() (make-table) (make-table) (make-table) '() 0 #f)))
+  (let* ((ctx (empty-ctx)))
     (comp-glo-decl-list ctx ast)
     (codegen ctx)))
 
