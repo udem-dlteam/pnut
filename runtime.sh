@@ -2,19 +2,17 @@
 
 _NULL=0 # Null pointer, should not be modified. TODO: Make global-var replace NULL with 0?
 
-ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
-
 strict_alloc() {
-  if [ $FREE_UNSETS_VARS -eq 1 ]; then
-    : $((_$ALLOC = $1)) # Save allocation size
-    : $((ALLOC += 1))
+  if [ $__FREE_UNSETS_VARS -eq 1 ]; then
+    : $((_$__ALLOC = $1)) # Save allocation size
+    : $((__ALLOC += 1))
   fi
-  strict_alloc_res=$ALLOC
-  : $((ALLOC += $1))
+  strict_alloc_res=$__ALLOC
+  : $((__ALLOC += $1))
   # Need to initialize the memory to 0 or else `set -u` will complain
-  if [ $STRICT_MODE -eq 1 ]; then
+  if [ $__STRICT_MODE -eq 1 ]; then
     strict_alloc_ix=$strict_alloc_res
-    while [ $strict_alloc_ix -lt $ALLOC ]; do
+    while [ $strict_alloc_ix -lt $__ALLOC ]; do
       : $((_$strict_alloc_ix=0))
       : $((strict_alloc_ix += 1))
     done
@@ -35,12 +33,12 @@ make_argv() {
 }
 
 push_data() {
-  : $((_$ALLOC=$1))
-  : $((ALLOC += 1))
+  : $((_$__ALLOC=$1))
+  : $((__ALLOC += 1))
 }
 
 unpack_array() {
-  unpack_array_addr=$ALLOC
+  unpack_array_addr=$__ALLOC
   while [ $# -gt 0 ] ; do
     push_data $1
     shift
@@ -49,7 +47,7 @@ unpack_array() {
 
 # Push a Shell string to the VM heap. Returns a reference to the string in $addr.
 unpack_string() {
-  unpack_string_addr=$ALLOC
+  unpack_string_addr=$__ALLOC
   unpack_string_src_buf="$1"
   while [ -n "$unpack_string_src_buf" ] ; do
     unpack_string_char="$unpack_string_src_buf"                      # remember current buffer
@@ -64,7 +62,7 @@ unpack_string() {
 
 # See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences
 unpack_escaped_string() {
-  unpack_string_addr=$ALLOC
+  unpack_string_addr=$__ALLOC
   unpack_string_src_buf="$1"
   while [ -n "$unpack_string_src_buf" ] ; do
     unpack_string_char="$unpack_string_src_buf"                      # remember current buffer
@@ -387,7 +385,7 @@ _free() {
   else
     free_return_loc=
   fi
-  if [ $FREE_UNSETS_VARS -eq 1 ]; then
+  if [ $__FREE_UNSETS_VARS -eq 1 ]; then
     free_ptr=$1
     free_size=$((_$((free_ptr - 1)))) # Get size of allocation
     while [ $free_size -gt 0 ]; do
@@ -551,12 +549,12 @@ _fopen() {
   fi
   pack_string $1
 
-  fopen_fd=$ALLOC                          # Allocate new FD
-  : $((_$((fopen_fd)) = 0))                # Initialize cursor to 0
-  fopen_buffer=$((fopen_fd + 1))           # Buffer starts after cursor
+  fopen_fd=$__ALLOC                               # Allocate new FD
+  : $((_$((fopen_fd)) = 0))                       # Initialize cursor to 0
+  fopen_buffer=$((fopen_fd + 1))                  # Buffer starts after cursor
   read_all_char $fopen_buffer < "$pack_string_res"
   : $((_$((fopen_buffer + read_all_char_len))=0)) # Terminate buffer with NUL character
-  ALLOC=$((ALLOC + read_all_char_len + 2)) # Update ALLOC to the new end of the heap
+  __ALLOC=$((__ALLOC + read_all_char_len + 2))    # Update __ALLOC to the new end of the heap
   prim_return_value $fopen_fd $fopen_return_loc
 }
 
@@ -699,7 +697,7 @@ _show_heap() {
   show_heap_ix=1
   show_heap_elided=0
   echo "    Heap:"
-  while [ $show_heap_ix -lt $ALLOC ]; do
+  while [ $show_heap_ix -lt $__ALLOC ]; do
     show_heap_location=_$show_heap_ix
     # Safe way of checking if the variable is defined or not. With +u, we could also check if it's empty.
     eval "if [ -z \${$show_heap_location+x} ]; then show_heap_undefined=1; else show_heap_undefined=0; fi"
@@ -728,7 +726,7 @@ _show_arg_stack() {
   set +u
   show_arg_stack_ix=1
   echo "    Heap:"
-  while [ $show_arg_stack_ix -le $((SP + 1)) ]; do
+  while [ $show_arg_stack_ix -le $((__SP + 1)) ]; do
     eval "val=\$_data_$show_arg_stack_ix"
     echo "        _$show_arg_stack_ix = $val"
     : $((show_arg_stack_ix += 1))

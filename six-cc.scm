@@ -85,7 +85,7 @@
   ; Used to initialize them all at the beginning of the execution so
   ; save_loc_var doesn't crash when saving an unitialized variable.
   ; result_loc is always initialized, so we don't need to add it to the list.
-  (if (not (equal? (cadr ident) 'result_loc))
+  (if (not (equal? 'six.internal-identifier (car ident)))
     (table-set! (ctx-all-variables ctx) ident '())))
 
 (define (is-local-var ctx ident)
@@ -95,28 +95,59 @@
   (cond
     ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
       (string-append (if (not prefixed-by-dollar) "$" "") (number->string (cadr ident))))
-    ((equal? '__ (cadr ident)) ; We don't want to prefix __ with another _
-      "__")
     ((table-ref (ctx-loc-env ctx) ident #f)
-      (format-var ident))
+      (format-local-var ident))
     (else
+      (format-non-local-var ident))))
+
+(define (format-non-local-var ident)
+  (cond
+    ((equal? 'six.internal-identifier (car ident))
+      (internal-ref ident))
+    (else ; Everything else is global
       (global-ref ident))))
 
 (define (global-var ident)
-  (string-append "_" (symbol->string (cadr ident))))
+  (string+symbol "_" (cadr ident)))
 
 (define (global-ref ident)
   (if support-addr-of?
       (string-append "_$" (global-var ident))
       (global-var ident)))
 
-(define (format-var ident)
+(define (format-local-var ident)
   (if prefix-local-vars
-    (string-append "_" (symbol->string (cadr ident)))
+    (string+symbol "_" (cadr ident))
     (symbol->string (cadr ident))))
+
+(define (internal-ref ident)
+  (string+symbol "__" (cadr ident)))
 
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
+
+(define (string+symbol str sym)
+  (string-append str (symbol->string sym)))
+
+(define result-loc-ident       '(six.internal-identifier result_loc))
+(define no-result-loc-ident    '(six.internal-identifier ||))               ; || is empty symbol
+(define alloc-ident            '(six.internal-identifier ALLOC))
+(define argc-ident             '(six.internal-identifier argc_for_main))
+(define argv-ident             '(six.internal-identifier argv_for_main))
+(define sp-ident               '(six.internal-identifier SP))               ; Local variables stack pointer
+(define strict-mode-ident      '(six.internal-identifier STRICT_MODE))      ; If malloc initializes the memory it allocates to 0
+(define free-unsets-vars-ident '(six.internal-identifier FREE_UNSETS_VARS)) ; If free unsets variables or is NOP
+
+(define (make-string-ident ix)
+  `(six.internal-identifier ,(string->symbol (string-append "str_" (number->string ix)))))
+
+(define result-loc-var       (format-non-local-var result-loc-ident))
+(define alloc-var            (format-non-local-var alloc-ident))
+(define argc-var             (format-non-local-var argc-ident))
+(define argv-var             (format-non-local-var argv-ident))
+(define sp-var               (format-non-local-var sp-ident))
+(define strict-mode-var      (format-non-local-var strict-mode-ident))
+(define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
 
 (define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
@@ -210,19 +241,21 @@
 
 (define reserved-variable-prefix
   (map symbol->string
-  '(result_loc   ; Variable storing the variable name where to return the value from a function call
-    str_         ; Prefix of variables used to store the address of a string literals
-    ; Special variable for zsh. If we initialize the local variables before
+  '(; Special variable for zsh. If we initialize the local variables before
     ; handling $# $@, writing to argv will overwrite the arguments those values.
     argv
+    ; ### Variables starting with _ ###
+    ; Prefix of variables used to store the address of a string literals
+    ; __str_
     ; Variables storing the argc/argv during program initialization (before main function call)
-    argc_for_main
-    argv_for_main
+    ; __argc_for_main
+    ; __argv_for_main
     ; Determine if malloc initializes the memory it allocates to 0
-    STRICT_MODE
+    ; __STRICT_MODE
     ; Determine if malloc initializes the memory it allocates to 0
-    FREE_UNSETS_VARS
+    ; __FREE_UNSETS_VARS
     ; Runtime library variables
+    NULL
     strict_alloc
     make_argv
     push_data
@@ -306,21 +339,21 @@
         (if (equal? 'addr (car function-return-method))
           (begin
             (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-            (add-new-local-var ctx '(six.identifier result_loc) #t 1)
+            (add-new-local-var ctx result-loc-ident #t 1)
             (if callee-save? (save-local-variables ctx))
             (if (cadr function-return-method) ; return address is always passed?
               (begin
                 (ctx-add-glo-decl!
                   ctx
-                  (list (env-var ctx '(six.identifier result_loc))
+                  (list (format-non-local-var result-loc-ident)
                         "=\"$1\"; shift "
                         "# Remove result_loc param")))
               (begin
                 (ctx-add-glo-decl!
                   ctx
                   (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
-                        "then " (env-var ctx '(six.identifier result_loc)) "=$1; shift ; "
-                        "else " (env-var ctx '(six.identifier result_loc)) "= ; fi ;")))))
+                        "then " (format-non-local-var result-loc-ident) "=$1; shift ; "
+                        "else " (format-non-local-var result-loc-ident) "= ; fi ;")))))
           (begin
             (if callee-save? (save-local-variables ctx))))
 
@@ -451,13 +484,13 @@
          (let ((code-expr (comp-rvalue ctx (cadr ast) '(return))))
               (case (car function-return-method)
                 ((variable)
-                (ctx-add-glo-decl!
-                  ctx
-                  (list "_" (symbol->string (cadr function-return-method)) "=$((" code-expr "))")))
+                  (ctx-add-glo-decl!
+                    ctx
+                    (list "_" (symbol->string (cadr function-return-method)) "=$((" code-expr "))")))
                 ((addr)
-                (ctx-add-glo-decl!
-                  ctx
-                  (list "prim_return_value $((" code-expr ")) $" (env-var ctx '(six.identifier result_loc)))))
+                  (ctx-add-glo-decl!
+                    ctx
+                    (list "prim_return_value $((" code-expr ")) $" (format-non-local-var result-loc-ident))))
                 (else
                   (error "Unknown value return method" function-return-method)))))
     ; Seems broken in while loops
@@ -535,7 +568,7 @@
          (local-vars-to-save
           (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
          (local-vars-to-save-no-result-loc
-          (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
+          (filter (lambda (x) (not (member x (list assign_to result-loc-ident)))) initialized-local-vars)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
       (if (and (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
@@ -553,7 +586,7 @@
          (local-vars-to-save
           (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
          (local-vars-to-save-no-result-loc
-          (filter (lambda (x) (not (member x (list assign_to '(six.identifier result_loc))))) initialized-local-vars)))
+          (filter (lambda (x) (not (member x (list assign_to result-loc-ident)))) initialized-local-vars)))
 
       (if (and (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
         (ctx-add-glo-decl!
@@ -608,7 +641,7 @@
             (ctx-add-glo-decl!
               ctx
               (list (string-concatenate (cons (function-name name)
-                                          (cons (env-var ctx (or assign_to '(six.identifier __)))
+                                          (cons (env-var ctx (or assign_to no-result-loc-ident)) ;; '|| is empty symbol. Maps to __
                                           code-params))
                                         " ")))
           (ctx-add-glo-decl! ctx (list call-code))))
@@ -708,7 +741,7 @@
   (define contains-side-effect #f)
   (define (alloc-identifier)
     (let ((id (gensym)))
-      (list 'six.identifier id)))
+      (list 'six.internal-identifier id)))
 
   (define (go-inplace-arithmetic-op assigned-op inplace-arith #!optional (side-effect #f))
     (if inline-inplace-arithmetic-ops
@@ -736,8 +769,7 @@
                   (not (equal? 1 (string-length val)))) ; We don't inline single character strings because those are interpreted as characters
             (let* ((string-variable (string->variable-name ctx val))
                    (table-val (table-ref literal-inits string-variable #f)))
-              ; FIXME: If a string is passed to a function multiple times, this caching mechanism won't work because
-              ; function arguments are processed separately.
+              ; FIXME: This check can be removed because there are no collision by construction
               (if table-val
                 (if (equal? val table-val)
                   string-variable
@@ -747,7 +779,7 @@
                   string-variable))
               )
             ast)))
-      ((six.list six.identifier six.-x)
+      ((six.list six.identifier six.internal-identifier six.-x)
         ast)
       ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.x=y)
         (list (car ast)
@@ -814,7 +846,7 @@
 
 (define (replace-identifier ast old new)
   (case (car ast)
-    ((six.identifier)
+    ((six.identifier six.internal-identifier)
       (if (equal? ast old)
           new
           ast))
@@ -1034,7 +1066,7 @@
             (begin
               (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
               (string-append "$" (obj-ref (- (length (ctx-data ctx)) 1)))))))
-    ((six.identifier)
+    ((six.identifier six.internal-identifier)
       (if wrapped
         (env-var ctx ast)
         (wrap-in-condition-if-needed "$" (env-var ctx ast arithmetic-assignment?) "")))
@@ -1145,34 +1177,36 @@
   (string-concatenate (filter (lambda (p) (string? p)) lst) "\n"))
 
 (define (runtime-prelude ctx)
-  (define result_loc_var (format-var '(six.identifier result_loc)))
   (unlines
     "set -e -u"
     ""
-    (if initialize-memory-when-alloc? "STRICT_MODE=1" "STRICT_MODE=0")
-    (if free-unsets-variables? "FREE_UNSETS_VARS=1" "FREE_UNSETS_VARS=0")
+    (string-append strict-mode-var      "=" (if initialize-memory-when-alloc? "1" "0"))
+    (string-append free-unsets-vars-var "=" (if free-unsets-variables?        "1" "0"))
     ""
     "# Load runtime library and primitives"
     ". ./runtime.sh"
     ""
     "# Local variables"
     ""
-    "SP=0 # Note: Stack grows up, not down"
+    (string-append sp-var "=0 # Note: Stack grows up, not down")
     ""
     "save_loc_var() {"
     (if (equal? 'addr (car function-return-method))
       (unlines
-      "  : $((SP += 1))"
-      ; "  unset \"save_loc_var_$SP\" # For some reason, ksh doesn't like to overwrite the value"
+      (string-append
+      "  : $((" sp-var " += 1))")
       "  # We must use eval to set a string to a dynamic variable"
       (string-append
-      "  eval \"save_loc_var_$SP=\\$" result_loc_var "\"")))
+      "  eval \"save_loc_var_$" sp-var "=\\$" result-loc-var "\"")))
     "  while [ $# -gt 0 ]; do"
-    "    : $((SP += 1))"
-    "    : $((save_loc_var_$SP=$1))"
+    (string-append
+    "    : $((" sp-var " += 1))")
+    (string-append
+    "    : $((save_loc_var_$" sp-var "=$1))")
     "    shift"
     "  done"
     "}"
+    (string-append alloc-var "=1 # Starting heap at 1 because 0 is the null pointer.")
     ""
     "rest_loc_var() {"
     (if (equal? 'addr (car function-return-method))
@@ -1180,22 +1214,26 @@
       "  while [ $# -gt 0 ]; do"
       "    # Make we we don't overwrite the result_loc"
       (string-append
-      "    if [ $1 != \"$" result_loc_var "\" ]; then : $(($1=save_loc_var_$SP)); fi")
-      "    : $((SP -= 1))"
+      "    if [ $1 != \"$" result-loc-var "\" ]; then : $(($1=save_loc_var_$" sp-var ")); fi")
+      (string-append
+      "    : $((" sp-var " -= 1))")
       "    shift"
       )
       (unlines
       "  while [ $# -gt 0 ]; do"
-      "    : $(($1=save_loc_var_$SP))"
-      "    : $((SP -= 1))"
+      (string-append
+      "    : $(($1=save_loc_var_$" sp-var "))")
+      (string-append
+      "    : $((" sp-var " -= 1))")
       "    shift"
       ))
     "  done"
     (if (equal? 'addr (car function-return-method))
       (unlines
       (string-append
-      "  eval \"" result_loc_var "=\\$save_loc_var_$SP\"")
-      "  : $((SP -= 1))"
+      "  eval \"" result-loc-var "=\\$save_loc_var_$" sp-var "\"")
+      (string-append
+      "  : $((" sp-var " -= 1))")
       ))
     "}"
     ""
@@ -1207,14 +1245,14 @@
       (else
         (error "Unknown value return method" function-return-method)))
     ""
-    "defarr() { : $(($1 = ALLOC)) $((ALLOC = ALLOC+$2)) ; }"
+    (string-append "defarr() { : $(($1 = " alloc-var ")) $((" alloc-var " = " alloc-var "+$2)) ; }")
     (if support-addr-of?
-        "defglo_pointable() { : $(($1 = ALLOC)) $((_$ALLOC = $2)) $((ALLOC = ALLOC+1)) ; }"
+        (string-append "defglo_pointable() { : $(($1 = " alloc-var ")) $((_$" alloc-var " = $2)) $((" alloc-var " = " alloc-var "+1)) ; }")
         "defglo() { : $(($1 = $2)) ; }")
     ""
     "# Setup argc, argv"
-    "argc_for_main=$(($# + 1));"
-    "make_argv $argc_for_main \"$0\" $@; argv_for_main=make_argv_ptr;"
+    (string-append argc-var "=$(($# + 1))")
+    (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=make_argv_ptr")
     ; This must be after make_argv because if one of the local variable is argv,
     ; writing to it will overwrite the $@ array in zsh.
     (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
@@ -1223,19 +1261,21 @@
           ""
           "# Initialize local vars so set -u can be used"
           (string-append ": $(( "
-                        (string-concatenate (map (lambda (l) (format-var l)) local-vars) " = ")
+                        (string-concatenate (map (lambda (l) (format-local-var l)) local-vars) " = ")
                         " = 0 ))"))))
-    ""
-    (string-append result_loc_var "=__ # Dummy result location")
     ""
     ))
 
 (define (runtime-postlude)
-  (string-append
-   (function-name '(six.identifier main))
-   (if (equal? 'addr (car function-return-method)) " __" "")
-   " $argc_for_main"
-   " $argv_for_main"))
+  (unlines
+    ""
+    (string-append result-loc-var "=__ # Dummy result location")
+    ""
+    (string-append
+    (function-name '(six.identifier main))
+    (if (equal? 'addr (car function-return-method)) " __" "")
+    (string-append " $" argc-var)
+    (string-append " $" argv-var))))
 
 (define escape-string-table
   (list->table '((#\alarm    . "\\a")
@@ -1260,7 +1300,7 @@
   (let ((var-name (table-ref (ctx-literals ctx) str #f)))
     (if var-name
       var-name
-      (let ((new-var-name `(six.identifier ,(string->symbol (string-append "str_" (number->string (table-length (ctx-literals ctx))))))))
+      (let ((new-var-name (make-string-ident (table-length (ctx-literals ctx)))))
         (table-set! (ctx-literals ctx) str new-var-name)
         new-var-name))))
 
@@ -1279,6 +1319,7 @@
                       (def_str_code (string-append "__" (number->string ix)) datum))))
           (reverse (ctx-data ctx))
           (iota (length (ctx-data ctx)))))
+      ""
       "")
     ""))
 
