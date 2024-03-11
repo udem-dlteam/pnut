@@ -568,16 +568,16 @@
             (list "fi"))))))
     ((six.return)
      (if (pair? (cdr ast))
-         (let ((code-expr (comp-rvalue ctx (cadr ast) '(return))))
+         (let ((code-expr (comp-rvalue ctx (cadr ast) '(return #f))))
               (case (car function-return-method)
                 ((variable)
                   (ctx-add-glo-decl!
                     ctx
-                    (list "_" (symbol->string (cadr function-return-method)) "=$((" code-expr "))")))
+                    (list "_" (symbol->string (cadr function-return-method)) "=" code-expr )))
                 ((addr)
                   (ctx-add-glo-decl!
                     ctx
-                    (list "prim_return_value $((" code-expr ")) $" (format-non-local-var result-loc-ident))))
+                    (list "prim_return_value " code-expr " $" (format-non-local-var result-loc-ident))))
                 (else
                   (error "Unknown value return method" function-return-method)))))
     ; Seems broken in while loops
@@ -601,7 +601,7 @@
     rvalue)))
 
 (define (comp-loop-test ctx ast)
-  (let* ((rvalue-res (comp-rvalue ctx ast '(test)))
+  (let* ((rvalue-res (comp-rvalue ctx ast '(test-loop)))
          (rvalue (car rvalue-res))
          (pre-side-effects (comp-side-effects ctx (cdr rvalue-res))))
 
@@ -697,11 +697,11 @@
   (let* ((name (car ast))
          (params (cdr ast))
          (func-call-params (filter (lambda (p) (equal? (car p) 'six.call)) params))
+         (singleton? (lambda (lst) (and (pair? lst) (null? (cdr lst)))))
          (code-params
           (map (lambda (p)
-                  (let* ((params-after (or (member p func-call-params) '()))
-                         (params-after-count (max 0 (- (length params-after) 1))))
-                    (comp-rvalue ctx p `(argument ,params-after-count))))
+                  (let* ((is-last-call-param (singleton? (member p func-call-params))))
+                    (comp-rvalue ctx p `(argument ,is-last-call-param))))
                params))
          (call-code
           (string-concatenate (cons (function-name name) code-params) " "))
@@ -748,7 +748,11 @@
      (comp-assignment ctx ast))
     (else
      ; Since we don't assign the result of the expression and comp-rvalue does the side-effect, we can drop the result of comp-rvalue
-     (comp-rvalue ctx ast '(statement-expr)))))
+     (let ((rvalue-res (comp-rvalue ctx ast '(statement-expr))))
+      (if (car rvalue-res) ; If there are side-effects in the rvalue
+        (ctx-add-glo-decl!
+          ctx
+          (list ": " (cdr rvalue-res))))))))
 
 (define (comp-glo-decl-list ctx ast)
   (if (pair? ast)
@@ -768,22 +772,14 @@
           (comp-fun-call ctx (cdr rhs) lhs))
         (else
           (let* ((simple-assignment (and (equal? (car lhs) 'six.identifier) arithmetic-assignment?))
-                 (rvalue-res (comp-rvalue ctx rhs `(assignment ,(not simple-assignment))))
-                 (rvalue (car rvalue-res))
-                 (pre-side-effects (comp-side-effects ctx (cadr rvalue-res)))
-                 (literal-inits (caddr rvalue-res)))
-          (for-each
-            (lambda (p) (ctx-add-glo-decl! ctx p))
-            pre-side-effects)
-          (comp-literal-inits ctx literal-inits)
+                 (rvalue (comp-rvalue ctx rhs `(assignment ,(not simple-assignment)))))
           (if simple-assignment
             (ctx-add-glo-decl!
               ctx
               (list (comp-lvalue ctx lhs) "=" rvalue))
             (ctx-add-glo-decl!
               ctx
-              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))")))
-              )))
+              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))"))))))
 
        ; Mark the variable as used written to, used to determine if we need to save and restore it
        ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
@@ -798,13 +794,13 @@
     ((six.identifier)
      (env-var ctx ast))
     ((six.index)
-     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) '(index-lvalue)) "))"))
+     (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) '(index-lvalue #t)) "))"))
     ((six.*x)
      ; Not sure if comp-rvalue is right here
-     (string-append "_$((" (comp-rvalue ctx (cadr ast) '(index-lvalue)) "))"))
+     (string-append "_" (comp-rvalue ctx (cadr ast) '(index-lvalue #f))))
     ((six.**x)
      ; Not sure if comp-rvalue is right here
-     (string-append "_$(( _$((" (comp-rvalue ctx (cadr ast) '(index-lvalue)) ")) ))"))
+     (string-append "_$(( _" (comp-rvalue ctx (cadr ast) '(index-lvalue #f)) " ))"))
     ((six.arrow)
      (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (env-var ctx (caddr ast)) "))"))
     (else
@@ -815,7 +811,7 @@
     ((six.identifier)
      (env-var ctx ast))
     ((six.*x)
-     (string-append "_$((" (comp-rvalue ctx (cadr ast) '(index-lvalue)) "))"))
+     (string-append "_" (comp-rvalue ctx (cadr ast) '(index-lvalue #f))))
     (else
      (error "unknown array lvalue" ast))))
 
@@ -882,48 +878,30 @@
       ((six.!x six.*x six.**x)
         (list (car ast)
               (go (cadr ast))))
-      ((six.++x six.--x six.x++ six.x-- six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
-        (case (car ast)
-          ((six.++x)
-            (let ((new-op (go (cadr ast))))
-              (go-inplace-arithmetic-op new-op
-                                        `(six.++x ,new-op))))
-          ((six.--x)
-            (let ((new-op (go (cadr ast))))
-              (go-inplace-arithmetic-op new-op
-                                        `(six.--x ,new-op))))
-          ((six.x++)
-            ; We map post increments to a pre-increment and replace x++ with x - 1 to compensate
-            (let ((new-op (go (cadr ast))))
-              (go-inplace-arithmetic-op `(six.x-y ,new-op (six.literal 1))
-                                        `(six.x-y (six.++x ,new-op) (six.literal 1))
-                                        `(six.++x ,new-op))))
-          ((six.x--)
-            ; We map post decrements to a pre-decrement and replace x-- with x + 1 to compensate
-            (let ((new-op (go (cadr ast))))
-              (go-inplace-arithmetic-op `(six.x+y ,new-op (six.literal 1))
-                                        `(six.x+y (six.--x ,new-op) (six.literal 1))
-                                        `(six.--x ,new-op))))
-          ((six.x+=y)
-            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-              (go-inplace-arithmetic-op new-op1
-                                        `(six.x+=y ,new-op1 ,new-op2))))
-          ((six.x-=y)
-            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-              (go-inplace-arithmetic-op new-op1
-                                        `(six.x-=y ,new-op1 ,new-op2))))
-          ((six.x*=y)
-            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-              (go-inplace-arithmetic-op new-op1
-                                        `(six.x*=y ,new-op1 ,new-op2))))
-          ((six.x/=y)
-            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-              (go-inplace-arithmetic-op new-op1
-                                        `(six.x/=y ,new-op1 ,new-op2))))
-          ((six.x%=y)
-            (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
-              (go-inplace-arithmetic-op new-op1
-                                        `(six.x%=y ,new-op1 ,new-op2))))))
+      ((six.++x)
+        (let ((new-op (go (cadr ast))))
+          (go-inplace-arithmetic-op new-op
+                                    `(six.++x ,new-op))))
+      ((six.--x)
+        (let ((new-op (go (cadr ast))))
+          (go-inplace-arithmetic-op new-op
+                                    `(six.--x ,new-op))))
+      ((six.x++)
+        ; We map post increments to a pre-increment and replace x++ with x - 1 to compensate
+        (let ((new-op (go (cadr ast))))
+          (go-inplace-arithmetic-op `(six.x-y ,new-op (six.literal 1))
+                                    `(six.x-y (six.++x ,new-op) (six.literal 1))
+                                    `(six.++x ,new-op))))
+      ((six.x--)
+        ; We map post decrements to a pre-decrement and replace x-- with x + 1 to compensate
+        (let ((new-op (go (cadr ast))))
+          (go-inplace-arithmetic-op `(six.x+y ,new-op (six.literal 1))
+                                    `(six.x+y (six.--x ,new-op) (six.literal 1))
+                                    `(six.--x ,new-op))))
+      ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+        (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+          (go-inplace-arithmetic-op new-op1
+                                    `(,(car ast) ,new-op1 ,new-op2))))
       (else
         (error "unknown ast" ast))))
 
@@ -963,16 +941,8 @@
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += 1 ))"))
         ((six.--x)
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= 1 ))"))
-        ((six.x+=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
-        ((six.x-=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
-        ((six.x*=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " *= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
-        ((six.x/=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " /= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
-        ((six.x%=y)
-          (string-append ": $((" (comp-lvalue ctx (cadr ast)) " %= " (comp-rvalue ctx (caddr ast) '(pure)) "))"))
+        ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+          (string-append ": $((" (comp-lvalue ctx (cadr ast)) (six-op-string (car ast)) (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         (else
           (error "unknown side effect" ast))))
 
@@ -992,7 +962,7 @@
          (pre-side-effects (caddr side-effects-res))
          (literal-inits (cadddr side-effects-res))
          (contains-side-effect (car (cddddr side-effects-res))))
-    (define (comp-side-effects-then-rvalue wrapped)
+    (define (comp-side-effects-then-rvalue wrapped compiling-test)
       ; Optimization: When returning with the variable return method, we can
       ; use the return location directly when it's used by the next function
       ; call.
@@ -1005,7 +975,7 @@
       ; Note: This could maybe be done in a simpler way by moving this logic
       ; to comp-fun-call but it works for now.
       (if (and (equal? (car function-return-method) 'variable) (not (null? fun-calls-to-replace)))
-        (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (< 0 (cadr context-tag))))
+        (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (cadr context-tag)))
               (ast-with-result-identifier
                 (replace-identifier new-ast
                                     (car (last fun-calls-to-replace)) ; Location of last function call
@@ -1031,8 +1001,8 @@
             fun-calls-to-replace
             (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
           (if must-assign-to-return-loc
-            (comp-rvalue-go ctx new-ast wrapped #f)
-            (comp-rvalue-go ctx ast-with-result-identifier wrapped #f)))
+            (comp-rvalue-go ctx new-ast wrapped compiling-test)
+            (comp-rvalue-go ctx ast-with-result-identifier wrapped compiling-test)))
         (begin
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
@@ -1041,36 +1011,22 @@
           (for-each
             (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
             fun-calls-to-replace)
-          (comp-rvalue-go ctx new-ast wrapped #f))))
+          (comp-rvalue-go ctx new-ast wrapped compiling-test))))
 
     (case (car context-tag)
-      ((return index-lvalue)
-        (comp-side-effects-then-rvalue #t))
+      ((return index-lvalue assignment)
+        (comp-side-effects-then-rvalue (cadr context-tag) #f))
       ((argument)
-        (comp-side-effects-then-rvalue #f))
+        (comp-side-effects-then-rvalue #f #f))
       ((statement-expr)
-        (if contains-side-effect
-          (ctx-add-glo-decl!
-            ctx
-            (list ": $(( " (comp-side-effects-then-rvalue #t) " ))"))
-          (comp-side-effects-then-rvalue #f))) ; Wrapped flag doesn't matter
-      ((test)
+        (cons contains-side-effect
+              (comp-side-effects-then-rvalue #f #f)))
+      ((test-if)
+        (comp-side-effects-then-rvalue #f (not arithmetic-conditions?)))
+      ((test-loop)
         (if (null? fun-calls-to-replace)
           (cons (comp-rvalue-go ctx new-ast #f (not arithmetic-conditions?)) pre-side-effects)
           (error "comp-rvalue: Function calls not supported in condition" ast)))
-      ((test-if)
-        (for-each
-          (lambda (e) (ctx-add-glo-decl! ctx e))
-          (comp-side-effects ctx pre-side-effects))
-        (comp-literal-inits ctx literal-inits)
-        (for-each
-          (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
-          fun-calls-to-replace)
-        (comp-rvalue-go ctx new-ast #f (not arithmetic-conditions?)))
-      ((assignment)
-        (if (null? fun-calls-to-replace)
-          (list (comp-rvalue-go ctx new-ast (cadr context-tag) #f) pre-side-effects literal-inits)
-          (error "function calls in assignment not supported" ast)))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
           (comp-rvalue-go ctx new-ast #t #f)
@@ -1080,32 +1036,31 @@
 
 (define (six-op-string op #!optional (test-operand #f))
   (case op
-    ((six.x+y) " + ")
-    ((six.x-y) " - ")
-    ((six.x*y) " * ")
-    ((six.x/y) " / ")
-    ((six.x%y) " % ")
-    ((six.x>>y) " >> ")
-    ((six.x<<y) " << ")
-    ((six.x&y)  " & ")
-    ((|six.x\|y|) " | ")
-    ((six.x^y) " ^ ")
-    ((six.x+=y) " += ")
-    ((six.x-=y) " -= ")
-    ((six.x*=y) " *= ")
-    ((six.x/=y) " /= ")
-    ((six.x%=y) " %= ")
-    ((six.x=y)  " = ")
-    ((six.x==y) (if test-operand " -eq " " == "))
-    ((six.x!=y) (if test-operand " -ne " " != "))
-    ((six.x<y)  (if test-operand " -lt " " < "))
-    ((six.x>y)  (if test-operand " -gt " " > "))
-    ((six.x<=y) (if test-operand " -le " " <= "))
-    ((six.x>=y) (if test-operand " -ge " " >= "))
-    ((six.x&&y)  " && ")
-    ((|six.x\|\|y|)  " || ")
-    (else
-      (error "unknown six op" op))))
+    ((six.x+y)      " + ")
+    ((six.x-y)      " - ")
+    ((six.x*y)      " * ")
+    ((six.x/y)      " / ")
+    ((six.x%y)      " % ")
+    ((six.x>>y)     " >> ")
+    ((six.x<<y)     " << ")
+    ((six.x&y)      " & ")
+    ((|six.x\|y|)   " | ")
+    ((six.x^y)      " ^ ")
+    ((six.x+=y)     " += ")
+    ((six.x-=y)     " -= ")
+    ((six.x*=y)     " *= ")
+    ((six.x/=y)     " /= ")
+    ((six.x%=y)     " %= ")
+    ((six.x=y)      " = ")
+    ((six.x&&y)     " && ")
+    ((|six.x\|\|y|) " || ")
+    ((six.x==y)     (if test-operand " -eq " " == "))
+    ((six.x!=y)     (if test-operand " -ne " " != "))
+    ((six.x<y)      (if test-operand " -lt " " < "))
+    ((six.x>y)      (if test-operand " -gt " " > "))
+    ((six.x<=y)     (if test-operand " -le " " <= "))
+    ((six.x>=y)     (if test-operand " -ge " " >= "))
+    (else           (error "unknown six op" op))))
 
 ; TODO: Distinguish between wrapped in $(( ... )) and wrapped in ( ... )?
 (define (comp-rvalue-go ctx ast wrapped compiling-test)
