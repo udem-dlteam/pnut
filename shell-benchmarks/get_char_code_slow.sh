@@ -39,12 +39,26 @@ read_n_char_slow() {
   # echo $acc
 }
 
-# Add some variables to the environment so subshells take longer to start
 env_size=$1; shift
+
+echo "With empty environment"
+time read_n_char_slow $1 < $2
+
+# Add some variables to the environment so subshells take longer to start
 i=0
 while [ $i -lt "$env_size" ]; do
   i=$((i+1))
   : $((acc_$i = 1))
 done
 
+echo "With full environment"
+time read_n_char_slow $1 < $2
+
+i=0
+while [ $i -lt "$env_size" ]; do
+  i=$((i+1))
+  unset "acc_$i"
+done
+
+echo "With unset environment"
 time read_n_char_slow $1 < $2
