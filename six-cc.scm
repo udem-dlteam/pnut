@@ -28,6 +28,7 @@
 ; If it's the caller or callee that should save local variables
 (define callee-save? #t)
 ; Always use arithmetic expansion to do if/while conditions?
+; ** Warning: Using this option breaks shortcut evaluation. **
 (define arithmetic-conditions? #f)
 ; Always use arithmetic expansion to do assignments?
 ; Warning: Assignment using arithmetic expansion doesn't overflow while regular
@@ -854,7 +855,7 @@
                (fun-params (cdr ast))
                (replaced-params (map (lambda (p) (go p executes-conditionally)) fun-params))
                (new-fun-call (cons fun-name replaced-params)))
-          (if executes-conditionally
+          (if (and executes-conditionally (not arithmetic-conditions?))
             (set! conditional-fun-calls (cons (cons id new-fun-call) conditional-fun-calls))
             (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls)))
           id))
