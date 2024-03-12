@@ -28,7 +28,7 @@
 ; If it's the caller or callee that should save local variables
 (define callee-save? #t)
 ; Always use arithmetic expansion to do if/while conditions?
-(define arithmetic-conditions? #t)
+(define arithmetic-conditions? #f)
 ; Always use arithmetic expansion to do assignments?
 ; Warning: Assignment using arithmetic expansion doesn't overflow while regular
 ; assignment to an overflowing expression does in ksh. The overflow breaks c4's
