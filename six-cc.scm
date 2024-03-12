@@ -1190,9 +1190,13 @@
                         (six-op-string (car ast))
                         (comp-rvalue-go ctx (caddr ast) #t #f)))
     ((six.*x)
-     (wrap-if-needed #f "_$((" (comp-rvalue-go ctx (cadr ast) #t #f) "))"))
+     ; Setting wrapped to false even if it's wrapped in $(( ... )) because
+     ; we need another layer of wrapping if it's a complex expression, i.e. not
+     ; a literal or a variable.
+     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) #f #f)))
     ((six.**x)
-     (wrap-if-needed #f "_$(( _$((" (comp-rvalue-go ctx (cadr ast) #t #f) ")) ))"))
+     ; ^ Same reason here
+     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) #f #f) "))"))
     ((six.x++)
      (error "x++ should have been replaced with x - 1 (and ++x side effect) by comp-rvalue"))
     ((six.x--)
