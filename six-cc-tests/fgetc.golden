@@ -2,9 +2,7 @@ int main() {
   int_ptr f;
   char c;
   f = fopen("six-cc-tests/fgetc.c", 0);
-  c = fgetc(f);
-  while (c) {
+  while (c = fgetc(f)) {
     putchar(c);
-    c = fgetc(f);
   }
 }

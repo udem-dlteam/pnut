@@ -2,11 +2,10 @@
 counter=5
 
 decrement_counter() {
-  _0result=$(($1 - 1))
-  return
+  : $(( counter -= 1 ))
 }
 
-while decrement_counter $counter; : $(( counter = _0result )); [ 0 -ne $counter ]; do
+while decrement_counter $counter; [ 0 -ne $counter ]; do
   echo "While: $counter"
 done
 

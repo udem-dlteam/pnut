@@ -67,6 +67,21 @@
 (define (ctx-add-glo-decl! ctx decl)
   (ctx-glo-decls-set! ctx (cons (cons decl (ctx-level ctx)) (ctx-glo-decls ctx))))
 
+(define (scope-glo-decls ctx body)
+  (let ((old-glo-decls (ctx-glo-decls ctx)))
+    (ctx-glo-decls-set! ctx '())
+    (let ((res (body))
+          (new-glo-decls (ctx-glo-decls ctx)))
+      (ctx-glo-decls-set! ctx old-glo-decls) ; Reset the global declarations to the previous state
+      (cons res (reverse (map car new-glo-decls))))))
+
+(define (glo-decl-unlines decls)
+  (if (null? decls)
+    ""
+    (string-append
+      (string-concatenate (map (lambda (d) (string-concatenate d)) decls) "; ")
+      "; ")))
+
 (define (nest-level ctx f)
   (ctx-level-set! ctx (+ (ctx-level ctx) 1))
   (f)
@@ -592,28 +607,10 @@
      (comp-statement-expr ctx ast))))
 
 (define (comp-if-test ctx ast)
-  (let* ((rvalue (comp-rvalue ctx ast '(test-if))))
-  (if arithmetic-conditions?
-    (string-append
-      "[ 0 != "
-      rvalue
-      " ]")
-    rvalue)))
+  (comp-rvalue ctx ast '(test-if)))
 
 (define (comp-loop-test ctx ast)
-  (let* ((rvalue-res (comp-rvalue ctx ast '(test-loop)))
-         (rvalue (car rvalue-res))
-         (pre-side-effects (comp-side-effects ctx (cdr rvalue-res))))
-
-    (string-append
-      (apply string-append (map (lambda (e) (string-append e "; ")) pre-side-effects))
-
-      (if arithmetic-conditions?
-        (string-append
-          "[ 0 != "
-          rvalue
-          " ]")
-        rvalue))))
+  (comp-rvalue ctx ast '(test-loop)))
 
 ; Primitives from the runtime library, and if they return a value or not.
 (define runtime-primitives
@@ -1021,12 +1018,18 @@
       ((statement-expr)
         (cons contains-side-effect
               (comp-side-effects-then-rvalue #f #f)))
-      ((test-if)
-        (comp-side-effects-then-rvalue #f (not arithmetic-conditions?)))
-      ((test-loop)
-        (if (null? fun-calls-to-replace)
-          (cons (comp-rvalue-go ctx new-ast #f (not arithmetic-conditions?)) pre-side-effects)
-          (error "comp-rvalue: Function calls not supported in condition" ast)))
+      ((test-if test-loop)
+        ; TODO: This can create long lines, use \ to split them.
+        (let ((side-effects-and-res
+                (scope-glo-decls ctx
+                  (lambda () (comp-side-effects-then-rvalue #f (not arithmetic-conditions?))))))
+          (if arithmetic-conditions?
+            (string-append
+              (glo-decl-unlines (cdr side-effects-and-res))
+              "[ "
+              (car side-effects-and-res)
+              " -ne 0 ]")
+            (string-append (glo-decl-unlines (cdr side-effects-and-res)) (car side-effects-and-res)))))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
           (comp-rvalue-go ctx new-ast #t #f)
