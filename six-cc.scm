@@ -76,10 +76,11 @@
       (cons res (reverse (map car new-glo-decls))))))
 
 (define (glo-decl-unlines decls)
+  (define (concat-line l) (if (pair? l) (string-concatenate l) l))
   (if (null? decls)
     ""
     (string-append
-      (string-concatenate (map (lambda (d) (string-concatenate d)) decls) "; ")
+      (string-concatenate (map concat-line decls) "; ")
       "; ")))
 
 (define (nest-level ctx f)
@@ -773,7 +774,7 @@
   (let ((lhs (cadr ast))
         (rhs (caddr ast)))
     (case (car lhs)
-      ((six.identifier six.index six.*x six.**x six.arrow)
+      ((six.identifier six.internal-identifier six.index six.*x six.**x six.arrow)
        (case (car rhs)
         ((six.call)
           (comp-fun-call ctx (cdr rhs) lhs))
@@ -798,7 +799,7 @@
 
 (define (comp-lvalue ctx ast)
   (case (car ast)
-    ((six.identifier)
+    ((six.identifier six.internal-identifier)
      (env-var ctx ast))
     ((six.index)
      (string-append "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue ctx (caddr ast) '(index-lvalue #t)) "))"))
@@ -946,10 +947,16 @@
           ast))
     ((six.literal six.list)
       ast)
-    ((six.call six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.arrow six.x+=y six.x=y)
+    ((six.call six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow six.x+=y six.x=y)
       (list (car ast)
             (replace-identifier (cadr ast) old new)
             (replace-identifier (caddr ast) old new)))
+    ((six.x&&y |six.x\|\|y|)
+      (list (car ast)
+            (replace-identifier (cadr ast) old new)
+            (replace-identifier (caddr ast) old new)
+            (map (lambda (a) (replace-identifier a old new)) (cadddr ast))
+            (map (lambda (a) (replace-identifier a old new)) (car (cddddr ast)))))
     ((six.x?y:z)
       (list (car ast)
             (replace-identifier (cadr ast) old new)
