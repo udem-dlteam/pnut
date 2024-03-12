@@ -677,6 +677,16 @@
           ctx
           (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
 
+; Like comp-fun-call, but checks that the parameters are simple and not nested function calls.
+; This function is not necessary, but we don't want to silently compile complexe function calls
+; that we've tried to simplify.
+(define (comp-simple-fun-call ctx ast #!optional (assign_to #f))
+  (let* ((params (cdr ast))
+         (func-call-params (filter (lambda (p) (equal? (car p) 'six.call)) params)))
+    (if (pair? func-call-params)
+      (error "Expected a simple function call, but got a nested function call" ast)
+      (comp-fun-call ctx ast assign_to))))
+
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
   ; - how to preserve value of variables that may be used by the caller (because no local variables).
@@ -813,11 +823,12 @@
      (error "unknown array lvalue" ast))))
 
 ; We can't have function calls and other side effects in $(( ... )), so we need to handle them separately.
-; For function calls, this function replaces them with unique identifiers and returns a list of the replaced function calls and their new identifiers.
+; For unconditional function calls, they are replaced with unique identifiers are returned as a list with their new identifiers.
 ; For pre/post-increments/decrements, we map them to a pre-side-effect and replace with the corresponding operation.
 ; Note that pre/post-increments/decrements of function calls are not supported.
 (define (handle-side-effects ctx ast)
   (define replaced-fun-calls '())
+  (define conditional-fun-calls '())
   (define pre-side-effect '())
   (define literal-inits (make-table))
   (define contains-side-effect #f)
@@ -834,15 +845,17 @@
         (set! pre-side-effect (cons (or side-effect inplace-arith) pre-side-effect))
         assigned-op)))
 
-  (define (go ast)
+  (define (go ast executes-conditionally)
     (case (car ast)
       ((six.call)
         (let* ((id (alloc-identifier))
                (fun-name (car ast))
                (fun-params (cdr ast))
-               (replaced-params (map go fun-params))
+               (replaced-params (map (lambda (p) (go p executes-conditionally)) fun-params))
                (new-fun-call (cons fun-name replaced-params)))
-          (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls))
+          (if executes-conditionally
+            (set! conditional-fun-calls (cons (cons id new-fun-call) conditional-fun-calls))
+            (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls)))
           id))
       ((six.literal)
         (let ((val (cadr ast)))
@@ -863,46 +876,63 @@
             ast)))
       ((six.list six.identifier six.internal-identifier six.-x)
         ast)
-      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.x&&y |six.x\|\|y| six.index six.arrow six.x=y)
+      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow six.x=y)
         (list (car ast)
-              (go (cadr ast))
-              (go (caddr ast))))
+              (go (cadr ast) executes-conditionally)
+              (go (caddr ast) executes-conditionally)))
+      ((six.x&&y |six.x\|\|y|)
+        (let* ((previous-conditional-fun-calls conditional-fun-calls)
+               (_1 (set! conditional-fun-calls '()))
+               ; Left side is always executed, unless the whole expression is executed conditionally.
+               ; We can compile it as always executed, but it makes the Shell code less regular.
+               ; Also, propagating the ast to executes-conditonally for better error messages
+               (left-side (go (cadr ast) ast))
+               (left-side-conditional-fun-calls conditional-fun-calls)
+               (_2 (set! conditional-fun-calls '()))
+               (right-side (go (caddr ast) ast))
+               (right-side-conditional-fun-calls conditional-fun-calls)
+               (_3 (set! previous-conditional-fun-calls '())))
+        (list (car ast)
+              left-side
+              right-side
+              left-side-conditional-fun-calls
+              right-side-conditional-fun-calls)))
       ((six.x?y:z)
         (list (car ast)
-              (go (cadr ast))
-              (go (caddr ast))
-              (go (cadddr ast))))
+              (go (cadr ast) executes-conditionally)
+              (go (caddr ast) ast)
+              (go (cadddr ast) ast)))
       ((six.!x six.*x six.**x)
         (list (car ast)
-              (go (cadr ast))))
+              (go (cadr ast) executes-conditionally)))
       ((six.++x)
-        (let ((new-op (go (cadr ast))))
+        (let ((new-op (go (cadr ast) executes-conditionally)))
           (go-inplace-arithmetic-op new-op
                                     `(six.++x ,new-op))))
       ((six.--x)
-        (let ((new-op (go (cadr ast))))
+        (let ((new-op (go (cadr ast) executes-conditionally)))
           (go-inplace-arithmetic-op new-op
                                     `(six.--x ,new-op))))
       ((six.x++)
         ; We map post increments to a pre-increment and replace x++ with x - 1 to compensate
-        (let ((new-op (go (cadr ast))))
+        (let ((new-op (go (cadr ast) executes-conditionally)))
           (go-inplace-arithmetic-op `(six.x-y ,new-op (six.literal 1))
                                     `(six.x-y (six.++x ,new-op) (six.literal 1))
                                     `(six.++x ,new-op))))
       ((six.x--)
         ; We map post decrements to a pre-decrement and replace x-- with x + 1 to compensate
-        (let ((new-op (go (cadr ast))))
+        (let ((new-op (go (cadr ast) executes-conditionally)))
           (go-inplace-arithmetic-op `(six.x+y ,new-op (six.literal 1))
                                     `(six.x+y (six.--x ,new-op) (six.literal 1))
                                     `(six.--x ,new-op))))
       ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
-        (let ((new-op1 (go (cadr ast))) (new-op2 (go (caddr ast))))
+        (let ((new-op1 (go (cadr ast) executes-conditionally)) (new-op2 (go (caddr ast) executes-conditionally)))
           (go-inplace-arithmetic-op new-op1
                                     `(,(car ast) ,new-op1 ,new-op2))))
       (else
         (error "unknown ast" ast))))
 
-  (list (go ast)
+  (list (go ast #f)
         (reverse replaced-fun-calls)
         (reverse pre-side-effect)
         (table->list literal-inits)
@@ -998,8 +1028,8 @@
             fun-calls-to-replace
             (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
           (if must-assign-to-return-loc
-            (comp-rvalue-go ctx new-ast wrapped compiling-test)
-            (comp-rvalue-go ctx ast-with-result-identifier wrapped compiling-test)))
+            (comp-rvalue-go ctx new-ast wrapped compiling-test '())
+            (comp-rvalue-go ctx ast-with-result-identifier wrapped compiling-test '())))
         (begin
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
@@ -1008,7 +1038,7 @@
           (for-each
             (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
             fun-calls-to-replace)
-          (comp-rvalue-go ctx new-ast wrapped compiling-test))))
+          (comp-rvalue-go ctx new-ast wrapped compiling-test '()))))
 
     (case (car context-tag)
       ((return index-lvalue assignment)
@@ -1032,7 +1062,7 @@
             (string-append (glo-decl-unlines (cdr side-effects-and-res)) (car side-effects-and-res)))))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
-          (comp-rvalue-go ctx new-ast #t #f)
+          (comp-rvalue-go ctx new-ast #t #f '())
           (error "function calls, side effects and string literals in pure context not supported" ast)))
       (else
         (error "unknown context tag" context-tag)))))
@@ -1066,11 +1096,25 @@
     (else           (error "unknown six op" op))))
 
 ; TODO: Distinguish between wrapped in $(( ... )) and wrapped in ( ... )?
-(define (comp-rvalue-go ctx ast wrapped compiling-test)
+(define (comp-rvalue-go ctx ast wrapped compiling-test test-side-effects)
+  (define (with-prefixed-side-effects . strs)
+    (let ((comped-side-effects
+            (cdr (scope-glo-decls ctx
+              (lambda ()
+                (for-each
+                  (lambda (se) (comp-simple-fun-call ctx (cddr se) (car se)))
+                  test-side-effects))))))
+      (if (null? test-side-effects)
+        (apply string-append strs)
+        (string-append "{ "
+                       (glo-decl-unlines comped-side-effects)
+                       (apply string-append strs)
+                       "; }"))))
+
   (define (wrap-if-needed parens-otherwise? . lines)
     (if (not wrapped)
       (if compiling-test
-        (string-append "[ $((" (apply string-append lines) ")) -ne 0 ]")
+        (with-prefixed-side-effects "[ $((" (apply string-append lines) ")) -ne 0 ]")
         (string-append "$((" (apply string-append lines) "))"))
       (if parens-otherwise?
         (string-append "(" (apply string-append lines) ")")
@@ -1081,11 +1125,14 @@
   ; in $(( ... )) here.
   (define (wrap-in-condition-if-needed . lines)
     (if compiling-test
-      (string-append "[ " (apply string-append lines) " -ne 0 ]")
+      (with-prefixed-side-effects "[ " (apply string-append lines) " -ne 0 ]")
       (apply string-append lines)))
 
   (if (and wrapped compiling-test)
     (error "Can't be compiling in a test context and wrapped in $(( ... ))" ast))
+
+  (if (and (not compiling-test) (pair? test-side-effects))
+    (error "Can't have test side effects in a non-test context" ast test-side-effects))
 
   (case (car ast)
     ((six.literal)
@@ -1135,48 +1182,55 @@
                         ; wrap it in parenthesis. It adds parenthesis that
                         ; sometimes aren't needed, but it hopefully helps readability.
                         (if wrap-left "(" "")
-                        (comp-rvalue-go ctx (cadr ast) wrapped #t)
+                        (comp-rvalue-go ctx (cadr ast) wrapped #t (cadddr ast))
                         (if wrap-left ")" "")
                         (six-op-string (car ast) #t)
                         (if wrap-right "(" "")
-                        (comp-rvalue-go ctx (caddr ast) wrapped #t)
+                        (comp-rvalue-go ctx (caddr ast) wrapped #t (car (cddddr ast)))
                         (if wrap-right ")" "")))
-        (wrap-if-needed #f
-                        (comp-rvalue-go ctx (cadr ast) #t #f)
-                        (six-op-string (car ast) #t)
-                        (comp-rvalue-go ctx (caddr ast) #t #f))))
+        (begin
+          ; Check if left-side-conditional-fun-calls and right-side-conditional-fun-calls are empty
+          (if (or (not (null? (cadddr ast))) (not (null? (car (cddddr ast)))))
+            (begin
+              (display "Ast: ") (display ast) (newline)
+              (error "Arithmetic with function calls in && and || not supported")))
+
+          (wrap-if-needed #f
+                          (comp-rvalue-go ctx (cadr ast) #t #f '())
+                          (six-op-string (car ast) #t)
+                          (comp-rvalue-go ctx (caddr ast) #t #f '())))))
     ((six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
      (if compiling-test
-         (string-append "[ "
-                        (comp-rvalue-go ctx (cadr ast) wrapped #f)
-                        (six-op-string (car ast) #t)
-                        (comp-rvalue-go ctx (caddr ast) wrapped #f)
-                        " ]")
+        (with-prefixed-side-effects "[ "
+                                    (comp-rvalue-go ctx (cadr ast) wrapped #f '())
+                                    (six-op-string (car ast) #t)
+                                    (comp-rvalue-go ctx (caddr ast) wrapped #f '())
+                                    " ]"))
          (wrap-if-needed #t
-                        (comp-rvalue-go ctx (cadr ast) #t #f)
+                        (comp-rvalue-go ctx (cadr ast) #t #f '())
                         (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) #t #f))))
+                        (comp-rvalue-go ctx (caddr ast) #t #f '())))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y)
      (wrap-if-needed #t
-                    (comp-rvalue-go ctx (cadr ast) #t #f)
+                    (comp-rvalue-go ctx (cadr ast) #t #f '())
                     (six-op-string (car ast))
-                    (comp-rvalue-go ctx (caddr ast) #t #f)))
+                    (comp-rvalue-go ctx (caddr ast) #t #f '())))
     ((six.-x)
      ; Check if the rest of ast is a literal, if so directly return the negated value
      (if (and (equal? 'six.literal (caadr ast)) (exact-integer? (cadadr ast)))
-       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) wrapped #f)
-       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) wrapped #f) ")"))))
+       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) wrapped #f test-side-effects)
+       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) wrapped #f '()) ")"))))
     ((six.x?y:z)
       (wrap-if-needed #t
-                      (comp-rvalue-go ctx (cadr ast) #t #f)
+                      (comp-rvalue-go ctx (cadr ast) #t #f '())
                       " ? "
-                      (comp-rvalue-go ctx (caddr ast) #t #f)
+                      (comp-rvalue-go ctx (caddr ast) #t #f '())
                       " : "
-                      (comp-rvalue-go ctx (cadddr ast) #t #f)))
+                      (comp-rvalue-go ctx (cadddr ast) #t #f '())))
     ((six.index)
-     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f '()) "))"))
     ((six.arrow)
-     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f '()) "))"))
     ((six.++x)
      (wrap-if-needed #t (comp-lvalue ctx (cadr ast)) " += 1"))
     ((six.--x)
@@ -1187,19 +1241,19 @@
      ; to generate clearer code.
      ; Case where it would be useful: !(a == b && b == c) is compiled as
      ; [ $(( a == b && b == c)) -ne 0 ] instead of [ $a -ne $b ] [ $b -ne $c ].
-     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) #t #f)))
+     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) #t #f '())))
     ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x=y)
      (wrap-if-needed #t (comp-lvalue ctx (cadr ast))
                         (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) #t #f)))
+                        (comp-rvalue-go ctx (caddr ast) #t #f '())))
     ((six.*x)
      ; Setting wrapped to false even if it's wrapped in $(( ... )) because
      ; we need another layer of wrapping if it's a complex expression, i.e. not
      ; a literal or a variable.
-     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) #f #f)))
+     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) #f #f '())))
     ((six.**x)
      ; ^ Same reason here
-     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) #f #f) "))"))
+     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) #f #f '()) "))"))
     ((six.x++)
      (error "x++ should have been replaced with x - 1 (and ++x side effect) by comp-rvalue"))
     ((six.x--)
