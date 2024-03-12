@@ -1010,7 +1010,7 @@
       ; Note: This could maybe be done in a simpler way by moving this logic
       ; to comp-fun-call but it works for now.
       (if (and (equal? (car function-return-method) 'variable) (not (null? fun-calls-to-replace)))
-        (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (cadr context-tag)))
+        (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (not (cadr context-tag))))
               (ast-with-result-identifier
                 (replace-identifier new-ast
                                     (car (last fun-calls-to-replace)) ; Location of last function call
