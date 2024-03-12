@@ -163,6 +163,7 @@
   (string-append str (symbol->string sym)))
 
 (define result-loc-ident       '(six.internal-identifier result_loc))
+(define result-ident           `(six.internal-identifier ,(if (equal? 'variable (car function-return-method)) (cadr function-return-method) '1_dont_use)))
 (define no-result-loc-ident    '(six.internal-identifier ||))               ; || is empty symbol
 (define alloc-ident            '(six.internal-identifier ALLOC))
 (define argc-ident             '(six.internal-identifier argc_for_main))
@@ -175,6 +176,7 @@
   `(six.internal-identifier ,(string->symbol (string-append "str_" (number->string ix)))))
 
 (define result-loc-var       (format-non-local-var result-loc-ident))
+(define result-var           (format-non-local-var result-ident))
 (define alloc-var            (format-non-local-var alloc-ident))
 (define argc-var             (format-non-local-var argc-ident))
 (define argv-var             (format-non-local-var argv-ident))
@@ -449,15 +451,15 @@
               (begin
                 (ctx-add-glo-decl!
                   ctx
-                  (list (format-non-local-var result-loc-ident)
+                  (list result-loc-var
                         "=\"$1\"; shift "
                         "# Remove result_loc param")))
               (begin
                 (ctx-add-glo-decl!
                   ctx
                   (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
-                        "then " (format-non-local-var result-loc-ident) "=$1; shift ; "
-                        "else " (format-non-local-var result-loc-ident) "= ; fi ;")))))
+                        "then " result-loc-var "=$1; shift ; "
+                        "else " result-loc-var "= ; fi ;")))))
           (begin
             (if callee-save? (save-local-variables ctx))))
 
@@ -590,11 +592,11 @@
                 ((variable)
                   (ctx-add-glo-decl!
                     ctx
-                    (list "_" (symbol->string (cadr function-return-method)) "=" code-expr )))
+                    (list result-var "=" code-expr )))
                 ((addr)
                   (ctx-add-glo-decl!
                     ctx
-                    (list "prim_return_value " code-expr " $" (format-non-local-var result-loc-ident))))
+                    (list "prim_return_value " code-expr " $" result-loc-var)))
                 (else
                   (error "Unknown value return method" function-return-method)))))
     ; Seems broken in while loops
@@ -731,7 +733,7 @@
         ((variable)
           (ctx-add-glo-decl! ctx (list call-code))
           (if assign_to
-            (comp-assignment ctx `(six.x=y ,assign_to (six.identifier ,(cadr function-return-method))))))
+            (comp-assignment ctx `(six.x=y ,assign_to ,result-ident))))
         ((addr)
           (if (and (or assign_to (cadr function-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
             (ctx-add-glo-decl!
@@ -826,12 +828,12 @@
 
 ; We can't have function calls and other side effects in $(( ... )), so we need to handle them separately.
 ; For unconditional function calls, they are replaced with unique identifiers are returned as a list with their new identifiers.
-; For pre/post-increments/decrements, we map them to a pre-side-effect and replace with the corresponding operation.
+; For pre/post-increments/decrements, we map them to a pre-side-effects and replace with the corresponding operation.
 ; Note that pre/post-increments/decrements of function calls are not supported.
 (define (handle-side-effects ctx ast)
   (define replaced-fun-calls '())
   (define conditional-fun-calls '())
-  (define pre-side-effect '())
+  (define pre-side-effects '())
   (define literal-inits (make-table))
   (define contains-side-effect #f)
   (define (alloc-identifier)
@@ -844,7 +846,7 @@
         (set! contains-side-effect #t)
         inplace-arith)
       (begin
-        (set! pre-side-effect (cons (or side-effect inplace-arith) pre-side-effect))
+        (set! pre-side-effects (cons (or side-effect inplace-arith) pre-side-effects))
         assigned-op)))
 
   (define (go ast executes-conditionally)
@@ -936,7 +938,7 @@
 
   (list (go ast #f)
         (reverse replaced-fun-calls)
-        (reverse pre-side-effect)
+        (reverse pre-side-effects)
         (table->list literal-inits)
         contains-side-effect))
 
@@ -1014,7 +1016,7 @@
               (ast-with-result-identifier
                 (replace-identifier new-ast
                                     (car (last fun-calls-to-replace)) ; Location of last function call
-                                    `(six.identifier ,(cadr function-return-method)))))
+                                    result-ident)))
           (for-each
             (lambda (e) (ctx-add-glo-decl! ctx e))
             (comp-side-effects ctx pre-side-effects))
@@ -1026,7 +1028,7 @@
                 (if nextCallUsesReturnLoc
                   (begin
                     ; Overwrite the argument of next function call with the return location
-                    (set-cdr! (car nextCallUsesReturnLoc) (cdr function-return-method))
+                    (set-cdr! (car nextCallUsesReturnLoc) (cdr result-ident))
                     (comp-fun-call ctx (cddr call)))
                   ; We only assign to the return location if it's not the
                   ; last function call. In that case, it's up to the caller
@@ -1354,7 +1356,7 @@
     ""
     (case (car function-return-method)
       ((variable)
-        (string-append "prim_return_value() { : $((_" (symbol->string (cadr function-return-method)) " = $1)) ; }"))
+        (string-append "prim_return_value() { : $((" result-var " = $1)) ; }"))
       ((addr)
         "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
       (else
