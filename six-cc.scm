@@ -41,29 +41,35 @@
   (string-append "_" (symbol->string (cadr ident))))
 
 (define-type ctx
-  glo-decls
-  loc-env
-  all-variables ; Set represented as a table
-  literals      ; Literals that have been assigned to a variable
-  enums         ; Enums that have been defined.
-  structs       ; Structures that have been defined
-  data          ; The data section
-  level
-  tail?)
+  glo-decls         ; Lines of code generated so far
+  loc-env           ; Local environment
+  all-variables     ; Set represented as a table
+  literals          ; Literals that have been assigned to a variable
+  enums             ; Enums that have been defined.
+  structs           ; Structures that have been defined
+  data              ; The data section
+  level             ; The current level of nesting
+  tail?             ; Is the current statement is in tail position?
+  single-statement? ; If the block has only one statement
+  loop?             ; Is the current block a loop block?
+  loop-end-actions  ; What to do at the end of a loop. Typically an increment.
+  )
 
-
-; (make-ctx '() (make-table) (make-table) (make-table) (make-table) (make-table) '() 0 #f)))
 (define (empty-ctx)
   (make-ctx
-    '() ; global declarations
+    '()          ; global declarations
     (make-table) ; local environment
     (make-table) ; all variables
     (make-table) ; literals
     (make-table) ; enums
     (make-table) ; structs
-    '() ; data
-    0 ; level
-    #f)) ; tail?
+    '()          ; data
+    0            ; level
+    #f           ; tail?
+    #f           ; single-statement?
+    #f           ; loop?
+    '()          ; loop-end-actions
+    ))
 
 (define (ctx-add-glo-decl! ctx decl)
   (ctx-glo-decls-set! ctx (cons (cons decl (ctx-level ctx)) (ctx-glo-decls ctx))))
@@ -479,9 +485,7 @@
 
       (comp-body ctx body-rest)
 
-      (if (and callee-save?
-               (not (equal? (car (last body-rest)) 'six.return)))
-        (restore-local-variables ctx))
+      (if (and callee-save?) (restore-local-variables ctx))
 
       (ctx-loc-env-set! ctx start-loc-env)))
 
@@ -502,6 +506,8 @@
     ; traversing the AST multiple times may complicate the C implementation.
     (if (not (null? new-local-vars))
       (error "Variables must be defined at the top of the function"))
+
+    (ctx-single-statement?-set! ctx (and (pair? lst) (null? (cdr lst))))
 
     (for-each
       (lambda (new-local-var)
@@ -532,35 +538,48 @@
 (define (comp-statement ctx ast #!optional (else-if? #f))
   (case (car ast)
     ((six.while)
-     (if #t ;; simple-expression
-         (let ((code-test (comp-loop-test ctx (cadr ast))))
-           (ctx-add-glo-decl!
-            ctx
-            (list "while " code-test " ; do"))
-           (nest ctx (comp-statement ctx (caddr ast)))
-           (ctx-add-glo-decl!
-            ctx
-            (list "done")))
-         (error "complex expression not yet supported")))
+      (let ((code-test (comp-loop-test ctx (cadr ast)))
+            (start-loop? (ctx-loop? ctx)))
+        (ctx-add-glo-decl!
+          ctx
+          (list "while " code-test " ; do"))
+        (ctx-loop?-set! ctx #t)
+        (nest ctx
+          (comp-statement ctx (caddr ast)))
+        (ctx-loop?-set! ctx start-loop?)
+        (ctx-add-glo-decl!
+          ctx
+          (list "done"))))
     ((six.for)
      ;;(six.for (six.x=y (six.identifier i) (six.literal 0))     (six.x<y (six.identifier i) (six.literal 2800))    (six.x++ (six.i...
      (let ((expr1 (cadr ast))
            (expr2 (caddr ast))
            (expr3 (cadddr ast))
-           (stat (car (cddddr ast))))
+           (stat (car (cddddr ast)))
+           (start-loop? (ctx-loop? ctx))
+           (start-loop-end-actions (ctx-loop-end-actions ctx)))
        (comp-statement ctx expr1)
-       ;; TODO: support "continue"
-       (let ((code-test (if expr2 (comp-loop-test ctx expr2) ":")))
+       (let ((code-test (if expr2 (comp-loop-test ctx expr2) ":"))
+             (loop-end-actions
+              (if expr3
+                (cdr (scope-glo-decls ctx (lambda () (comp-statement ctx expr3))))
+                '())))
          (ctx-add-glo-decl!
-          ctx
-          (list "while " code-test " ; do"))
+            ctx
+            (list "while " code-test " ; do"))
+         (ctx-loop?-set! ctx #t)
+         (ctx-loop-end-actions-set! ctx loop-end-actions)
          (nest ctx
           (comp-statement ctx stat)
-          (if expr3 (comp-statement ctx expr3))
+          (for-each
+            (lambda (action) (ctx-add-glo-decl! ctx action))
+            loop-end-actions)
          )
+         (ctx-loop?-set! ctx start-loop?)
+         (ctx-loop-end-actions-set! ctx start-loop-end-actions)
          (ctx-add-glo-decl!
-          ctx
-          (list "done")))))
+            ctx
+            (list "done")))))
     ((six.if)
      (let ((test (cadr ast))
            (stat (caddr ast)))
@@ -599,14 +618,40 @@
                     (list "prim_return_value " code-expr " $" result-loc-var)))
                 (else
                   (error "Unknown value return method" function-return-method)))))
-    ; Seems broken in while loops
-    ;  (if (not (ctx-tail? ctx))
-     (if callee-save? (restore-local-variables ctx))
-     (ctx-add-glo-decl! ctx (list "return")))
+
+     (if (ctx-tail? ctx)
+      (begin
+        ; We're in a loop, so we won't fall through to the next statement with a break
+        (if (ctx-loop? ctx)
+          (ctx-add-glo-decl! ctx (list "break"))
+          ; The block only has one statement (a return), and we can't have the block empty
+          (if ctx-single-statement?
+            (begin
+              (if callee-save? (restore-local-variables ctx))
+              (ctx-add-glo-decl! ctx (list "return"))))))
+      (begin
+        (if callee-save? (restore-local-variables ctx))
+        (ctx-add-glo-decl! ctx (list "return")))))
     ((six.break)
-     (ctx-add-glo-decl!
-      ctx
-      (list "break")))
+      (if (not (ctx-loop? ctx)) (error "break statement outside of a loop"))
+      (if (or (not (ctx-tail? ctx)) (ctx-single-statement? ctx))
+        (begin
+          (for-each
+            (lambda (action) (ctx-add-glo-decl! ctx action))
+            (ctx-loop-end-actions ctx))
+          (ctx-add-glo-decl!
+            ctx
+            (list "break")))))
+    ((six.continue)
+      (if (not (ctx-loop? ctx)) (error "continue statement outside of a loop"))
+      (if (or (not (ctx-tail? ctx)) (ctx-single-statement? ctx))
+        (begin
+          (for-each
+            (lambda (action) (ctx-add-glo-decl! ctx action))
+            (ctx-loop-end-actions ctx))
+          (ctx-add-glo-decl!
+            ctx
+            (list "continue")))))
     (else
      (comp-statement-expr ctx ast))))
 
