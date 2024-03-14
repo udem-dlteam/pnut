@@ -1414,7 +1414,7 @@
     ""
     "# Setup argc, argv"
     (string-append argc-var "=$(($# + 1))")
-    (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=make_argv_ptr")
+    (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=$make_argv_ptr")
     ; This must be after make_argv because if one of the local variable is argv,
     ; writing to it will overwrite the $@ array in zsh.
     (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
