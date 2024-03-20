@@ -1,8 +1,10 @@
 # Memory management
 
-_NULL=0 # Null pointer, should not be modified. TODO: Make global-var replace NULL with 0?
-
-_EOF=-1
+# C constants
+# readonly is POSIX compliant: https://pubs.opengroup.org/onlinepubs/009695299/utilities/readonly.html
+# Idea: Inlining those constants in the generated code could make it faster, at the cost of readability.
+readonly _NULL=0
+readonly _EOF=-1
 
 strict_alloc() {
   if [ $__FREE_UNSETS_VARS -eq 1 ]; then
