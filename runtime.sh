@@ -541,9 +541,9 @@ read_n_char() {
   done
 }
 
-# Read the file, and return a file descriptor to the file. The file descriptor is
-# just a string, nothing to close.
-_fopen() {
+# Read the file, and return a file descriptor to the file.
+# The file descriptor is just a cursor and a string, so closing just frees up the object.
+_fopen() { # $1: File name, $2: Mode
   if [ $# -eq 3 ]; then
     fopen_return_loc=$1; shift
   else
@@ -555,12 +555,12 @@ _fopen() {
   : $((_$((fopen_fd)) = 0))                       # Initialize cursor to 0
   fopen_buffer=$((fopen_fd + 1))                  # Buffer starts after cursor
   read_all_char $fopen_buffer < "$pack_string_res"
-  : $((_$((fopen_buffer + read_all_char_len))=0)) # Terminate buffer with NUL character
+  : $((_$((fopen_buffer + read_all_char_len))=-1)) # Terminate buffer with EOF character
   __ALLOC=$((__ALLOC + read_all_char_len + 2))    # Update __ALLOC to the new end of the heap
   prim_return_value $fopen_fd $fopen_return_loc
 }
 
-_fclose() {
+_fclose() { # $1: File descriptor
   if [ $# -eq 2 ]; then
     fclose_return_loc=$1; shift
   else
@@ -570,18 +570,23 @@ _fclose() {
   prim_return_value 0 $fclose_return_loc
 }
 
-_fread() {
-  if [ $# -eq 4 ]; then
+# Only supports item size = 1 for now
+_fread() { # $1: Buffer, $2: Item size, $3: Number of items to read, $4: File descriptor
+  if [ $# -eq 5 ]; then
     fread_return_loc=$1; shift
   else
     fread_return_loc=
   fi
-  fread_fd=$1
-  fread_buf=$2
+  fread_buf=$1
+  fread_item_size=$2
   fread_count=$3
+  fread_fd=$4
   fread_len=0
+  # TODO: Support all item sizes. One difficulty is that we can't read partial items.
+  if [ $fread_item_size -ne 1 ]; then echo "fread: item size must be 1" ; exit 1 ; fi
   fread_fd_buffer=$((fread_fd + 1)) # Buffer starts at fd + 1
-  while [ $fread_count -ne 0 ] ; do
+  # As long as there are items to read and we haven't reached EOF
+  while [ $fread_count -ne 0 ] && [ $((_$fread_fd_buffer)) -ne -1 ] ; do
     : $((_$fread_buf=_$fread_fd_buffer))
     : $((fread_buf += 1))
     : $((fread_fd_buffer += 1))
