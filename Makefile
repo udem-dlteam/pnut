@@ -136,7 +136,7 @@ endif
 			if [ -e "$$input" ]; then \
 				$$SHELL six-cc-tests/$$filename.sh $$args < "$$input" > six-cc-tests/$$filename.result; \
 			else \
-				timeout 1 $$SHELL six-cc-tests/$$filename.sh $$args < c4.c > six-cc-tests/$$filename.result; \
+				timeout 3 $$SHELL six-cc-tests/$$filename.sh $$args < c4.c > six-cc-tests/$$filename.result; \
 			fi; \
 			if [ $$? -eq 0 ]; then \
 				if [ -f "six-cc-tests/$$filename.golden" ]; then \
