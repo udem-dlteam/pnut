@@ -129,7 +129,15 @@ endif
 			first_line=$$(head -n 1 $$file); \
 			args=$${first_line#"/* args:"}; \
 			args=$${args%"*/"}; \
-			timeout 1 $$SHELL six-cc-tests/$$filename.sh $$args > six-cc-tests/$$filename.result; \
+			input=$${first_line#"/* input:"}; \
+			input=$${input%"*/"}; \
+			input=$${input#" "}; \
+			input=$${input%" "}; \
+			if [ -e "$$input" ]; then \
+				$$SHELL six-cc-tests/$$filename.sh $$args < "$$input" > six-cc-tests/$$filename.result; \
+			else \
+				timeout 1 $$SHELL six-cc-tests/$$filename.sh $$args < c4.c > six-cc-tests/$$filename.result; \
+			fi; \
 			if [ $$? -eq 0 ]; then \
 				if [ -f "six-cc-tests/$$filename.golden" ]; then \
 					diff_out=$$(diff six-cc-tests/$$filename.golden six-cc-tests/$$filename.result); \
@@ -163,19 +171,31 @@ c4-for-six.sh: six-cc.scm c4-for-six.c
 c4_by_c4-for-six-op.golden: c4-for-six.sh c4.c
 	ksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden
 
-c4_by_c4-for-six-op.golden-all: c4-for-six.sh c4.c
-# Takes ~5s
-	time ksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.ksh
-# Takes ~35s
-	time bash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.bash
-# Takes ~2min
-	time dash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.dash
-# Takes ~3min30s
-	time zsh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.zsh
-# Takes ~40s
-	time yash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.yash
-# Takes ~3min30s
-	time mksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.mksh
+# Takes ~3.3s
+c4_by_c4-for-six-op.golden.ksh: c4-for-six.sh c4.c
+	ksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.ksh
+
+# Takes ~53s
+c4_by_c4-for-six-op.golden.bash: c4-for-six.sh c4.c
+	bash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.bash
+
+# Takes ~1min15s
+c4_by_c4-for-six-op.golden.dash: c4-for-six.sh c4.c
+	dash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.dash
+
+# Takes ~2min20s
+c4_by_c4-for-six-op.golden.zsh: c4-for-six.sh c4.c
+	zsh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.zsh
+
+# Takes ~1min
+c4_by_c4-for-six-op.golden.yash: c4-for-six.sh c4.c
+	yash ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.yash
+
+# Takes ~6min30s
+c4_by_c4-for-six-op.golden.mksh: c4-for-six.sh c4.c
+	mksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden.mksh
+
+c4_by_c4-for-six-op.golden-all: c4_by_c4-for-six-op.golden.ksh c4_by_c4-for-six-op.golden.bash c4_by_c4-for-six-op.golden.dash c4_by_c4-for-six-op.golden.zsh c4_by_c4-for-six-op.golden.yash c4_by_c4-for-six-op.golden.mksh
 
 # Run bytecode using C4 Shell VM to compile c4.c again, to confirm that the bytecode produced works
 six-cc-c4-bootstrap-on-vm: c4_by_c4-for-six-op.golden

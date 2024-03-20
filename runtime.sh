@@ -368,6 +368,21 @@ defstr() {
 
 _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
+_getchar() {
+  if [ $# -eq 1 ]; then
+    getchar_return_loc=$1; shift
+  else
+    getchar_return_loc=
+  fi
+  get_char
+  case "$get_char_char" in
+    EOF) getchar_code=-1 ;;
+    NEWLINE) getchar_code=10 ;; # 10 == '\n'
+    *) char_to_int "$get_char_char"; getchar_code=$char_to_int_code ;;
+  esac
+  prim_return_value $getchar_code $getchar_return_loc
+}
+
 _exit() { echo \"Exiting with code $1\"; exit $1; }
 
 _malloc() {
@@ -627,6 +642,18 @@ read_all_char() {
     : $((read_all_char_buf_ptr += 1))
     : $((read_all_char_len += 1))
   done
+}
+
+get_char_stdin_buf=
+get_char_stdin() {
+  # In order to support getchar calls interlaced with read calls, we must swap
+  # the get_char buffers so that it reads from the right buffer.
+  # An alternative could be to copy get_char's implementation in this function
+  get_char_stdin_buf_bk="$get_char_src_buf" # Save previous buffer
+  get_char_src_buf="$get_char_stdin_buf"    # Put stdin buffer in place
+  get_char
+  get_char_stdin_buf="$get_char_src_buf"    # Save updated stdin buffer
+  get_char_src_buf="$get_char_stdin_buf_bk" # Restore previous buffer
 }
 
 get_char_src_buf=

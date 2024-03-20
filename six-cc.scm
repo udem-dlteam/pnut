@@ -379,15 +379,19 @@
     int_to_char
     defstr
     ; Primitives
+    putchar
+    getchar
+    exit
     malloc
+    free
     printf
     open
     read
     close
     read_n_char
     fopen
-    fclose
     fread
+    fclose
     fgetc
     read_all_char
     get_char
@@ -664,6 +668,7 @@
 ; Primitives from the runtime library, and if they return a value or not.
 (define runtime-primitives
   '((putchar #f)
+    (getchar #t)
     (exit #f)
     (malloc #t)
     (free #f)
