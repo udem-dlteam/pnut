@@ -1490,7 +1490,13 @@
     (comp-program ast)))
 
 (define (read-six port)
-  (##six-types-set! '((void . #f) (void_ptr . #f) (char . #f) (char_ptr . #f) (char_ptr_ptr . #f) (int . #f) (int_ptr . #f) (struct . #f) (enum . #f)))
+  (##six-types-set!
+    '((void     . #f) (void_ptr . #f)
+      (char     . #f) (char_ptr . #f) (char_ptr_ptr . #f)
+      (int      . #f) (int_ptr . #f)  (int_ptr_ptr  . #f)
+      (FILE_ptr . #f)
+      (struct   . #f)
+      (enum     . #f)))
   (let ((rt (input-port-readtable port)))
     (input-port-readtable-set! port (readtable-start-syntax-set rt 'six))
     (read-all port)))

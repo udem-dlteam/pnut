@@ -2,6 +2,8 @@
 
 _NULL=0 # Null pointer, should not be modified. TODO: Make global-var replace NULL with 0?
 
+_EOF=-1
+
 strict_alloc() {
   if [ $__FREE_UNSETS_VARS -eq 1 ]; then
     : $((_$__ALLOC = $1)) # Save allocation size
