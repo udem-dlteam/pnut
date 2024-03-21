@@ -8,6 +8,29 @@ typedef char *char_ptr;
 
 #endif
 
+
+#define AVOID_AMPAMP_BARBAR
+#define USE_IN_RANGE_FUNCTION_not
+
+#ifdef AVOID_AMPAMP_BARBAR
+#define AND &
+#define OR |
+#else
+#define AND &&
+#define OR ||
+#endif
+
+#ifdef USE_IN_RANGE_FUNCTION
+int in_range(int x, int lo, int hi) {
+  if (x < lo) return 0;
+  if (x > hi) return 0;
+  return 1;
+}
+#else
+#define in_range(x, lo, hi) ((x >= lo) AND (x <= hi))
+#endif
+
+
 int NEWLINE = 10;
 int SPACE = 32;
 int SHARP = 35;
@@ -48,10 +71,10 @@ void get_ch() {
 
 void get_identifier() {
 
-  while ((ch >= UPPER_A && ch <= UPPER_Z) ||
-         (ch >= LOWER_A && ch <= LOWER_Z) ||
-         (ch >= DIGIT_0 && ch <= DIGIT_9) ||
-         ch == UNDERSCORE) {
+  while (in_range(ch, UPPER_A, UPPER_Z) OR
+         in_range(ch, LOWER_A, LOWER_Z) OR
+         in_range(ch, DIGIT_0, DIGIT_9) OR
+         (ch == UNDERSCORE)) {
     get_ch();
   }
 
@@ -78,25 +101,25 @@ void get_token() {
 
       /* detect '#' at start of line, possibly preceded by whitespace */
 
-      if (token == NEWLINE && ch == SHARP)
+      if ((token == NEWLINE) AND (ch == SHARP))
         handle_preprocessor_directive();
 
-    } else if (token >= DIGIT_0 && token <= DIGIT_9) {
+    } else if (in_range(token, DIGIT_0, DIGIT_9)) {
 
       value = token - DIGIT_0;
 
       token = INTEGER;
 
-      while (ch >= DIGIT_0 && ch <= DIGIT_9) {
+      while (in_range(ch, DIGIT_0, DIGIT_9)) {
         value = value * 10 + (ch - DIGIT_0);
         get_ch();
       }
 
       break;
 
-    } else if ((token >= UPPER_A && token <= UPPER_Z) ||
-               (token >= LOWER_A && token <= LOWER_Z) ||
-               token == UNDERSCORE) {
+    } else if (in_range(token, UPPER_A, UPPER_Z) OR
+               in_range(token, LOWER_A, LOWER_Z) OR
+               (token == UNDERSCORE)) {
 
       get_identifier();
 
