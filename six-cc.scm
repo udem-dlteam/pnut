@@ -729,18 +729,21 @@
           (list "esac"))))
     ((six.return)
      (if (pair? (cdr ast))
-         (let ((code-expr (comp-rvalue ctx (cadr ast) '(return #f))))
-              (case (car function-return-method)
-                ((variable)
-                  (ctx-add-glo-decl!
-                    ctx
-                    (list result-var "=" code-expr )))
-                ((addr)
-                  (ctx-add-glo-decl!
-                    ctx
-                    (list "prim_return_value " code-expr " $" result-loc-var)))
-                (else
-                  (error "Unknown value return method" function-return-method)))))
+        (case (car function-return-method)
+          ((variable)
+            (ctx-add-glo-decl!
+              ctx
+              (list result-var "=" (comp-rvalue ctx (cadr ast) '(return #f)) )))
+          ((addr)
+            (if (cadr function-return-method) ; Always pass the return address
+              (ctx-add-glo-decl!
+                ctx
+                (list ": $(( $" result-loc-var " = " (comp-rvalue ctx (cadr ast) '(return #t)) " )) # Assign return value"))
+              (ctx-add-glo-decl!
+                ctx
+                (list "prim_return_value " (comp-rvalue ctx (cadr ast) '(return #f)) " $" result-loc-var))))
+          (else
+            (error "Unknown value return method" function-return-method))))
 
      (if (ctx-tail? ctx)
       (begin
