@@ -1562,6 +1562,7 @@
   (unlines
     ""
     (string-append result-loc-var "=__ # Dummy result location")
+    "__=0 # Required for zsh" ; TODO: Investigate why this is necessary for zsh
     ""
     (string-append
     (function-name '(six.identifier main))
