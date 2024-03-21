@@ -376,11 +376,11 @@ _getchar() {
   else
     getchar_return_loc=
   fi
-  get_char
-  case "$get_char_char" in
+  get_char_stdin
+  case "$get_char_stdin_char" in
     EOF) getchar_code=-1 ;;
     NEWLINE) getchar_code=10 ;; # 10 == '\n'
-    *) char_to_int "$get_char_char"; getchar_code=$char_to_int_code ;;
+    *) char_to_int "$get_char_stdin_char"; getchar_code=$char_to_int_code ;;
   esac
   prim_return_value $getchar_code $getchar_return_loc
 }
@@ -646,16 +646,33 @@ read_all_char() {
   done
 }
 
-get_char_stdin_buf=
-get_char_stdin() {
-  # In order to support getchar calls interlaced with read calls, we must swap
-  # the get_char buffers so that it reads from the right buffer.
-  # An alternative could be to copy get_char's implementation in this function
-  get_char_stdin_buf_bk="$get_char_src_buf" # Save previous buffer
-  get_char_src_buf="$get_char_stdin_buf"    # Put stdin buffer in place
-  get_char
-  get_char_stdin_buf="$get_char_src_buf"    # Save updated stdin buffer
-  get_char_src_buf="$get_char_stdin_buf_bk" # Restore previous buffer
+get_char_stdin_src_buf=
+get_char_stdin()                                    # get next char from source into $get_char_stdin_char
+{
+  if [ -z "$get_char_stdin_src_buf" ] ; then        # need to get next line when buffer empty
+    IFS=                             # don't split input
+    if read -r get_char_stdin_src_buf ; then        # read next line into $src_buf
+      if [ -z "$get_char_stdin_src_buf" ] ; then    # an empty line implies a newline character
+        get_char_stdin_char=NEWLINE                 # next get_char_stdin call will read next line
+        return
+      fi
+    else
+      get_char_stdin_char=EOF                       # EOF reached when read fails
+      return
+    fi
+  else
+    get_char_stdin_src_buf="${get_char_stdin_src_buf#?}"           # remove the current char from $src_buf
+    if [ -z "$get_char_stdin_src_buf" ] ; then      # end of line if the buffer is now empty
+      get_char_stdin_char=NEWLINE
+      return
+    fi
+  fi
+
+  # current character is at the head of $src_buf
+
+  get_char_stdin_char="$get_char_stdin_src_buf"                    # remember current buffer
+  get_char_stdin_rest="${get_char_stdin_src_buf#?}"                # remove the first get_char_stdin_char
+  get_char_stdin_char="${get_char_stdin_char%"$get_char_stdin_rest"}"             # remove all but first char
 }
 
 get_char_src_buf=
