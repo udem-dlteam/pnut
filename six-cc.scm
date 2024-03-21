@@ -36,6 +36,10 @@
 ; hashing algorithm, and prevents it from compiling itself.
 ; ** Do not use this option if you want to compile c4 with c4 **
 (define arithmetic-assignment? #f)
+; A simple function is a function without local variables and doesn't call other functions.
+; And so, we can use $1, $2, ... directly and not worry about clobbering the caller's variables.
+; Note: This option is not compatible with (addr #f) return method.
+(define optimise-simple-functions? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -54,6 +58,7 @@
   loop?             ; Are we enclosed in loop?
   loop-end-actions  ; What to do at the end of a loop. Typically an increment.
   block-type        ; What kind of block are we in? (function, loop, switch, if, ...)
+  is-simple-function?; Is the current function simple, i.e. without local variables and not calling other functions?
   )
 
 (define (empty-ctx)
@@ -71,6 +76,7 @@
     #f           ; loop?
     '()          ; loop-end-actions
     'default     ; block-type
+    #f           ; is-simple-function?
     ))
 
 (define (ctx-add-glo-decl! ctx decl)
@@ -135,9 +141,13 @@
 (define (env-var ctx ident #!optional (prefixed-by-dollar #f))
   (cond
     ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
-      (string-append (if (not prefixed-by-dollar) "$" "") (number->string (cadr ident))))
+      (string-append (if prefixed-by-dollar "" "$") (number->string (cadr ident))))
     ((table-ref (ctx-loc-env ctx) ident #f)
-      (format-local-var ident))
+      (if (ctx-is-simple-function? ctx)
+        (if prefixed-by-dollar
+          (number->string (local-var-position (table-ref (ctx-loc-env ctx) ident)))
+          (string-append "$" (number->string (local-var-position (table-ref (ctx-loc-env ctx) ident)))))
+        (format-local-var ident)))
     (else
       (format-non-local-var ident))))
 
@@ -197,6 +207,8 @@
 (define sp-var               (format-non-local-var sp-ident))
 (define strict-mode-var      (format-non-local-var strict-mode-ident))
 (define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
+
+(define (get-result-loc ctx) (if (ctx-is-simple-function? ctx) "1" result-loc-var))
 
 (define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
@@ -451,55 +463,59 @@
       (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
              (body-decls (get-body-declarations body))
              (body-rest (car body-decls))
-             (new-local-vars (cdr body-decls)))
+             (new-local-vars (cdr body-decls))
+             (is-simple-function? (and optimise-simple-functions? (null? new-local-vars)))
+             (local-vars-to-map
+              (map cons parameters
+                        (iota (length parameters) (if is-simple-function? 2 1)))))
+
+
+        (ctx-is-simple-function?-set! ctx is-simple-function?)
 
         (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
         (assert-variable-names-are-safe (map car new-local-vars))
 
         (for-each
-          (lambda (param pos) (add-new-local-var ctx (car param) #t pos))
-          parameters
-          (iota (length parameters) 1))
+          (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) #t (cdr param-and-pos)))
+          local-vars-to-map)
 
         ; Add local variables to the environment
         (for-each
           (lambda (param) (add-new-local-var ctx (car param) (cdr param)))
           new-local-vars)
 
-        (if (equal? 'addr (car function-return-method))
+        (if (not (ctx-is-simple-function? ctx))
           (begin
-            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-            (add-new-local-var ctx result-loc-ident #t 1)
-            (if callee-save? (save-local-variables ctx))
-            (if (cadr function-return-method) ; return address is always passed?
+            (if (equal? 'addr (car function-return-method))
               (begin
-                (ctx-add-glo-decl!
-                  ctx
-                  (list result-loc-var
-                        "=\"$1\"; shift "
-                        "# Remove result_loc param")))
+                (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
+                (add-new-local-var ctx result-loc-ident #t 1)
+                (if callee-save? (save-local-variables ctx))
+                (if (cadr function-return-method) ; return address is always passed?
+                  (begin
+                    (ctx-add-glo-decl!
+                      ctx
+                      (list result-loc-var
+                            "=\"$1\"; shift "
+                            "# Remove result_loc param")))
+                  (begin
+                    (ctx-add-glo-decl!
+                      ctx
+                      (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
+                            "then " result-loc-var "=$1; shift ; "
+                            "else " result-loc-var "= ; fi ;")))))
               (begin
-                (ctx-add-glo-decl!
-                  ctx
-                  (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
-                        "then " result-loc-var "=$1; shift ; "
-                        "else " result-loc-var "= ; fi ;")))))
-          (begin
-            (if callee-save? (save-local-variables ctx))))
+                (if callee-save? (save-local-variables ctx))))
 
-        (let ((local-vars-to-map
-                (map cons parameters (iota (length parameters) 1))))
-
-          (for-each
-            (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
-            local-vars-to-map))
-
-        (for-each
-          (lambda (new-local-var)
-            (if (cdr new-local-var)
-              (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
-              (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
-          new-local-vars)
+            (for-each
+              (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
+              local-vars-to-map)
+            (for-each
+              (lambda (new-local-var)
+                (if (cdr new-local-var)
+                  (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+                  (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+              new-local-vars)))
 
       (comp-body ctx body-rest)
 
@@ -738,10 +754,10 @@
             (if (cadr function-return-method) ; Always pass the return address
               (ctx-add-glo-decl!
                 ctx
-                (list ": $(( $" result-loc-var " = " (comp-rvalue ctx (cadr ast) '(return #t)) " )) # Assign return value"))
+                (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " )) # Assign return value"))
               (ctx-add-glo-decl!
                 ctx
-                (list "prim_return_value " (comp-rvalue ctx (cadr ast) '(return #f)) " $" result-loc-var))))
+                (list "prim_return_value " (comp-rvalue ctx (cadr ast) '(return #f)) " $" (get-result-loc ctx)))))
           (else
             (error "Unknown value return method" function-return-method))))
 
@@ -834,7 +850,9 @@
           (filter (lambda (x) (not (member x (list assign_to result-loc-ident)))) initialized-local-vars)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (and (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
+      (if (and (not disable-save-restore-vars?)
+               (not (null? local-vars-to-save))
+               (not (ctx-is-simple-function? ctx)))
         (ctx-add-glo-decl!
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc)) " "))))))
@@ -851,7 +869,9 @@
          (local-vars-to-save-no-result-loc
           (filter (lambda (x) (not (member x (list assign_to result-loc-ident)))) initialized-local-vars)))
 
-      (if (and (not disable-save-restore-vars?) (not (null? local-vars-to-save)))
+      (if (and (not disable-save-restore-vars?)
+               (not (null? local-vars-to-save))
+               (not (ctx-is-simple-function? ctx)))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
@@ -867,6 +887,8 @@
       (comp-fun-call ctx ast assign_to))))
 
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
+  (if (ctx-is-simple-function? ctx)
+    (error "Function calls are not supported in functions that are considered simple. To make the function non-simple, declare a local variable or remove the --optimise-simple-functions flag."))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
   ; - how to preserve value of variables that may be used by the caller (because no local variables).
   ;   Options:
@@ -1348,7 +1370,7 @@
     ((six.identifier six.internal-identifier)
       (if wrapped
         (env-var ctx ast)
-        (wrap-in-condition-if-needed "$" (env-var ctx ast arithmetic-assignment?) "")))
+        (wrap-in-condition-if-needed "$" (env-var ctx ast #t) "")))
     ((six.x&&y |six.x\|\|y|)
       ; Note, this could also be compiled in a single [ ] block using -a and -o,
       ; which I think are POSIX compliant but are deprecated.
@@ -1684,6 +1706,9 @@
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--arithmetic-assignment")))
                   (set! arithmetic-assignment? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--optimise-simple-functions")))
+                  (set! optimise-simple-functions? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)
