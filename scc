@@ -10,7 +10,7 @@ echo "*** compiling $source_file -> $output_file"
 
 gcc -E -C -P -DSIX_CC "$source_file" > "$temp_file"
 
-./six-cc.scm "$temp_file" > "$output_file"
+./six-cc.scm "$temp_file" $SIX_CC_OPTIONS > "$output_file"
 
 chmod +x "$output_file"
 
