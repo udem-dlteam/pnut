@@ -547,6 +547,79 @@
             (loop (cdr lst)))
           (ctx-tail?-set! ctx start-tail?)))))
 
+;; Accumulate the body of a case statement until a break or another case statement is found.
+;; Note that because Shell cases always break at the end, we can't have fallthrough, and so
+;; it fails if it finds another case statement before a break.
+(define (gather-case-body ast)
+  (let loop ((ast ast) (body '()) (last-return? #f))
+    (if (pair? ast)
+      (let ((tag (caar ast)))
+        (case tag
+          ((six.break)
+           (cons (reverse body) (cdr ast)))
+          ((six.case six.label)
+            (if last-return?
+              (cons (reverse body) ast)
+              (error "Switch case fallthrough not supported")))
+          ((six.return)
+           (loop (cdr ast) (cons (car ast) body) #t))
+          (else
+           (loop (cdr ast) (cons (car ast) body) #f))))
+      (cons (reverse body) '()))))
+
+(define (gather-case-patterns ast)
+  (let loop ((ast ast) (patterns '()))
+    (if (and (pair? ast) (equal? 'six.case (car ast)))
+      (loop (caddr ast) (cons (cadr ast) patterns))
+      (cons (reverse patterns) ast))))
+
+(define (gather-case-data cases)
+  (cond
+    ((equal? 'six.case (caar cases)) ;; (six.case (six.literal ...) ...)
+      (let* ((pattern-and-body-start (gather-case-patterns (car cases)))
+             (patterns (map (lambda (c) (comp-constant c)) (car pattern-and-body-start)))
+             (patterns-string (string-concatenate patterns "|"))
+             (rest (cons (cdr pattern-and-body-start) (cdr cases))))
+        (cons patterns-string rest)))
+    ((and (equal? 'six.label (caar cases)) (equal? 'default (cadar cases))) ;; (six.label default ...)
+      (let* ((rest (cons (caddar cases) (cdr cases))))
+        (cons "*" rest)))
+    (else
+      (error "Unknown case" (car cases)))))
+
+(define (comp-cases ctx cases)
+  (let loop ((cases cases))
+    (if (pair? cases)
+      (let* ((case-data (gather-case-data cases))
+             (patterns-string (car case-data))
+             (rest (cdr case-data))
+             (body-and-new-rest (gather-case-body rest))
+             (body (car body-and-new-rest))
+             (new-rest (cdr body-and-new-rest))
+             (comped-body (cdr (scope-glo-decls ctx (lambda () (comp-body ctx body))))))
+        ; If the body is a single statement, we may be able to put the pattern and ;; on the same line
+        (cond
+          ((and (pair? comped-body) (null? (cdr comped-body))
+                (< (string-length patterns-string) 40))
+            (ctx-add-glo-decl!
+              ctx
+              (list patterns-string ") " (car comped-body) " ;;")))
+
+          ((and (pair? comped-body) (null? (cdr comped-body)))
+            (ctx-add-glo-decl!
+              ctx
+              (list patterns-string ")"))
+            (nest ctx
+              (ctx-add-glo-decl!
+                ctx
+                (list (car comped-body) " ;;"))))
+          (else
+            (ctx-add-glo-decl! ctx (list patterns-string ")"))
+            (nest ctx
+              (for-each (lambda (l) (ctx-add-glo-decl! ctx l)) comped-body)
+              (ctx-add-glo-decl! ctx (list ";;")))))
+        (loop new-rest)))))
+
 (define (comp-statement ctx ast #!optional (else-if? #f))
   (case (car ast)
     ((six.while)
@@ -625,6 +698,20 @@
           (ctx-add-glo-decl!
             ctx
             (list "fi")))))
+    ((six.switch)
+     (let* ((control-expr (cadr ast))
+            (cases (cdaddr ast))
+            (control-test (comp-rvalue ctx control-expr '(switch-control)))
+            (start-block-type (ctx-block-type ctx)))
+         (ctx-add-glo-decl!
+            ctx
+            (list "case " control-test " in"))
+         (ctx-block-type-set! ctx 'switch)
+         (nest ctx (comp-cases ctx cases))
+         (ctx-block-type-set! ctx start-block-type)
+         (ctx-add-glo-decl!
+          ctx
+          (list "esac"))))
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) '(return #f))))
@@ -648,7 +735,8 @@
           ; The block only has one statement (a return without a value), and we
           ; can't have the block empty unless it's a case statement.
           (if (and (ctx-single-statement? ctx)
-                   (not (pair? (cdr ast)))) ;; We haven't returned using prim_return_value
+                   (not (pair? (cdr ast))) ;; We haven't returned using prim_return_value
+                   (not (equal? 'case (ctx-block-type ctx)))) ; Not a case statement
             (begin
               (if callee-save? (restore-local-variables ctx))
               (ctx-add-glo-decl! ctx (list "return"))))))
@@ -1122,7 +1210,7 @@
     (case (car context-tag)
       ((return index-lvalue assignment)
         (comp-side-effects-then-rvalue (cadr context-tag) #f))
-      ((argument)
+      ((argument switch-control)
         (comp-side-effects-then-rvalue #f #f))
       ((statement-expr)
         (cons contains-side-effect
