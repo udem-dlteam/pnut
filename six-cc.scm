@@ -45,20 +45,20 @@
   (string-append "_" (symbol->string (cadr ident))))
 
 (define-type ctx
-  glo-decls         ; Lines of code generated so far
-  loc-env           ; Local environment
-  all-variables     ; Set represented as a table
-  literals          ; Literals that have been assigned to a variable
-  enums             ; Enums that have been defined.
-  structs           ; Structures that have been defined
-  data              ; The data section
-  level             ; The current level of nesting
-  tail?             ; Is the current statement is in tail position?
-  single-statement? ; If the current block has only one statement
-  loop?             ; Are we enclosed in loop?
-  loop-end-actions  ; What to do at the end of a loop. Typically an increment.
-  block-type        ; What kind of block are we in? (function, loop, switch, if, ...)
-  is-simple-function?; Is the current function simple, i.e. without local variables and not calling other functions?
+  glo-decls           ; Lines of code generated so far
+  loc-env             ; Local environment
+  all-variables       ; Set represented as a table
+  literals            ; Literals that have been assigned to a variable
+  enums               ; Enums that have been defined.
+  structs             ; Structures that have been defined
+  data                ; The data section
+  level               ; The current level of nesting
+  tail?               ; Is the current statement is in tail position?
+  single-statement?   ; If the current block has only one statement
+  loop?               ; Are we enclosed in loop?
+  loop-end-actions    ; What to do at the end of a loop. Typically an increment.
+  block-type          ; What kind of block are we in? (function, loop, switch, if, ...)
+  is-simple-function? ; Is the current function simple, i.e. without local variables and not calling other functions?
   )
 
 (define (empty-ctx)
@@ -465,9 +465,13 @@
              (body-rest (car body-decls))
              (new-local-vars (cdr body-decls))
              (is-simple-function?
-              (and optimise-simple-functions?
-                  (null? new-local-vars)
-                  (not (equal? (cadr name) 'main))))
+              (if (and optimise-simple-functions?
+                       (null? new-local-vars)
+                       (not (equal? (cadr name) 'main)))
+                  (if (null? parameters)
+                    'extra-simple ; Extra simple functions don't have parameters, and so can call other functions unlike simple functions
+                    'simple)
+                  #f))
              (local-vars-to-map
               (map cons parameters
                         (iota (length parameters) (if is-simple-function? 2 1)))))
@@ -890,8 +894,6 @@
       (comp-fun-call ctx ast assign_to))))
 
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
-  (if (ctx-is-simple-function? ctx)
-    (error "Function calls are not supported in functions that are considered simple. To make the function non-simple, declare a local variable or remove the --optimise-simple-functions flag."))
   ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
   ; - how to preserve value of variables that may be used by the caller (because no local variables).
   ;   Options:
@@ -922,6 +924,13 @@
           (if is-prim
               (cadr (assoc (cadr name) runtime-primitives))
               #t)))
+
+      (if (and (equal? 'simple (ctx-is-simple-function? ctx)) (not is-prim))
+        (begin
+          (display "Function calls to non-primitives are not supported in functions that are considered simple.\n")
+          (display "To make the function non-simple, declare a local variable or remove the --optimise-simple-functions flag.\n")
+          (display "Function: ") (display ast) (newline)
+          (exit 1)))
 
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
