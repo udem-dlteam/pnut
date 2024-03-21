@@ -50,9 +50,10 @@
   data              ; The data section
   level             ; The current level of nesting
   tail?             ; Is the current statement is in tail position?
-  single-statement? ; If the block has only one statement
-  loop?             ; Is the current block a loop block?
+  single-statement? ; If the current block has only one statement
+  loop?             ; Are we enclosed in loop?
   loop-end-actions  ; What to do at the end of a loop. Typically an increment.
+  block-type        ; What kind of block are we in? (function, loop, switch, if, ...)
   )
 
 (define (empty-ctx)
@@ -69,6 +70,7 @@
     #f           ; single-statement?
     #f           ; loop?
     '()          ; loop-end-actions
+    'default     ; block-type
     ))
 
 (define (ctx-add-glo-decl! ctx decl)
@@ -549,14 +551,17 @@
   (case (car ast)
     ((six.while)
       (let ((code-test (comp-loop-test ctx (cadr ast)))
-            (start-loop? (ctx-loop? ctx)))
+            (start-loop? (ctx-loop? ctx))
+            (start-block-type (ctx-block-type ctx)))
         (ctx-add-glo-decl!
           ctx
           (list "while " code-test " ; do"))
         (ctx-loop?-set! ctx #t)
+        (ctx-block-type-set! ctx 'loop)
         (nest ctx
           (comp-statement ctx (caddr ast)))
         (ctx-loop?-set! ctx start-loop?)
+        (ctx-block-type-set! ctx start-block-type)
         (ctx-add-glo-decl!
           ctx
           (list "done"))))
@@ -567,7 +572,8 @@
            (expr3 (cadddr ast))
            (stat (car (cddddr ast)))
            (start-loop? (ctx-loop? ctx))
-           (start-loop-end-actions (ctx-loop-end-actions ctx)))
+           (start-loop-end-actions (ctx-loop-end-actions ctx))
+           (start-block-type (ctx-block-type ctx)))
        (comp-statement ctx expr1)
        (let ((code-test (if expr2 (comp-loop-test ctx expr2) ":"))
              (loop-end-actions
@@ -579,6 +585,7 @@
             (list "while " code-test " ; do"))
          (ctx-loop?-set! ctx #t)
          (ctx-loop-end-actions-set! ctx loop-end-actions)
+         (ctx-block-type-set! ctx 'loop)
          (nest ctx
           (comp-statement ctx stat)
           (for-each
@@ -587,16 +594,19 @@
          )
          (ctx-loop?-set! ctx start-loop?)
          (ctx-loop-end-actions-set! ctx start-loop-end-actions)
+         (ctx-block-type-set! ctx start-block-type)
          (ctx-add-glo-decl!
             ctx
             (list "done")))))
     ((six.if)
      (let* ((test (cadr ast))
             (stat (caddr ast))
-            (code-test (comp-if-test ctx test)))
+            (code-test (comp-if-test ctx test))
+            (start-block-type (ctx-block-type ctx)))
         (ctx-add-glo-decl!
           ctx
           (list (if else-if? "elif " "if ") code-test " ; then"))
+        (ctx-block-type-set! ctx 'if)
         (nest ctx (comp-statement ctx stat))
         (if (pair? (cdddr ast))
             (let ((else-block (cadddr ast)))
@@ -610,6 +620,7 @@
                     ctx
                     (list "else"))
                   (nest ctx (comp-statement ctx else-block))))))
+         (ctx-block-type-set! ctx start-block-type)
          (if (not else-if?)
           (ctx-add-glo-decl!
             ctx
@@ -631,11 +642,13 @@
 
      (if (ctx-tail? ctx)
       (begin
-        ; We're in a loop, so we won't fall through to the next statement with a break
+        ; We're in a loop, so we won't fall through to the next statement without a break statement
         (if (ctx-loop? ctx)
           (ctx-add-glo-decl! ctx (list "break"))
-          ; The block only has one statement (a return), and we can't have the block empty
-          (if ctx-single-statement?
+          ; The block only has one statement (a return without a value), and we
+          ; can't have the block empty unless it's a case statement.
+          (if (and (ctx-single-statement? ctx)
+                   (not (pair? (cdr ast)))) ;; We haven't returned using prim_return_value
             (begin
               (if callee-save? (restore-local-variables ctx))
               (ctx-add-glo-decl! ctx (list "return"))))))
