@@ -55,7 +55,7 @@ void fatal_error(char_ptr msg) {
 /* tokenizer */
 
 void handle_preprocessor_directive() {
-  /* TODO */
+  return;
 }
 
 int ch;
