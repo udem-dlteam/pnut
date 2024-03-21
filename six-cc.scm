@@ -1241,13 +1241,13 @@
                         ; side of the expression is a different conditional, we
                         ; wrap it in parenthesis. It adds parenthesis that
                         ; sometimes aren't needed, but it hopefully helps readability.
-                        (if wrap-left "(" "")
+                        (if wrap-left "{ " "")
                         (comp-rvalue-go ctx (cadr ast) wrapped #t (cadddr ast))
-                        (if wrap-left ")" "")
+                        (if wrap-left "; }" "")
                         (six-op-string (car ast) #t)
-                        (if wrap-right "(" "")
+                        (if wrap-right "{ " "")
                         (comp-rvalue-go ctx (caddr ast) wrapped #t (car (cddddr ast)))
-                        (if wrap-right ")" "")))
+                        (if wrap-right "; }" "")))
         (begin
           ; Check if left-side-conditional-fun-calls and right-side-conditional-fun-calls are empty
           (if (or (not (null? (cadddr ast))) (not (null? (car (cddddr ast)))))
