@@ -214,12 +214,18 @@
     (else
      (error "unknown global declaration" ast))))
 
-(define (comp-constant ctx ast)
+(define (comp-constant ast)
   (case (car ast)
     ((six.literal)
      (let ((val (cadr ast)))
        (cond ((exact-integer? val)
               (number->string val))
+             ((string? val)
+              ; Hacky way to detect character literals
+              ; since six doesn't distinguish between " and '
+              (if (equal? 1 (string-length val))
+                (number->string (char->integer (string-ref val 0)))
+                (error "String literals are not supported in this context")))
              (else
               "unknown literal" ast))))
     (else
@@ -236,7 +242,7 @@
           (ctx-add-glo-decl!
            ctx
            (list "defarr " (global-var name) " " size)))
-        (let ((val (if init (comp-constant ctx init) "0")))
+        (let ((val (if init (comp-constant init) "0")))
           (ctx-add-glo-decl!
            ctx
            (if support-addr-of?
