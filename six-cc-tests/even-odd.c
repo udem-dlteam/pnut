@@ -6,12 +6,14 @@ int abs(int number)
 
 int even(int number)
 {
+  int a; /* Local variable so that the function is not simple */
   if(number == 0) return 1;
   return odd(abs(number)-1);
 }
 
 int odd(int number)
 {
+  int a; /* Local variable so that the function is not simple */
   if( number == 0 ) return 0;
   return even(abs(number)-1);
 }

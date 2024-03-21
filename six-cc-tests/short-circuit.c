@@ -1,12 +1,14 @@
 /* Test that the lazy evaluation properties of || and && are respected */
 
 void DO_NOT_CALL(int x) {
+  int a; /* Local variable so that the function is not simple */
   printf("Boom!");
   exit(1);
   return x;
 }
 
 void SHOULD_BE_CALLED(int x) {
+  int a; /* Local variable so that the function is not simple */
   if (x) {
     printf("Ah!\n");
   }

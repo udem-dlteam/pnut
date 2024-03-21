@@ -464,7 +464,10 @@
              (body-decls (get-body-declarations body))
              (body-rest (car body-decls))
              (new-local-vars (cdr body-decls))
-             (is-simple-function? (and optimise-simple-functions? (null? new-local-vars)))
+             (is-simple-function?
+              (and optimise-simple-functions?
+                  (null? new-local-vars)
+                  (not (equal? (cadr name) 'main))))
              (local-vars-to-map
               (map cons parameters
                         (iota (length parameters) (if is-simple-function? 2 1)))))
