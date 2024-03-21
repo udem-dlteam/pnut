@@ -591,29 +591,29 @@
             ctx
             (list "done")))))
     ((six.if)
-     (let ((test (cadr ast))
-           (stat (caddr ast)))
-       (let ((code-test (comp-if-test ctx test)))
-         (ctx-add-glo-decl!
-            ctx
-            (list (if else-if? "elif " "if ") code-test " ; then"))
-         (nest ctx (comp-statement ctx stat))
-         (if (pair? (cdddr ast))
-             (let ((else-block (cadddr ast)))
-               (if (equal? (car else-block) 'six.if)
-                   (begin
-                    ; Next statement is if, so compiling to elif
-                    (comp-statement ctx else-block #t))
-                   (begin
-                    ; Normal case
-                    (ctx-add-glo-decl!
-                      ctx
-                      (list "else"))
-                    (nest ctx (comp-statement ctx else-block))))))
+     (let* ((test (cadr ast))
+            (stat (caddr ast))
+            (code-test (comp-if-test ctx test)))
+        (ctx-add-glo-decl!
+          ctx
+          (list (if else-if? "elif " "if ") code-test " ; then"))
+        (nest ctx (comp-statement ctx stat))
+        (if (pair? (cdddr ast))
+            (let ((else-block (cadddr ast)))
+              (if (equal? (car else-block) 'six.if)
+                  (begin
+                  ; Next statement is if, so compiling to elif
+                  (comp-statement ctx else-block #t))
+                  (begin
+                  ; Normal case
+                  (ctx-add-glo-decl!
+                    ctx
+                    (list "else"))
+                  (nest ctx (comp-statement ctx else-block))))))
          (if (not else-if?)
           (ctx-add-glo-decl!
             ctx
-            (list "fi"))))))
+            (list "fi")))))
     ((six.return)
      (if (pair? (cdr ast))
          (let ((code-expr (comp-rvalue ctx (cadr ast) '(return #f))))
