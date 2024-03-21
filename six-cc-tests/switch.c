@@ -1,7 +1,9 @@
-int LOWERCASE=1;
-int UPPERCASE=2;
-int NEWLINE=3;
-int OTHER=4;
+enum Category() {
+  LOWERCASE = 1;
+  UPPERCASE;
+  NEWLINE;
+  OTHER;
+}
 
 /* For all ascii characters, categorize them into 4 categories */
 int categorize_char(char c) {
@@ -69,6 +71,20 @@ int categorize_char(char c) {
   }
   /* Dead code, but puts the switch in non-tail call position */
   return a;
+}
+
+char_ptr category_to_string(int category) {
+  switch (category) {
+    case LOWERCASE:
+      return "lowercase";
+    case UPPERCASE:
+      return "uppercase";
+    case NEWLINE:
+      return "newline";
+    case OTHER:
+      return "other";
+  }
+  return "unknown";
 }
 
 int main() {

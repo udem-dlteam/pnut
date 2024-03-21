@@ -156,6 +156,12 @@
       (string-append "_$" (global-var ident))
       (global-var ident)))
 
+(define (enum-ref ctx ident)
+  (let ((enum (table-ref (ctx-enums ctx) (cadr ident) #f)))
+    (if enum
+      (string+symbol "_" (cadr ident))
+      (error "Unknown enum label constant" ident))))
+
 (define (format-local-var ident)
   (if prefix-local-vars
     (string+symbol "_" (cadr ident))
@@ -573,11 +579,20 @@
       (loop (caddr ast) (cons (cadr ast) patterns))
       (cons (reverse patterns) ast))))
 
-(define (gather-case-data cases)
+(define (comp-pattern ctx ast)
+  (case (car ast)
+    ((six.literal)
+     (comp-constant ast))
+    ((six.identifier)
+     (string-append "$" (enum-ref ctx ast)))
+    (else
+     (error "Unsupported pattern" ast))))
+
+(define (gather-case-data ctx cases)
   (cond
     ((equal? 'six.case (caar cases)) ;; (six.case (six.literal ...) ...)
       (let* ((pattern-and-body-start (gather-case-patterns (car cases)))
-             (patterns (map (lambda (c) (comp-constant c)) (car pattern-and-body-start)))
+             (patterns (map (lambda (c) (comp-pattern ctx c)) (car pattern-and-body-start)))
              (patterns-string (string-concatenate patterns "|"))
              (rest (cons (cdr pattern-and-body-start) (cdr cases))))
         (cons patterns-string rest)))
@@ -590,7 +605,7 @@
 (define (comp-cases ctx cases)
   (let loop ((cases cases))
     (if (pair? cases)
-      (let* ((case-data (gather-case-data cases))
+      (let* ((case-data (gather-case-data ctx cases))
              (patterns-string (car case-data))
              (rest (cdr case-data))
              (body-and-new-rest (gather-case-body rest))
