@@ -370,7 +370,7 @@ defstr() {
 
 _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
-_getchar() {
+_getchar_old() {
   if [ $# -eq 1 ]; then
     getchar_return_loc=$1; shift
   else
@@ -383,6 +383,11 @@ _getchar() {
     *) char_to_int "$get_char_stdin_char"; getchar_code=$char_to_int_code ;;
   esac
   prim_return_value $getchar_code $getchar_return_loc
+}
+
+_getchar() {
+  get_char_stdin
+  : $(($1 = char_to_int_code))
 }
 
 _exit() { echo \"Exiting with code $1\"; exit $1; }
@@ -647,23 +652,23 @@ read_all_char() {
 }
 
 get_char_stdin_src_buf=
-get_char_stdin()                                    # get next char from source into $get_char_stdin_char
+get_char_stdin()                                    # get next char from source into $char_to_int_code
 {
   if [ -z "$get_char_stdin_src_buf" ] ; then        # need to get next line when buffer empty
     IFS=                             # don't split input
     if read -r get_char_stdin_src_buf ; then        # read next line into $src_buf
       if [ -z "$get_char_stdin_src_buf" ] ; then    # an empty line implies a newline character
-        get_char_stdin_char=NEWLINE                 # next get_char_stdin call will read next line
+        char_to_int_code=10                      # next get_char_stdin call will read next line
         return
       fi
     else
-      get_char_stdin_char=EOF                       # EOF reached when read fails
+      char_to_int_code=-1                       # EOF reached when read fails
       return
     fi
   else
     get_char_stdin_src_buf="${get_char_stdin_src_buf#?}"           # remove the current char from $src_buf
     if [ -z "$get_char_stdin_src_buf" ] ; then      # end of line if the buffer is now empty
-      get_char_stdin_char=NEWLINE
+      char_to_int_code=10
       return
     fi
   fi
@@ -673,6 +678,7 @@ get_char_stdin()                                    # get next char from source 
   get_char_stdin_char="$get_char_stdin_src_buf"                    # remember current buffer
   get_char_stdin_rest="${get_char_stdin_src_buf#?}"                # remove the first get_char_stdin_char
   get_char_stdin_char="${get_char_stdin_char%"$get_char_stdin_rest"}"             # remove all but first char
+  char_to_int "$get_char_stdin_char"
 }
 
 get_char_src_buf=
