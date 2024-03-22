@@ -374,7 +374,7 @@ _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
 
 __stdin_buf=
-_getchar()                                          # get next char from source into $__c
+_getchar()
 {
   if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
     IFS=                                            # don't split input
@@ -395,12 +395,34 @@ _getchar()                                          # get next char from source 
     fi
   fi
 
-  # current character is at the head of $__stdin_buf
-  __stdin_char="$__stdin_buf"                    # remember current buffer
-  __stdin_rest="${__stdin_buf#?}"                # remove the first __stdin_char
-  __stdin_char="${__stdin_char%"$__stdin_rest"}" # remove all but first char
-  char_to_int "$__stdin_char"
-  : $(($1 = __c))
+  # The current character is at the head of $__stdin_buf. It will be removed in the next call to getchar.
+  # The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
+  # occurrences See analyze-big-c.py to see the frequency of each character in big.c.
+  # Note that adding cases here speeds up all shells except ksh, so the set of optimized characters should be kept small.
+  case "$__stdin_buf" in
+    " "*) : $(($1 = 32))  ;;
+    "e"*) : $(($1 = 101)) ;;
+    "="*) : $(($1 = 61))  ;;
+    "t"*) : $(($1 = 116)) ;;
+    ";"*) : $(($1 = 59))  ;;
+    "i"*) : $(($1 = 105)) ;;
+    ")"*) : $(($1 = 41))  ;;
+    "("*) : $(($1 = 40))  ;;
+    "n"*) : $(($1 = 110)) ;;
+    "s"*) : $(($1 = 115)) ;;
+    "l"*) : $(($1 = 108)) ;;
+    "+"*) : $(($1 = 43))  ;;
+    "p"*) : $(($1 = 112)) ;;
+    "a"*) : $(($1 = 97))  ;;
+    "r"*) : $(($1 = 114)) ;;
+    "f"*) : $(($1 = 102)) ;;
+    "d"*) : $(($1 = 100)) ;;
+    "*"*) : $(($1 = 42))  ;;
+    *)
+      char_to_int "${__stdin_buf%"${__stdin_buf#?}"}" # get the first character
+      : $(($1 = __c))
+      ;;
+  esac
 }
 
 _exit() { echo \"Exiting with code $1\"; exit $1; }
@@ -617,6 +639,7 @@ read_all_char() {
   done
 }
 
+# TODO: Optimize like getchar
 get_char_src_buf=
 get_char()                           # get next char from source into $get_char_char
 {
@@ -643,7 +666,7 @@ get_char()                           # get next char from source into $get_char_
 
   get_char_char="$get_char_src_buf"                    # remember current buffer
   get_char_rest="${get_char_src_buf#?}"                # remove the first get_char_char
-  get_char_char="${get_char_char%"$get_char_rest"}"             # remove all but first char
+  get_char_char="${get_char_char%"$get_char_rest"}"    # remove all but first char
 }
 
 _memset() { # $2: Pointer, $3: Value, $4: Length
