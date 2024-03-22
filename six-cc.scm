@@ -37,7 +37,7 @@
 ; A simple function is a function without local variables and doesn't call other functions.
 ; And so, we can use $1, $2, ... directly and not worry about clobbering the caller's variables.
 ; Note: This option is not compatible with (addr #f) return method.
-(define optimise-simple-functions? #t)
+(define optimise-simple-functions? #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
