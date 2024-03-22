@@ -37,7 +37,9 @@
 ; A simple function is a function without local variables and doesn't call other functions.
 ; And so, we can use $1, $2, ... directly and not worry about clobbering the caller's variables.
 ; Note: This option is not compatible with (addr #f) return method.
-(define optimise-simple-functions? #f)
+(define optimize-simple-functions? #f)
+; Use $1 for the return location instead of result_loc.
+(define use-$1-for-return-loc? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -108,11 +110,11 @@
   position
   initialized)
 
-(define (shift-ctx-loc-env-position ctx)
-  (for-each (lambda (p)
-              (if (local-var-position (cdr p))
-                (local-var-position-set! (cdr p) (+ 1 (local-var-position (cdr p))))))
-            (table->list (ctx-loc-env ctx))))
+; (define (shift-ctx-loc-env-position ctx)
+;   (for-each (lambda (p)
+;               (if (local-var-position (cdr p))
+;                 (local-var-position-set! (cdr p) (+ 1 (local-var-position (cdr p))))))
+;             (table->list (ctx-loc-env ctx))))
 
 (define (mark-ctx-loc-env-initialized ctx ident)
   (let* ((env (ctx-loc-env ctx))
@@ -204,7 +206,8 @@
 (define strict-mode-var      (format-non-local-var strict-mode-ident))
 (define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
 
-(define (get-result-loc ctx) (if (ctx-is-simple-function? ctx) "1" result-loc-var))
+(define (get-result-var ctx) (if (or (ctx-is-simple-function? ctx) use-$1-for-return-loc?) "1" result-loc-ident))
+(define (get-result-loc ctx) (if (or (ctx-is-simple-function? ctx) use-$1-for-return-loc?) "1" result-loc-var))
 
 (define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
@@ -434,7 +437,7 @@
              (body-rest (car body-decls))
              (new-local-vars (cdr body-decls))
              (is-simple-function?
-              (if (and optimise-simple-functions?
+              (if (and optimize-simple-functions?
                        (null? new-local-vars)
                        (not (equal? (cadr name) 'main)))
                   (if (null? parameters)
@@ -443,13 +446,15 @@
                   #f))
              (local-vars-to-map
               (map cons parameters
-                        (iota (length parameters) (if is-simple-function? 2 1)))))
-
+                        (iota (length parameters)
+                              (if (or is-simple-function? use-$1-for-return-loc?) 2 1)))))
 
         (ctx-is-simple-function?-set! ctx is-simple-function?)
 
         (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
         (assert-variable-names-are-safe (map car new-local-vars))
+
+        (add-new-local-var ctx result-loc-ident #t 1)
 
         (for-each
           (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) #t (cdr param-and-pos)))
@@ -462,14 +467,14 @@
 
         (if (not (ctx-is-simple-function? ctx))
           (begin
-            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-            (add-new-local-var ctx result-loc-ident #t 1)
+            ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
             (if callee-save? (save-local-variables ctx))
-            (ctx-add-glo-decl!
-              ctx
-              (list result-loc-var
-                    "=\"$1\"; shift "
-                    "# Remove result_loc param"))
+            (if (not use-$1-for-return-loc?)
+              (ctx-add-glo-decl!
+                ctx
+                (list result-loc-var
+                      "=\"$1\"; shift "
+                      "# Remove result_loc param")))
 
             (for-each
               (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
@@ -825,7 +830,9 @@
                (not (ctx-is-simple-function? ctx)))
         (ctx-add-glo-decl!
           ctx
-          (list "rest_loc_var " (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
+          (list "rest_loc_var "
+                (if use-$1-for-return-loc? "$1 " "")
+                (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
 
 ; Like comp-fun-call, but checks that the parameters are simple and not nested function calls.
 ; This function is not necessary, but we don't want to silently compile complexe function calls
@@ -872,7 +879,7 @@
       (if (and (equal? 'simple (ctx-is-simple-function? ctx)) (not is-prim))
         (begin
           (display "Function calls to non-primitives are not supported in functions that are considered simple.\n")
-          (display "To make the function non-simple, declare a local variable or remove the --optimise-simple-functions flag.\n")
+          (display "To make the function non-simple, declare a local variable or remove the --optimize-simple-functions flag.\n")
           (display "Function: ") (display ast) (newline)
           (exit 1)))
 
@@ -1414,11 +1421,13 @@
     (string-append sp-var "=0 # Note: Stack grows up, not down")
     ""
     "save_loc_var() {"
-    (string-append
-    "  : $((" sp-var " += 1))")
-    "  # We must use eval to set a string to a dynamic variable"
-    (string-append
-    "  eval \"save_loc_var_$" sp-var "=\\$" result-loc-var "\"")
+    (if (not use-$1-for-return-loc?)
+      (unlines
+      (string-append
+      "  : $((" sp-var " += 1))")
+      "  # We must use eval to set a string to a dynamic variable"
+      (string-append
+      "  eval \"save_loc_var_$" sp-var "=\\$" result-loc-var "\"")))
     "  while [ $# -gt 0 ]; do"
     (string-append
     "    : $((" sp-var " += 1))")
@@ -1429,18 +1438,25 @@
     "}"
     ""
     "rest_loc_var() {"
+    (if use-$1-for-return-loc?
+    "  __result_loc=$1; shift")
     "  while [ $# -gt 0 ]; do"
-    "    # Make we we don't overwrite the result_loc"
-    (string-append
-    "    if [ $1 != \"$" result-loc-var "\" ]; then : $(($1=save_loc_var_$" sp-var ")); fi")
+    "    # Make sure result_loc is not overwritten"
+    (if use-$1-for-return-loc?
+      (string-append
+      "    if [ $1 != \"$__result_loc\" ]; then : $(($1=save_loc_var_$" sp-var ")); fi")
+      (string-append
+      "    if [ $1 != \"$" result-loc-var "\" ]; then : $(($1=save_loc_var_$" sp-var ")); fi"))
     (string-append
     "    : $((" sp-var " -= 1))")
     "    shift"
     "  done"
+    (if (not use-$1-for-return-loc?)
+    (unlines
     (string-append
     "  eval \"" result-loc-var "=\\$save_loc_var_$" sp-var "\"")
     (string-append
-    "  : $((" sp-var " -= 1))")
+    "  : $((" sp-var " -= 1))")))
     "}"
     ""
     ""
@@ -1552,6 +1568,8 @@
 ; - callee-save: boolean
 ; - arithmetic-conditions: boolean
 ; - arithmetic-assignment: boolean
+; - optimize-simple-functions: boolean
+; - use-$1-for-return-loc: boolean
 (define (parse-cmd-line args)
   (let loop ((args args) (files '()))
     (if (null? args)
@@ -1585,8 +1603,11 @@
                 ((and (pair? rest) (member arg '("--arithmetic-assignment")))
                   (set! arithmetic-assignment? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--optimise-simple-functions")))
-                  (set! optimise-simple-functions? (not (equal? "false" (car rest))))
+                ((and (pair? rest) (member arg '("--optimize-simple-functions")))
+                  (set! optimize-simple-functions? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--use-$1-for-return-loc")))
+                  (set! use-$1-for-return-loc? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)
