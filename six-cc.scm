@@ -863,7 +863,7 @@
 ; that we've tried to simplify.
 (define (comp-simple-fun-call ctx ast #!optional (assign_to #f))
   (let* ((params (cdr ast))
-         (func-call-params (filter (lambda (p) (equal? (car p) 'six.call)) params)))
+         (func-call-params (filter (lambda (p) (and (pair? p) (equal? (car p) 'six.call))) params)))
     (if (pair? func-call-params)
       (error "Expected a simple function call, but got a nested function call" ast)
       (comp-fun-call ctx ast assign_to))))
@@ -884,7 +884,7 @@
   ;    - Functions take an extra parameter that is the address/name of the variable where to store the return value.
   (let* ((name (car ast))
          (params (cdr ast))
-         (func-call-params (filter (lambda (p) (equal? (car p) 'six.call)) params))
+         (func-call-params (filter (lambda (p) (and (pair? p) (equal? (car p) 'six.call))) params))
          (singleton? (lambda (lst) (and (pair? lst) (null? (cdr lst)))))
          (code-params
           (map (lambda (p)
@@ -1026,6 +1026,7 @@
         assigned-op)))
 
   (define (go ast executes-conditionally)
+    (if (not (pair? ast)) (set! ast (list 'six.literal ast)))
     (case (car ast)
       ((six.call)
         (let* ((id (alloc-identifier))
