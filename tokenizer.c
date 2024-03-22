@@ -11,6 +11,7 @@ typedef char *char_ptr;
 
 #define AVOID_AMPAMP_BARBAR
 #define USE_IN_RANGE_FUNCTION_not
+#define INLINE_get_ch
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -42,10 +43,9 @@ int LOWER_A = 97;
 int LOWER_Z = 122;
 int UNDERSCORE = 95;
 
-int END_OF_FILE = 256;
-int INTEGER = 257;
-int IDENTIFIER = 258;
-int OTHER = 259;
+int INTEGER = 256;
+int IDENTIFIER = 257;
+int OTHER = 258;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -59,15 +59,20 @@ void handle_preprocessor_directive() {
 }
 
 int ch;
-int token;
-int value;
+int tok;
+int val;
+
+#ifdef INLINE_get_ch
+
+#define get_ch() ch = getchar()
+
+#else
 
 void get_ch() {
-
   ch = getchar();
-  if (ch == EOF) ch = END_OF_FILE;
-
 }
+
+#endif
 
 void get_identifier() {
 
@@ -81,59 +86,61 @@ void get_identifier() {
   /* TODO: accumulate in a string pool, check for keywords */
 }
 
-void get_token() {
-
-  value = 0; /* value of token */
+void get_tok() {
 
   while (1) {
 
-    token = ch;
-    get_ch();
+    if (ch <= SPACE) {
 
-    if (token <= SPACE) {
+      if (ch == EOF) {
+        tok = EOF;
+        break;
+      }
 
       /* skip whitespace, detecting when it is at start of line */
 
-      while (ch <= SPACE) {
-        if (ch == NEWLINE) token = ch;
+      if (ch == NEWLINE) tok = ch;
+      get_ch();
+
+      while (in_range(ch, 0, SPACE)) {
+        if (ch == NEWLINE) tok = ch;
         get_ch();
       }
 
       /* detect '#' at start of line, possibly preceded by whitespace */
 
-      if ((token == NEWLINE) AND (ch == SHARP))
+      if ((tok == NEWLINE) AND (ch == SHARP))
         handle_preprocessor_directive();
 
-    } else if (in_range(token, DIGIT_0, DIGIT_9)) {
-
-      value = token - DIGIT_0;
-
-      token = INTEGER;
-
-      while (in_range(ch, DIGIT_0, DIGIT_9)) {
-        value = value * 10 + (ch - DIGIT_0);
-        get_ch();
-      }
-
-      break;
-
-    } else if (in_range(token, UPPER_A, UPPER_Z) OR
-               in_range(token, LOWER_A, LOWER_Z) OR
-               (token == UNDERSCORE)) {
+    } else if (in_range(ch, LOWER_A, LOWER_Z) OR
+               in_range(ch, UPPER_A, UPPER_Z) OR
+               (ch == UNDERSCORE)) {
 
       get_identifier();
 
-      token = IDENTIFIER;
+      tok = IDENTIFIER;
 
       break;
 
-    } else if (token == END_OF_FILE) {
+    } else if (in_range(ch, DIGIT_0, DIGIT_9)) {
+
+      val = ch - DIGIT_0;
+      get_ch();
+
+      while (in_range(ch, DIGIT_0, DIGIT_9)) {
+        val = val * 10 + (ch - DIGIT_0);
+        get_ch();
+      }
+
+      tok = INTEGER;
 
       break;
 
     } else {
 
-      token = OTHER;
+      get_ch();
+
+      tok = OTHER;
 
       break;
 
@@ -143,19 +150,19 @@ void get_token() {
 
 int main() {
 
-  get_ch();
-  get_token();
+  ch = NEWLINE;
+  get_tok();
 
-  while (token != END_OF_FILE) {
+  while (tok != EOF) {
     /*
-    if (token == IDENTIFIER)
+    if (tok == IDENTIFIER)
       printf("IDENTIFIER\n");
-    else if (token == INTEGER)
+    else if (tok == INTEGER)
       printf("INTEGER\n");
     else
       printf("OTHER\n");
     */
-    get_token();
+    get_tok();
   }
 
   return 0;
