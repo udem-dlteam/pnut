@@ -11,8 +11,7 @@ boolean_options = ["true", "false"]
 # (option_type, key, values)
 # option_type: True for options that are concatenated with a dash
 #              False for options that are separated by a space
-options = [ (True, "function-return-method", ["variable", "arg-loc false", "arg-loc true"])
-          # Only testing with true since not initializing is incorrect semantics
+options = [ # Only testing with true since not initializing is incorrect semantics
           , (False, "initialize-memory-when-alloc", ["true"])
           , (False, "inline-inplace-arithmetic-ops", boolean_options)
           , (False, "prefix-local-vars", boolean_options)

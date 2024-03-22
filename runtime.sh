@@ -370,21 +370,6 @@ defstr() {
 
 _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
-_getchar_old() {
-  if [ $# -eq 1 ]; then
-    getchar_return_loc=$1; shift
-  else
-    getchar_return_loc=
-  fi
-  get_char_stdin
-  case "$get_char_stdin_char" in
-    EOF) getchar_code=-1 ;;
-    NEWLINE) getchar_code=10 ;; # 10 == '\n'
-    *) char_to_int "$get_char_stdin_char"; getchar_code=$char_to_int_code ;;
-  esac
-  prim_return_value $getchar_code $getchar_return_loc
-}
-
 _getchar() {
   get_char_stdin
   : $(($1 = char_to_int_code))
@@ -392,23 +377,13 @@ _getchar() {
 
 _exit() { echo \"Exiting with code $1\"; exit $1; }
 
-_malloc() {
-  if [ $# -eq 2 ]; then
-    malloc_return_loc=$1; shift
-  else
-    malloc_return_loc=
-  fi
-  malloc_size=$1
+_malloc() { # $2 = malloc_size
+  malloc_size=$2
   strict_alloc $malloc_size
-  prim_return_value $strict_alloc_res $malloc_return_loc
+  : $(($1 = strict_alloc_res))
 }
 
-_free() {
-  if [ $# -eq 2 ]; then
-    free_return_loc=$1; shift
-  else
-    free_return_loc=
-  fi
+_free() { # $1 = free_ptr
   if [ $__FREE_UNSETS_VARS -eq 1 ]; then
     free_ptr=$1
     free_size=$((_$((free_ptr - 1)))) # Get size of allocation
@@ -418,10 +393,9 @@ _free() {
       : $((free_size -= 1))
     done
   fi
-  prim_return_value 0 $free_return_loc
 }
 
-_printf() {
+_printf() { # $1 = printf format string, $2... = printf args
   printf_fmt_ptr=$1; shift
   printf_mod=0
   while [ "$((_$printf_fmt_ptr))" -ne 0 ] ; do
@@ -507,39 +481,24 @@ _printf() {
 # We represent file descriptors as strings. That means that modes and offsets do not work.
 # These limitations are acceptable since c4.cc does not use them.
 # TODO: Packing and unpacking the string is a lazy way of copying a string
-_open() {
-  if [ $# -eq 3 ]; then
-    open_return_loc=$1; shift
-  else
-    open_return_loc=
-  fi
-  pack_string $1
+_open() { # $2: File name, $3: Mode
+  pack_string $2
   unpack_string "$pack_string_res"
-  prim_return_value $unpack_string_addr $open_return_loc
+  : $(($1 = unpack_string_addr))
 }
 
-_read() {
-  if [ $# -eq 4 ]; then
-    read_return_loc=$1; shift
-  else
-    read_return_loc=
-  fi
-  read_fd=$1
-  read_buf=$2
-  read_count=$3
+_read() { # $2: File descriptor, $3: Buffer, $3: Maximum number of bytes to read
+  read_fd=$2
+  read_buf=$3
+  read_count=$4
   pack_string $read_fd
   read_n_char $read_count $read_buf < "$pack_string_res" # We don't want to use cat because it's not pure Shell
-  prim_return_value $read_n_char_len $read_return_loc
+  : $(($1 = read_n_char_len))
 }
 
 # File descriptor is just a string, nothing to close
-_close() {
-  if [ $# -eq 2 ]; then
-    close_return_loc=$1; shift
-  else
-    close_return_loc=
-  fi
-  prim_return_value 0 $close_return_loc
+_close() { # $2: File descriptor
+  : $(($1 = 0))
 }
 
 # Used to implement the read instruction.
@@ -565,44 +524,28 @@ read_n_char() {
 
 # Read the file, and return a file descriptor to the file.
 # The file descriptor is just a cursor and a string, so closing just frees up the object.
-_fopen() { # $1: File name, $2: Mode
-  if [ $# -eq 3 ]; then
-    fopen_return_loc=$1; shift
-  else
-    fopen_return_loc=
-  fi
-  pack_string $1
-
-  fopen_fd=$__ALLOC                               # Allocate new FD
-  : $((_$((fopen_fd)) = 0))                       # Initialize cursor to 0
-  fopen_buffer=$((fopen_fd + 1))                  # Buffer starts after cursor
+_fopen() { # $2: File name, $3: Mode
+  pack_string $2
+  fopen_fd=$__ALLOC                                 # Allocate new FD
+  : $((_$((fopen_fd)) = 0))                         # Initialize cursor to 0
+  fopen_buffer=$((fopen_fd + 1))                    # Buffer starts after cursor
   read_all_char $fopen_buffer < "$pack_string_res"
-  : $((_$((fopen_buffer + read_all_char_len))=-1)) # Terminate buffer with EOF character
-  __ALLOC=$((__ALLOC + read_all_char_len + 2))    # Update __ALLOC to the new end of the heap
-  prim_return_value $fopen_fd $fopen_return_loc
+  : $((_$((fopen_buffer + read_all_char_len))=-1))  # Terminate buffer with EOF character
+  __ALLOC=$((__ALLOC + read_all_char_len + 2))      # Update __ALLOC to the new end of the heap
+  : $(($1 = fopen_fd))
 }
 
-_fclose() { # $1: File descriptor
-  if [ $# -eq 2 ]; then
-    fclose_return_loc=$1; shift
-  else
-    fclose_return_loc=
-  fi
-  _free $1 # Release file descriptor buffer
-  prim_return_value 0 $fclose_return_loc
+_fclose() { # $2: File descriptor
+  _free $2 # Release file descriptor buffer
+  : $(($1 = 0))
 }
 
 # Only supports item size = 1 for now
-_fread() { # $1: Buffer, $2: Item size, $3: Number of items to read, $4: File descriptor
-  if [ $# -eq 5 ]; then
-    fread_return_loc=$1; shift
-  else
-    fread_return_loc=
-  fi
-  fread_buf=$1
-  fread_item_size=$2
-  fread_count=$3
-  fread_fd=$4
+_fread() { # $2: Buffer, $3: Item size, $4: Number of items to read, $5: File descriptor
+  fread_buf=$2
+  fread_item_size=$3
+  fread_count=$4
+  fread_fd=$5
   fread_len=0
   # TODO: Support all item sizes. One difficulty is that we can't read partial items.
   if [ $fread_item_size -ne 1 ]; then echo "fread: item size must be 1" ; exit 1 ; fi
@@ -617,21 +560,16 @@ _fread() { # $1: Buffer, $2: Item size, $3: Number of items to read, $4: File de
   done
   # Update cursor
   : $((_$fread_fd = $fread_len))
-  prim_return_value $fread_len $fread_return_loc
+  : $(($1 = fread_len))
 }
 
-_fgetc() { # $1: File descriptor
-  if [ $# -eq 2 ]; then
-    fgetc_return_loc=$1; shift
-  else
-    fgetc_return_loc=
-  fi
-  fgetc_fd=$1
+_fgetc() { # $2: File descriptor
+  fgetc_fd=$2
   fgetc_cursor=$((_$fgetc_fd))
   fgetc_fd_buffer=$((fgetc_fd + 1)) # Buffer starts at fd + 1
   fgetc_char=$((_$((fgetc_fd_buffer + fgetc_cursor))))
   : $((_$fgetc_fd += 1)) # Update cursor
-  prim_return_value $fgetc_char $fgetc_return_loc
+  : $(($1 = fgetc_char))
 }
 
 read_all_char() {
@@ -655,7 +593,7 @@ get_char_stdin_src_buf=
 get_char_stdin()                                    # get next char from source into $char_to_int_code
 {
   if [ -z "$get_char_stdin_src_buf" ] ; then        # need to get next line when buffer empty
-    IFS=                             # don't split input
+    IFS=                                            # don't split input
     if read -r get_char_stdin_src_buf ; then        # read next line into $src_buf
       if [ -z "$get_char_stdin_src_buf" ] ; then    # an empty line implies a newline character
         char_to_int_code=10                      # next get_char_stdin call will read next line
@@ -710,43 +648,33 @@ get_char()                           # get next char from source into $get_char_
   get_char_char="${get_char_char%"$get_char_rest"}"             # remove all but first char
 }
 
-_memset() {
-  if [ $# -eq 4 ]; then
-    memset_return_loc=$1; shift
-  else
-    memset_return_loc=
-  fi
-  memset_ptr=$1
-  memset_val=$2
-  memset_len=$3
+_memset() { # $2: Pointer, $3: Value, $4: Length
+  memset_ptr=$2
+  memset_val=$3
+  memset_len=$4
   memset_ix=0
   while [ $memset_ix -lt $memset_len ]; do
     : $((_$((memset_ptr + memset_ix)) = memset_val))
     : $((memset_ix += 1))
   done
-  prim_return_value $memset_ptr $memset_return_loc
+  : $(($1 = memset_ptr))
 }
 
-_memcmp() {
-  if [ $# -eq 4 ]; then
-    memcmp_return_loc=$1; shift
-  else
-    memcmp_return_loc=
-  fi
-  memcmp_op1=$1
-  memcmp_op2=$2
-  memcmp_len=$3
+_memcmp() { # $2: Pointer 1, $3: Pointer 2, $4: Length
+  memcmp_op1=$2
+  memcmp_op2=$3
+  memcmp_len=$4
   memcmp_ix=0
   memcmp_a=0
   while [ $memcmp_ix -lt $memcmp_len ]; do
     if [ $((_$((memcmp_op1 + memcmp_ix)))) -ne $((_$((memcmp_op2 + memcmp_ix)))) ] ; then
       # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
-      prim_return_value $((_$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix)))) $memcmp_return_loc
+      : $(($1 = _$((memcmp_op1 + memcmp_ix)) - _$((memcmp_op2 + memcmp_ix))))
       return
     fi
     : $((memcmp_ix = memcmp_ix + 1))
   done
-  prim_return_value 0 $memcmp_return_loc
+  : $(($1 = 0))
 }
 
 # Debug

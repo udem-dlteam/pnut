@@ -5,8 +5,6 @@
 ; Possible values:
 ; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
 ; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
-; (define function-return-method '(variable 0result))
-(define function-return-method '(addr #t))
 ; Useful for debugging only
 (define disable-save-restore-vars? #f)
 ; Disable for faster execution of programs that allocate a lot of memory
@@ -187,7 +185,6 @@
   (string-append str (symbol->string sym)))
 
 (define result-loc-ident       '(six.internal-identifier result_loc))
-(define result-ident           `(six.internal-identifier ,(if (equal? 'variable (car function-return-method)) (cadr function-return-method) '1_dont_use)))
 (define no-result-loc-ident    '(six.internal-identifier ||))               ; || is empty symbol
 (define alloc-ident            '(six.internal-identifier ALLOC))
 (define argc-ident             '(six.internal-identifier argc_for_main))
@@ -200,7 +197,6 @@
   `(six.internal-identifier ,(string->symbol (string-append "str_" (number->string ix)))))
 
 (define result-loc-var       (format-non-local-var result-loc-ident))
-(define result-var           (format-non-local-var result-ident))
 (define alloc-var            (format-non-local-var alloc-ident))
 (define argc-var             (format-non-local-var argc-ident))
 (define argv-var             (format-non-local-var argv-ident))
@@ -497,26 +493,14 @@
 
         (if (not (ctx-is-simple-function? ctx))
           (begin
-            (if (equal? 'addr (car function-return-method))
-              (begin
-                (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-                (add-new-local-var ctx result-loc-ident #t 1)
-                (if callee-save? (save-local-variables ctx))
-                (if (cadr function-return-method) ; return address is always passed?
-                  (begin
-                    (ctx-add-glo-decl!
-                      ctx
-                      (list result-loc-var
-                            "=\"$1\"; shift "
-                            "# Remove result_loc param")))
-                  (begin
-                    (ctx-add-glo-decl!
-                      ctx
-                      (list "if [ $# -eq " (+ 1 (length parameters)) " ]; "
-                            "then " result-loc-var "=$1; shift ; "
-                            "else " result-loc-var "= ; fi ;")))))
-              (begin
-                (if callee-save? (save-local-variables ctx))))
+            (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
+            (add-new-local-var ctx result-loc-ident #t 1)
+            (if callee-save? (save-local-variables ctx))
+            (ctx-add-glo-decl!
+              ctx
+              (list result-loc-var
+                    "=\"$1\"; shift "
+                    "# Remove result_loc param"))
 
             (for-each
               (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
@@ -756,22 +740,9 @@
           (list "esac"))))
     ((six.return)
      (if (pair? (cdr ast))
-        (case (car function-return-method)
-          ((variable)
-            (ctx-add-glo-decl!
-              ctx
-              (list result-var "=" (comp-rvalue ctx (cadr ast) '(return #f)) )))
-          ((addr)
-            (if (cadr function-return-method) ; Always pass the return address
-              (ctx-add-glo-decl!
-                ctx
-                (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " )) # Assign return value"))
-              (ctx-add-glo-decl!
-                ctx
-                (list "prim_return_value " (comp-rvalue ctx (cadr ast) '(return #f)) " $" (get-result-loc ctx)))))
-          (else
-            (error "Unknown value return method" function-return-method))))
-
+      (ctx-add-glo-decl!
+        ctx
+        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " )) # Assign return value")))
      (if (ctx-tail? ctx)
       (begin
         ; We're in a loop, so we won't fall through to the next statement without a break statement
@@ -942,22 +913,14 @@
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
       (if (and (not is-prim) (not callee-save?)) (save-local-variables ctx assign_to))
 
-      (case (car function-return-method)
-        ((variable)
-          (ctx-add-glo-decl! ctx (list call-code))
-          (if assign_to
-            (comp-assignment ctx `(six.x=y ,assign_to ,result-ident))))
-        ((addr)
-          (if (and (or assign_to (cadr function-return-method)) can-return) ; Always pass the return address, even if it's not used, as long as the function can return a value
-            (ctx-add-glo-decl!
-              ctx
-              (list (string-concatenate (cons (function-name name)
-                                          (cons (env-var ctx (or assign_to no-result-loc-ident)) ;; '|| is empty symbol. Maps to __
-                                          code-params))
-                                        " ")))
-          (ctx-add-glo-decl! ctx (list call-code))))
-        (else
-          (error "Unknown value return method" function-return-method)))
+      (if can-return ; Always pass the return address, even if it's not used, as long as the function can return a value
+        (ctx-add-glo-decl!
+          ctx
+          (list (string-concatenate (cons (function-name name)
+                                      (cons (env-var ctx (or assign_to no-result-loc-ident)) ;; '|| is empty symbol. Maps to __
+                                      code-params))
+                                    " ")))
+        (ctx-add-glo-decl! ctx (list call-code)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
       (if (and (not is-prim) (not callee-save?)) (restore-local-variables ctx assign_to))))
@@ -1213,55 +1176,15 @@
          (literal-inits (cadddr side-effects-res))
          (contains-side-effect (car (cddddr side-effects-res))))
     (define (comp-side-effects-then-rvalue wrapped compiling-test)
-      ; Optimization: When returning with the variable return method, we can
-      ; use the return location directly when it's used by the next function
-      ; call.
-      ; Also, the return location can be returned directly by comp-rvalue when
-      ; we know that it will be used directly after. This is normally true,
-      ; except when the rvalue is a function call argument and the parent
-      ; function call has multiple function call arguments. In that case, only
-      ; the last function call argument can skip assigning to the return
-      ; location.
-      ; Note: This could maybe be done in a simpler way by moving this logic
-      ; to comp-fun-call but it works for now.
-      (if (and (equal? (car function-return-method) 'variable) (not (null? fun-calls-to-replace)))
-        (let ((must-assign-to-return-loc (and (equal? (car context-tag) 'argument) (not (cadr context-tag))))
-              (ast-with-result-identifier
-                (replace-identifier new-ast
-                                    (car (last fun-calls-to-replace)) ; Location of last function call
-                                    result-ident)))
-          (for-each
-            (lambda (e) (ctx-add-glo-decl! ctx e))
-            (comp-side-effects ctx pre-side-effects))
-          (comp-literal-inits ctx literal-inits)
-          (for-each
-            (lambda (call nextCall)
-              ; Check if next function call uses the result, if it's the case use the variable directly
-              (let ((nextCallUsesReturnLoc (and nextCall (member (car call) (cddr nextCall)))))
-                (if nextCallUsesReturnLoc
-                  (begin
-                    ; Overwrite the argument of next function call with the return location
-                    (set-cdr! (car nextCallUsesReturnLoc) (cdr result-ident))
-                    (comp-fun-call ctx (cddr call)))
-                  ; We only assign to the return location if it's not the
-                  ; last function call. In that case, it's up to the caller
-                  ; of comp-rvalue to read the value.
-                  ; TODO: Add the return location to the list of local vars to save to support recursive function calls
-                  (comp-fun-call ctx (cddr call) (and (or nextCall must-assign-to-return-loc) (car call))))))
-            fun-calls-to-replace
-            (cdr (reverse (cons #f (reverse fun-calls-to-replace)))))
-          (if must-assign-to-return-loc
-            (comp-rvalue-go ctx new-ast wrapped compiling-test '())
-            (comp-rvalue-go ctx ast-with-result-identifier wrapped compiling-test '())))
-        (begin
-          (for-each
-            (lambda (e) (ctx-add-glo-decl! ctx e))
-            (comp-side-effects ctx pre-side-effects))
-          (comp-literal-inits ctx literal-inits)
-          (for-each
-            (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
-            fun-calls-to-replace)
-          (comp-rvalue-go ctx new-ast wrapped compiling-test '()))))
+      (begin
+        (for-each
+          (lambda (e) (ctx-add-glo-decl! ctx e))
+          (comp-side-effects ctx pre-side-effects))
+        (comp-literal-inits ctx literal-inits)
+        (for-each
+          (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
+          fun-calls-to-replace)
+        (comp-rvalue-go ctx new-ast wrapped compiling-test '())))
 
     (case (car context-tag)
       ((return index-lvalue assignment)
@@ -1521,13 +1444,11 @@
     (string-append sp-var "=0 # Note: Stack grows up, not down")
     ""
     "save_loc_var() {"
-    (if (equal? 'addr (car function-return-method))
-      (unlines
-      (string-append
-      "  : $((" sp-var " += 1))")
-      "  # We must use eval to set a string to a dynamic variable"
-      (string-append
-      "  eval \"save_loc_var_$" sp-var "=\\$" result-loc-var "\"")))
+    (string-append
+    "  : $((" sp-var " += 1))")
+    "  # We must use eval to set a string to a dynamic variable"
+    (string-append
+    "  eval \"save_loc_var_$" sp-var "=\\$" result-loc-var "\"")
     "  while [ $# -gt 0 ]; do"
     (string-append
     "    : $((" sp-var " += 1))")
@@ -1539,41 +1460,20 @@
     (string-append alloc-var "=1 # Starting heap at 1 because 0 is the null pointer.")
     ""
     "rest_loc_var() {"
-    (if (equal? 'addr (car function-return-method))
-      (unlines
-      "  while [ $# -gt 0 ]; do"
-      "    # Make we we don't overwrite the result_loc"
-      (string-append
-      "    if [ $1 != \"$" result-loc-var "\" ]; then : $(($1=save_loc_var_$" sp-var ")); fi")
-      (string-append
-      "    : $((" sp-var " -= 1))")
-      "    shift"
-      )
-      (unlines
-      "  while [ $# -gt 0 ]; do"
-      (string-append
-      "    : $(($1=save_loc_var_$" sp-var "))")
-      (string-append
-      "    : $((" sp-var " -= 1))")
-      "    shift"
-      ))
+    "  while [ $# -gt 0 ]; do"
+    "    # Make we we don't overwrite the result_loc"
+    (string-append
+    "    if [ $1 != \"$" result-loc-var "\" ]; then : $(($1=save_loc_var_$" sp-var ")); fi")
+    (string-append
+    "    : $((" sp-var " -= 1))")
+    "    shift"
     "  done"
-    (if (equal? 'addr (car function-return-method))
-      (unlines
-      (string-append
-      "  eval \"" result-loc-var "=\\$save_loc_var_$" sp-var "\"")
-      (string-append
-      "  : $((" sp-var " -= 1))")
-      ))
+    (string-append
+    "  eval \"" result-loc-var "=\\$save_loc_var_$" sp-var "\"")
+    (string-append
+    "  : $((" sp-var " -= 1))")
     "}"
     ""
-    (case (car function-return-method)
-      ((variable)
-        (string-append "prim_return_value() { : $((" result-var " = $1)) ; }"))
-      ((addr)
-        "prim_return_value() { if [ $# -eq 2 ]; then : $(($2 = $1)) ; fi ; }")
-      (else
-        (error "Unknown value return method" function-return-method)))
     ""
     (string-append "defarr() { : $(($1 = " alloc-var ")) $((" alloc-var " = " alloc-var "+$2)) ; }")
     (if support-addr-of?
@@ -1604,7 +1504,7 @@
     ""
     (string-append
     (function-name '(six.identifier main))
-    (if (equal? 'addr (car function-return-method)) " __" "")
+    " __"
     (string-append " $" argc-var)
     (string-append " $" argv-var))))
 
@@ -1674,7 +1574,6 @@
   (for-each comp-file (parse-cmd-line args)))
 
 ; Code generation options:
-; - function-return-method: addr | variable
 ; - initialize-memory-when-alloc: boolean
 ; - free-unsets-variables: boolean
 ; - inline-inplace-arithmetic-ops: boolean
@@ -1690,13 +1589,7 @@
         files
         (let ((arg (car args))
               (rest (cdr args)))
-          (cond ((and (member arg '("--function-return-method-variable")))
-                  (set! function-return-method '(variable 0result))
-                  (loop rest files))
-                ((and (pair? rest) (member arg '("--function-return-method-arg-loc")))
-                  (set! function-return-method `(addr ,(not (equal? "false" (car rest)))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--inline-inplace-arithmetic-ops")))
+          (cond ((and (pair? rest) (member arg '("--inline-inplace-arithmetic-ops")))
                   (set! inline-inplace-arithmetic-ops (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--initialize-memory-when-alloc")))
