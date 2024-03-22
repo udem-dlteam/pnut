@@ -10,3 +10,4 @@ vm-tests/*.result
 six-cc-tests/*.sh
 c4-for-six.sh
 c4_by_c4-for-six-op.golden.*
+tokenizer.sh
