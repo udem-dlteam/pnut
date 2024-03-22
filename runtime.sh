@@ -370,8 +370,34 @@ defstr() {
 
 _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
-_getchar() {
-  get_char_stdin
+
+__stdin_buf=
+_getchar()                                    # get next char from source into $char_to_int_code
+{
+  if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
+    IFS=                                            # don't split input
+    if read -r __stdin_buf ; then                   # read next line into $src_buf
+      if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
+        : $(($1 = 10))                              # next getchar call will read next line
+        return
+      fi
+    else
+      : $(($1 = -1))                                # EOF reached when read fails
+      return
+    fi
+  else
+    __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $src_buf
+    if [ -z "$__stdin_buf" ] ; then                 # end of line if the buffer is now empty
+      : $(($1 = 10))
+      return
+    fi
+  fi
+
+  # current character is at the head of $__stdin_buf
+  __stdin_char="$__stdin_buf"                    # remember current buffer
+  __stdin_rest="${__stdin_buf#?}"                # remove the first __stdin_char
+  __stdin_char="${__stdin_char%"$__stdin_rest"}" # remove all but first char
+  char_to_int "$__stdin_char"
   : $(($1 = char_to_int_code))
 }
 
@@ -587,36 +613,6 @@ read_all_char() {
     : $((read_all_char_buf_ptr += 1))
     : $((read_all_char_len += 1))
   done
-}
-
-get_char_stdin_src_buf=
-get_char_stdin()                                    # get next char from source into $char_to_int_code
-{
-  if [ -z "$get_char_stdin_src_buf" ] ; then        # need to get next line when buffer empty
-    IFS=                                            # don't split input
-    if read -r get_char_stdin_src_buf ; then        # read next line into $src_buf
-      if [ -z "$get_char_stdin_src_buf" ] ; then    # an empty line implies a newline character
-        char_to_int_code=10                      # next get_char_stdin call will read next line
-        return
-      fi
-    else
-      char_to_int_code=-1                       # EOF reached when read fails
-      return
-    fi
-  else
-    get_char_stdin_src_buf="${get_char_stdin_src_buf#?}"           # remove the current char from $src_buf
-    if [ -z "$get_char_stdin_src_buf" ] ; then      # end of line if the buffer is now empty
-      char_to_int_code=10
-      return
-    fi
-  fi
-
-  # current character is at the head of $src_buf
-
-  get_char_stdin_char="$get_char_stdin_src_buf"                    # remember current buffer
-  get_char_stdin_rest="${get_char_stdin_src_buf#?}"                # remove the first get_char_stdin_char
-  get_char_stdin_char="${get_char_stdin_char%"$get_char_stdin_rest"}"             # remove all but first char
-  char_to_int "$get_char_stdin_char"
 }
 
 get_char_src_buf=
