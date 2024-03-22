@@ -59,7 +59,7 @@ unpack_string() {
     unpack_string_char="${unpack_string_char%"$unpack_string_rest"}" # remove all but first char
     unpack_string_src_buf="${unpack_string_src_buf#?}"               # remove the current char from $src_buf
     char_to_int "$unpack_string_char"
-    push_data $char_to_int_code
+    push_data $__c
   done
   push_data 0
 }
@@ -79,24 +79,24 @@ unpack_escaped_string() {
       unpack_string_char="${unpack_string_char%"$unpack_string_rest"}" # remove all but first char
       unpack_string_src_buf="${unpack_string_src_buf#?}"               # remove the current char from $src_buf
       case "$unpack_string_char" in
-        'a') char_to_int_code=7 ;;
-        'b') char_to_int_code=8 ;;
-        'f') char_to_int_code=12 ;;
-        'n') char_to_int_code=10 ;;
-        'r') char_to_int_code=13 ;;
-        't') char_to_int_code=9 ;;
-        'v') char_to_int_code=11 ;;
-        '\') char_to_int_code=92 ;;
-        '"') char_to_int_code=34 ;;
-        "'") char_to_int_code=39 ;;
-        '?') char_to_int_code=63 ;;
-        '$') char_to_int_code=36 ;; # Not in C, used to escape variable expansion between double quotes
+        'a') __c=7 ;;
+        'b') __c=8 ;;
+        'f') __c=12 ;;
+        'n') __c=10 ;;
+        'r') __c=13 ;;
+        't') __c=9 ;;
+        'v') __c=11 ;;
+        '\') __c=92 ;;
+        '"') __c=34 ;;
+        "'") __c=39 ;;
+        '?') __c=63 ;;
+        '$') __c=36 ;; # Not in C, used to escape variable expansion between double quotes
         *) echo "invalid escape in string: $unpack_string_char"; exit 1 ;;
       esac
-      push_data $char_to_int_code
+      push_data $__c
     else
       char_to_int "$unpack_string_char"
-      push_data $char_to_int_code
+      push_data $__c
     fi
   done
   push_data 0
@@ -118,7 +118,7 @@ pack_string() {
     pack_string_len=$((pack_string_len + 1))
     case $pack_string_char in
       10) pack_string_res="$pack_string_res\n" ;; # 10 == '\n'
-      *)  int_to_char "$pack_string_char"; pack_string_res="$pack_string_res$int_to_char_char" ;;
+      *)  int_to_char "$pack_string_char"; pack_string_res="$pack_string_res$__char" ;;
     esac
   done
 }
@@ -142,7 +142,7 @@ print_string() {
         print_string_acc="" ;;
       *)
         int_to_char $print_string_char
-        print_string_acc="$print_string_acc$int_to_char_char" ;;
+        print_string_acc="$print_string_acc$__char" ;;
     esac
   done
   printf "%s" "$print_string_acc"
@@ -150,203 +150,205 @@ print_string() {
 
 char_to_int() {
   case $1 in
-    '0') char_to_int_code=48 ;;
-    '1') char_to_int_code=49 ;;
-    '2') char_to_int_code=50 ;;
-    '3') char_to_int_code=51 ;;
-    '4') char_to_int_code=52 ;;
-    '5') char_to_int_code=53 ;;
-    '6') char_to_int_code=54 ;;
-    '7') char_to_int_code=55 ;;
-    '8') char_to_int_code=56 ;;
-    '9') char_to_int_code=57 ;;
-    'a') char_to_int_code=97 ;;
-    'b') char_to_int_code=98 ;;
-    'c') char_to_int_code=99 ;;
-    'd') char_to_int_code=100 ;;
-    'e') char_to_int_code=101 ;;
-    'f') char_to_int_code=102 ;;
-    'g') char_to_int_code=103 ;;
-    'h') char_to_int_code=104 ;;
-    'i') char_to_int_code=105 ;;
-    'j') char_to_int_code=106 ;;
-    'k') char_to_int_code=107 ;;
-    'l') char_to_int_code=108 ;;
-    'm') char_to_int_code=109 ;;
-    'n') char_to_int_code=110 ;;
-    'o') char_to_int_code=111 ;;
-    'p') char_to_int_code=112 ;;
-    'q') char_to_int_code=113 ;;
-    'r') char_to_int_code=114 ;;
-    's') char_to_int_code=115 ;;
-    't') char_to_int_code=116 ;;
-    'u') char_to_int_code=117 ;;
-    'v') char_to_int_code=118 ;;
-    'w') char_to_int_code=119 ;;
-    'x') char_to_int_code=120 ;;
-    'y') char_to_int_code=121 ;;
-    'z') char_to_int_code=122 ;;
-    'A') char_to_int_code=65 ;;
-    'B') char_to_int_code=66 ;;
-    'C') char_to_int_code=67 ;;
-    'D') char_to_int_code=68 ;;
-    'E') char_to_int_code=69 ;;
-    'F') char_to_int_code=70 ;;
-    'G') char_to_int_code=71 ;;
-    'H') char_to_int_code=72 ;;
-    'I') char_to_int_code=73 ;;
-    'J') char_to_int_code=74 ;;
-    'K') char_to_int_code=75 ;;
-    'L') char_to_int_code=76 ;;
-    'M') char_to_int_code=77 ;;
-    'N') char_to_int_code=78 ;;
-    'O') char_to_int_code=79 ;;
-    'P') char_to_int_code=80 ;;
-    'Q') char_to_int_code=81 ;;
-    'R') char_to_int_code=82 ;;
-    'S') char_to_int_code=83 ;;
-    'T') char_to_int_code=84 ;;
-    'U') char_to_int_code=85 ;;
-    'V') char_to_int_code=86 ;;
-    'W') char_to_int_code=87 ;;
-    'X') char_to_int_code=88 ;;
-    'Y') char_to_int_code=89 ;;
-    'Z') char_to_int_code=90 ;;
-    ' ') char_to_int_code=32 ;;
-    '!') char_to_int_code=33 ;;
-    '"') char_to_int_code=34 ;;
-    '#') char_to_int_code=35 ;;
-    '$') char_to_int_code=36 ;;
-    '%') char_to_int_code=37 ;;
-    '&') char_to_int_code=38 ;;
-    "'") char_to_int_code=39 ;;
-    '(') char_to_int_code=40 ;;
-    ')') char_to_int_code=41 ;;
-    '*') char_to_int_code=42 ;;
-    '+') char_to_int_code=43 ;;
-    ',') char_to_int_code=44 ;;
-    '-') char_to_int_code=45 ;;
-    '.') char_to_int_code=46 ;;
-    '/') char_to_int_code=47 ;;
-    ':') char_to_int_code=58 ;;
-    ';') char_to_int_code=59 ;;
-    '<') char_to_int_code=60 ;;
-    '=') char_to_int_code=61 ;;
-    '>') char_to_int_code=62 ;;
-    '?') char_to_int_code=63 ;;
-    '@') char_to_int_code=64 ;;
-    '[') char_to_int_code=91 ;;
-    '\') char_to_int_code=92 ;;
-    ']') char_to_int_code=93 ;;
-    '^') char_to_int_code=94 ;;
-    '_') char_to_int_code=95 ;;
-    '`') char_to_int_code=96 ;;
-    '{') char_to_int_code=123 ;;
-    '|') char_to_int_code=124 ;;
-    '}') char_to_int_code=125 ;;
-    '~') char_to_int_code=126 ;;
-    *)   char_to_int_code=$(LC_CTYPE=C printf "%d" "'$1") ;;
+    '0') __c=48 ;;
+    '1') __c=49 ;;
+    '2') __c=50 ;;
+    '3') __c=51 ;;
+    '4') __c=52 ;;
+    '5') __c=53 ;;
+    '6') __c=54 ;;
+    '7') __c=55 ;;
+    '8') __c=56 ;;
+    '9') __c=57 ;;
+    'a') __c=97 ;;
+    'b') __c=98 ;;
+    'c') __c=99 ;;
+    'd') __c=100 ;;
+    'e') __c=101 ;;
+    'f') __c=102 ;;
+    'g') __c=103 ;;
+    'h') __c=104 ;;
+    'i') __c=105 ;;
+    'j') __c=106 ;;
+    'k') __c=107 ;;
+    'l') __c=108 ;;
+    'm') __c=109 ;;
+    'n') __c=110 ;;
+    'o') __c=111 ;;
+    'p') __c=112 ;;
+    'q') __c=113 ;;
+    'r') __c=114 ;;
+    's') __c=115 ;;
+    't') __c=116 ;;
+    'u') __c=117 ;;
+    'v') __c=118 ;;
+    'w') __c=119 ;;
+    'x') __c=120 ;;
+    'y') __c=121 ;;
+    'z') __c=122 ;;
+    'A') __c=65 ;;
+    'B') __c=66 ;;
+    'C') __c=67 ;;
+    'D') __c=68 ;;
+    'E') __c=69 ;;
+    'F') __c=70 ;;
+    'G') __c=71 ;;
+    'H') __c=72 ;;
+    'I') __c=73 ;;
+    'J') __c=74 ;;
+    'K') __c=75 ;;
+    'L') __c=76 ;;
+    'M') __c=77 ;;
+    'N') __c=78 ;;
+    'O') __c=79 ;;
+    'P') __c=80 ;;
+    'Q') __c=81 ;;
+    'R') __c=82 ;;
+    'S') __c=83 ;;
+    'T') __c=84 ;;
+    'U') __c=85 ;;
+    'V') __c=86 ;;
+    'W') __c=87 ;;
+    'X') __c=88 ;;
+    'Y') __c=89 ;;
+    'Z') __c=90 ;;
+    ' ') __c=32 ;;
+    '!') __c=33 ;;
+    '"') __c=34 ;;
+    '#') __c=35 ;;
+    '$') __c=36 ;;
+    '%') __c=37 ;;
+    '&') __c=38 ;;
+    "'") __c=39 ;;
+    '(') __c=40 ;;
+    ')') __c=41 ;;
+    '*') __c=42 ;;
+    '+') __c=43 ;;
+    ',') __c=44 ;;
+    '-') __c=45 ;;
+    '.') __c=46 ;;
+    '/') __c=47 ;;
+    ':') __c=58 ;;
+    ';') __c=59 ;;
+    '<') __c=60 ;;
+    '=') __c=61 ;;
+    '>') __c=62 ;;
+    '?') __c=63 ;;
+    '@') __c=64 ;;
+    '[') __c=91 ;;
+    '\') __c=92 ;;
+    ']') __c=93 ;;
+    '^') __c=94 ;;
+    '_') __c=95 ;;
+    '`') __c=96 ;;
+    '{') __c=123 ;;
+    '|') __c=124 ;;
+    '}') __c=125 ;;
+    '~') __c=126 ;;
+    *)
+      echo "Invalid character: $1" ; exit 1
+      __c=$(LC_CTYPE=C printf "%d" "'$1") ;;
   esac
 }
 
 int_to_char() {
   case $1 in
-    48)  int_to_char_char="0" ;;
-    49)  int_to_char_char="1" ;;
-    50)  int_to_char_char="2" ;;
-    51)  int_to_char_char="3" ;;
-    52)  int_to_char_char="4" ;;
-    53)  int_to_char_char="5" ;;
-    54)  int_to_char_char="6" ;;
-    55)  int_to_char_char="7" ;;
-    56)  int_to_char_char="8" ;;
-    57)  int_to_char_char="9" ;;
-    97)  int_to_char_char="a" ;;
-    98)  int_to_char_char="b" ;;
-    99)  int_to_char_char="c" ;;
-    100) int_to_char_char="d" ;;
-    101) int_to_char_char="e" ;;
-    102) int_to_char_char="f" ;;
-    103) int_to_char_char="g" ;;
-    104) int_to_char_char="h" ;;
-    105) int_to_char_char="i" ;;
-    106) int_to_char_char="j" ;;
-    107) int_to_char_char="k" ;;
-    108) int_to_char_char="l" ;;
-    109) int_to_char_char="m" ;;
-    110) int_to_char_char="n" ;;
-    111) int_to_char_char="o" ;;
-    112) int_to_char_char="p" ;;
-    113) int_to_char_char="q" ;;
-    114) int_to_char_char="r" ;;
-    115) int_to_char_char="s" ;;
-    116) int_to_char_char="t" ;;
-    117) int_to_char_char="u" ;;
-    118) int_to_char_char="v" ;;
-    119) int_to_char_char="w" ;;
-    120) int_to_char_char="x" ;;
-    121) int_to_char_char="y" ;;
-    122) int_to_char_char="z" ;;
-    65)  int_to_char_char="A" ;;
-    66)  int_to_char_char="B" ;;
-    67)  int_to_char_char="C" ;;
-    68)  int_to_char_char="D" ;;
-    69)  int_to_char_char="E" ;;
-    70)  int_to_char_char="F" ;;
-    71)  int_to_char_char="G" ;;
-    72)  int_to_char_char="H" ;;
-    73)  int_to_char_char="I" ;;
-    74)  int_to_char_char="J" ;;
-    75)  int_to_char_char="K" ;;
-    76)  int_to_char_char="L" ;;
-    77)  int_to_char_char="M" ;;
-    78)  int_to_char_char="N" ;;
-    79)  int_to_char_char="O" ;;
-    80)  int_to_char_char="P" ;;
-    81)  int_to_char_char="Q" ;;
-    82)  int_to_char_char="R" ;;
-    83)  int_to_char_char="S" ;;
-    84)  int_to_char_char="T" ;;
-    85)  int_to_char_char="U" ;;
-    86)  int_to_char_char="V" ;;
-    87)  int_to_char_char="W" ;;
-    88)  int_to_char_char="X" ;;
-    89)  int_to_char_char="Y" ;;
-    90)  int_to_char_char="Z" ;;
-    32)  int_to_char_char=" " ;;
-    33)  int_to_char_char="!" ;;
-    34)  int_to_char_char="\"" ;;
-    35)  int_to_char_char="#" ;;
-    36)  int_to_char_char="$" ;;
-    37)  int_to_char_char="%" ;;
-    38)  int_to_char_char="&" ;;
-    39)  int_to_char_char="'" ;;
-    40)  int_to_char_char="(" ;;
-    41)  int_to_char_char=")" ;;
-    42)  int_to_char_char="*" ;;
-    43)  int_to_char_char="+" ;;
-    44)  int_to_char_char="," ;;
-    45)  int_to_char_char="-" ;;
-    46)  int_to_char_char="." ;;
-    47)  int_to_char_char="/" ;;
-    58)  int_to_char_char=":" ;;
-    59)  int_to_char_char=";" ;;
-    60)  int_to_char_char="<" ;;
-    61)  int_to_char_char="=" ;;
-    62)  int_to_char_char=">" ;;
-    63)  int_to_char_char="?" ;;
-    64)  int_to_char_char="@" ;;
-    91)  int_to_char_char="[" ;;
-    92)  int_to_char_char="\\" ;;
-    93)  int_to_char_char="]" ;;
-    94)  int_to_char_char="^" ;;
-    95)  int_to_char_char="_" ;;
-    96)  int_to_char_char="\`" ;;
-    123) int_to_char_char="{" ;;
-    124) int_to_char_char="|" ;;
-    125) int_to_char_char="}" ;;
-    126) int_to_char_char="~" ;;
-    *)   int_to_char_char=$(printf "\\$(printf "%o" "$1")") ;;
+    48)  __char="0" ;;
+    49)  __char="1" ;;
+    50)  __char="2" ;;
+    51)  __char="3" ;;
+    52)  __char="4" ;;
+    53)  __char="5" ;;
+    54)  __char="6" ;;
+    55)  __char="7" ;;
+    56)  __char="8" ;;
+    57)  __char="9" ;;
+    97)  __char="a" ;;
+    98)  __char="b" ;;
+    99)  __char="c" ;;
+    100) __char="d" ;;
+    101) __char="e" ;;
+    102) __char="f" ;;
+    103) __char="g" ;;
+    104) __char="h" ;;
+    105) __char="i" ;;
+    106) __char="j" ;;
+    107) __char="k" ;;
+    108) __char="l" ;;
+    109) __char="m" ;;
+    110) __char="n" ;;
+    111) __char="o" ;;
+    112) __char="p" ;;
+    113) __char="q" ;;
+    114) __char="r" ;;
+    115) __char="s" ;;
+    116) __char="t" ;;
+    117) __char="u" ;;
+    118) __char="v" ;;
+    119) __char="w" ;;
+    120) __char="x" ;;
+    121) __char="y" ;;
+    122) __char="z" ;;
+    65)  __char="A" ;;
+    66)  __char="B" ;;
+    67)  __char="C" ;;
+    68)  __char="D" ;;
+    69)  __char="E" ;;
+    70)  __char="F" ;;
+    71)  __char="G" ;;
+    72)  __char="H" ;;
+    73)  __char="I" ;;
+    74)  __char="J" ;;
+    75)  __char="K" ;;
+    76)  __char="L" ;;
+    77)  __char="M" ;;
+    78)  __char="N" ;;
+    79)  __char="O" ;;
+    80)  __char="P" ;;
+    81)  __char="Q" ;;
+    82)  __char="R" ;;
+    83)  __char="S" ;;
+    84)  __char="T" ;;
+    85)  __char="U" ;;
+    86)  __char="V" ;;
+    87)  __char="W" ;;
+    88)  __char="X" ;;
+    89)  __char="Y" ;;
+    90)  __char="Z" ;;
+    32)  __char=" " ;;
+    33)  __char="!" ;;
+    34)  __char="\"" ;;
+    35)  __char="#" ;;
+    36)  __char="$" ;;
+    37)  __char="%" ;;
+    38)  __char="&" ;;
+    39)  __char="'" ;;
+    40)  __char="(" ;;
+    41)  __char=")" ;;
+    42)  __char="*" ;;
+    43)  __char="+" ;;
+    44)  __char="," ;;
+    45)  __char="-" ;;
+    46)  __char="." ;;
+    47)  __char="/" ;;
+    58)  __char=":" ;;
+    59)  __char=";" ;;
+    60)  __char="<" ;;
+    61)  __char="=" ;;
+    62)  __char=">" ;;
+    63)  __char="?" ;;
+    64)  __char="@" ;;
+    91)  __char="[" ;;
+    92)  __char="\\" ;;
+    93)  __char="]" ;;
+    94)  __char="^" ;;
+    95)  __char="_" ;;
+    96)  __char="\`" ;;
+    123) __char="{" ;;
+    124) __char="|" ;;
+    125) __char="}" ;;
+    126) __char="~" ;;
+    *)   __char=$(printf "\\$(printf "%o" "$1")") ;;
   esac
 }
 
@@ -372,7 +374,7 @@ _putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
 
 
 __stdin_buf=
-_getchar()                                    # get next char from source into $char_to_int_code
+_getchar()                                          # get next char from source into $__c
 {
   if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
     IFS=                                            # don't split input
@@ -398,7 +400,7 @@ _getchar()                                    # get next char from source into $
   __stdin_rest="${__stdin_buf#?}"                # remove the first __stdin_char
   __stdin_char="${__stdin_char%"$__stdin_rest"}" # remove all but first char
   char_to_int "$__stdin_char"
-  : $(($1 = char_to_int_code))
+  : $(($1 = __c))
 }
 
 _exit() { echo \"Exiting with code $1\"; exit $1; }
@@ -426,7 +428,7 @@ _printf() { # $1 = printf format string, $2... = printf args
   printf_mod=0
   while [ "$((_$printf_fmt_ptr))" -ne 0 ] ; do
     printf_head=$((_$printf_fmt_ptr))
-    int_to_char $printf_head; printf_head_char=$int_to_char_char
+    int_to_char $printf_head; printf_head_char=$__char
     printf_fmt_ptr=$((printf_fmt_ptr + 1))
     if [ $printf_mod -eq 1 ] ; then
       case $printf_head_char in
@@ -438,7 +440,7 @@ _printf() { # $1 = printf format string, $2... = printf args
           printf_char=$1; shift
           # Don't need to handle non-printable characters the only use of %c is for printable characters
           int_to_char $printf_char
-          printf "%c" "$int_to_char_char"
+          printf "%c" "$__char"
           ;;
         'x') # 120 = 'x' Hexadecimal integer
           printf_imm=$1; shift
@@ -538,7 +540,7 @@ read_n_char() {
     case "$get_char_char" in
       EOF) break ;;
       NEWLINE) read_n_char_code=10 ;; # 10 == '\n'
-      *) char_to_int "$get_char_char"; read_n_char_code=$char_to_int_code ;;
+      *) char_to_int "$get_char_char"; read_n_char_code=$__c ;;
     esac
 
     : $((_$read_n_char_buf_ptr=$read_n_char_code))
@@ -606,7 +608,7 @@ read_all_char() {
     case "$get_char_char" in
       EOF) break ;;
       NEWLINE) read_all_char_code=10 ;; # 10 == '\n'
-      *) char_to_int "$get_char_char"; read_all_char_code=$char_to_int_code ;;
+      *) char_to_int "$get_char_char"; read_all_char_code=$__c ;;
     esac
 
     : $((_$read_all_char_buf_ptr=$read_all_char_code))
@@ -696,7 +698,7 @@ _show_heap() {
       show_heap_char=""
       if [ $show_heap_ascii -ge 31 ] && [ $show_heap_ascii -le 127 ] ; then
         int_to_char $show_heap_ascii
-        show_heap_char=$int_to_char_char
+        show_heap_char=$__char
       fi
       echo "        _$show_heap_ix = $show_heap_ascii  ($show_heap_char)"
     fi
