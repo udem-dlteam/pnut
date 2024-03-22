@@ -428,6 +428,10 @@
     show_fd
     )))
 
+; Defined in some versions of Gambit but not all, so including it here.
+(define (any pred lst)
+  (if (null? lst) #f (if (pred (car lst)) #t (any pred (cdr lst)))))
+
 (define (is-name-reserved name)
   (any (lambda (prefix) (string-prefix? prefix name)) reserved-variable-prefix))
 
