@@ -390,38 +390,7 @@
     ; __FREE_UNSETS_VARS
     ; Runtime library variables
     NULL
-    strict_alloc
-    make_argv
-    push_data
-    unpack_array
-    unpack_string
-    pack_string
-    print_string
-    char_to_int
-    int_to_char
-    defstr
-    ; Primitives
-    putchar
-    getchar
-    exit
-    malloc
-    free
-    printf
-    open
-    read
-    close
-    read_n_char
-    fopen
-    fread
-    fclose
-    fgetc
-    read_all_char
-    get_char
-    memset
-    memcmp
-    show_heap
-    show_arg_stack
-    show_fd
+    EOF
     )))
 
 ; Defined in some versions of Gambit but not all, so including it here.
@@ -1483,7 +1452,7 @@
     ""
     "# Setup argc, argv"
     (string-append argc-var "=$(($# + 1))")
-    (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=$make_argv_ptr")
+    (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=$__argv")
     ; This must be after make_argv because if one of the local variable is argv,
     ; writing to it will overwrite the $@ array in zsh.
     (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
@@ -1546,7 +1515,7 @@
               (cond ((list? datum)
                       (string-append
                         "unpack_array " (string-concatenate (map number->string datum) " ")
-                        "; __" (number->string ix) "=$unpack_array_addr"))
+                        "; __" (number->string ix) "=$__addr"))
                     ((string? datum)
                       (def_str_code (string-append "__" (number->string ix)) datum))))
           (reverse (ctx-data ctx))
