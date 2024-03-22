@@ -1427,7 +1427,6 @@
     "    shift"
     "  done"
     "}"
-    (string-append alloc-var "=1 # Starting heap at 1 because 0 is the null pointer.")
     ""
     "rest_loc_var() {"
     "  while [ $# -gt 0 ]; do"

@@ -6,17 +6,57 @@
 readonly _NULL=0
 readonly _EOF=-1
 
+__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
+
+# Begins a new object on the heap. The object is uninitialized and its length is $1.
+new_object() {
+  __OBJ_START=$__ALLOC          # Point to the header of the new object
+  __OBJ_LEN=$1                  # Initialize object length, will be used to write the header when finalizing the object.
+  if [ $__FREE_UNSETS_VARS -eq 1 ]; then
+    __addr=$((__ALLOC + 1))
+    : $((__ALLOC += $1 + 1))
+  else
+    __addr=$__ALLOC
+    : $((__ALLOC += $1))
+  fi
+}
+
+# Add $1 to the end of the object, growing it by 1 byte.
+extend_object() {
+  : $((_$__ALLOC = $1))
+  : $((__ALLOC   += 1))
+  if [ $__FREE_UNSETS_VARS -eq 1 ]; then
+    : $((__OBJ_LEN += 1))
+  fi
+}
+
+# Finalize the object, writing the header and returning the address of the object.
+finalize_object() { # $1 = (optional) number of bytes to add to the object
+  if [ $# -eq 1 ]; then
+    : $((__ALLOC += $1))
+    : $((__OBJ_LEN += $1))
+  fi
+  if [ $__FREE_UNSETS_VARS -eq 1 ]; then
+    : $((_$__OBJ_START = __OBJ_LEN))  # Write header
+    : $(( __addr = __OBJ_START + 1))  # Return address of object, after the header
+    # unset __OBJ_START
+    # unset __OBJ_LEN
+  else
+    __addr=$__OBJ_START
+  fi
+}
+
 strict_alloc() {
   # When free isn't a no-op, we need to tag all objects with their size
   if [ $__FREE_UNSETS_VARS -eq 1 ]; then
     : $((_$__ALLOC = $1)) # Save allocation size
     : $((__ALLOC += 1))
   fi
-  __res=$__ALLOC
+  __addr=$__ALLOC
   : $((__ALLOC += $1))
   # Need to initialize the memory to 0 or else `set -u` will complain
   if [ $__STRICT_MODE -eq 1 ]; then
-    __ix=$__res
+    __ix=$__addr
     while [ $__ix -lt $__ALLOC ]; do
       : $((_$__ix=0))
       : $((__ix += 1))
@@ -27,47 +67,46 @@ strict_alloc() {
 make_argv() {
   __argc=$1; shift;
   strict_alloc $__argc
-  __argv=$__res
+  __argv=$__addr
+  __ptr=$__addr # Saving value because its overwritten by unpack_string
 
   while [ $# -ge 1 ]; do
     unpack_string "$1"
-    : $((_$__res = $__addr))
-    : $((__res += 1))
+    : $((_$__ptr = $__addr))
+    : $((__ptr += 1))
     shift
   done
 }
 
-push_data() {
-  : $((_$__ALLOC=$1))
-  : $((__ALLOC += 1))
-}
-
 unpack_array() {
-  __addr=$__ALLOC
+  strict_alloc $# # Allocate enough space for all elements
+  __ptr=$__addr
   while [ $# -gt 0 ] ; do
-    push_data $1
+    : $((_$__ptr = $1))
+    : $((__ptr += 1))
     shift
   done
 }
 
 # Push a Shell string to the VM heap. Returns a reference to the string in $__addr.
 unpack_string() {
-  __addr=$__ALLOC
+  new_object 0
   __buf="$1"
   while [ -n "$__buf" ] ; do
     __char="${__buf%"${__buf#?}"}"   # remove all but first char
     __buf="${__buf#?}"               # remove the current char from $__buf
     char_to_int "$__char"
-    push_data $__c
+    extend_object $__c
   done
-  push_data 0
+  extend_object 0
+  finalize_object
 }
 
 # See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences
 # Not matching on the most common characters like in _getchar because this
 # function reads strings with a different distribution.
 unpack_escaped_string() {
-  __addr=$__ALLOC
+  new_object 0
   __buf="$1"
   while [ -n "$__buf" ] ; do
     case "$__buf" in
@@ -95,9 +134,10 @@ unpack_escaped_string() {
         __buf="${__buf#?}"               # remove the current char from $__buf
         ;;
     esac
-    push_data $__c
+    extend_object $__c
   done
-  push_data 0
+  extend_object 0
+  finalize_object
 }
 
 # Convert a VM string reference to a Shell string.
@@ -429,7 +469,7 @@ _exit() { echo \"Exiting with code $1\"; exit $1; }
 
 _malloc() { # $2 = malloc_size
   strict_alloc $2
-  : $(($1 = __res))
+  : $(($1 = __addr))
 }
 
 _free() { # $1 = pointer to object to free
@@ -568,13 +608,14 @@ read_n_char() {
 # The file descriptor is just a cursor and a string, so closing just frees up the object.
 _fopen() { # $2: File name, $3: Mode
   pack_string $2
-  __fd=$__ALLOC                                 # Allocate new FD
+  new_object 0
+  __fd=$__addr                                  # Allocate new FD
   : $((_$((__fd)) = 0))                         # Initialize cursor to 0
-  __buf=$((__fd + 1))                    # Buffer starts after cursor
+  __buf=$((__fd + 1))                           # Buffer starts after cursor
   read_all_char $__buf < "$__res"
-  : $((_$((__buf + __len))=-1))  # Terminate buffer with EOF character
-  __ALLOC=$((__ALLOC + __len + 2))      # Update __ALLOC to the new end of the heap
+  : $((_$((__buf + __len))=-1))                 # Terminate buffer with EOF character
   : $(($1 = __fd))
+  finalize_object $((__len + 2))                # 2 is for the cursor and EOF
 }
 
 _fclose() { # $2: File descriptor
