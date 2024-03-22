@@ -8,6 +8,7 @@ mksh -c 'echo \$KSH_VERSION'
 zsh -c 'echo \$ZSH_VERSION'
 dash -c 'echo unknown-possibly-0.5.12'
 bash -c 'echo \$BASH_VERSION'
+yash -c 'echo \$YASH_VERSION'
 "
 
 source_file="$1"
