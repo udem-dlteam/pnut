@@ -5,8 +5,6 @@
 ; Possible values:
 ; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
 ; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
-; Useful for debugging only
-(define disable-save-restore-vars? #f)
 ; Disable for faster execution of programs that allocate a lot of memory
 (define initialize-memory-when-alloc? #t)
 ; free function is noop or unsets the variables?
@@ -800,18 +798,17 @@
           (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
             (map car sorted-local-vars)
             (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
+         (variables-to-ignore
+          (if use-$1-for-return-loc? (list assign_to result-loc-ident) (list assign_to)))
          (local-vars-to-save
-          (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
-         (local-vars-to-save-no-result-loc
-          (filter (lambda (x) (not (member x (list assign_to result-loc-ident)))) initialized-local-vars)))
+          (filter (lambda (x) (not (member x variables-to-ignore))) initialized-local-vars)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (and (not disable-save-restore-vars?)
-               (not (null? local-vars-to-save))
+      (if (and (not (null? local-vars-to-save))
                (not (ctx-is-simple-function? ctx)))
         (ctx-add-glo-decl!
           ctx
-          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc)) " "))))))
+          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))))
 
 (define (restore-local-variables ctx #!optional (assign_to #f))
   (let* ((sorted-local-vars
@@ -820,19 +817,18 @@
           (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
             (map car sorted-local-vars)
             (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
+         (variables-to-ignore
+          (if use-$1-for-return-loc? (list assign_to result-loc-ident) (list assign_to)))
          (local-vars-to-save
-          (filter (lambda (x) (not (member x (list assign_to)))) initialized-local-vars))
-         (local-vars-to-save-no-result-loc
-          (filter (lambda (x) (not (member x (list assign_to result-loc-ident)))) initialized-local-vars)))
+          (filter (lambda (x) (not (member x variables-to-ignore))) initialized-local-vars)))
 
-      (if (and (not disable-save-restore-vars?)
-               (not (null? local-vars-to-save))
+      (if (and (not (null? local-vars-to-save))
                (not (ctx-is-simple-function? ctx)))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var "
                 (if use-$1-for-return-loc? "$1 " "")
-                (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save-no-result-loc) " "))))))
+                (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save) " "))))))
 
 ; Like comp-fun-call, but checks that the parameters are simple and not nested function calls.
 ; This function is not necessary, but we don't want to silently compile complexe function calls
