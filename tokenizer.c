@@ -47,6 +47,48 @@ int INTEGER = 256;
 int IDENTIFIER = 257;
 int OTHER = 258;
 
+
+int AUTO_KW     = 300;
+int BREAK_KW    = 301;
+int CASE_KW     = 302;
+int CHAR_KW     = 303;
+int CONST_KW    = 304;
+int CONTINUE_KW = 305;
+int DEFAULT_KW  = 306;
+int DEFINE_KW   = 307;
+int DO_KW       = 308;
+int DOUBLE_KW   = 309;
+int ELSE_KW     = 310;
+int ENDIF_KW    = 311;
+int ENUM_KW     = 312;
+int ERROR_KW    = 313;
+int EXTERN_KW   = 314;
+int FLOAT_KW    = 315;
+int FOR_KW      = 316;
+int GOTO_KW     = 317;
+int IF_KW       = 318;
+int IFDEF_KW    = 319;
+int IFNDEF_KW   = 320;
+int INCLUDE_KW  = 321;
+int INT_KW      = 322;
+int LONG_KW     = 323;
+int REGISTER_KW = 324;
+int RETURN_KW   = 325;
+int SHORT_KW    = 326;
+int SIGNED_KW   = 327;
+int SIZEOF_KW   = 328;
+int STATIC_KW   = 329;
+int STRUCT_KW   = 330;
+int SWITCH_KW   = 331;
+int TYPEDEF_KW  = 332;
+int UNDEF_KW    = 333;
+int UNION_KW    = 334;
+int UNSIGNED_KW = 335;
+int VOID_KW     = 336;
+int VOLATILE_KW = 337;
+int WHILE_KW    = 338;
+
+
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
   exit(1);
@@ -62,6 +104,87 @@ int ch;
 int tok;
 int val;
 
+#define STRING_POOL_SIZE 10000
+char string_pool[STRING_POOL_SIZE];
+int string_pool_alloc = 0;
+
+/* These parameters give a perfect hashing of the C keywords */
+#define HASH_PARAM 12443
+#define HASH_PRIME 103
+#define IDENT_TABLE_SIZE 10000 /* MUST BE > HASH_PRIME */
+int ident_table[IDENT_TABLE_SIZE];
+int ident_table_alloc = HASH_PRIME;
+int ident_start;
+int hash;
+
+int start_ident() {
+  int dummy;
+  ident_start = string_pool_alloc;
+  hash = 0;
+}
+
+void accum_ident() {
+
+  int dummy;
+
+  string_pool[string_pool_alloc] = ch;
+  string_pool_alloc += 1;
+  hash = (ch + (hash ^ HASH_PARAM)) % HASH_PRIME;
+  if (string_pool_alloc >= STRING_POOL_SIZE) {
+    fatal_error("string pool overflow");
+  }
+}
+
+int end_ident() {
+
+  int probe;
+  int probe_start;
+  int c1;
+  int c2;
+  int i;
+
+  string_pool[string_pool_alloc] = 0; /* terminate string */
+
+  probe = ident_table[hash];
+
+  while (probe != 0) {
+    probe_start = ident_table[probe+1];
+    i = 0;
+    c1 = string_pool[ident_start+i];
+    c2 = string_pool[probe_start+i];
+    while (c1 == c2) {
+      if (c1 == 0) {
+        string_pool_alloc = ident_start; /* undo string allocation */
+        return probe;
+      }
+      i += 1;
+      c1 = string_pool[ident_start+i];
+      c2 = string_pool[probe_start+i];
+    }
+    hash = probe; /* remember previous ident */
+    probe = ident_table[probe];
+  }
+
+  /* a new ident has been found */
+
+  probe = ident_table_alloc;
+  ident_table_alloc += 3;
+
+  if (ident_table_alloc > IDENT_TABLE_SIZE) {
+    fatal_error("ident table overflow");
+  }
+
+  string_pool_alloc += 1; /* account for terminator */
+
+  ident_table[hash] = probe; /* add new ident at end of chain */
+
+  ident_table[probe] = 0; /* no next ident */
+  ident_table[probe+1] = ident_start;
+  ident_table[probe+2] = IDENTIFIER;
+
+  return probe;
+}
+
 #ifdef INLINE_get_ch
 
 #define get_ch() ch = getchar()
@@ -74,16 +197,89 @@ void get_ch() {
 
 #endif
 
-void get_identifier() {
+void get_ident() {
+
+  int ident;
+
+  start_ident();
 
   while (in_range(ch, UPPER_A, UPPER_Z) OR
          in_range(ch, LOWER_A, LOWER_Z) OR
          in_range(ch, DIGIT_0, DIGIT_9) OR
          (ch == UNDERSCORE)) {
+    accum_ident();
     get_ch();
   }
 
-  /* TODO: accumulate in a string pool, check for keywords */
+  ident = end_ident();
+  tok = ident_table[ident+2];
+  /*
+  printf("tok=%d %s\n", tok, string_pool + ident_table[ident+1]);
+  */
+}
+
+void init_kw(int tok, char_ptr name) {
+
+  int i = 0;
+
+  start_ident();
+
+  while (name[i] != 0) {
+    ch = name[i];
+    i += 1;
+    accum_ident();
+  }
+
+  ident_table[end_ident()+2] = tok;
+}
+
+void init_ident_table() {
+
+  int i;
+
+  for (i=0; i<HASH_PRIME; i++) {
+    ident_table[i] = 0;
+  }
+
+  init_kw(AUTO_KW,     "auto");
+  init_kw(BREAK_KW,    "break");
+  init_kw(CASE_KW,     "case");
+  init_kw(CHAR_KW,     "char");
+  init_kw(CONST_KW,    "const");
+  init_kw(CONTINUE_KW, "continue");
+  init_kw(DEFAULT_KW,  "default");
+  init_kw(DEFINE_KW,   "define");
+  init_kw(DO_KW,       "do");
+  init_kw(DOUBLE_KW,   "double");
+  init_kw(ELSE_KW,     "else");
+  init_kw(ENDIF_KW,    "endif");
+  init_kw(ENUM_KW,     "enum");
+  init_kw(ERROR_KW,    "error");
+  init_kw(EXTERN_KW,   "extern");
+  init_kw(FLOAT_KW,    "float");
+  init_kw(FOR_KW,      "for");
+  init_kw(GOTO_KW,     "goto");
+  init_kw(IF_KW,       "if");
+  init_kw(IFDEF_KW,    "ifdef");
+  init_kw(IFNDEF_KW,   "ifndef");
+  init_kw(INCLUDE_KW,  "include");
+  init_kw(INT_KW,      "int");
+  init_kw(LONG_KW,     "long");
+  init_kw(REGISTER_KW, "register");
+  init_kw(RETURN_KW,   "return");
+  init_kw(SHORT_KW,    "short");
+  init_kw(SIGNED_KW,   "signed");
+  init_kw(SIZEOF_KW,   "sizeof");
+  init_kw(STATIC_KW,   "static");
+  init_kw(STRUCT_KW,   "struct");
+  init_kw(SWITCH_KW,   "switch");
+  init_kw(TYPEDEF_KW,  "typedef");
+  init_kw(UNDEF_KW,    "undef");
+  init_kw(UNION_KW,    "union");
+  init_kw(UNSIGNED_KW, "unsigned");
+  init_kw(VOID_KW,     "void");
+  init_kw(VOLATILE_KW, "volatile");
+  init_kw(WHILE_KW,    "while");
 }
 
 void get_tok() {
@@ -116,7 +312,7 @@ void get_tok() {
                in_range(ch, UPPER_A, UPPER_Z) OR
                (ch == UNDERSCORE)) {
 
-      get_identifier();
+      get_ident();
 
       tok = IDENTIFIER;
 
@@ -149,6 +345,8 @@ void get_tok() {
 }
 
 int main() {
+
+  init_ident_table();
 
   ch = NEWLINE;
   get_tok();
