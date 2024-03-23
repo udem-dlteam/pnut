@@ -733,14 +733,9 @@
         (ctx-add-glo-decl! ctx (list "return")))))
     ((six.break)
       (if (not (ctx-loop? ctx)) (error "break statement outside of a loop"))
-      (if (or (not (ctx-tail? ctx)) (ctx-single-statement? ctx))
-        (begin
-          (for-each
-            (lambda (action) (ctx-add-glo-decl! ctx action))
-            (ctx-loop-end-actions ctx))
-          (ctx-add-glo-decl!
+      (ctx-add-glo-decl!
             ctx
-            (list "break")))))
+            (list "break")))
     ((six.continue)
       (if (not (ctx-loop? ctx)) (error "continue statement outside of a loop"))
       (if (or (not (ctx-tail? ctx)) (ctx-single-statement? ctx))
@@ -805,6 +800,7 @@
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
       (if (and (not (null? local-vars-to-save))
                (not (ctx-is-simple-function? ctx)))
+        ; Idea: Pass the value to save directly to save_loc_var instead of the variable name
         (ctx-add-glo-decl!
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))))
