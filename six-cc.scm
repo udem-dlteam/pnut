@@ -798,8 +798,7 @@
           (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
             (map car sorted-local-vars)
             (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
-         (variables-to-ignore
-          (if use-$1-for-return-loc? (list assign_to result-loc-ident) (list assign_to)))
+         (variables-to-ignore (list assign_to result-loc-ident))
          (local-vars-to-save
           (filter (lambda (x) (not (member x variables-to-ignore))) initialized-local-vars)))
 
@@ -817,8 +816,7 @@
           (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
             (map car sorted-local-vars)
             (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
-         (variables-to-ignore
-          (if use-$1-for-return-loc? (list assign_to result-loc-ident) (list assign_to)))
+         (variables-to-ignore (list assign_to result-loc-ident))
          (local-vars-to-save
           (filter (lambda (x) (not (member x variables-to-ignore))) initialized-local-vars)))
 
