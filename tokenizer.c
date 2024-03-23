@@ -336,45 +336,58 @@ void init_ident_table() {
   init_kw(WHILE_KW,    "while");
 }
 
+int accum_digit(int base) {
+  int digit = 99;
+  int MININT = -2147483648;
+  int limit;
+  if (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
+    digit = ch - DIGIT_0_CH;
+  } else if (in_range(ch, UPPER_A_CH, UPPER_Z_CH)) {
+    digit = ch - UPPER_A_CH + 10;
+  } else if (in_range(ch, LOWER_A_CH, LOWER_Z_CH)) {
+    digit = ch - LOWER_A_CH + 10;
+  }
+  if (digit >= base) {
+    return 0; /* character is not a digit in that base */
+  } else {
+    limit = MININT / base;
+    if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
+      fatal_error("literal integer overflow");
+    } else {
+      val = val * base - digit;
+      get_ch();
+    }
+    return 1;
+  }
+}
+
 void get_string_char() {
 
   val = ch;
   get_ch();
 
   if (val == BACKSLASH_CH) {
-    if (ch == in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
+    if (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
       /*
       Parse octal character, up to 3 digits.
       Note that \1111 is parsed as '\111' followed by '1'
       See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
       */
-      val = DIGIT_0_CH - ch;
-      get_ch();
-      if (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
-        val = val * 8 + (DIGIT_0_CH - ch);
-        get_ch();
-        if (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
-          val = val * 8 + (DIGIT_0_CH - ch);
-          get_ch();
-        }
-      }
+      val = 0;
+      accum_digit(8);
+      accum_digit(8);
+      accum_digit(8);
+      val = -(val % 256); /* keep low 8 bits, without overflowing */
     } else if ((ch == UPPER_X_CH) OR (ch == LOWER_X_CH)) {
       get_ch();
       val = 0;
-      /*
-      Unlike octal numbers, hex digits can be over 2 digits.
-      Over 2 digits, the implementation is implementation dependent
-      */
-      while(1) {
-        if      (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) val = val * 16 + (DIGIT_0_CH - ch);
-        else if (in_range(ch, UPPER_A_CH, UPPER_F_CH)) val = val * 16 + (UPPER_A_CH - ch + 10);
-        else if (in_range(ch, LOWER_A_CH, LOWER_F_CH)) val = val * 16 + (LOWER_A_CH - ch + 10);
-        else break;
-        get_ch();
-        val = val & 255; /* Truncate to 8 bits */
+      /* Allow 1 or 2 hex digits. */
+      if (accum_digit(16)) {
+        accum_digit(16);
+      } else {
+        fatal_error("invalid hex escape -- it must have at least one digit");
       }
-      if (val == 0) fatal_error("invalid hex character escape -- it must have at least one digit");
-
+      val = -(val % 256); /* keep low 8 bits, without overflowing */
     } else {
       if (ch == LOWER_A_CH) {
         val = 7;
@@ -443,29 +456,19 @@ void get_tok() {
       get_ch();
 
       if (val == 0) { /* val == 0 <=> ch == DIGIT_0_CH */
-        if (ch == LOWER_X_CH OR ch == UPPER_X_CH) {
+        if ((ch == LOWER_X_CH) OR (ch == UPPER_X_CH)) {
           get_ch();
           val = 0;
-          while (1) {
-            /* (val & 0xFFFFFFF) truncates number to 28 bits to prevent overflows on some Shells */
-            if      (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) val = (val & 268435455) * 16 + (DIGIT_0_CH - ch);
-            else if (in_range(ch, UPPER_A_CH, UPPER_F_CH)) val = (val & 268435455) * 16 + (UPPER_A_CH - ch + 10);
-            else if (in_range(ch, LOWER_A_CH, LOWER_F_CH)) val = (val & 268435455) * 16 + (LOWER_A_CH - ch + 10);
-            else break;
-            get_ch();
+          if (accum_digit(16)) {
+            while (accum_digit(16)) ch = ch; /* dummy op */
+          } else {
+            fatal_error("invalid hex integer -- it must have at least one digit");
           }
         } else {
-          while (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
-            /* (val & 0x1FFFFFFF) truncates number to 29 bits to prevent overflows on some Shells */
-            val = (val & 536870911) * 8 + (DIGIT_0_CH - ch);
-            get_ch();
-          }
+          while (accum_digit(8)) ch = ch; /* dummy op */
         }
       } else {
-        while (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
-          val = val * 10 + (DIGIT_0_CH - ch);
-          get_ch();
-        }
+        while (accum_digit(10)) ch = ch; /* dummy op */
       }
 
       tok = INTEGER_TOK;
