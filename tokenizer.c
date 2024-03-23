@@ -48,6 +48,7 @@ int MINUS_CH       = 45;
 int PERIOD_CH      = 46;
 int SLASH_CH       = 47;
 int DIGIT_0_CH     = 48;
+int DIGIT_7_CH     = 55;
 int DIGIT_9_CH     = 57;
 int COLON_CH       = 58;
 int SEMICOLON_CH   = 59;
@@ -56,6 +57,7 @@ int EQ_CH          = 61;
 int GT_CH          = 62;
 int QUESTION_CH    = 63;
 int UPPER_A_CH     = 65;
+int UPPER_F_CH     = 70;
 int UPPER_X_CH     = 88;
 int UPPER_Z_CH     = 90;
 int CARET_CH       = 94;
@@ -340,12 +342,39 @@ void get_string_char() {
   get_ch();
 
   if (val == BACKSLASH_CH) {
-    if (ch == DIGIT_0_CH) {
-      /*TODO*/
-      val = 0;
+    if (ch == in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
+      /*
+      Parse octal character, up to 3 digits.
+      Note that \1111 is parsed as '\111' followed by '1'
+      See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
+      */
+      val = DIGIT_0_CH - ch;
+      get_ch();
+      if (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
+        val = val * 8 + (DIGIT_0_CH - ch);
+        get_ch();
+        if (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
+          val = val * 8 + (DIGIT_0_CH - ch);
+          get_ch();
+        }
+      }
     } else if ((ch == UPPER_X_CH) OR (ch == LOWER_X_CH)) {
-      /*TODO*/
+      get_ch();
       val = 0;
+      /*
+      Unlike octal numbers, hex digits can be over 2 digits.
+      Over 2 digits, the implementation is implementation dependent
+      */
+      while(1) {
+        if      (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) val = val * 16 + (DIGIT_0_CH - ch);
+        else if (in_range(ch, UPPER_A_CH, UPPER_F_CH)) val = val * 16 + (UPPER_A_CH - ch + 10);
+        else if (in_range(ch, LOWER_A_CH, LOWER_F_CH)) val = val * 16 + (LOWER_A_CH - ch + 10);
+        else break;
+        get_ch();
+        val = val & 255; /* Truncate to 8 bits */
+      }
+      if (val == 0) fatal_error("invalid hex character escape -- it must have at least one digit");
+
     } else {
       if (ch == LOWER_A_CH) {
         val = 7;
@@ -410,11 +439,33 @@ void get_tok() {
     } else if (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
 
       val = DIGIT_0_CH - ch;
+
       get_ch();
 
-      while (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
-        val = val * 10 + (DIGIT_0_CH - ch);
-        get_ch();
+      if (val == 0) { /* val == 0 <=> ch == DIGIT_0_CH */
+        if (ch == LOWER_X_CH OR ch == UPPER_X_CH) {
+          get_ch();
+          val = 0;
+          while (1) {
+            /* (val & 0xFFFFFFF) truncates number to 28 bits to prevent overflows on some Shells */
+            if      (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) val = (val & 268435455) * 16 + (DIGIT_0_CH - ch);
+            else if (in_range(ch, UPPER_A_CH, UPPER_F_CH)) val = (val & 268435455) * 16 + (UPPER_A_CH - ch + 10);
+            else if (in_range(ch, LOWER_A_CH, LOWER_F_CH)) val = (val & 268435455) * 16 + (LOWER_A_CH - ch + 10);
+            else break;
+            get_ch();
+          }
+        } else {
+          while (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
+            /* (val & 0x1FFFFFFF) truncates number to 29 bits to prevent overflows on some Shells */
+            val = (val & 536870911) * 8 + (DIGIT_0_CH - ch);
+            get_ch();
+          }
+        }
+      } else {
+        while (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
+          val = val * 10 + (DIGIT_0_CH - ch);
+          get_ch();
+        }
       }
 
       tok = INTEGER_TOK;
