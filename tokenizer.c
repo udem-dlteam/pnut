@@ -118,15 +118,11 @@ int ident_start;
 int hash;
 
 int start_ident() {
-  int dummy;
   ident_start = string_pool_alloc;
   hash = 0;
 }
 
 void accum_ident() {
-
-  int dummy;
-
   string_pool[string_pool_alloc] = ch;
   string_pool_alloc += 1;
   hash = (ch + (hash ^ HASH_PARAM)) % HASH_PRIME;
@@ -199,8 +195,6 @@ void get_ch() {
 
 void get_ident() {
 
-  int ident;
-
   start_ident();
 
   while (in_range(ch, UPPER_A, UPPER_Z) OR
@@ -211,10 +205,10 @@ void get_ident() {
     get_ch();
   }
 
-  ident = end_ident();
-  tok = ident_table[ident+2];
+  val = end_ident();
+  tok = ident_table[val+2];
   /*
-  printf("tok=%d %s\n", tok, string_pool + ident_table[ident+1]);
+  printf("tok=%d val=%d %s\n", tok, val, string_pool + ident_table[val+1]);
   */
 }
 
