@@ -1629,65 +1629,114 @@
 (define (main . args)
   (for-each comp-file (parse-cmd-line args)))
 
+; Runtime options:
+; --malloc-init:                  Malloc initializes memory to zero
+; --malloc-no-init:               Malloc does not initialize memory
+; --free-unsets-vars:             Free unsets variables
+; --free-noop:                    Free does nothing
+; --zero-globals:                 Initialize global variables to zero
+; --no-zero-globals:              Do not initialize global variables (faster, not compliant with C semantic)
+;
 ; Code generation options:
-; - initialize-memory-when-alloc: boolean
-; - free-unsets-variables: boolean
-; - inline-inplace-arithmetic-ops: boolean
-; - prefix-local-vars: boolean
-; - inline-string-init: boolean
-; - init-string-precompute-hash: boolean
-; - callee-save: boolean
-; - arithmetic-conditions: boolean
-; - arithmetic-assignment: boolean
-; - optimize-simple-functions: boolean
-; - use-$1-for-return-loc: boolean
+; --inline-inplace-arithmetic:    Do arithmetic side effects in arithmetic expansion
+; --no-inline-inplace-arithmetic: Do arithmetic side effects before the arithmetic expansion
+; --prefix-local-vars:            Prefix local variables with _
+; --no-prefix-local-vars:         Do not prefix local variables
+; --init-string-inline:           defstr is called before using the string
+; --init-string-upfront:          defstr is called during program initialization
+; --callee-save:                  Local variables are saved by callee
+; --caller-save:                  Local variables are saved by caller (!!Currently broken!!)
+; --use-arithmetic-conditions:    Do && and || in arithmetic expansion (!!Currently broken!!)
+; --use-shell-conditions:         Do && and || using Shell's operator
+; --use-arithmetic-assignment:    Assign to variables using $(( var = ... ))
+; --use-regular-assignment:       Assign to variables using var=...
+; --optimize-simple-functions:    Optimize local variables for simple functions
+; --no-optimize-simple-functions: Treat all functions the same
+; --optimize-return-loc:          Use $1 for return location
+; --no-optimize-return-loc:       Use __result_loc to store the return location
+; --numeric-chars:                Replace characters with their ASCII values
+; --no-numeric-chars:             Replace characters with a constant containing the ASCII value
 (define (parse-cmd-line args)
   (let loop ((args args) (files '()))
     (if (null? args)
         files
         (let ((arg (car args))
               (rest (cdr args)))
-          (cond ((and (pair? rest) (member arg '("--inline-inplace-arithmetic-ops")))
-                  (set! inline-inplace-arithmetic-ops (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--initialize-memory-when-alloc")))
-                  (set! initialize-memory-when-alloc? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--free-unsets-variables")))
-                  (set! free-unsets-variables? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--prefix-local-vars")))
-                  (set! prefix-local-vars (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--inline-string-init")))
-                  (set! inline-string-init (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--init-string-precompute-hash")))
-                  (set! init-string-precompute-hash? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--callee-save")))
-                  (set! callee-save? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--arithmetic-conditions")))
-                  (set! arithmetic-conditions? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--arithmetic-assignment")))
-                  (set! arithmetic-assignment? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--optimize-simple-functions")))
-                  (set! optimize-simple-functions? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--use-$1-for-return-loc")))
-                  (set! use-$1-for-return-loc? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((and (pair? rest) (member arg '("--define-constants-for-characters")))
-                  (set! define-constants-for-characters? (not (equal? "false" (car rest))))
-                  (loop (cdr rest) files))
-                ((member arg '("--no-zero-globals"))
-                  (set! initialize-globals? #f)
-                  (loop (cdr rest) files))
-                ((member arg '("--zero-globals"))
+          (cond
+                ; Runtime options
+                ((equal? arg "--malloc-init")
+                  (set! initialize-memory-when-alloc? #t)
+                  (loop rest files))
+                ((equal? arg "--malloc-no-init")
+                  (set! initialize-memory-when-alloc? #f)
+                  (loop rest files))
+                ((equal? arg "--free-unsets-vars")
+                  (set! free-unsets-variables? #t)
+                  (loop rest files))
+                ((equal? arg "--free-noop")
+                  (set! free-unsets-variables? #f)
+                  (loop rest files))
+                ((equal? arg "--zero-globals")
                   (set! initialize-globals? #t)
+                  (loop rest files))
+                ((equal? arg "--no-zero-globals")
+                  (set! initialize-globals? #f)
+                  (loop rest files))
+
+                ; Codegen options
+                ((equal? arg "--inline-inplace-arithmetic")
+                  (set! inline-inplace-arithmetic-ops #t)
+                  (loop rest files))
+                ((equal? arg "--no-inline-inplace-arithmetic")
+                  (set! inline-inplace-arithmetic-ops #f)
+                  (loop rest files))
+                ((equal? arg "--prefix-local-vars")
+                  (set! prefix-local-vars #t)
+                  (loop rest files))
+                ((equal? arg "--no-prefix-local-vars")
+                  (set! prefix-local-vars #f)
+                  (loop rest files))
+                ((equal? arg "--init-string-inline")
+                  (set! inline-string-init #t)
+                  (loop rest files))
+                ((equal? arg "--init-string-upfront")
+                  (set! inline-string-init #f)
+                  (loop rest files))
+                ((equal? arg "--callee-save")
+                  (set! callee-save? #t)
+                  (loop rest files))
+                ((equal? arg "--caller-save")
+                  (set! callee-save? #f)
+                  (loop rest files))
+                ((equal? arg "--use-arithmetic-conditions")
+                  (set! arithmetic-conditions? #t)
+                  (loop rest files))
+                ((equal? arg "--use-shell-conditions")
+                  (set! arithmetic-conditions? #f)
+                  (loop rest files))
+                ((equal? arg "--use-arithmetic-assignment")
+                  (set! arithmetic-assignment? #t)
+                  (loop rest files))
+                ((equal? arg "--use-regular-assignment")
+                  (set! arithmetic-assignment? #f)
+                  (loop rest files))
+                ((equal? arg "--optimize-simple-functions")
+                  (set! optimize-simple-functions? #t)
+                  (loop rest files))
+                ((equal? arg "--no-optimize-simple-functions")
+                  (set! optimize-simple-functions? #f)
+                  (loop rest files))
+                ((equal? arg "--optimize-return-loc")
+                  (set! use-$1-for-return-loc? #t)
+                  (loop rest files))
+                ((equal? arg "--no-optimize-return-loc")
+                  (set! use-$1-for-return-loc? #f)
+                  (loop rest files))
+                ((equal? arg "--numeric-chars")
+                  (set! define-constants-for-characters? #f)
+                  (loop rest files))
+                ((equal? arg "--no-numeric-chars")
+                  (set! define-constants-for-characters? #t)
                   (loop rest files))
                 (else
                   (if (and (>= (string-length arg) 2)

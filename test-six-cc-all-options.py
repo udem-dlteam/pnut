@@ -8,31 +8,27 @@ shell = parser.parse_args().shell
 
 boolean_options = ["true", "false"]
 
-# (option_type, key, values)
-# option_type: True for options that are concatenated with a dash
-#              False for options that are separated by a space
-options = [ # Only testing with true since not initializing is incorrect semantics
-          , (False, "initialize-memory-when-alloc", ["true"])
-          , (False, "inline-inplace-arithmetic-ops", boolean_options)
-          , (False, "prefix-local-vars", boolean_options)
-          , (False, "inline-string-init", boolean_options)
-          , (False, "arithmetic-conditions", boolean_options)
-          , (False, "arithmetic-assignment", boolean_options)
+options = [ ["--malloc-init"] # , "--malloc-no-init"]
+          , ["--free-unsets-vars", "--free-noop"]
+          , ["--zero-globals", "--no-zero-globals"]
+          , ["--inline-inplace-arithmetic", "--no-inline-inplace-arithmetic"]
+          , ["--prefix-local-vars", "--no-prefix-local-vars"]
+          , ["--init-string-inline", "--init-string-upfront"]
+          , ["--callee-save"] # , "--caller-save"]
+          , ["--use-shell-conditions"] # , "--use-arithmetic-conditions", ]
+          , ["--use-arithmetic-assignment", "--use-regular-assignment"]
+          , ["--optimize-simple-functions", "--no-optimize-simple-functions"]
+          , ["--optimize-return-loc", "--no-optimize-return-loc"]
+          , ["--numeric-chars", "--no-numeric-chars"]
           ]
 
 def generate_options(opts):
   if len(opts) == 0:
     yield "";
   else:
-    opt = opts[0]
-    option_type = opt[0]
-    key = opt[1]
-    for val in opt[2]:
+    for opt in opts[0]:
       for rest in generate_options(opts[1:]):
-        if option_type == True:
-          yield f"--{key}-{val} " + rest
-        else:
-          yield f"--{key} {val} " + rest
+        yield f"{opt} " + rest
 
 for six_cc_options in generate_options(options):
   print(f"Running tests with {shell} with options: {six_cc_options}")
