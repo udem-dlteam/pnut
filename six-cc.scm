@@ -775,7 +775,7 @@
      (if (pair? (cdr ast))
       (ctx-add-glo-decl!
         ctx
-        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " )) # Assign return value")))
+        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " ))")))
      (if (ctx-tail? ctx)
       (begin
         ; We're in a loop, so we won't fall through to the next statement without a break statement
