@@ -622,6 +622,7 @@
   (case (car ast)
     ((six.while)
       (let ((code-test (comp-loop-test ctx (cadr ast)))
+            (body (caddr ast))
             (start-loop? (ctx-loop? ctx))
             (start-block-type (ctx-block-type ctx)))
         (ctx-add-glo-decl!
@@ -630,6 +631,9 @@
         (ctx-loop?-set! ctx #t)
         (ctx-block-type-set! ctx 'loop)
         (nest ctx
+          ;; If the body is empty, add a : to avoid syntax errors
+          (if (equal? '(six.compound) body)
+            (ctx-add-glo-decl! ctx (list ":")))
           (comp-statement ctx (caddr ast)))
         (ctx-loop?-set! ctx start-loop?)
         (ctx-block-type-set! ctx start-block-type)
@@ -641,7 +645,7 @@
      (let ((expr1 (cadr ast))
            (expr2 (caddr ast))
            (expr3 (cadddr ast))
-           (stat (car (cddddr ast)))
+           (body (car (cddddr ast)))
            (start-loop? (ctx-loop? ctx))
            (start-loop-end-actions (ctx-loop-end-actions ctx))
            (start-block-type (ctx-block-type ctx)))
@@ -658,7 +662,10 @@
          (ctx-loop-end-actions-set! ctx loop-end-actions)
          (ctx-block-type-set! ctx 'loop)
          (nest ctx
-          (comp-statement ctx stat)
+          ;; If the body is empty, add a : to avoid syntax errors
+          (if (and (equal? '(six.compound) body) (null? loop-end-actions))
+            (ctx-add-glo-decl! ctx (list ":")))
+          (comp-statement ctx body)
           (for-each
             (lambda (action) (ctx-add-glo-decl! ctx action))
             loop-end-actions)
@@ -671,14 +678,18 @@
             (list "done")))))
     ((six.if)
      (let* ((test (cadr ast))
-            (stat (caddr ast))
+            (body (caddr ast))
             (code-test (comp-if-test ctx test))
             (start-block-type (ctx-block-type ctx)))
         (ctx-add-glo-decl!
           ctx
           (list (if else-if? "elif " "if ") code-test " ; then"))
         (ctx-block-type-set! ctx 'if)
-        (nest ctx (comp-statement ctx stat))
+        (nest ctx
+          ;; If the body is empty, add a : to avoid syntax errors
+          (if (equal? '(six.compound) body)
+            (ctx-add-glo-decl! ctx (list ":")))
+          (comp-statement ctx body))
         (if (pair? (cdddr ast))
             (let ((else-block (cadddr ast)))
               (if (equal? (car else-block) 'six.if)
@@ -690,7 +701,11 @@
                   (ctx-add-glo-decl!
                     ctx
                     (list "else"))
-                  (nest ctx (comp-statement ctx else-block))))))
+                  (nest ctx
+                    ;; If the body is empty, add a : to avoid syntax errors
+                    (if (equal? '(six.compound) else-block)
+                      (ctx-add-glo-decl! ctx (list ":")))
+                    (comp-statement ctx else-block))))))
          (ctx-block-type-set! ctx start-block-type)
          (if (not else-if?)
           (ctx-add-glo-decl!
