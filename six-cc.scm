@@ -1,10 +1,5 @@
 #!/usr/bin/env gsi
 
-(define support-addr-of? #f)
-; Determines how to return a value from a function call.
-; Possible values:
-; - '(variable var_name): Each function returns in a variable called {var_name} and the caller must save it if needed.
-; - '(addr always-pass): Functions take an extra parameter (always or when assigning) that is the name of the variable where to store the return value.
 ; Disable for faster execution of programs that allocate a lot of memory
 (define initialize-memory-when-alloc? #t)
 ; free function is noop or unsets the variables?
@@ -160,9 +155,7 @@
   (string+symbol "_" (cadr ident)))
 
 (define (global-ref ident)
-  (if support-addr-of?
-      (string-append "_$" (global-var ident))
-      (global-var ident)))
+  (global-var ident))
 
 (define (enum-ref ctx ident)
   (let ((enum (table-ref (ctx-enums ctx) (cadr ident) #f)))
@@ -262,9 +255,7 @@
         (let ((val (if init (comp-constant init) "0")))
           (ctx-add-glo-decl!
            ctx
-           (if support-addr-of?
-               (list "defglo_pointable " (global-var name) " " val)
-               (list "defglo " (global-var name) " " val)))))))
+            (list "defglo " (global-var name) " " val))))))
 
 ; An enum is defined with a function without parameters returning a value of
 ; type `enum` and that has a body containing only assignments or identifiers.
@@ -1466,9 +1457,7 @@
     ""
     ""
     (string-append "defarr() { : $(($1 = " alloc-var ")) $((" alloc-var " = " alloc-var "+$2)) ; }")
-    (if support-addr-of?
-        (string-append "defglo_pointable() { : $(($1 = " alloc-var ")) $((_$" alloc-var " = $2)) $((" alloc-var " = " alloc-var "+1)) ; }")
-        "defglo() { : $(($1 = $2)) ; }")
+    "defglo() { : $(($1 = $2)) ; }"
     ""
     "# Setup argc, argv"
     (string-append argc-var "=$(($# + 1))")
