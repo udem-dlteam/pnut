@@ -1471,9 +1471,23 @@
   (unlines
     "set -e -u"
     ""
+    "# Handle runtime options"
     (string-append strict-mode-var      "=" (if initialize-memory-when-alloc? "1" "0"))
     (string-append free-unsets-vars-var "=" (if free-unsets-variables?        "1" "0"))
     (string-append init-globals-var     "=" (if initialize-globals?           "1" "0"))
+    ""
+    (string-append
+    "if [ $# -gt 0 ] && [ $1 = \"--malloc-init\" ] ;      then " strict-mode-var "=1; shift; fi")
+    (string-append
+    "if [ $# -gt 0 ] && [ $1 = \"--malloc-no-init\" ] ;   then " strict-mode-var "=0; shift; fi")
+    (string-append
+    "if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then " free-unsets-vars-var "=1; shift; fi")
+    (string-append
+    "if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then " free-unsets-vars-var "=0; shift; fi")
+    (string-append
+    "if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then " init-globals-var "=1; shift; fi")
+    (string-append
+    "if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then " init-globals-var "=0; shift; fi")
     ""
     "# Load runtime library and primitives"
     ". ./runtime.sh"
