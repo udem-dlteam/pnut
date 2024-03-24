@@ -22,11 +22,11 @@ int string_sum(char_ptr s) {
 int iota_array(int start, int max) {
   int i;
   int_ptr arr;
-  arr = malloc(max);
+  arr = malloc(max - start);
   for (i = 0; i + start < max; i++) {
     arr[i] = i + start;
-   }
- return arr;
+  }
+  return arr;
 }
 
 int array_sum(int_ptr arr, int len) {
@@ -46,7 +46,7 @@ int main() {
   int n2;
   int n3;
   int arr;
-  arr = iota_array(1, 50);
+  arr = iota_array(0, 50);
   n1 = string_len([1,2,3,4,5,0]);
   n2 = string_sum("Hello, world!");
   n3 = array_sum(arr, 50);

@@ -767,6 +767,7 @@
     (getchar #t)
     (exit #f)
     (malloc #t)
+    (calloc #t)
     (free #f)
     (printf #f)
     (open #t)

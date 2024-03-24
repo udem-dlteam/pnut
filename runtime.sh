@@ -25,9 +25,7 @@ new_object() {
 extend_object() {
   : $((_$__ALLOC = $1))
   : $((__ALLOC   += 1))
-  if [ $__FREE_UNSETS_VARS -eq 1 ]; then
-    : $((__OBJ_LEN += 1))
-  fi
+  : $((__OBJ_LEN += 1))
 }
 
 # Finalize the object, writing the header and returning the address of the object.
@@ -46,7 +44,7 @@ finalize_object() { # $1 = (optional) number of bytes to add to the object
   fi
 }
 
-strict_alloc() {
+alloc() {
   # When free isn't a no-op, we need to tag all objects with their size
   if [ $__FREE_UNSETS_VARS -eq 1 ]; then
     : $((_$__ALLOC = $1)) # Save allocation size
@@ -54,19 +52,21 @@ strict_alloc() {
   fi
   __addr=$__ALLOC
   : $((__ALLOC += $1))
-  # Need to initialize the memory to 0 or else `set -u` will complain
-  if [ $__STRICT_MODE -eq 1 ]; then
-    __ix=$__addr
-    while [ $__ix -lt $__ALLOC ]; do
-      : $((_$__ix=0))
-      : $((__ix += 1))
-    done
-  fi
+}
+
+# Initialize the memory to 0
+initialize_memory() { # $1 = address, $2 = length
+  __ix=$1
+  __last=$(($1 + $2))
+  while [ $__ix -lt $__last ]; do
+    : $((_$__ix=0))
+    : $((__ix += 1))
+  done
 }
 
 make_argv() {
   __argc=$1; shift;
-  strict_alloc $__argc
+  alloc $__argc # Allocate enough space for all elements. No need to initialize.
   __argv=$__addr
   __ptr=$__addr # Saving value because its overwritten by unpack_string
 
@@ -79,7 +79,7 @@ make_argv() {
 }
 
 unpack_array() {
-  strict_alloc $# # Allocate enough space for all elements
+  alloc $# # Allocate enough space for all elements. No need to initialize.
   __ptr=$__addr
   while [ $# -gt 0 ] ; do
     : $((_$__ptr = $1))
@@ -468,7 +468,14 @@ _getchar()
 _exit() { echo \"Exiting with code $1\"; exit $1; }
 
 _malloc() { # $2 = malloc_size
-  strict_alloc $2
+  alloc $2
+  : $(($1 = __addr))
+}
+
+# Similar to malloc, but always initializes memory to 0.
+_calloc() { # $2 = nitems, $3 = size
+  alloc $(($2 * $3))
+  initialize_memory $__addr $(($2 * $3))
   : $(($1 = __addr))
 }
 
