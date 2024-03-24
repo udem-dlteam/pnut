@@ -31,54 +31,6 @@ int in_range(int x, int lo, int hi) {
 #define in_range(x, lo, hi) ((x >= lo) AND (x <= hi))
 #endif
 
-int NEWLINE_CH     = 10;
-int SPACE_CH       = 32;
-int EXCL_CH        = 33;
-int DQUOTE_CH      = 34;
-int SHARP_CH       = 35;
-int PERCENT_CH     = 37;
-int AMP_CH         = 38;
-int QUOTE_CH       = 39;
-int LPAREN_CH      = 40;
-int RPAREN_CH      = 41;
-int STAR_CH        = 42;
-int PLUS_CH        = 43;
-int COMMA_CH       = 44;
-int MINUS_CH       = 45;
-int PERIOD_CH      = 46;
-int SLASH_CH       = 47;
-int DIGIT_0_CH     = 48;
-int DIGIT_7_CH     = 55;
-int DIGIT_9_CH     = 57;
-int COLON_CH       = 58;
-int SEMICOLON_CH   = 59;
-int LT_CH          = 60;
-int EQ_CH          = 61;
-int GT_CH          = 62;
-int QUESTION_CH    = 63;
-int UPPER_A_CH     = 65;
-int UPPER_F_CH     = 70;
-int UPPER_X_CH     = 88;
-int UPPER_Z_CH     = 90;
-int CARET_CH       = 94;
-int LBRACK_CH      = 91;
-int BACKSLASH_CH   = 92;
-int RBRACK_CH      = 93;
-int UNDERSCORE_CH  = 95;
-int LOWER_A_CH     = 97;
-int LOWER_B_CH     = 98;
-int LOWER_F_CH     = 102;
-int LOWER_N_CH     = 110;
-int LOWER_R_CH     = 114;
-int LOWER_T_CH     = 116;
-int LOWER_V_CH     = 118;
-int LOWER_X_CH     = 120;
-int LOWER_Z_CH     = 122;
-int LBRACE_CH      = 123;
-int BAR_CH         = 124;
-int RBRACE_CH      = 125;
-int TILDE_CH       = 126;
-
 int AUTO_KW        = 300;
 int BREAK_KW       = 301;
 int CASE_KW        = 302;
@@ -246,7 +198,7 @@ void get_ch() {
 
 void handle_preprocessor_directive() {
   /*TODO*/
-  while ((ch != NEWLINE_CH) AND (ch != EOF)) {
+  while ((ch != '\n') AND (ch != EOF)) {
     printf("%c", ch);
     get_ch();
   }
@@ -257,10 +209,10 @@ void get_ident() {
 
   begin_string();
 
-  while (in_range(ch, UPPER_A_CH, UPPER_Z_CH) OR
-         in_range(ch, LOWER_A_CH, LOWER_Z_CH) OR
-         in_range(ch, DIGIT_0_CH, DIGIT_9_CH) OR
-         (ch == UNDERSCORE_CH)) {
+  while (in_range(ch, 'A', 'Z') OR
+         in_range(ch, 'a', 'z') OR
+         in_range(ch, '0', '9') OR
+         (ch == '_')) {
     accum_string();
     get_ch();
   }
@@ -340,12 +292,12 @@ int accum_digit(int base) {
   int digit = 99;
   int MININT = -2147483648;
   int limit;
-  if (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
-    digit = ch - DIGIT_0_CH;
-  } else if (in_range(ch, UPPER_A_CH, UPPER_Z_CH)) {
-    digit = ch - UPPER_A_CH + 10;
-  } else if (in_range(ch, LOWER_A_CH, LOWER_Z_CH)) {
-    digit = ch - LOWER_A_CH + 10;
+  if (in_range(ch, '0', '9')) {
+    digit = ch - '0';
+  } else if (in_range(ch, 'A', 'Z')) {
+    digit = ch - 'A' + 10;
+  } else if (in_range(ch, 'a', 'z')) {
+    digit = ch - 'a' + 10;
   }
   if (digit >= base) {
     return 0; /* character is not a digit in that base */
@@ -366,8 +318,8 @@ void get_string_char() {
   val = ch;
   get_ch();
 
-  if (val == BACKSLASH_CH) {
-    if (in_range(ch, DIGIT_0_CH, DIGIT_7_CH)) {
+  if (val == '\\') {
+    if (in_range(ch, '0', '7')) {
       /*
       Parse octal character, up to 3 digits.
       Note that \1111 is parsed as '\111' followed by '1'
@@ -378,7 +330,7 @@ void get_string_char() {
       accum_digit(8);
       accum_digit(8);
       val = -(val % 256); /* keep low 8 bits, without overflowing */
-    } else if ((ch == UPPER_X_CH) OR (ch == LOWER_X_CH)) {
+    } else if ((ch == 'X') OR (ch == 'x')) {
       get_ch();
       val = 0;
       /* Allow 1 or 2 hex digits. */
@@ -389,21 +341,21 @@ void get_string_char() {
       }
       val = -(val % 256); /* keep low 8 bits, without overflowing */
     } else {
-      if (ch == LOWER_A_CH) {
+      if (ch == 'a') {
         val = 7;
-      } else if (ch == LOWER_B_CH) {
+      } else if (ch == 'b') {
         val = 8;
-      } else if (ch == LOWER_F_CH) {
+      } else if (ch == 'f') {
         val = 12;
-      } else if (ch == LOWER_N_CH) {
+      } else if (ch == 'n') {
         val = 10;
-      } else if (ch == LOWER_R_CH) {
+      } else if (ch == 'r') {
         val = 13;
-      } else if (ch == LOWER_T_CH) {
+      } else if (ch == 't') {
         val = 9;
-      } else if (ch == LOWER_V_CH) {
+      } else if (ch == 'v') {
         val = 11;
-      } else if ((ch == BACKSLASH_CH) OR (ch == QUOTE_CH) OR (ch == DQUOTE_CH)) {
+      } else if ((ch == '\\') OR (ch == '\'') OR (ch == '"')) {
         val = ch;
       } else {
         fatal_error("unimplemented string character escape");
@@ -417,7 +369,7 @@ void get_tok() {
 
   while (1) {
 
-    if (ch <= SPACE_CH) {
+    if (ch <= ' ') {
 
       if (ch == EOF) {
         tok = EOF;
@@ -426,37 +378,37 @@ void get_tok() {
 
       /* skip whitespace, detecting when it is at start of line */
 
-      if (ch == NEWLINE_CH) tok = ch;
+      if (ch == '\n') tok = ch;
       get_ch();
 
-      while (in_range(ch, 0, SPACE_CH)) {
-        if (ch == NEWLINE_CH) tok = ch;
+      while (in_range(ch, 0, ' ')) {
+        if (ch == '\n') tok = ch;
         get_ch();
       }
 
       /* detect '#' at start of line, possibly preceded by whitespace */
 
-      if ((tok == NEWLINE_CH) AND (ch == SHARP_CH))
+      if ((tok == '\n') AND (ch == '#'))
         handle_preprocessor_directive();
 
       /* will continue while (1) loop */
 
-    } else if (in_range(ch, LOWER_A_CH, LOWER_Z_CH) OR
-               in_range(ch, UPPER_A_CH, UPPER_Z_CH) OR
-               (ch == UNDERSCORE_CH)) {
+    } else if (in_range(ch, 'a', 'z') OR
+               in_range(ch, 'A', 'Z') OR
+               (ch == '_')) {
 
       get_ident();
 
       break;
 
-    } else if (in_range(ch, DIGIT_0_CH, DIGIT_9_CH)) {
+    } else if (in_range(ch, '0', '9')) {
 
-      val = DIGIT_0_CH - ch;
+      val = '0' - ch;
 
       get_ch();
 
-      if (val == 0) { /* val == 0 <=> ch == DIGIT_0_CH */
-        if ((ch == LOWER_X_CH) OR (ch == UPPER_X_CH)) {
+      if (val == 0) { /* val == 0 <=> ch == '0' */
+        if ((ch == 'x') OR (ch == 'X')) {
           get_ch();
           val = 0;
           if (accum_digit(16)) {
@@ -475,12 +427,12 @@ void get_tok() {
 
       break;
 
-    } else if (ch == QUOTE_CH) {
+    } else if (ch == '\'') {
 
       get_ch();
       get_string_char();
 
-      if (ch != QUOTE_CH) {
+      if (ch != '\'') {
         fatal_error("unterminated character literal");
       }
 
@@ -490,13 +442,13 @@ void get_tok() {
 
       break;
 
-    } else if (ch == DQUOTE_CH) {
+    } else if (ch == '"') {
 
       get_ch();
 
       begin_string();
 
-      while ((ch != DQUOTE_CH) AND (ch != EOF)) {
+      while ((ch != '"') AND (ch != EOF)) {
         get_string_char();
         tok = ch;
         ch = val;
@@ -504,7 +456,7 @@ void get_tok() {
         ch = tok;
       }
 
-      if (ch != DQUOTE_CH) {
+      if (ch != '"') {
         fatal_error("unterminated string literal");
       }
 
@@ -522,13 +474,13 @@ void get_tok() {
 
       tok = ch; /* fallback for single char tokens */
 
-      if (ch == SLASH_CH) {
+      if (ch == '/') {
 
         get_ch();
-        if (ch == STAR_CH) {
+        if (ch == '*') {
           get_ch();
           tok = ch; /* remember previous char, except first one */
-          while (((tok != STAR_CH) OR (ch != SLASH_CH)) AND (ch != EOF)) {
+          while (((tok != '*') OR (ch != '/')) AND (ch != EOF)) {
             tok = ch;
             get_ch();
           }
@@ -537,54 +489,54 @@ void get_tok() {
           }
           get_ch();
           /* will continue while (1) loop */
-        } else if (ch == SLASH_CH) {
-          while ((ch != NEWLINE_CH) AND (ch != EOF)) {
+        } else if (ch == '/') {
+          while ((ch != '\n') AND (ch != EOF)) {
             get_ch();
           }
           /* will continue while (1) loop */
         } else {
-          if (ch == EQ_CH) {
+          if (ch == '=') {
             get_ch();
             tok = SLASH_EQ_TOK;
           }
           break;
         }
 
-      } else if (ch == AMP_CH) {
+      } else if (ch == '&') {
 
         get_ch();
-        if (ch == AMP_CH) {
+        if (ch == '&') {
           get_ch();
           tok = AMP_AMP_TOK;
-        } else if (ch == EQ_CH) {
+        } else if (ch == '=') {
           get_ch();
           tok = AMP_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == BAR_CH) {
+      } else if (ch == '|') {
 
         get_ch();
-        if (ch == BAR_CH) {
+        if (ch == '|') {
           get_ch();
           tok = BAR_BAR_TOK;
-        } else if (ch == EQ_CH) {
+        } else if (ch == '=') {
           get_ch();
           tok = BAR_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == LT_CH) {
+      } else if (ch == '<') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = LT_EQ_TOK;
-        } else if (ch == LT_CH) {
+        } else if (ch == '<') {
           get_ch();
-          if (ch == EQ_CH) {
+          if (ch == '=') {
             get_ch();
             tok = LSHIFT_EQ_TOK;
           } else {
@@ -594,15 +546,15 @@ void get_tok() {
 
         break;
 
-      } else if (ch == GT_CH) {
+      } else if (ch == '>') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = GT_EQ_TOK;
-        } else if (ch == GT_CH) {
+        } else if (ch == '>') {
           get_ch();
-          if (ch == EQ_CH) {
+          if (ch == '=') {
             get_ch();
             tok = RSHIFT_EQ_TOK;
           } else {
@@ -612,77 +564,77 @@ void get_tok() {
 
         break;
 
-      } else if (ch == EQ_CH) {
+      } else if (ch == '=') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = EQ_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == EXCL_CH) {
+      } else if (ch == '!') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = EXCL_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == PLUS_CH) {
+      } else if (ch == '+') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = PLUS_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == MINUS_CH) {
+      } else if (ch == '-') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = MINUS_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == STAR_CH) {
+      } else if (ch == '*') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = STAR_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == PERCENT_CH) {
+      } else if (ch == '%') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = PERCENT_EQ_TOK;
         }
 
         break;
 
-      } else if (ch == CARET_CH) {
+      } else if (ch == '^') {
 
         get_ch();
-        if (ch == EQ_CH) {
+        if (ch == '=') {
           get_ch();
           tok = CARET_EQ_TOK;
         }
 
         break;
 
-      } else if ((ch == QUESTION_CH) OR (ch == COMMA_CH) OR (ch == COLON_CH) OR (ch == SEMICOLON_CH) OR (ch == LPAREN_CH) OR (ch == RPAREN_CH) OR (ch == LBRACK_CH) OR (ch == RBRACK_CH) OR (ch == LBRACE_CH) OR (ch == RBRACE_CH)) {
+      } else if ((ch == '?') OR (ch == ',') OR (ch == ':') OR (ch == ';') OR (ch == '(') OR (ch == ')') OR (ch == '[') OR (ch == ']') OR (ch == '{') OR (ch == '}')) {
 
         tok = ch;
 
@@ -706,7 +658,7 @@ void print_string_char(int c) {
   else if (c == 13) printf("\\r");
   else if (c == 9) printf("\\t");
   else if (c == 11) printf("\\v");
-  else if ((c == BACKSLASH_CH) OR (c == QUOTE_CH) OR (c == DQUOTE_CH)) printf("\\%c", c);
+  else if ((c == '\\') OR (c == '\'') OR (c == '"')) printf("\\%c", c);
   else if ((c < 32) OR (c > 126)) printf("\\%d%d%d", c>>6, (c>>3)&7, c&7);
   else putchar(c);
 }
@@ -800,7 +752,7 @@ int main() {
 
   init_ident_table();
 
-  ch = NEWLINE_CH;
+  ch = '\n';
   get_tok();
 
   while (tok != EOF) {
