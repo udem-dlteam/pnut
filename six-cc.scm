@@ -35,6 +35,10 @@
 (define use-$1-for-return-loc? #t)
 ; Define constants for characters in the data section.
 (define define-constants-for-characters? #t)
+; defarr initializes memory or not?
+; The C semantic is to initialize memory to 0, but we can save a lot of time by
+; only initializing memory that's actually needed.
+(define initialize-globals? #f)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -188,6 +192,7 @@
 (define sp-ident               '(six.internal-identifier SP))               ; Local variables stack pointer
 (define strict-mode-ident      '(six.internal-identifier STRICT_MODE))      ; If malloc initializes the memory it allocates to 0
 (define free-unsets-vars-ident '(six.internal-identifier FREE_UNSETS_VARS)) ; If free unsets variables or is NOP
+(define init-globals-ident     '(six.internal-identifier INIT_GLOBALS))     ; If global variables are initialized
 
 (define (make-string-ident ix)
   `(six.internal-identifier ,(string->symbol (string-append "str_" (number->string ix)))))
@@ -198,6 +203,7 @@
 (define sp-var               (format-non-local-var sp-ident))
 (define strict-mode-var      (format-non-local-var strict-mode-ident))
 (define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
+(define init-globals-var     (format-non-local-var init-globals-ident))
 
 (define (get-result-var ctx) (if (or (ctx-is-simple-function? ctx) use-$1-for-return-loc?) "1" result-loc-ident))
 (define (get-result-loc ctx) (if (or (ctx-is-simple-function? ctx) use-$1-for-return-loc?) "1" result-loc-var))
@@ -1467,6 +1473,7 @@
     ""
     (string-append strict-mode-var      "=" (if initialize-memory-when-alloc? "1" "0"))
     (string-append free-unsets-vars-var "=" (if free-unsets-variables?        "1" "0"))
+    (string-append init-globals-var     "=" (if initialize-globals?           "1" "0"))
     ""
     "# Load runtime library and primitives"
     ". ./runtime.sh"
@@ -1515,7 +1522,8 @@
     "}"
     ""
     ""
-    "defarr() { alloc $2; initialize_memory $__addr $2 : $(( $1 = __addr )) ; }"
+    (string-append
+    "defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $" init-globals-var  " -ne 0 ]; then initialize_memory $1 $2; fi; }")
     "defglo() { : $(($1 = $2)) ; }"
     ""
     "# Setup argc, argv"
@@ -1675,6 +1683,12 @@
                 ((and (pair? rest) (member arg '("--define-constants-for-characters")))
                   (set! define-constants-for-characters? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
+                ((member arg '("--no-zero-globals"))
+                  (set! initialize-globals? #f)
+                  (loop (cdr rest) files))
+                ((member arg '("--zero-globals"))
+                  (set! initialize-globals? #t)
+                  (loop rest files))
                 (else
                   (if (and (>= (string-length arg) 2)
                            (string=? (substring arg 0 1) "-"))
