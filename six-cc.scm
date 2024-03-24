@@ -33,6 +33,8 @@
 (define optimize-simple-functions? #f)
 ; Use $1 for the return location instead of result_loc.
 (define use-$1-for-return-loc? #t)
+; Define constants for characters in the data section.
+(define define-constants-for-characters? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -42,6 +44,7 @@
   loc-env             ; Local environment
   all-variables       ; Set represented as a table
   literals            ; Literals that have been assigned to a variable
+  characters          ; Characters that have been assigned to a variable
   enums               ; Enums that have been defined.
   structs             ; Structures that have been defined
   data                ; The data section
@@ -60,6 +63,7 @@
     (make-table) ; local environment
     (make-table) ; all variables
     (make-table) ; literals
+    (make-table) ; characters
     (make-table) ; enums
     (make-table) ; structs
     '()          ; data
@@ -222,17 +226,70 @@
     (else
      (error "unknown global declaration" ast))))
 
-(define (comp-constant ast)
+(define (character-ident c)
+  (define (with-prefix prefix c)
+    `(six.internal-identifier ,(string->symbol (string-append prefix (list->string (list c))))))
+
+  (define (mk-ident c)
+    `(six.internal-identifier ,(string->symbol c)))
+
+  (cond
+    ((char-lower-case? c) (with-prefix "LOWER_" c))
+    ((char-upper-case? c) (with-prefix "UPPER_" c))
+    ((char-numeric? c)    (with-prefix "DIGIT_" c))
+    ((eq? c #\null)       (mk-ident "NULL_CH"))
+    ((eq? c #\newline)    (mk-ident "NEWLINE_CH"))
+    ((eq? c #\space)      (mk-ident "SPACE_CH"))
+    ((eq? c #\!)          (mk-ident "EXCL_CH"))
+    ((eq? c #\")          (mk-ident "DQUOTE_CH"))
+    ((eq? c #\#)          (mk-ident "SHARP_CH"))
+    ((eq? c #\$)          (mk-ident "DOLLAR_CH"))
+    ((eq? c #\%)          (mk-ident "PERCENT_CH"))
+    ((eq? c #\&)          (mk-ident "AMP_CH"))
+    ((eq? c #\')          (mk-ident "QUOTE_CH"))
+    ((eq? c #\()          (mk-ident "LPAREN_CH"))
+    ((eq? c #\))          (mk-ident "RPAREN_CH"))
+    ((eq? c #\*)          (mk-ident "STAR_CH"))
+    ((eq? c #\+)          (mk-ident "PLUS_CH"))
+    ((eq? c #\,)          (mk-ident "COMMA_CH"))
+    ((eq? c #\-)          (mk-ident "MINUS_CH"))
+    ((eq? c #\.)          (mk-ident "PERIOD_CH"))
+    ((eq? c #\/)          (mk-ident "SLASH_CH"))
+    ((eq? c #\:)          (mk-ident "COLON_CH"))
+    ((eq? c #\;)          (mk-ident "SEMICOLON_CH"))
+    ((eq? c #\<)          (mk-ident "LT_CH"))
+    ((eq? c #\=)          (mk-ident "EQ_CH"))
+    ((eq? c #\>)          (mk-ident "GT_CH"))
+    ((eq? c #\?)          (mk-ident "QUESTION_CH"))
+    ((eq? c #\@)          (mk-ident "AT_CH"))
+    ((eq? c #\^)          (mk-ident "CARET_CH"))
+    ((eq? c #\[)          (mk-ident "LBRACK_CH"))
+    ((eq? c #\\)          (mk-ident "BACKSLASH_CH"))
+    ((eq? c #\])          (mk-ident "RBRACK_CH"))
+    ((eq? c #\_)          (mk-ident "UNDERSCORE_CH"))
+    ((eq? c #\`)          (mk-ident "BACKTICK_CH"))
+    ((eq? c #\{)          (mk-ident "LBRACE_CH"))
+    ((eq? c #\|)          (mk-ident "BAR_CH"))
+    ((eq? c #\})          (mk-ident "RBRACE_CH"))
+    ((eq? c #\~)          (mk-ident "TILDE_CH"))
+    ((eq? c #\delete))    (mk-ident "DELETE_CH")
+    (else
+      (error "Unknown character"))))
+
+(define (comp-constant ctx ast)
   (case (car ast)
     ((six.literal)
      (let ((val (cadr ast)))
        (cond ((exact-integer? val)
               (number->string val))
              ((string? val)
-              ; Hacky way to detect character literals
-              ; since six doesn't distinguish between " and '
+              ; Hacky way to detect character literals since six doesn't distinguish between " and '
               (if (equal? 1 (string-length val))
-                (number->string (char->integer (string-ref val 0)))
+                (if define-constants-for-characters?
+                  (let ((ident (character-ident (string-ref val 0))))
+                    (table-set! (ctx-characters ctx) (string-ref val 0) ident)
+                    (string-append "$" (format-non-local-var ident)))
+                  (number->string (char->integer (string-ref val 0))))
                 (error "String literals are not supported in this context")))
              (else
               "unknown literal" ast))))
@@ -250,7 +307,7 @@
           (ctx-add-glo-decl!
            ctx
            (list "defarr " (global-var name) " " size)))
-        (let ((val (if init (comp-constant init) "0")))
+        (let ((val (if init (comp-constant ctx init) "0")))
           (ctx-add-glo-decl!
            ctx
             (list "defglo " (global-var name) " " val))))))
@@ -554,7 +611,7 @@
 (define (comp-pattern ctx ast)
   (case (car ast)
     ((six.literal)
-     (comp-constant ast))
+     (comp-constant ctx ast))
     ((six.identifier)
      (string-append "$" (enum-ref ctx ast)))
     (else
@@ -1258,15 +1315,18 @@
        (cond ((exact-integer? val)
               (wrap-in-condition-if-needed (number->string val)))
              ((string? val)
-              ; Hacky way to detect character literals
-              ; since six doesn't distinguish between " and '
+              ; Hacky way to detect character literals since six doesn't distinguish between " and '
               (if (equal? 1 (string-length val))
-                (wrap-in-condition-if-needed (number->string (char->integer (string-ref val 0))))
+                (if define-constants-for-characters?
+                  (let ((ident (character-ident (string-ref val 0))))
+                    (table-set! (ctx-characters ctx) (string-ref val 0) ident)
+                    (wrap-in-condition-if-needed
+                      (string-append (if wrapped "" "$") (format-non-local-var ident))))
+                  (wrap-in-condition-if-needed (number->string (char->integer (string-ref val 0)))))
                 (begin
                   (ctx-data-set! ctx (cons val (ctx-data ctx)))
-                  (wrap-in-condition-if-needed (if wrapped
-                    (obj-ref (- (length (ctx-data ctx)) 1))
-                    (string-append "$" (obj-ref (- (length (ctx-data ctx)) 1))))))))
+                  (wrap-in-condition-if-needed
+                    (string-append (if wrapped "" "$") (obj-ref (- (length (ctx-data ctx)) 1)))))))
              (else
               "unknown literal" ast))))
     ((six.list)
@@ -1514,23 +1574,33 @@
         new-var-name))))
 
 ; Initialize the heap, allocating memory for hardcoded strings and arrays.
+; It also defines the variables for the hardcoded characters.
 (define (heap-prelude ctx)
-  (if (not (null? (ctx-data ctx)))
-    (unlines
-      "# Heap initialization"
-      (apply unlines
-        (map (lambda (datum ix)
-              (cond ((list? datum)
-                      (string-append
-                        "unpack_array " (string-concatenate (map number->string datum) " ")
-                        "; __" (number->string ix) "=$__addr"))
-                    ((string? datum)
-                      (def_str_code (string-append "__" (number->string ix)) datum))))
-          (reverse (ctx-data ctx))
-          (iota (length (ctx-data ctx)))))
-      ""
+  (unlines
+    (if (not (null? (ctx-data ctx)))
+      (unlines
+        "# Heap initialization"
+        (apply unlines
+          (map (lambda (datum ix)
+                (cond ((list? datum)
+                        (string-append
+                          "unpack_array " (string-concatenate (map number->string datum) " ")
+                          "; __" (number->string ix) "=$__addr"))
+                      ((string? datum)
+                        (def_str_code (string-append "__" (number->string ix)) datum))))
+            (reverse (ctx-data ctx))
+            (iota (length (ctx-data ctx)))))
+        "")
       "")
-    ""))
+  (if (> (table-length (ctx-characters ctx)) 0)
+    (unlines
+      "# Character constants"
+      (apply unlines
+        (map (lambda (char)
+          (string-append (format-non-local-var (cdr char)) "=" (number->string (char->integer (car char)))))
+          (list-sort (lambda (c1 c2) (char<? (car c1) (car c2))) (table->list (ctx-characters ctx)))))
+      "")
+    "")))
 
 (define (comp-file path)
   (let ((ast (call-with-input-file path read-six)))
@@ -1601,6 +1671,9 @@
                   (loop (cdr rest) files))
                 ((and (pair? rest) (member arg '("--use-$1-for-return-loc")))
                   (set! use-$1-for-return-loc? (not (equal? "false" (car rest))))
+                  (loop (cdr rest) files))
+                ((and (pair? rest) (member arg '("--define-constants-for-characters")))
+                  (set! define-constants-for-characters? (not (equal? "false" (car rest))))
                   (loop (cdr rest) files))
                 (else
                   (if (and (>= (string-length arg) 2)
