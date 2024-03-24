@@ -179,7 +179,6 @@
 
 (define result-loc-ident       '(six.internal-identifier result_loc))
 (define no-result-loc-ident    '(six.internal-identifier ||))               ; || is empty symbol
-(define alloc-ident            '(six.internal-identifier ALLOC))
 (define argc-ident             '(six.internal-identifier argc_for_main))
 (define argv-ident             '(six.internal-identifier argv_for_main))
 (define sp-ident               '(six.internal-identifier SP))               ; Local variables stack pointer
@@ -190,7 +189,6 @@
   `(six.internal-identifier ,(string->symbol (string-append "str_" (number->string ix)))))
 
 (define result-loc-var       (format-non-local-var result-loc-ident))
-(define alloc-var            (format-non-local-var alloc-ident))
 (define argc-var             (format-non-local-var argc-ident))
 (define argv-var             (format-non-local-var argv-ident))
 (define sp-var               (format-non-local-var sp-ident))
@@ -1457,7 +1455,7 @@
     "}"
     ""
     ""
-    (string-append "defarr() { : $(($1 = " alloc-var ")) $((" alloc-var " = " alloc-var "+$2)) ; }")
+    "defarr() { alloc $2; initialize_memory $__addr $2 : $(( $1 = __addr )) ; }"
     "defglo() { : $(($1 = $2)) ; }"
     ""
     "# Setup argc, argv"
