@@ -25,10 +25,6 @@
 ; hashing algorithm, and prevents it from compiling itself.
 ; ** Do not use this option if you want to compile c4 with c4 **
 (define arithmetic-assignment? #f)
-; A simple function is a function without local variables and doesn't call other functions.
-; And so, we can use $1, $2, ... directly and not worry about clobbering the caller's variables.
-; Note: This option is not compatible with (addr #f) return method.
-(define optimize-simple-functions? #f)
 ; Use $1 for the return location instead of result_loc.
 (define use-$1-for-return-loc? #t)
 ; Define constants for characters in the data section.
@@ -37,6 +33,8 @@
 ; The C semantic is to initialize memory to 0, but we can save a lot of time by
 ; only initializing memory that's actually needed.
 (define initialize-globals? #f)
+; Optimize readonly function parameters by keeping them in $1, $2, ...
+(define optimize-readonly-params? #t)
 
 (define (function-name ident)
   (string-append "_" (symbol->string (cadr ident))))
@@ -56,7 +54,6 @@
   loop?               ; Are we enclosed in loop?
   loop-end-actions    ; What to do at the end of a loop. Typically an increment.
   block-type          ; What kind of block are we in? (function, loop, switch, if, ...)
-  is-simple-function? ; Is the current function simple, i.e. without local variables and not calling other functions?
   )
 
 (define (empty-ctx)
@@ -75,7 +72,6 @@
     #f           ; loop?
     '()          ; loop-end-actions
     'default     ; block-type
-    #f           ; is-simple-function?
     ))
 
 (define (ctx-add-glo-decl! ctx decl)
@@ -106,8 +102,11 @@
   `(nest-level ,ctx (lambda () ,@body)))
 
 (define-type local-var
-  position
-  initialized)
+  position    ; Position of the variable in the local environment
+  type        ; Function param or local
+  initialized ; If the variable has been initialized
+  written-to  ; If the variable has been written to
+  )
 
 ; (define (shift-ctx-loc-env-position ctx)
 ;   (for-each (lambda (p)
@@ -121,12 +120,37 @@
     (if loc
       (local-var-initialized-set! loc #t))))
 
+; Assumes that l1 and l2 are sorted by identifier
+; l1 and l2 are lists of (ident . local-var) objects
+(define (merge-local-variables-helper tbl ls)
+  (for-each
+    (lambda (l)
+      (let ((e (table-ref tbl (car l) #f)))
+        (if e
+          (table-set! tbl (car l)
+                          (make-local-var
+                            (or (local-var-position    e) (local-var-position    (cdr l)))
+                            (or (local-var-type        e) (local-var-type        (cdr l)))
+                            (or (local-var-initialized e) (local-var-initialized (cdr l)))
+                            (or (local-var-written-to  e) (local-var-written-to  (cdr l)))))
+          (table-set! tbl (car l) (cdr l)))))
+    ls))
+
+(define (merge-local-variables . ls)
+  (define tbl (make-table))
+  (for-each
+    (lambda (l) (merge-local-variables-helper tbl l))
+    ls)
+  (table->list tbl))
+
 (define (add-new-local-var ctx ident initialized #!optional (position #f))
   (table-set! (ctx-loc-env ctx)
               ident
               (make-local-var
                 (or position (+ 1 (table-length (ctx-loc-env ctx))))
-                initialized))
+                (if position 'param 'local)
+                initialized
+                #f))
   ; Gather the list of all local variables.
   ; Used to initialize them all at the beginning of the execution so
   ; save_loc_var doesn't crash when saving an unitialized variable.
@@ -137,18 +161,26 @@
 (define (is-local-var ctx ident)
   (table-ref (ctx-loc-env ctx) ident #f))
 
+(define (is-mutable-local-var ctx ident)
+  (let ((var (table-ref (ctx-loc-env ctx) ident #f)))
+    (if var
+      (local-var-written-to var)
+      #f)))
+
 (define (env-var ctx ident #!optional (prefixed-by-dollar #f))
-  (cond
-    ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
-      (string-append (if prefixed-by-dollar "" "$") (number->string (cadr ident))))
-    ((table-ref (ctx-loc-env ctx) ident #f)
-      (if (ctx-is-simple-function? ctx)
-        (if prefixed-by-dollar
-          (number->string (local-var-position (table-ref (ctx-loc-env ctx) ident)))
-          (string-append "$" (number->string (local-var-position (table-ref (ctx-loc-env ctx) ident)))))
-        (format-local-var ident)))
-    (else
-      (format-non-local-var ident))))
+  (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
+    (cond
+      ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
+        (string-append (if prefixed-by-dollar "" "$") (number->string (cadr ident))))
+      (local-var
+        (if (or (or (local-var-written-to local-var) (equal? 'local (local-var-type local-var)))
+                (not optimize-readonly-params?))
+          (format-local-var ident)
+          (if prefixed-by-dollar ; The variable is stored in $1, $2, ...
+              (number->string (local-var-position local-var))
+              (string-append "$" (number->string (local-var-position local-var))))))
+      (else
+        (format-non-local-var ident)))))
 
 (define (format-non-local-var ident)
   (cond
@@ -203,8 +235,8 @@
 (define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
 (define init-globals-var     (format-non-local-var init-globals-ident))
 
-(define (get-result-var ctx) (if (or (ctx-is-simple-function? ctx) use-$1-for-return-loc?) "1" result-loc-ident))
-(define (get-result-loc ctx) (if (or (ctx-is-simple-function? ctx) use-$1-for-return-loc?) "1" result-loc-var))
+(define (get-result-var ctx) (if use-$1-for-return-loc? "1" result-loc-ident))
+(define (get-result-loc ctx) (if use-$1-for-return-loc? "1" result-loc-var))
 
 (define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
@@ -469,6 +501,54 @@
           (loop (cdr lst) (cons (cons var-name var-init) new-local-vars)))
         (cons lst (reverse new-local-vars)))))
 
+; Traverse the AST and gather all the local variables that are declared in the function.
+; It also keep tracks of variables that are assigned to.
+(define (gather-function-var-used ast)
+  (define (go ast)
+    (case (car ast)
+      ((six.return six.break six.continue six.literal six.list six.identifier six.internal-identifier) '())
+      ((six.define-variable)
+        (let* ((var-name (cadr ast))
+               (var-init (car (cddddr ast))))
+          (list (cons var-name (make-local-var #f 'local var-init #f)))))
+      ((six.while) (go (caddr ast)))
+      ((six.for)
+
+        (merge-local-variables (go (cadr ast)) (go (car (cddddr ast)))))
+      ((six.if)    (merge-local-variables (go (caddr ast)) (if (pair? (cdddr ast)) (go (cadddr ast)) '())))
+      ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+        (let ((lhs (cadr ast))
+              (rhs (caddr ast)))
+          (merge-local-variables
+            (go rhs)
+            (if (equal? (car lhs) 'six.identifier)
+              (list (cons lhs (make-local-var #f #f #f #t)))
+              '()))))
+      ((six.x++ six.++x six.--x six.x--)
+        (let ((lhs (cadr ast)))
+          (if (equal? (car lhs) 'six.identifier)
+            (list (cons lhs (make-local-var #f #f #f #t)))
+            '())))
+      ((six.switch)
+        (apply merge-local-variables (map go (cdaddr ast))))
+      ((six.case six.label) ; (six.case (six.literal ...) (six.case (six.literal ...) ... ( ... body ...)))
+        (go (caddr ast)))
+      ((six.compound)
+        (apply merge-local-variables (map go (cdr ast))))
+      ((six.call)
+        (let* ((fun-params (cdr ast)))
+          (apply merge-local-variables (map go fun-params))))
+      ((six.-x six.!x six.*x six.**x)
+        (go (cadr ast)))
+      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow six.x&&y |six.x\|\|y|)
+        (merge-local-variables (go (cadr ast)) (go (caddr ast))))
+      ((six.x?y:z)
+        (merge-local-variables (go (cadr ast)) (go (caddr ast)) (go (cadddr ast))))
+      (else
+        (error "unknown ast" ast))))
+
+  (apply append (map go ast)))
+
 (define (comp-glo-define-procedure ctx ast)
   (let* ((name (cadr ast))
          (proc (caddr ast))
@@ -484,20 +564,11 @@
              (body-decls (get-body-declarations body))
              (body-rest (car body-decls))
              (new-local-vars (cdr body-decls))
-             (is-simple-function?
-              (if (and optimize-simple-functions?
-                       (null? new-local-vars)
-                       (not (equal? (cadr name) 'main)))
-                  (if (null? parameters)
-                    'extra-simple ; Extra simple functions don't have parameters, and so can call other functions unlike simple functions
-                    'simple)
-                  #f))
-             (local-vars-to-map
-              (map cons parameters
-                        (iota (length parameters)
-                              (if (or is-simple-function? use-$1-for-return-loc?) 2 1)))))
-
-        (ctx-is-simple-function?-set! ctx is-simple-function?)
+             (variables-used (gather-function-var-used body))
+              (indexed-parameters
+                (map cons parameters
+                          (iota (length parameters)
+                                (if (or use-$1-for-return-loc?) 2 1)))))
 
         (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
         (assert-variable-names-are-safe (map car new-local-vars))
@@ -506,42 +577,45 @@
 
         (for-each
           (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) #t (cdr param-and-pos)))
-          local-vars-to-map)
+          indexed-parameters)
 
         ; Add local variables to the environment
         (for-each
           (lambda (param) (add-new-local-var ctx (car param) (cdr param)))
           new-local-vars)
 
-        (if (not (ctx-is-simple-function? ctx))
-          (begin
-            ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-            (save-local-variables ctx)
-            (if (not use-$1-for-return-loc?)
-              (ctx-add-glo-decl!
-                ctx
-                (list result-loc-var
-                      "=\"$1\"; shift "
-                      "# Remove result_loc param")))
+        ; Mark local variables as written to or constant
+        (ctx-loc-env-set! ctx (list->table (filter (lambda (v) (local-var-position (cdr v))) (merge-local-variables (table->list (ctx-loc-env ctx)) variables-used))))
 
-            (for-each
-              (lambda (p) (comp-assignment ctx `(six.x=y (six.identifier ,(cadaar p)) (six.identifier ,(cdr p)))))
-              local-vars-to-map)
-            (for-each
-              (lambda (new-local-var)
-                (if (cdr new-local-var)
-                  (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
-                  (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
-              new-local-vars)))
+        ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
+        (save-local-variables ctx)
+        (if (not use-$1-for-return-loc?)
+          (ctx-add-glo-decl!
+            ctx
+            (list result-loc-var
+                  "=\"$1\"; shift "
+                  "# Remove result_loc param")))
+
+        (for-each
+          (lambda (p)
+            (if (or (is-mutable-local-var ctx (caar p)) (not optimize-readonly-params?))
+              (comp-assignment ctx `(six.x=y ,(caar p) (six.identifier ,(cdr p))))))
+          indexed-parameters)
+
+        (for-each
+          (lambda (new-local-var)
+            (if (cdr new-local-var)
+              (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+              (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+          new-local-vars)
 
         (if (null? body)
-          (begin
-            (ctx-add-glo-decl! ctx (list ":")))
+          (ctx-add-glo-decl! ctx (list ":"))
           (comp-body ctx body-rest))
 
         (restore-local-variables ctx)
 
-      (ctx-loc-env-set! ctx start-loc-env)))
+        (ctx-loc-env-set! ctx start-loc-env)))
 
     (ctx-add-glo-decl!
      ctx
@@ -859,12 +933,17 @@
   (let* ((sorted-local-vars
           (list-sort (lambda (v1 v2) (< (local-var-position (cdr v1)) (local-var-position (cdr v2)))) (table->list (ctx-loc-env ctx))))
          (local-vars-ident (map car sorted-local-vars)) ; Only keep ident
-         (local-vars-to-save
-          (filter (lambda (x) (not (equal? x result-loc-ident))) local-vars-ident)))
+         (local-var-need-to-be-saved
+          (lambda (ident)
+            (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
+              (and (not (equal? ident result-loc-ident))
+                    (or (local-var-written-to local-var)
+                        (equal? 'local (local-var-type local-var))
+                        (not optimize-readonly-params?))))))
+         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (and (not (null? local-vars-to-save))
-               (not (ctx-is-simple-function? ctx)))
+      (if (not (null? local-vars-to-save))
         ; Idea: Pass the value to save directly to save_loc_var instead of the variable name
         (ctx-add-glo-decl!
           ctx
@@ -874,11 +953,16 @@
   (let* ((sorted-local-vars
           (list-sort (lambda (v1 v2) (< (local-var-position (cdr v1)) (local-var-position (cdr v2)))) (table->list (ctx-loc-env ctx))))
          (local-vars-ident (map car sorted-local-vars)) ; Only keep ident
-         (local-vars-to-save
-          (filter (lambda (x) (not (equal? x result-loc-ident))) local-vars-ident)))
+         (local-var-need-to-be-saved
+          (lambda (ident)
+            (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
+              (and (not (equal? ident result-loc-ident))
+                    (or (local-var-written-to local-var)
+                        (equal? 'local (local-var-type local-var))
+                        (not optimize-readonly-params?))))))
+         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
 
-      (if (and (not (null? local-vars-to-save))
-               (not (ctx-is-simple-function? ctx)))
+      (if (not (null? local-vars-to-save))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var "
@@ -913,13 +997,6 @@
           (if is-prim
               (cadr (assoc (cadr name) runtime-primitives))
               #t)))
-
-      (if (and (equal? 'simple (ctx-is-simple-function? ctx)) (not is-prim))
-        (begin
-          (display "Function calls to non-primitives are not supported in functions that are considered simple.\n")
-          (display "To make the function non-simple, declare a local variable or remove the --optimize-simple-functions flag.\n")
-          (display "Function: ") (display ast) (newline)
-          (exit 1)))
 
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
@@ -1700,11 +1777,11 @@
                 ((equal? arg "--use-regular-assignment")
                   (set! arithmetic-assignment? #f)
                   (loop rest files))
-                ((equal? arg "--optimize-simple-functions")
-                  (set! optimize-simple-functions? #t)
+                ((equal? arg "--optimize-readonly-params")
+                  (set! optimize-readonly-params? #t)
                   (loop rest files))
-                ((equal? arg "--no-optimize-simple-functions")
-                  (set! optimize-simple-functions? #f)
+                ((equal? arg "--no-optimize-readonly-params")
+                  (set! optimize-readonly-params? #f)
                   (loop rest files))
                 ((equal? arg "--optimize-return-loc")
                   (set! use-$1-for-return-loc? #t)
