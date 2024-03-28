@@ -16,8 +16,6 @@
 ; Unpack strings where they are used instead of at program initialization
 ; This can slow down programs because the initialization may be done multiple times
 (define inline-string-init #t)
-; If it's the caller or callee that should save local variables
-(define callee-save? #t)
 ; Always use arithmetic expansion to do if/while conditions?
 ; ** Warning: Using this option breaks shortcut evaluation. **
 (define arithmetic-conditions? #f)
@@ -518,7 +516,7 @@
         (if (not (ctx-is-simple-function? ctx))
           (begin
             ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-            (if callee-save? (save-local-variables ctx))
+            (save-local-variables ctx)
             (if (not use-$1-for-return-loc?)
               (ctx-add-glo-decl!
                 ctx
@@ -536,9 +534,12 @@
                   (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
               new-local-vars)))
 
-      (comp-body ctx body-rest)
+        (if (null? body)
+          (begin
+            (ctx-add-glo-decl! ctx (list ":")))
+          (comp-body ctx body-rest))
 
-      (if (and callee-save?) (restore-local-variables ctx))
+        (restore-local-variables ctx)
 
       (ctx-loc-env-set! ctx start-loc-env)))
 
@@ -793,10 +794,10 @@
                    (not (pair? (cdr ast))) ;; We haven't returned using prim_return_value
                    (not (equal? 'case (ctx-block-type ctx)))) ; Not a case statement
             (begin
-              (if callee-save? (restore-local-variables ctx))
+              (restore-local-variables ctx)
               (ctx-add-glo-decl! ctx (list "return"))))))
       (begin
-        (if callee-save? (restore-local-variables ctx))
+        (restore-local-variables ctx)
         (ctx-add-glo-decl! ctx (list "return")))))
     ((six.break)
       (if (not (ctx-loop? ctx)) (error "break statement outside of a loop"))
@@ -854,16 +855,12 @@
 ;      Note: on branch laurent/six-cc-lazy-var-restore.
 ;  [ ] Use a smarter data structure, so we can save and restore variables in different orders.
 ;  [ ] Use dynamic variables only ( $((_$i_{var_name})) ), with a counter that we increment on each function call so we don't need to save and restore them. The counter could be $1, since it's scoped locally and doesn't need to be restored
-(define (save-local-variables ctx #!optional (assign_to #f))
+(define (save-local-variables ctx)
   (let* ((sorted-local-vars
           (list-sort (lambda (v1 v2) (< (local-var-position (cdr v1)) (local-var-position (cdr v2)))) (table->list (ctx-loc-env ctx))))
-         (initialized-local-vars
-          (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
-            (map car sorted-local-vars)
-            (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
-         (variables-to-ignore (list assign_to result-loc-ident))
+         (local-vars-ident (map car sorted-local-vars)) ; Only keep ident
          (local-vars-to-save
-          (filter (lambda (x) (not (member x variables-to-ignore))) initialized-local-vars)))
+          (filter (lambda (x) (not (equal? x result-loc-ident))) local-vars-ident)))
 
       ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
       (if (and (not (null? local-vars-to-save))
@@ -873,16 +870,12 @@
           ctx
           (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))))
 
-(define (restore-local-variables ctx #!optional (assign_to #f))
+(define (restore-local-variables ctx)
   (let* ((sorted-local-vars
           (list-sort (lambda (v1 v2) (< (local-var-position (cdr v1)) (local-var-position (cdr v2)))) (table->list (ctx-loc-env ctx))))
-         (initialized-local-vars
-          (if callee-save? ; If it's callee-save, we have to save all variables, even uninitialized ones
-            (map car sorted-local-vars)
-            (map car (filter (lambda (l) (local-var-initialized (cdr l))) sorted-local-vars))))
-         (variables-to-ignore (list assign_to result-loc-ident))
+         (local-vars-ident (map car sorted-local-vars)) ; Only keep ident
          (local-vars-to-save
-          (filter (lambda (x) (not (member x variables-to-ignore))) initialized-local-vars)))
+          (filter (lambda (x) (not (equal? x result-loc-ident))) local-vars-ident)))
 
       (if (and (not (null? local-vars-to-save))
                (not (ctx-is-simple-function? ctx)))
@@ -903,19 +896,6 @@
       (comp-fun-call ctx ast assign_to))))
 
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
-  ; There are many ways we can implement function calls. There are 2 axis for the calling protocol:
-  ; - how to preserve value of variables that may be used by the caller (because no local variables).
-  ;   Options:
-  ;    - Caller saves all of its variable and restore them after the call (what we do for now).
-  ;    - Caller saves all variables that may be used by the callee. (requires an analysis of the functions and transitive closure).
-  ;    - Have every variable on a stack.
-  ;    - Let the C code handle the problem
-  ;    Optimization ideas:
-  ;    - Exploit how $1, $2, ... are scoped locally to the function, and are restored after a function call.
-  ; - how to pass the return value.
-  ;   Options:
-  ;    - Each function returns in a variable called {function_name}_result and the caller must save it if needed.
-  ;    - Functions take an extra parameter that is the address/name of the variable where to store the return value.
   (let* ((name (car ast))
          (params (cdr ast))
          (func-call-params (filter (lambda (p) (and (pair? p) (equal? (car p) 'six.call))) params))
@@ -944,9 +924,6 @@
       (if (and (not can-return) assign_to)
         (error "Function call can't return a value, but we are assigning to a variable"))
 
-      ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (and (not is-prim) (not callee-save?)) (save-local-variables ctx assign_to))
-
       (if can-return ; Always pass the return address, even if it's not used, as long as the function can return a value
         (ctx-add-glo-decl!
           ctx
@@ -954,10 +931,7 @@
                                       (cons (env-var ctx (or assign_to no-result-loc-ident)) ;; '|| is empty symbol. Maps to __
                                       code-params))
                                     " ")))
-        (ctx-add-glo-decl! ctx (list call-code)))
-
-      ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (and (not is-prim) (not callee-save?)) (restore-local-variables ctx assign_to))))
+        (ctx-add-glo-decl! ctx (list call-code)))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)
@@ -1658,8 +1632,6 @@
 ; --no-prefix-local-vars:         Do not prefix local variables
 ; --init-string-inline:           defstr is called before using the string
 ; --init-string-upfront:          defstr is called during program initialization
-; --callee-save:                  Local variables are saved by callee
-; --caller-save:                  Local variables are saved by caller (!!Currently broken!!)
 ; --use-arithmetic-conditions:    Do && and || in arithmetic expansion (!!Currently broken!!)
 ; --use-shell-conditions:         Do && and || using Shell's operator
 ; --use-arithmetic-assignment:    Assign to variables using $(( var = ... ))
@@ -1715,12 +1687,6 @@
                   (loop rest files))
                 ((equal? arg "--init-string-upfront")
                   (set! inline-string-init #f)
-                  (loop rest files))
-                ((equal? arg "--callee-save")
-                  (set! callee-save? #t)
-                  (loop rest files))
-                ((equal? arg "--caller-save")
-                  (set! callee-save? #f)
                   (loop rest files))
                 ((equal? arg "--use-arithmetic-conditions")
                   (set! arithmetic-conditions? #t)
