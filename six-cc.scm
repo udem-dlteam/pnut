@@ -554,21 +554,24 @@
          (proc (caddr ast))
          (result-type (cadr proc))
          (parameters (caddr proc))
-         (body (cdar (cdddr proc))))
+         (body (cdar (cdddr proc)))
+         (indexed-parameters
+          (map cons parameters
+                    (iota (length parameters)
+                          (if (or use-$1-for-return-loc?) 2 1)))))
     (ctx-add-glo-decl!
      ctx
-     (list (function-name name) "() {"))
+     (list
+      (function-name name) "() {"
+      (if (pair? indexed-parameters) " # " "")
+      (string-concatenate (map (lambda (p) (string-append (symbol->string (cadaar p)) ": $" (number->string (cdr p)))) indexed-parameters) ", ")))
     (ctx-tail?-set! ctx #t)
     (nest ctx
       (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
              (body-decls (get-body-declarations body))
              (body-rest (car body-decls))
              (new-local-vars (cdr body-decls))
-             (variables-used (gather-function-var-used body))
-              (indexed-parameters
-                (map cons parameters
-                          (iota (length parameters)
-                                (if (or use-$1-for-return-loc?) 2 1)))))
+             (variables-used (gather-function-var-used body)))
 
         (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
         (assert-variable-names-are-safe (map car new-local-vars))
