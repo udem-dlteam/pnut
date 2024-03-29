@@ -28,7 +28,13 @@ IFS="
 for shell_version_command in $SHELL_VERSION_COMMANDS ; do
     shell=`echo "$shell_version_command" | sed -e "s/ .*//"`
     version=`eval $shell_version_command`
-    echo "`/usr/bin/time $shell "$output_file" < big.c 2>&1 | sed -e 's/ real.*//'` $shell $version"
+    if [ -n "$TEST" ] ; then # If TEST env var is defined, generate result files instead of benchmarking
+        echo "Generating $shell result file"
+        cat big.c | $shell "$output_file" > "${source_file%.*}_$shell.result"
+    else
+        echo "`/usr/bin/time $shell "$output_file" < big.c 2>&1 | sed -e 's/ real.*//'` $shell $version"
+    fi
+
 done
 
 rm "$temp_file"
