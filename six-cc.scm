@@ -313,22 +313,25 @@
       (error "Unknown character"))))
 
 (define (comp-constant ctx ast)
+  (define (handle-literal lit transform)
+    (let ((val (cadr lit)))
+        (cond ((exact-integer? val)
+                (number->string (transform val)))
+              ((string? val)
+                ; Hacky way to detect character literals since six doesn't distinguish between " and '
+                (if (equal? 1 (string-length val))
+                  (if define-constants-for-characters?
+                    (let ((ident (character-ident (string-ref val 0))))
+                      (table-set! (ctx-characters ctx) (string-ref val 0) ident)
+                      (string-append "$" (format-non-local-var ident)))
+                    (number->string (transform (char->integer (string-ref val 0)))))
+                  (error "String literals are not supported in this context")))
+              (else
+                "unknown literal" ast))))
   (case (car ast)
-    ((six.literal)
-     (let ((val (cadr ast)))
-       (cond ((exact-integer? val)
-              (number->string val))
-             ((string? val)
-              ; Hacky way to detect character literals since six doesn't distinguish between " and '
-              (if (equal? 1 (string-length val))
-                (if define-constants-for-characters?
-                  (let ((ident (character-ident (string-ref val 0))))
-                    (table-set! (ctx-characters ctx) (string-ref val 0) ident)
-                    (string-append "$" (format-non-local-var ident)))
-                  (number->string (char->integer (string-ref val 0))))
-                (error "String literals are not supported in this context")))
-             (else
-              "unknown literal" ast))))
+    ((six.literal) (handle-literal ast identity))
+    ((six.-x)
+      (handle-literal (cadr ast) (lambda (x) (- x))))
     (else
      (error "unknown constant" ast))))
 
