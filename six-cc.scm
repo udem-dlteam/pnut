@@ -942,14 +942,13 @@
          (local-var-need-to-be-saved
           (lambda (ident)
             (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
-              (and (not (equal? ident result-loc-ident))
-                    (or (local-var-written-to local-var)
-                        (equal? 'local (local-var-type local-var))
-                        (not optimize-readonly-params?))))))
+              (and (not (equal? ident result-loc-ident))          ; The result-loc-ident is always saved by save_loc_var
+                   (or (local-var-written-to local-var)           ; Save because it's a mutable variable
+                       (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
+                       (not optimize-readonly-params?))))))       ; or save because optimization is disabled
          (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
 
-      ; All primitives uses variables not starting with _, meaning that there can't be a conflicts
-      (if (not (null? local-vars-to-save))
+      (if (or (pair? local-vars-to-save) (not use-$1-for-return-loc?))
         ; Idea: Pass the value to save directly to save_loc_var instead of the variable name
         (ctx-add-glo-decl!
           ctx
@@ -962,13 +961,13 @@
          (local-var-need-to-be-saved
           (lambda (ident)
             (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
-              (and (not (equal? ident result-loc-ident))
-                    (or (local-var-written-to local-var)
-                        (equal? 'local (local-var-type local-var))
-                        (not optimize-readonly-params?))))))
+              (and (not (equal? ident result-loc-ident))          ; The result-loc-ident is always saved by save_loc_var
+                   (or (local-var-written-to local-var)           ; Save because it's a mutable variable
+                       (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
+                       (not optimize-readonly-params?))))))       ; or save because optimization is disabled
          (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
 
-      (if (not (null? local-vars-to-save))
+      (if (or (pair? local-vars-to-save) (not use-$1-for-return-loc?))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var "
