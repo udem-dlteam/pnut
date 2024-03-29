@@ -761,9 +761,9 @@ _show_heap() {
 _show_arg_stack() {
   set +u
   __ix=1
-  echo "    Heap:"
-  while [ $__ix -le $((__SP + 1)) ]; do
-    eval "__val=\$_data_$__ix"
+  echo "    Local variables stack:"
+  while [ $__ix -le $((__SP)) ]; do
+    eval "__val=\$save_loc_var_$__ix"
     echo "        _$__ix = $__val"
     : $((__ix += 1))
   done
