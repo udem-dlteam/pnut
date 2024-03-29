@@ -125,9 +125,11 @@ int hash;
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
+int alloc_result;
+
 int alloc_obj(int size) {
 
-  int result = heap_alloc;
+  alloc_result = heap_alloc;
 
   heap_alloc += size;
 
@@ -135,7 +137,7 @@ int alloc_obj(int size) {
     fatal_error("heap overflow");
   }
 
-  return result;
+  return alloc_result;
 }
 
 void begin_string() {
@@ -152,14 +154,13 @@ void accum_string() {
   }
 }
 
+int probe;
+int probe_start;
+int c1;
+int c2;
+int end_ident_i;
+
 int end_ident() {
-
-  int probe;
-  int probe_start;
-  int c1;
-  int c2;
-  int i;
-
   string_pool[string_pool_alloc] = 0; /* terminate string */
   string_pool_alloc += 1; /* account for terminator */
 
@@ -167,17 +168,17 @@ int end_ident() {
 
   while (probe != 0) {
     probe_start = heap[probe+1];
-    i = 0;
-    c1 = string_pool[string_start+i];
-    c2 = string_pool[probe_start+i];
+    end_ident_i = 0;
+    c1 = string_pool[string_start+end_ident_i];
+    c2 = string_pool[probe_start+end_ident_i];
     while (c1 == c2) {
       if (c1 == 0) {
         string_pool_alloc = string_start; /* undo string allocation */
         return probe;
       }
-      i += 1;
-      c1 = string_pool[string_start+i];
-      c2 = string_pool[probe_start+i];
+      end_ident_i += 1;
+      c1 = string_pool[string_start+end_ident_i];
+      c2 = string_pool[probe_start+end_ident_i];
     }
     hash = probe; /* remember previous ident */
     probe = heap[probe];
@@ -695,60 +696,62 @@ void set_child(ast node, int i, ast child) {
   heap[node+i+1] = child;
 }
 
+ast ast_result;
+
 ast new_ast0(int op, int val) {
 
-  ast result = alloc_obj(2);
+  ast_result = alloc_obj(2);
 
-  heap[result] = op;
-  set_val(result, val);
+  heap[ast_result] = op;
+  set_val(ast_result, val);
 
-  return result;
+  return ast_result;
 }
 
 ast new_ast1(int op, ast child0) {
 
-  ast result = alloc_obj(2);
+  ast_result = alloc_obj(2);
 
-  heap[result] = op + 1024;
-  set_child(result, 0, child0);
+  heap[ast_result] = op + 1024;
+  set_child(ast_result, 0, child0);
 
-  return result;
+  return ast_result;
 }
 
 ast new_ast2(int op, ast child0, ast child1) {
 
-  ast result = alloc_obj(3);
+  ast_result = alloc_obj(3);
 
-  heap[result] = op + 2048;
-  set_child(result, 0, child0);
-  set_child(result, 1, child1);
+  heap[ast_result] = op + 2048;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
 
-  return result;
+  return ast_result;
 }
 
 ast new_ast3(int op, ast child0, ast child1, ast child2) {
 
-  ast result = alloc_obj(3);
+  ast_result = alloc_obj(3);
 
-  heap[result] = op + 3072;
-  set_child(result, 0, child0);
-  set_child(result, 1, child1);
-  set_child(result, 2, child2);
+  heap[ast_result] = op + 3072;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+  set_child(ast_result, 2, child2);
 
-  return result;
+  return ast_result;
 }
 
 ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
 
-  ast result = alloc_obj(4);
+  ast_result = alloc_obj(4);
 
-  heap[result] = op + 4096;
-  set_child(result, 0, child0);
-  set_child(result, 1, child1);
-  set_child(result, 2, child2);
-  set_child(result, 3, child3);
+  heap[ast_result] = op + 4096;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+  set_child(ast_result, 2, child2);
+  set_child(ast_result, 3, child3);
 
-  return result;
+  return ast_result;
 }
 
 void syntax_error(char_ptr msg) {
