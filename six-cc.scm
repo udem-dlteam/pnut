@@ -1557,6 +1557,8 @@
       (unlines
       (string-append
       "  : $((" sp-var " += 1))")
+      (string-append
+      "  unset \"save_loc_var_$" sp-var "\" # For some reason, zsh behaves incorrectly when the variable is already set")
       "  # We must use eval to set a string to a dynamic variable"
       (string-append
       "  eval \"save_loc_var_$" sp-var "=\\$" result-loc-var "\"")))
