@@ -1402,7 +1402,7 @@ void print_tok(int tok, int val) {
     print_string_char(val);
     printf("' ");
   } else if (tok == STRING) {
-    printf("\"");
+    printf(" \"");
     i = 0;
     while (string_pool[val+i] != 0) {
       print_string_char(string_pool[val+i]);
