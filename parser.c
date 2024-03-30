@@ -5,6 +5,7 @@
 typedef FILE *FILE_ptr;
 typedef int *int_ptr;
 typedef char *char_ptr;
+typedef void *void_ptr;
 
 #endif
 
@@ -100,6 +101,11 @@ int RSHIFT     = 421;
 int SLASH_EQ   = 422;
 int STAR_EQ    = 423;
 
+int STRING_TREE = 424;
+int STRING_TREE_INTEGER = 425;
+int STRING_TREE_CHAR = 426;
+int STRING_TREE_STRING = 427;
+int STRING_TREE_STRING_POOL = 428;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -671,6 +677,8 @@ void get_tok() {
     }
   }
 }
+
+/* parser */
 
 int get_op(ast node) {
   return heap[node] & 1023;
@@ -1406,6 +1414,91 @@ void print_tok(int tok, int val) {
   }
 }
 
+/* codegen */
+
+#define string_tree int
+#define STRING_TREE_SIZE 100000
+void_ptr string_tree_pool[STRING_TREE_SIZE];
+int string_tree_alloc = 0;
+
+/*
+  Because concatenating strings is very expensive and a common operation, we
+  use a tree structure to represent the concatenated strings. That way, the
+  concatenation can be done in O(1).
+  At the end of the codegen process, the tree will be flattened into a single
+  string.
+*/
+
+string_tree wrap_str(char_ptr s) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE_STRING;
+  string_tree_pool[string_tree_alloc + 1] = s;
+  return (string_tree_alloc += 2) - 2;
+}
+
+string_tree wrap_str_pool(char_ptr s) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE_STRING_POOL;
+  string_tree_pool[string_tree_alloc + 1] = s;
+  return (string_tree_alloc += 2) - 2;
+}
+
+string_tree wrap_int(int i) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE_INTEGER;
+  string_tree_pool[string_tree_alloc + 1] = i;
+  return (string_tree_alloc += 2) - 2;
+}
+
+string_tree wrap_char(char c) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE_CHAR;
+  string_tree_pool[string_tree_alloc + 1] = c;
+  return (string_tree_alloc += 2) - 2;
+}
+
+string_tree string_concat(string_tree t1, string_tree t2) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE;
+  string_tree_pool[string_tree_alloc + 1] = 2;
+  string_tree_pool[string_tree_alloc + 2] = t1;
+  string_tree_pool[string_tree_alloc + 3] = t2;
+  return (string_tree_alloc += 4) - 4;
+}
+
+string_tree string_concat3(string_tree t1, string_tree t2, string_tree t3) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE;
+  string_tree_pool[string_tree_alloc + 1] = 3;
+  string_tree_pool[string_tree_alloc + 2] = t1;
+  string_tree_pool[string_tree_alloc + 3] = t2;
+  string_tree_pool[string_tree_alloc + 4] = t3;
+  return (string_tree_alloc += 5) - 5;
+}
+
+string_tree string_concat4(string_tree t1, string_tree t2, string_tree t3, string_tree t4) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE;
+  string_tree_pool[string_tree_alloc + 1] = 4;
+  string_tree_pool[string_tree_alloc + 2] = t1;
+  string_tree_pool[string_tree_alloc + 3] = t2;
+  string_tree_pool[string_tree_alloc + 4] = t3;
+  string_tree_pool[string_tree_alloc + 5] = t4;
+  return (string_tree_alloc += 6) - 6;
+}
+
+void print_string_tree(string_tree t) {
+  int i;
+
+  if (string_tree_pool[t] == STRING_TREE) {
+    for (i = 0; i < string_tree_pool[t + 1]; i++) {
+      print_string_tree(string_tree_pool[t + i + 2]);
+    }
+  } else if (string_tree_pool[t] == STRING_TREE_STRING) {
+    printf("%s", string_tree_pool[t + 1]);
+  } else if (string_tree_pool[t] == STRING_TREE_STRING_POOL) {
+    fatal_error("Not supported");
+  } else if (string_tree_pool[t] == STRING_TREE_INTEGER) {
+    printf("%d", string_tree_pool[t + 1]);
+  } else if (string_tree_pool[t] == STRING_TREE_CHAR) {
+    putchar(string_tree_pool[t + 1]);
+  } else {
+    fatal_error("unexpected string tree node");
+  }
+}
 
 void codegen(ast node) {
 
