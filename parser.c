@@ -105,7 +105,8 @@ int STRING_TREE = 424;
 int STRING_TREE_INTEGER = 425;
 int STRING_TREE_CHAR = 426;
 int STRING_TREE_STRING = 427;
-int STRING_TREE_STRING_POOL = 428;
+
+int IDENTIFIER_CONCAT = 428;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -1330,6 +1331,7 @@ void print_string_char(int c) {
   else putchar(c);
 }
 
+/* TODO: Combine with op_to_str? */
 void print_tok(int tok, int val) {
 
   int i;
@@ -1435,12 +1437,6 @@ string_tree wrap_str(char_ptr s) {
   return (string_tree_alloc += 2) - 2;
 }
 
-string_tree wrap_str_pool(char_ptr s) {
-  string_tree_pool[string_tree_alloc] = STRING_TREE_STRING_POOL;
-  string_tree_pool[string_tree_alloc + 1] = s;
-  return (string_tree_alloc += 2) - 2;
-}
-
 string_tree wrap_int(int i) {
   string_tree_pool[string_tree_alloc] = STRING_TREE_INTEGER;
   string_tree_pool[string_tree_alloc + 1] = i;
@@ -1480,6 +1476,17 @@ string_tree string_concat4(string_tree t1, string_tree t2, string_tree t3, strin
   return (string_tree_alloc += 6) - 6;
 }
 
+string_tree string_concat5(string_tree t1, string_tree t2, string_tree t3, string_tree t4, string_tree t5) {
+  string_tree_pool[string_tree_alloc] = STRING_TREE;
+  string_tree_pool[string_tree_alloc + 1] = 5;
+  string_tree_pool[string_tree_alloc + 2] = t1;
+  string_tree_pool[string_tree_alloc + 3] = t2;
+  string_tree_pool[string_tree_alloc + 4] = t3;
+  string_tree_pool[string_tree_alloc + 5] = t4;
+  string_tree_pool[string_tree_alloc + 6] = t5;
+  return (string_tree_alloc += 7) - 7;
+}
+
 void print_string_tree(string_tree t) {
   int i;
 
@@ -1489,8 +1496,6 @@ void print_string_tree(string_tree t) {
     }
   } else if (string_tree_pool[t] == STRING_TREE_STRING) {
     printf("%s", string_tree_pool[t + 1]);
-  } else if (string_tree_pool[t] == STRING_TREE_STRING_POOL) {
-    fatal_error("Not supported");
   } else if (string_tree_pool[t] == STRING_TREE_INTEGER) {
     printf("%d", string_tree_pool[t + 1]);
   } else if (string_tree_pool[t] == STRING_TREE_CHAR) {
@@ -1500,69 +1505,115 @@ void print_string_tree(string_tree t) {
   }
 }
 
-void codegen(ast node) {
+#define GLO_DECL_SIZE 100000
+string_tree glo_decls[GLO_DECL_SIZE];
+int glo_decl_ix = 0;
+
+void append_glo_decl(string_tree decl) {
+  glo_decls[glo_decl_ix] = decl;
+  glo_decl_ix += 1;
+}
+
+void print_glo_decls() {
+  int i;
+  for (i = 0; i < glo_decl_ix; i++) {
+    print_string_tree(glo_decls[i]);
+    putchar('\n');
+  }
+}
+
+string_tree op_to_str(int op) {
+  if      (op < 256)         return wrap_char(op);
+  else if (op == AMP_AMP)    return wrap_str("&&");
+  else if (op == AMP_EQ)     return wrap_str("&=");
+  else if (op == BAR_BAR)    return wrap_str("||");
+  else if (op == BAR_EQ)     return wrap_str("|=");
+  else if (op == CARET_EQ)   return wrap_str("^=");
+  else if (op == EQ_EQ)      return wrap_str("==");
+  else if (op == GT_EQ)      return wrap_str(">=");
+  else if (op == LSHIFT_EQ)  return wrap_str("<<=");
+  else if (op == LT_EQ)      return wrap_str("<=");
+  else if (op == LSHIFT)     return wrap_str("<<");
+  else if (op == MINUS_EQ)   return wrap_str("-=");
+  else if (op == EXCL_EQ)    return wrap_str("!=");
+  else if (op == PERCENT_EQ) return wrap_str("%%=");
+  else if (op == PLUS_EQ)    return wrap_str("+=");
+  else if (op == RSHIFT_EQ)  return wrap_str(">>=");
+  else if (op == RSHIFT)     return wrap_str(">>");
+  else if (op == SLASH_EQ)   return wrap_str("/=");
+  else if (op == STAR_EQ)    return wrap_str("*=");
+  else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("op_to_str: unexpected operator");
+  }
+}
+
+string_tree codegen(ast node) {
 
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int val;
+  string_tree sub1;
+  string_tree sub2;
+  string_tree sub3;
 
   if (nb_children == 0) {
     if (op == IDENTIFIER) {
       val = get_val(node);
-      print_tok(op, val);
+      return wrap_str(string_pool + heap[val+1]);
+    } else if (op == IDENTIFIER_CONCAT) {
+      val = get_val(node);
+      return val;
     } else if (op == INTEGER) {
       val = get_val(node);
-      print_tok(op, val);
+      return wrap_int(val);
     } else if (op == CHARACTER) {
       val = get_val(node);
-      print_tok(op, val);
+      return wrap_char(val);
     } else if (op == STRING) {
       val = get_val(node);
-      print_tok(op, val);
+      return string_concat3(wrap_char('"'), wrap_str(string_pool + val), wrap_char('"'));
     } else {
-      printf("op=%d %c", op, op);
+      printf("0: op=%d %c", op, op);
       fatal_error("unexpected operator");
     }
   } else if (nb_children == 1) {
     if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
-      printf("( ");
-      print_tok(op, 0);
-      codegen(get_child(node, 0));
-      printf(" )");
+      sub1 = codegen(get_child(node, 0));
+      return string_concat3(wrap_char('('), sub1, wrap_char(')'));
     } else {
-      printf("op=%d %c", op, op);
+      printf("1: op=%d %c", op, op);
       fatal_error("unexpected operator");
     }
   } else if (nb_children == 2) {
       if ((op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/') OR (op == '%') OR (op == '^') OR (op == ',') OR (op == AMP_AMP) OR (op == BAR_BAR) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT)) {
-        printf("( ");
-        codegen(get_child(node, 0));
-        print_tok(op, 0);
-        codegen(get_child(node, 1));
-        printf(" )");
+        sub1 = codegen(get_child(node, 0));
+        sub2 = codegen(get_child(node, 1));
+        sub3 = op_to_str(op);
+        return string_concat5(wrap_char('('), sub1, sub3, sub2, wrap_char(')'));
       } else if ((op == '=') OR (op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)) {
-        codegen(get_child(node, 0));
-        print_tok(op, 0);
-        codegen(get_child(node, 1));
-        printf("; \n");
+        sub1 = codegen(get_child(node, 0));
+        sub2 = codegen(get_child(node, 1));
+        sub3 = op_to_str(op);
+        return string_concat4(sub1, sub3, sub2, wrap_str("; "));
       } else {
-        printf("op=%d %c", op, op);
+        printf("2: op=%d %c", op, op);
         fatal_error("unexpected operator");
       }
   } else if (nb_children == 3) {
-    printf("op=%d %c", op, op);
+    printf("3: op=%d %c", op, op);
     fatal_error("unexpected operator");
   } else if (nb_children == 4) {
-    printf("op=%d %c", op, op);
+    printf("4: op=%d %c", op, op);
     fatal_error("unexpected operator");
   } else {
-    printf("op=%d %c", op, op);
+    printf("5: op=%d %c", op, op);
     fatal_error("unexpected operator");
   }
 }
 
 void codegen_statement(ast node) {
-  codegen(node);
+  append_glo_decl(codegen(node));
 }
 
 int main() {
@@ -1576,8 +1627,9 @@ int main() {
 
   while (tok != EOF) {
     node = parse_statement();
-    /*    codegen_statement(node); */
+    codegen_statement(node);
   }
+  print_glo_decls();
   /*
   printf("// string_pool_alloc=%d heap_alloc=%d\n", string_pool_alloc, heap_alloc);
   */
