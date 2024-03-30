@@ -1419,7 +1419,7 @@ void print_tok(int tok, int val) {
 /* codegen */
 
 #define string_tree int
-#define STRING_TREE_SIZE 100000
+#define STRING_TREE_SIZE 1000000
 void_ptr string_tree_pool[STRING_TREE_SIZE];
 int string_tree_alloc = 0;
 
@@ -1432,24 +1432,28 @@ int string_tree_alloc = 0;
 */
 
 string_tree wrap_str(char_ptr s) {
+  if (string_tree_alloc + 2 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE_STRING;
   string_tree_pool[string_tree_alloc + 1] = s;
   return (string_tree_alloc += 2) - 2;
 }
 
 string_tree wrap_int(int i) {
+  if (string_tree_alloc + 3 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE_INTEGER;
   string_tree_pool[string_tree_alloc + 1] = i;
   return (string_tree_alloc += 2) - 2;
 }
 
 string_tree wrap_char(char c) {
+  if (string_tree_alloc + 2 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE_CHAR;
   string_tree_pool[string_tree_alloc + 1] = c;
   return (string_tree_alloc += 2) - 2;
 }
 
 string_tree string_concat(string_tree t1, string_tree t2) {
+  if (string_tree_alloc + 4 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE;
   string_tree_pool[string_tree_alloc + 1] = 2;
   string_tree_pool[string_tree_alloc + 2] = t1;
@@ -1458,6 +1462,7 @@ string_tree string_concat(string_tree t1, string_tree t2) {
 }
 
 string_tree string_concat3(string_tree t1, string_tree t2, string_tree t3) {
+  if (string_tree_alloc + 5 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE;
   string_tree_pool[string_tree_alloc + 1] = 3;
   string_tree_pool[string_tree_alloc + 2] = t1;
@@ -1467,6 +1472,7 @@ string_tree string_concat3(string_tree t1, string_tree t2, string_tree t3) {
 }
 
 string_tree string_concat4(string_tree t1, string_tree t2, string_tree t3, string_tree t4) {
+  if (string_tree_alloc + 6 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE;
   string_tree_pool[string_tree_alloc + 1] = 4;
   string_tree_pool[string_tree_alloc + 2] = t1;
