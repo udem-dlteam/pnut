@@ -228,6 +228,7 @@
   `(six.internal-identifier ,(string->symbol (string-append "str_" (number->string ix)))))
 
 (define result-loc-var       (format-non-local-var result-loc-ident))
+(define no-result-loc-var    (format-non-local-var no-result-loc-ident))
 (define argc-var             (format-non-local-var argc-ident))
 (define argv-var             (format-non-local-var argv-ident))
 (define sp-var               (format-non-local-var sp-ident))
@@ -1007,12 +1008,14 @@
         (error "Function call can't return a value, but we are assigning to a variable"))
 
       (if can-return ; Always pass the return address, even if it's not used, as long as the function can return a value
-        (ctx-add-glo-decl!
-          ctx
-          (list (string-concatenate (cons (function-name name)
-                                      (cons (env-var ctx (or assign_to no-result-loc-ident)) ;; '|| is empty symbol. Maps to __
-                                      code-params))
-                                    " ")))
+        (let ((return-var
+                (if assign_to (comp-lvalue ctx assign_to) no-result-loc-var))) ;; '|| is empty symbol. Maps to __
+          (ctx-add-glo-decl!
+            ctx
+            (list (string-concatenate (cons (function-name name)
+                                        (cons return-var
+                                        code-params))
+                                      " "))))
         (ctx-add-glo-decl! ctx (list call-code)))))
 
 (define (comp-statement-expr ctx ast)
