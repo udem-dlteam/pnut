@@ -10,7 +10,8 @@ typedef void *void_ptr;
 #endif
 
 #define ast int
-
+#define true 1
+#define false 0
 
 #define AVOID_AMPAMP_BARBAR
 #define USE_IN_RANGE_FUNCTION_not
@@ -105,8 +106,7 @@ int STRING_TREE = 424;
 int STRING_TREE_INTEGER = 425;
 int STRING_TREE_CHAR = 426;
 int STRING_TREE_STRING = 427;
-
-int IDENTIFIER_CONCAT = 428;
+int STRING_TREE_SUBSTRING = 428;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -1438,6 +1438,14 @@ string_tree wrap_str(char_ptr s) {
   return (string_tree_alloc += 2) - 2;
 }
 
+string_tree wrap_substr(char_ptr s, int len) {
+  if (string_tree_alloc + 3 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
+  string_tree_pool[string_tree_alloc] = STRING_TREE_SUBSTRING;
+  string_tree_pool[string_tree_alloc + 1] = s;
+  string_tree_pool[string_tree_alloc + 2] = len;
+  return (string_tree_alloc += 3) - 3;
+}
+
 string_tree wrap_int(int i) {
   if (string_tree_alloc + 3 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
   string_tree_pool[string_tree_alloc] = STRING_TREE_INTEGER;
@@ -1502,6 +1510,8 @@ void print_string_tree(string_tree t) {
     }
   } else if (string_tree_pool[t] == STRING_TREE_STRING) {
     printf("%s", string_tree_pool[t + 1]);
+  } else if (string_tree_pool[t] == STRING_TREE_SUBSTRING) {
+    printf("%.*s", string_tree_pool[t + 2], string_tree_pool[t + 1]);
   } else if (string_tree_pool[t] == STRING_TREE_INTEGER) {
     printf("%d", string_tree_pool[t + 1]);
   } else if (string_tree_pool[t] == STRING_TREE_CHAR) {
