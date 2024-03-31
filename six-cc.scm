@@ -309,9 +309,15 @@
     ((eq? c #\|)          (mk-ident "BAR_CH"))
     ((eq? c #\})          (mk-ident "RBRACE_CH"))
     ((eq? c #\~)          (mk-ident "TILDE_CH"))
-    ((eq? c #\delete))    (mk-ident "DELETE_CH")
+    ((eq? c #\alarm)      (mk-ident "ALARM_CH"))
+    ((eq? c #\backspace)  (mk-ident "BACKSPACE_CH"))
+    ((eq? c #\page)       (mk-ident "PAGE_CH"))
+    ((eq? c #\return)     (mk-ident "RET_CH"))
+    ((eq? c #\tab)        (mk-ident "TAB_CH"))
+    ((eq? c #\vtab)       (mk-ident "VTAB_CH"))
+
     (else
-      (error "Unknown character"))))
+      (error "Unknown character" c))))
 
 (define (comp-constant ctx ast)
   (define (handle-literal lit transform)
@@ -640,7 +646,7 @@
     ; variable declared and save them at the beginning of the function, but
     ; traversing the AST multiple times may complicate the C implementation.
     (if (not (null? new-local-vars))
-      (error "Variables must be defined at the top of the function"))
+      (error "Variables must be defined at the top of the function" new-local-vars))
 
     (ctx-single-statement?-set! ctx (and (pair? lst) (null? (cdr lst))))
 
