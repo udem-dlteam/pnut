@@ -1135,13 +1135,20 @@ ast parse_comma_expression() {
 
   ast result = parse_assignment_expression();
   ast child;
+  ast tail;
 
-  while (tok == ',') {
+  if (tok == ',') { /* List of 1 elements are not boxed in a cons cell */
+    result = new_ast2(',', result, 0); /* Create default cons cell */
+    tail = result;
+    while (tok == ',') {
 
-    get_tok();
-    child = parse_assignment_expression();
-    result = new_ast2(',', result, child);
+      get_tok();
+      child = parse_assignment_expression();
+      child = new_ast2(',', child, 0); /* New tail cons cell */
+      set_child(tail, 1, child);       /* Add new cons cell at end of list */
+      tail = child;                    /* Advance tail */
 
+    }
   }
 
   return result;
@@ -1566,20 +1573,19 @@ ast handle_side_effects_go(ast node) {
     }
   } else if (nb_children == 2) {
     if ((op == '(')) { /* Function call */
-      /* Replace the arguments */
-      sub2 = get_child(node, 1); /* argument list */
-      while (get_op(sub2) == ',') {
-        sub1 = get_child(node, 0); /* Save next elem */
-        if (get_op(get_child(sub2, 0)) != ',') { /* Tail of list */
-          sub3 = handle_side_effects_go(get_child(sub2, 0));
-          set_child(sub2, 0, sub3);
-          sub3 = handle_side_effects_go(get_child(sub2, 1));
-          set_child(sub2, 1, sub3);
-        } else {
-          sub3 = handle_side_effects_go(get_child(sub2, 1));
-          set_child(sub2, 1, sub3);
+
+      /* Traverse the arguments and replace them with the result of handle_side_effects_go */
+      sub2 = get_child(node, 1);
+      if (sub2 != 0) { /* Check if not an empty list */
+        if (get_op(sub2) == ',') {
+          while (get_op(sub2) == ',') {
+            sub1 = handle_side_effects_go(get_child(sub2, 0));
+            sub2 = get_child(sub2, 1);
+          }
+        } else { /* sub2 is the first argument, not wrapped in a cons cell */
+          sub2 = handle_side_effects_go(sub2);
+          set_child(node, 1, sub2);
         }
-        sub2 = sub1;
       }
 
       sub1 = fresh_ident();
