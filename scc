@@ -30,9 +30,11 @@ for shell_version_command in $SHELL_VERSION_COMMANDS ; do
     version=`eval $shell_version_command`
     if [ -n "$TEST" ] ; then # If TEST env var is defined, generate result files instead of benchmarking
         echo "Generating $shell result file"
-        cat big.c | $shell "$output_file" > "${source_file%.*}_$shell.result"
+        cat small.c | $shell "$output_file" > "${source_file%.*}_$shell.result"
+    elif [ -n "$DEBUG" ] ; then
+        $shell "$output_file" < small.c
     else
-        echo "`/usr/bin/time $shell "$output_file" < big.c 2>&1 | sed -e 's/ real.*//'` $shell $version"
+        echo "`/usr/bin/time $shell "$output_file" < small.c 2>&1 | sed -e 's/ real.*//'` $shell $version"
     fi
 
 done
