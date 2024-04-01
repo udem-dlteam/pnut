@@ -1846,10 +1846,6 @@ string_tree comp_rvalue(ast node, int context) {
   }
 
   for (i = 0; i < literals_inits_nb; i += 2) {
-    /*
-      literals_inits[i]: identifier
-      literals_inits[i + 1]: value
-    */
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , env_var(literals_inits[i])
                                   , wrap_str(" \"")
@@ -1857,7 +1853,7 @@ string_tree comp_rvalue(ast node, int context) {
                                   , wrap_char('\"')));
   }
   for (i = 0; i < replaced_fun_calls_nb; i += 2) {
-    fatal_error("comp_rvalue: replaced function calls not yet implemented");
+    comp_fun_call(replaced_fun_calls[i + 1], replaced_fun_calls[i]);
   }
 
   if (context == RVALUE_CTX_BASE) {
@@ -1955,7 +1951,6 @@ void comp_assignment(ast node) {
   int rhs_op = get_op(rhs);
   if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
     if (rhs_op == '(') {
-      /* TODO function call */
       comp_fun_call(rhs, lhs);
     } else {
       if (lhs_op == IDENTIFIER) {
