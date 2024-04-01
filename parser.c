@@ -74,6 +74,8 @@ int UNSIGNED_KW    = 335;
 int VOID_KW        = 336;
 int VOLATILE_KW    = 337;
 int WHILE_KW       = 338;
+int VAR_DECL       = 339;
+int FUN_DECL       = 340;
 
 int IDENTIFIER = 400;
 int INTEGER    = 401;
@@ -107,6 +109,8 @@ int STRING_TREE_INTEGER = 425;
 int STRING_TREE_CHAR = 426;
 int STRING_TREE_STRING = 427;
 int STRING_TREE_SUBSTRING = 428;
+
+int IDENTIFIER_INTERNAL = 429;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -1331,97 +1335,18 @@ void print_string_char(int c) {
   else putchar(c);
 }
 
-/* TODO: Combine with op_to_str? */
-void print_tok(int tok, int val) {
-
-  int i;
-
-  if (tok == AUTO_KW) printf("auto");
-  else if (tok == BREAK_KW) printf("break");
-  else if (tok == CASE_KW) printf("case");
-  else if (tok == CHAR_KW) printf("char");
-  else if (tok == CONST_KW) printf("const");
-  else if (tok == CONTINUE_KW) printf("continue");
-  else if (tok == DEFAULT_KW) printf("default");
-  else if (tok == DEFINE_KW) printf("define");
-  else if (tok == DO_KW) printf("do");
-  else if (tok == DOUBLE_KW) printf("double");
-  else if (tok == ELSE_KW) printf("else");
-  else if (tok == ENDIF_KW) printf("endif");
-  else if (tok == ENUM_KW) printf("enum");
-  else if (tok == ERROR_KW) printf("error");
-  else if (tok == EXTERN_KW) printf("extern");
-  else if (tok == FLOAT_KW) printf("float");
-  else if (tok == FOR_KW) printf("for");
-  else if (tok == GOTO_KW) printf("goto");
-  else if (tok == IF_KW) printf("if");
-  else if (tok == IFDEF_KW) printf("ifdef");
-  else if (tok == IFNDEF_KW) printf("ifndef");
-  else if (tok == INCLUDE_KW) printf("include");
-  else if (tok == INT_KW) printf("int");
-  else if (tok == LONG_KW) printf("long");
-  else if (tok == REGISTER_KW) printf("register");
-  else if (tok == RETURN_KW) printf("return");
-  else if (tok == SHORT_KW) printf("short");
-  else if (tok == SIGNED_KW) printf("signed");
-  else if (tok == SIZEOF_KW) printf("sizeof");
-  else if (tok == STATIC_KW) printf("static");
-  else if (tok == STRUCT_KW) printf("struct");
-  else if (tok == SWITCH_KW) printf("switch");
-  else if (tok == TYPEDEF_KW) printf("typedef");
-  else if (tok == UNDEF_KW) printf("undef");
-  else if (tok == UNION_KW) printf("union");
-  else if (tok == UNSIGNED_KW) printf("unsigned");
-  else if (tok == VOID_KW) printf("void");
-  else if (tok == VOLATILE_KW) printf("volatile");
-  else if (tok == WHILE_KW) printf("while");
-
-  else if (tok == AMP_AMP) printf("&&");
-  else if (tok == AMP_EQ) printf("&=");
-  else if (tok == BAR_BAR) printf("||");
-  else if (tok == BAR_EQ) printf("|=");
-  else if (tok == CARET_EQ) printf("^=");
-  else if (tok == EQ_EQ) printf("==");
-  else if (tok == GT_EQ) printf(">=");
-  else if (tok == LSHIFT_EQ) printf("<<=");
-  else if (tok == LSHIFT) printf("<<");
-  else if (tok == LT_EQ) printf("<=");
-  else if (tok == MINUS_EQ) printf("-=");
-  else if (tok == EXCL_EQ) printf("!=");
-  else if (tok == PERCENT_EQ) printf("%%=");
-  else if (tok == PLUS_EQ) printf("+=");
-  else if (tok == RSHIFT_EQ) printf(">>=");
-  else if (tok == RSHIFT) printf(">>");
-  else if (tok == SLASH_EQ) printf("/=");
-  else if (tok == STAR_EQ) printf("*=");
-
-  else if (tok == IDENTIFIER) {
-    printf("%s", string_pool + heap[val+1]);
-  } else if (tok == INTEGER) {
-    printf("%d", -val);
-  } else if (tok == CHARACTER) {
-    printf("'");
-    print_string_char(val);
-    printf("' ");
-  } else if (tok == STRING) {
-    printf(" \"");
-    i = 0;
-    while (string_pool[val+i] != 0) {
-      print_string_char(string_pool[val+i]);
-      i += 1;
-    }
-    printf("\" ");
-  } else {
-    printf("%c", tok);
-  }
-}
-
 /* codegen */
 
 #define string_tree int
 #define STRING_TREE_SIZE 1000000
 void_ptr string_tree_pool[STRING_TREE_SIZE];
 int string_tree_alloc = 0;
+
+#ifndef SIX_CC
+/* Place prototype of mutually recursive functions here */
+string_tree comp_array_lvalue(ast node);
+string_tree comp_lvalue(ast node);
+#endif
 
 /*
   Because concatenating strings is very expensive and a common operation, we
@@ -1561,11 +1486,171 @@ string_tree op_to_str(int op) {
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("op_to_str: unexpected operator");
+    return -1;
   }
 }
 
-string_tree codegen(ast node) {
+/*
+  Similar to op_to_str, but returns the shell test operand instead of the C-style operands.
+*/
+string_tree test_op_to_str(int op) {
+  if      (op == EQ_EQ)      return wrap_str(" -eq ");
+  else if (op == EXCL_EQ)    return wrap_str(" -ne ");
+  else if (op == '<')        return wrap_str(" -lt ");
+  else if (op == '>')        return wrap_str(" -gt ");
+  else if (op == LT_EQ)      return wrap_str(" -le ");
+  else if (op == GT_EQ)      return wrap_str(" -ge ");
+  else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("test_op_to_str: unexpected operator");
+    return -1;
+  }
+}
 
+int gensym_ix = 0;
+
+ast fresh_ident() {
+  gensym_ix++;
+  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
+}
+
+int replaced_fun_calls[100];
+int replaced_fun_calls_nb = 0;
+int conditional_fun_calls[100];
+int conditional_fun_calls_nb = 0;
+int literals_inits[100];
+int literals_inits_nb = 0;
+int executes_conditionally = 0;
+int contains_side_effects = 0;
+
+/*
+  We can't have function calls and other side effects in $(( ... )), so we need to handle them separately.
+  For unconditional function calls, they are replaced with unique identifiers and returned as a list with their new identifiers.
+  For pre/post-increments/decrements, we map them to a pre-side-effects and replace with the corresponding operation.
+  Note that pre/post-increments/decrements of function calls are not supported.
+*/
+ast handle_side_effects_go(ast node) {
+  int op = get_op(node);
+  int nb_children = get_nb_children(node);
+  int val;
+  ast sub1;
+  ast sub2;
+  ast sub3;
+  int i;
+
+  if (nb_children == 0) {
+    if (op == IDENTIFIER OR op == INTEGER OR op == CHARACTER) {
+      return node;
+    } else if (op == STRING) {
+      /* We must initialize strings before the expression */
+      sub1 = fresh_ident();
+      literals_inits[literals_inits_nb] = sub1;
+      literals_inits[literals_inits_nb + 1] = get_val(node);
+      literals_inits_nb += 2;
+      return sub1;
+    } else {
+      printf("0: op=%d %c", op, op);
+      fatal_error("unexpected operator");
+    }
+  } else if (nb_children == 1) {
+    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
+      /* TODO: Reuse ast node? */
+      return new_ast1(op, handle_side_effects_go(get_child(node, 0)));
+    } else if ((op == PLUS_PLUS) OR (op == MINUS_MINUS)) {
+      /* The parser fails on postfix ++/--, so this is only preincrement/predecrement */
+      contains_side_effects = true;
+      return new_ast1(op, handle_side_effects_go(get_child(node, 0)));
+    } else {
+      printf("1: op=%d %c", op, op);
+      fatal_error("unexpected operator");
+    }
+  } else if (nb_children == 2) {
+    if ((op == '(')) { /* Function call */
+      /* Replace the arguments */
+      sub2 = get_child(node, 1); /* argument list */
+      while (get_op(sub2) == ',') {
+        sub1 = get_child(node, 0); /* Save next elem */
+        if (get_op(get_child(sub2, 0)) != ',') { /* Tail of list */
+          sub3 = handle_side_effects_go(get_child(sub2, 0));
+          set_child(sub2, 0, sub3);
+          sub3 = handle_side_effects_go(get_child(sub2, 1));
+          set_child(sub2, 1, sub3);
+        } else {
+          sub3 = handle_side_effects_go(get_child(sub2, 1));
+          set_child(sub2, 1, sub3);
+        }
+        sub2 = sub1;
+      }
+
+      sub1 = fresh_ident();
+
+      /* TODO: if execute-conditionally */
+      replaced_fun_calls[replaced_fun_calls_nb] = sub1;
+      replaced_fun_calls[replaced_fun_calls_nb + 1] = node;
+      replaced_fun_calls_nb += 2;
+      return sub1;
+    } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
+      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=')
+      OR (op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)
+      OR (op == '[')) {
+      /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
+      sub1 = handle_side_effects_go(get_child(node, 0));
+      sub2 = handle_side_effects_go(get_child(node, 1)); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
+      return new_ast2(op, sub1, sub2);
+    } else if ((op == AMP_AMP) OR (op == BAR_BAR)) {
+      printf("2: op=%d %c", op, op);
+      fatal_error("unexpected operator");
+    }
+  } else if (nb_children == 3) {
+    printf("3: op=%d %c\n", op, op);
+    fatal_error("unexpected operator");
+  } else if (nb_children == 4) {
+    printf("4: op=%d %c\n", op, op);
+    fatal_error("unexpected operator");
+  } else {
+    printf("5: op=%d %c with %d children\n", op, op, get_nb_children(node));
+    fatal_error("unexpected operator");
+  }
+}
+
+ast handle_side_effects(ast node) {
+  replaced_fun_calls_nb = 0;
+  conditional_fun_calls_nb = 0;
+  literals_inits_nb = 0;
+  executes_conditionally = 0;
+  contains_side_effects = 0;
+  return handle_side_effects_go(node);
+}
+
+string_tree env_var(ast ident) {
+  if (get_op(ident) == IDENTIFIER) {
+    return wrap_str(string_pool + heap[get_val(ident)+1]);
+  } else if (get_op(ident) == IDENTIFIER_INTERNAL) {
+    return string_concat(wrap_str("__"), get_val(ident));
+  } else {
+    printf("op=%d %c", get_op(ident), get_op(ident));
+    fatal_error("env_var: unknown identifier");
+  }
+}
+
+/*
+  Wrap code in $((...)) if it's not already (flagged via wrapped), and if it's
+  already in $(( )), wrap it in parentheses if parens_otherwise is true. If it's
+  not wrapped and we're compiling tests, we also add the test condition to make
+  it a valid test.
+*/
+string_tree wrap_if_needed(int wrapped, int parens_otherwise, int compiling_test, string_tree code) {
+  if (wrapped) {
+    if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
+    else return code;
+  } else {
+    if (compiling_test) return string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) - ne 0 ]"));
+    else return string_concat3(wrap_str("$(( "), code, wrap_str(" ))"));
+  }
+}
+
+/* TODO: Side effects */
+string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int val;
@@ -1573,63 +1658,304 @@ string_tree codegen(ast node) {
   string_tree sub2;
   string_tree sub3;
 
+  if (wrapped AND compiling_tests) { fatal_error("comp_rvalue_go: Can't compile as a test while wrapped in $(( ... ))"); }
+
   if (nb_children == 0) {
-    if (op == IDENTIFIER) {
-      val = get_val(node);
-      return wrap_str(string_pool + heap[val+1]);
-    } else if (op == IDENTIFIER_CONCAT) {
-      val = get_val(node);
-      return val;
-    } else if (op == INTEGER) {
-      val = get_val(node);
-      return wrap_int(val);
+    if (op == INTEGER) {
+      return wrap_int(-get_val(node));
     } else if (op == CHARACTER) {
-      val = get_val(node);
-      return wrap_char(val);
+      return wrap_int(get_val(node));
+    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL) {
+      if (wrapped) {
+        return env_var(node);
+      } else {
+        /* TODO: */
+        return string_concat3(wrap_str("$(("), env_var(node), wrap_str("))"));
+      }
+      return env_var(node);
     } else if (op == STRING) {
-      val = get_val(node);
-      return string_concat3(wrap_char('"'), wrap_str(string_pool + val), wrap_char('"'));
+      fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
+      return -1;
     } else {
-      printf("0: op=%d %c", op, op);
-      fatal_error("unexpected operator");
+      printf("op=%d %c", op, op);
+      fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
     }
   } else if (nb_children == 1) {
-    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
-      sub1 = codegen(get_child(node, 0));
-      return string_concat3(wrap_char('('), sub1, wrap_char(')'));
+    if (op == '*') {
+      /*
+        Setting wrapped to false even if it's wrapped in $(( ... )) because we
+        need another layer of wrapping if it's a complex expression, i.e. not a
+        literal or a variable.
+      */
+      sub1 = comp_rvalue_go(get_child(node, 0), false, false);
+      return wrap_if_needed(wrapped, compiling_tests, true, string_concat(wrap_char('_'), sub1));
+    } else if (op == '+') {
+      /* +x is equivalent to x */
+      comp_rvalue_go(get_child(node, 0), wrapped, compiling_tests);
+    } else if (op == '-') {
+      /*
+        Check if the rest of ast is a literal, if so directly return the negated value.
+        Note: I think this can be simplified by not wrapped in () in the else case.
+      */
+      if (get_op(get_child(node, 0)) == INTEGER) {
+        /* TODO: Call wrap-in-condition-if-needed when implemented */
+        return wrap_int(-get_val(get_child(node, 0)));
+      } else {
+        sub1 = comp_rvalue_go(get_child(node, 0), true, false);
+        return wrap_if_needed(wrapped, compiling_tests, false, string_concat3(wrap_str("-("), sub1, wrap_char(')')));
+      }
+    } else if (op == '~') {
+      sub1 = comp_rvalue_go(get_child(node, 0), true, false);
+      return wrap_if_needed(wrapped, compiling_tests, false, string_concat3(wrap_str("~("), sub1, wrap_char(')')));
+    } else if (op == '!') {
+      sub1 = comp_rvalue_go(get_child(node, 0), true, false);
+      return wrap_if_needed(wrapped, compiling_tests, false, string_concat(wrap_char('!'), sub1));
+    } else if (op == MINUS_MINUS) {
+      sub1 = comp_lvalue(get_child(node, 0));
+      return wrap_if_needed(wrapped, compiling_tests, true, string_concat(sub1, wrap_str(" -= 1")));
+    } else if (op == PLUS_PLUS) {
+      sub1 = comp_lvalue(get_child(node, 0));
+      return wrap_if_needed(wrapped, compiling_tests, true, string_concat(sub1, wrap_str(" += 1")));
+    } else if (op == '&') {
+      fatal_error("comp_rvalue_go: address of operator not supported");
     } else {
       printf("1: op=%d %c", op, op);
-      fatal_error("unexpected operator");
+      fatal_error("comp_rvalue_go: unexpected operator");
     }
   } else if (nb_children == 2) {
-      if ((op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/') OR (op == '%') OR (op == '^') OR (op == ',') OR (op == AMP_AMP) OR (op == BAR_BAR) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT)) {
-        sub1 = codegen(get_child(node, 0));
-        sub2 = codegen(get_child(node, 1));
-        sub3 = op_to_str(op);
-        return string_concat5(wrap_char('('), sub1, sub3, sub2, wrap_char(')'));
-      } else if ((op == '=') OR (op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)) {
-        sub1 = codegen(get_child(node, 0));
-        sub2 = codegen(get_child(node, 1));
-        sub3 = op_to_str(op);
-        return string_concat4(sub1, sub3, sub2, wrap_str("; "));
+    if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT) {
+      sub1 = comp_rvalue_go(get_child(node, 0), true, false);
+      sub2 = comp_rvalue_go(get_child(node, 1), true, false);
+      return wrap_if_needed(wrapped, true, compiling_tests, string_concat3(sub1, op_to_str(op), sub2));
+    } else if (op == PLUS_EQ OR op == MINUS_EQ OR op == STAR_EQ OR op == SLASH_EQ OR op == PERCENT_EQ OR op == '=') {
+      sub1 = comp_lvalue(get_child(node, 0));
+      sub2 = comp_rvalue_go(get_child(node, 1), true, false);
+      return wrap_if_needed(wrapped, compiling_tests, true, string_concat4(sub1, op_to_str(op), sub2, wrap_char(';')));
+    } else if (op == '[') { /* six.index */
+      sub1 = comp_array_lvalue(get_child(node, 0));
+      sub2 = comp_rvalue_go(get_child(node, 1), true, false);
+      return wrap_if_needed(wrapped, compiling_tests, false,
+        string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
+    } else if (op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '<' OR op == '>') {
+      if (compiling_tests) {
+        /* TODO: Call wrap-in-condition-if-needed when implemented */
+        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, false);
+        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, false);
+        return wrap_if_needed(wrapped, compiling_tests, false, string_concat5(wrap_str("[ "), sub1, test_op_to_str(op), sub2, wrap_str(" ]")));
       } else {
-        printf("2: op=%d %c", op, op);
-        fatal_error("unexpected operator");
+        sub1 = comp_rvalue_go(get_child(node, 0), true, false);
+        sub2 = comp_rvalue_go(get_child(node, 1), true, false);
+        return wrap_if_needed(wrapped, compiling_tests, true, string_concat3(sub1, op_to_str(op), sub2));
       }
+    } else if (op == AMP_AMP OR op == BAR_BAR) {
+      /*
+        Note, this could also be compiled in a single [ ] block using -a and -o,
+        which I think are POSIX compliant but are deprecated.
+      */
+      if (compiling_tests) {
+        /*
+          When compiling in a test context, && and || can be compiled to Shell's
+          && and || with [ ... ] blocks.
+
+          A notable difference between these operators in Shell and C is that in
+          Shell, they have equal precedence while in C, && has higher precedence.
+          This means that we need to add parenthesis that would not be needed in C.
+
+          As a heuristic, we add parenthesis whenever the left or right side of
+          the operator is a different comparison operator.
+        */
+        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, true);
+        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, true);
+        if ((get_op(get_child(node, 0)) == AMP_AMP OR get_op(get_child(node, 0)) == BAR_BAR) AND get_op(get_child(node, 0)) != op) {
+          sub1 = string_concat3(wrap_str("{ "), sub1, wrap_str(" }"));
+        }
+        if ((get_op(get_child(node, 1)) == AMP_AMP OR get_op(get_child(node, 1)) == BAR_BAR) AND get_op(get_child(node, 1)) != op) {
+          sub2 = string_concat3(wrap_str("{ "), sub2, wrap_str(" }"));
+        }
+        return string_concat3(sub1, test_op_to_str(op), sub2);
+      } else {
+        /* TODO: Fail when there are conditional side-effects */
+        sub1 = comp_rvalue_go(get_child(node, 0), true, false);
+        sub2 = comp_rvalue_go(get_child(node, 1), true, false);
+        return wrap_if_needed(wrapped, compiling_tests, false,
+          string_concat3(sub1, test_op_to_str(op), sub2));
+      }
+    } else {
+      fatal_error("comp_rvalue_go: unknown rvalue");
+      return -1;
+    }
   } else if (nb_children == 3) {
-    printf("3: op=%d %c", op, op);
-    fatal_error("unexpected operator");
-  } else if (nb_children == 4) {
-    printf("4: op=%d %c", op, op);
-    fatal_error("unexpected operator");
+    /* TODO: ternary operator */
+    fatal_error("comp_rvalue_go: should have returned before the end");
+    return -1;
+  }
+  fatal_error("comp_rvalue_go: should have returned before the end");
+  return -1;
+}
+
+char escaped_char(char c) {
+  switch (c) {
+    case '\a': return 'a';
+    case '\b': return 'b';
+    case '\f': return 'f';
+    case '\n': return 'n';
+    case '\r': return 'r';
+    case '\t': return 't';
+    case '\v': return 'v';
+    case '\\': return '\\';
+    case '"':  return '"';
+    default:   return c;
+  }
+}
+
+string_tree escape_string(char_ptr str) {
+  char_ptr seq = str;
+  string_tree res = wrap_str("");
+  char c;
+  while (*str != '\0') {
+    c = *str;
+    if (c == '\a' OR c == '\b' OR c == '\f' OR c == '\n' OR c == '\r' OR c == '\t' OR c == '\v' OR c == '\\' OR c == '"') {
+      res = string_concat4(res, wrap_substr(seq, str - seq), wrap_char('\\'), wrap_char(escaped_char(*str)));
+      seq = str;
+    }
+    str += 1;
+  }
+  return string_concat(wrap_substr(seq, str - seq), res);
+}
+
+int RVALUE_CTX_PURE = 0;
+int RVALUE_CTX_BASE = 1;
+int RVALUE_CTX_BASE_WRAPPED = 2; /* Like base context, except that we're already in $(( ... )) */
+int RVALUE_CTX_TEST = 3;
+int RVALUE_CTX_STATEMENT = 4;
+
+string_tree comp_rvalue(ast node, int context) {
+  ast simple_ast = handle_side_effects(node);
+  int i;
+
+  if (context == RVALUE_CTX_PURE) {
+    if (replaced_fun_calls_nb != 0 OR conditional_fun_calls_nb != 0 OR literals_inits_nb != 0)
+      fatal_error("comp_rvalue: side effects not allowed in pure context");
+    return comp_rvalue_go(simple_ast, true, false);
+  }
+
+  for (i = 0; i < literals_inits_nb; i += 2) {
+    /*
+      literals_inits[i]: identifier
+      literals_inits[i + 1]: value
+    */
+    append_glo_decl(string_concat5( wrap_str("defstr ")
+                                  , env_var(literals_inits[i])
+                                  , wrap_str(" \"")
+                                  , escape_string(string_pool + literals_inits[i + 1])
+                                  , wrap_char('\"')));
+  }
+  for (i = 0; i < replaced_fun_calls_nb; i += 2) {
+    fatal_error("comp_rvalue: replaced function calls not yet implemented");
+  }
+
+  if (context == RVALUE_CTX_BASE) {
+    return comp_rvalue_go(simple_ast, false, false);
+  } else if (context == RVALUE_CTX_BASE_WRAPPED) {
+    return comp_rvalue_go(simple_ast, true, false);
+  } else if (context == RVALUE_CTX_TEST) {
+    return comp_rvalue_go(simple_ast, false, true);
+  } else if (context == RVALUE_CTX_STATEMENT) {
+    return comp_rvalue_go(simple_ast, false, false);
   } else {
-    printf("5: op=%d %c", op, op);
-    fatal_error("unexpected operator");
+    fatal_error("comp_rvalue: unknown context");
+  }
+}
+
+string_tree comp_array_lvalue(ast node) {
+  int op = get_op(node);
+  string_tree rvalue;
+  if (op == IDENTIFIER) {
+    return env_var(node);
+  } else if (op == '*') {
+    rvalue = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
+    return string_concat(wrap_char('_'), rvalue);
+  } else {
+    fatal_error("comp_array_lvalue: unknown lvalue");
+    return -1;
+  }
+}
+
+string_tree comp_lvalue(ast node) {
+  int op = get_op(node);
+  string_tree sub1;
+  string_tree sub2;
+
+  if (op == IDENTIFIER) {
+    return env_var(node);
+  } else if (op == '[') {
+    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_BASE_WRAPPED);
+    return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+  } else if (op == '*') {
+    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
+    return string_concat(wrap_char('_'), sub1);
+  } else if (op == ARROW) {
+    fatal_error("comp_lvalue: struct not yet supported");
+    return -1;
+  } else {
+    fatal_error("comp_lvalue: unknown lvalue");
+    return -1;
+  }
+}
+
+void comp_fun_call(ast node, ast assign_to) {
+  /* TODO */
+  fatal_error("comp_fun_call: not yet implemented");
+}
+
+void comp_assignment(ast node) {
+  int lhs = get_child(node, 0);
+  int rhs = get_child(node, 1);
+  int lhs_op = get_op(lhs);
+  int rhs_op = get_op(rhs);
+  if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
+    if (rhs_op == '(') {
+      /* TODO function call */
+      comp_fun_call(rhs, lhs);
+    } else {
+      if (lhs_op == IDENTIFIER) {
+        append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_STATEMENT)));
+      } else {
+        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_STATEMENT), wrap_str(" ))")));
+      }
+    }
+  } else {
+    fatal_error("unknown lhs");
+  }
+}
+
+/*
+This function compiles 1 top level declaration at the time.
+The 3 types of supported top level declarations are:
+  - global variable declarations
+  - global variable assignations
+  - function declarations
+Structures, enums, and unions are not supported.
+*/
+void comp_glo_decl(ast node) {
+  int op = get_op(node);
+
+  if (op == '=') { /* Assignations */
+   comp_assignment(node);
+  } else if (op == '(') {
+    /* comp_fun_call(); */
+    node = get_child(node, 1); /* Start of list*/
+    fatal_error("comp_glo_decl: function calls not yet supported");
+  } else {
+    /* Allow all operations to appear at the top level while fun and var decls can't be parsed */
+    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    fatal_error("comp_glo_decl: unexpected declaration");
   }
 }
 
 void codegen_statement(ast node) {
-  append_glo_decl(codegen(node));
+  comp_glo_decl(node);
 }
 
 int main() {
