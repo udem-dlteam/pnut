@@ -994,13 +994,7 @@
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   (let* ((name (car ast))
          (params (cdr ast))
-         (func-call-params (filter (lambda (p) (and (pair? p) (equal? (car p) 'six.call))) params))
-         (singleton? (lambda (lst) (and (pair? lst) (null? (cdr lst)))))
-         (code-params
-          (map (lambda (p)
-                  (let* ((is-last-call-param (singleton? (member p func-call-params))))
-                    (comp-rvalue ctx p `(argument ,is-last-call-param))))
-               params))
+         (code-params (map (lambda (p) (comp-rvalue ctx p `(argument))) params))
          (call-code
           (string-concatenate (cons (function-name name) code-params) " "))
          (is-prim
