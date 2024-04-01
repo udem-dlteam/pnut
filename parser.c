@@ -786,7 +786,141 @@ void expect_tok(int expected_tok) {
 
 #ifndef SIX_CC
 ast parse_comma_expression();
+ast parse_cast_expression();
+ast parse_compound_statement();
+ast parse_conditional_expression();
 #endif
+
+ast parse_type() {
+
+  int type_kw = 0;
+
+  while (1) {
+    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
+      if ((type_kw != 0) AND (type_kw != INT_KW)) {
+        syntax_error("inconsistent type");
+      } else {
+        type_kw = INT_KW;
+        get_tok();
+      }
+    } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
+      syntax_error("unsupported type");
+    } else if (tok == VOID_KW) {
+      if (type_kw != 0) {
+        syntax_error("inconsistent type");
+      } else {
+        type_kw = VOID_KW;
+        get_tok();
+      }
+    } else {
+      break;
+    }
+  }
+
+  if (type_kw == 0) {
+    syntax_error("type expected");
+  }
+
+  return new_ast0(type_kw, 0);
+}
+
+int parse_stars() {
+
+  int stars = 0;
+
+  while (tok == '*') {
+    stars += 1;
+    get_tok();
+  }
+
+  return stars;
+}
+
+int is_type_starter(int tok) {
+  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW);
+}
+
+ast parse_definition(int local) {
+
+  ast type;
+  int stars;
+  ast init;
+  int name;
+  ast params;
+  ast body;
+  ast this_type;
+
+  /* use a simplified syntax for definitions */
+
+  if (is_type_starter(tok)) {
+
+    type = parse_type();
+
+    while (1) {
+
+      stars = parse_stars();
+
+      this_type = type;
+      if (stars != 0) {
+        this_type = new_ast0(get_op(type), stars);
+      }
+
+      name = val;
+
+      expect_tok(IDENTIFIER);
+
+      if (tok == '(') {
+
+        if (local) {
+          syntax_error("function declaration only allowed at global level");
+        }
+
+        get_tok();
+
+        params = 0;
+
+        expect_tok(')'); /* TODO: parse parameter list */
+
+        if (tok == ';') {
+          /* forward declaration */
+          body = 0;
+          get_tok();
+        } else {
+          body = parse_compound_statement();
+        }
+
+        new_ast4(FN_DECL, name, this_type, params, body);
+
+        break;
+
+      } else {
+
+        if ((stars == 0) AND (get_op(type) == VOID_KW)) {
+          syntax_error("variable with void type");
+        }
+
+        init = 0;
+
+        if (tok == '=') {
+          get_tok();
+          init = parse_conditional_expression();
+        }
+
+        new_ast3(VAR_DECL, name, this_type, init);
+
+        if (tok == ';') {
+          get_tok();
+          break;
+        } else if (tok == ',') {
+          get_tok();
+          break;
+        } else {
+          syntax_error("';' or ',' expected");
+        }
+      }
+    }
+  }
+}
 
 ast parse_parenthesized_expression() {
 
@@ -882,11 +1016,6 @@ ast parse_postfix_expression() {
 
   return result;
 }
-
-#ifndef SIX_CC
-ast parse_cast_expression();
-ast parse_compound_statement();
-#endif
 
 ast parse_unary_expression() {
 
@@ -1318,7 +1447,11 @@ ast parse_compound_statement() {
   expect_tok('{');
 
   while ((tok != '}') AND (tok != EOF)) {
-    child1 = parse_statement();
+    if (is_type_starter(tok)) {
+      child1 = parse_definition(1);
+    } else {
+      child1 = parse_statement();
+    }
     result = new_ast2('{', result, child1);
   }
 
@@ -2002,8 +2135,8 @@ int main() {
   get_tok();
 
   while (tok != EOF) {
-    node = parse_statement();
-    codegen_statement(node);
+    node = parse_definition(0);
+    /*    codegen_statement(node); */
   }
   print_glo_decls();
   /*
