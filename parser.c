@@ -1930,6 +1930,8 @@ void comp_fun_call(ast node, ast assign_to) {
     } else {
       code_params = comp_rvalue(params, RVALUE_CTX_BASE);
     }
+  } else {
+    code_params = wrap_str("");
   }
 
   /*
