@@ -2063,11 +2063,6 @@ void comp_fun_call(ast node, ast assign_to) {
     code_params = wrap_str("");
   }
 
-  /*
-  TODO: Check if its a primitive once we've implemented hash tables
-  or get rid of the distinct behavior for primitives that don't return
-  */
-
   append_glo_decl(string_concat5(
     wrap_str(string_pool + heap[get_val(name)+1]), /* Function name*/
     wrap_char(' '),

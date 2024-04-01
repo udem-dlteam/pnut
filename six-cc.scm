@@ -910,26 +910,6 @@
 (define (comp-loop-test ctx ast)
   (comp-rvalue ctx ast '(test-loop)))
 
-; Primitives from the runtime library, and if they return a value or not.
-(define runtime-primitives
-  '((putchar #f)
-    (getchar #t)
-    (exit #f)
-    (malloc #t)
-    (calloc #t)
-    (free #f)
-    (printf #f)
-    (open #t)
-    (read #t)
-    (close #t)
-    (fopen #t)
-    (fclose #t)
-    (fread #t)
-    (fgetc #t)
-    (memset #t)
-    (memcmp #t)
-    (show_heap #f)))
-
 ; Remove the variable we are assigning to from the list of local variables to save.
 ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
 ; Some ideas on how to reduce the number of variables saved:
@@ -994,29 +974,16 @@
 (define (comp-fun-call ctx ast #!optional (assign_to #f))
   (let* ((name (car ast))
          (params (cdr ast))
-         (code-params (map (lambda (p) (comp-rvalue ctx p `(argument))) params))
-         (call-code
-          (string-concatenate (cons (function-name name) code-params) " "))
-         (is-prim
-          (member (cadr name) (map car runtime-primitives)))
-         (can-return
-          (if is-prim
-              (cadr (assoc (cadr name) runtime-primitives))
-              #t)))
+         (code-params (map (lambda (p) (comp-rvalue ctx p `(argument))) params)))
 
-      (if (and (not can-return) assign_to)
-        (error "Function call can't return a value, but we are assigning to a variable"))
-
-      (if can-return ; Always pass the return address, even if it's not used, as long as the function can return a value
-        (let ((return-var
-                (if assign_to (comp-lvalue ctx assign_to) no-result-loc-var))) ;; '|| is empty symbol. Maps to __
-          (ctx-add-glo-decl!
-            ctx
-            (list (string-concatenate (cons (function-name name)
-                                        (cons return-var
-                                        code-params))
-                                      " "))))
-        (ctx-add-glo-decl! ctx (list call-code)))))
+    (let ((return-var
+            (if assign_to (comp-lvalue ctx assign_to) no-result-loc-var))) ;; '|| is empty symbol. Maps to __
+      (ctx-add-glo-decl!
+        ctx
+        (list (string-concatenate (cons (function-name name)
+                                    (cons return-var
+                                    code-params))
+                                  " "))))))
 
 (define (comp-statement-expr ctx ast)
   (case (car ast)

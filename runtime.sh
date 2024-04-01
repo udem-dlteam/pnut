@@ -410,11 +410,13 @@ defstr() { # $1 = variable name, $2 = string
 
 # Primitives
 
-_putchar() { printf \\$(($1/64))$(($1/8%8))$(($1%8)) ; }
+_putchar() {
+  : $(($1 = 0)); shift # Return 0
+  printf \\$(($1/64))$(($1/8%8))$(($1%8))
+}
 
 __stdin_buf=
-_getchar()
-{
+_getchar() {
   if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
     IFS=                                            # don't split input
     if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
@@ -465,7 +467,11 @@ _getchar()
   esac
 }
 
-_exit() { echo \"Exiting with code $1\"; exit $1; }
+_exit() {
+  : $(($1 = 0)); shift # Return 0
+  echo \"Exiting with code $1\"
+  exit $1
+}
 
 _malloc() { # $2 = malloc_size
   alloc $2
@@ -480,6 +486,7 @@ _calloc() { # $2 = nitems, $3 = size
 }
 
 _free() { # $1 = pointer to object to free
+  : $(($1 = 0)); shift # Return 0
   if [ $__FREE_UNSETS_VARS -eq 1 ]; then
     __ptr=$1
     __size=$((_$((__ptr - 1)))) # Get size of allocation
@@ -492,6 +499,7 @@ _free() { # $1 = pointer to object to free
 }
 
 _printf() { # $1 = printf format string, $2... = printf args
+  : $(($1 = 0)); shift # Return 0
   __fmt_ptr=$1; shift
   __mod=0
   while [ "$((_$__fmt_ptr))" -ne 0 ] ; do
@@ -626,7 +634,7 @@ _fopen() { # $2: File name, $3: Mode
 }
 
 _fclose() { # $2: File descriptor
-  _free $2 # Release file descriptor buffer
+  _free __ $2 # Release file descriptor buffer
   : $(($1 = 0))
 }
 
@@ -674,8 +682,7 @@ read_all_char() {
 }
 
 __io_buf=
-get_char()                           # get next char from source into $__c
-{
+get_char() {                          # get next char from source into $__c
   if [ -z "$__io_buf" ] ; then        # need to get next line when buffer empty
     IFS=                              # don't split input
     if read -r __io_buf ; then        # read next line into $__io_buf
