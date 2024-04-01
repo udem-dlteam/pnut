@@ -1911,8 +1911,39 @@ string_tree comp_lvalue(ast node) {
 }
 
 void comp_fun_call(ast node, ast assign_to) {
-  /* TODO */
-  fatal_error("comp_fun_call: not yet implemented");
+  ast name = get_child(node, 0);
+  ast params = get_child(node, 1);
+  ast param;
+  string_tree code_params = 0;
+
+  if (params != 0) { /* Check if not an empty list */
+    if (get_op(params) == ',') {
+      while (get_op(params) == ',') {
+        param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
+        if(code_params == 0) { /* Doing so prevents removes an extra whitespace that would otherwise be inserted */
+          code_params = param;
+        } else {
+          code_params = string_concat3(code_params, wrap_char(' '), param);
+        }
+        params = get_child(params, 1);
+      }
+    } else {
+      code_params = comp_rvalue(params, RVALUE_CTX_BASE);
+    }
+  }
+
+  /*
+  TODO: Check if its a primitive once we've implemented hash tables
+  or get rid of the distinct behavior for primitives that don't return
+  */
+
+  append_glo_decl(string_concat5(
+    wrap_str(string_pool + heap[get_val(name)+1]), /* Function name*/
+    wrap_char(' '),
+    env_var(assign_to),
+    wrap_char(' '),
+    code_params
+  ));
 }
 
 void comp_assignment(ast node) {
