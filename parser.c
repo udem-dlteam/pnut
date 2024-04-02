@@ -1690,7 +1690,7 @@ int contains_side_effects = 0;
   For pre/post-increments/decrements, we map them to a pre-side-effects and replace with the corresponding operation.
   Note that pre/post-increments/decrements of function calls are not supported.
 */
-ast handle_side_effects_go(ast node) {
+ast handle_side_effects_go(ast node, int executes_conditionally) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int val;
@@ -1716,11 +1716,11 @@ ast handle_side_effects_go(ast node) {
   } else if (nb_children == 1) {
     if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
       /* TODO: Reuse ast node? */
-      return new_ast1(op, handle_side_effects_go(get_child(node, 0)));
+      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else if ((op == PLUS_PLUS) OR (op == MINUS_MINUS)) {
       /* The parser fails on postfix ++/--, so this is only preincrement/predecrement */
       contains_side_effects = true;
-      return new_ast1(op, handle_side_effects_go(get_child(node, 0)));
+      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("unexpected operator");
@@ -1733,35 +1733,41 @@ ast handle_side_effects_go(ast node) {
       if (sub2 != 0) { /* Check if not an empty list */
         if (get_op(sub2) == ',') {
           while (get_op(sub2) == ',') {
-            sub1 = handle_side_effects_go(get_child(sub2, 0));
+            sub1 = handle_side_effects_go(get_child(sub2, 0), executes_conditionally);
             set_child(sub2, 0, sub1);
           }
         } else { /* sub2 is the first argument, not wrapped in a cons cell */
-          sub2 = handle_side_effects_go(sub2);
+          sub2 = handle_side_effects_go(sub2, executes_conditionally);
           set_child(node, 1, sub2);
         }
       }
 
       sub1 = fresh_ident();
 
-      /* TODO: if execute-conditionally */
-      replaced_fun_calls[replaced_fun_calls_nb] = sub1;
-      replaced_fun_calls[replaced_fun_calls_nb + 1] = node;
-      replaced_fun_calls_nb += 2;
+      if (executes_conditionally) {
+        conditional_fun_calls[conditional_fun_calls_nb] = sub1;
+        conditional_fun_calls[conditional_fun_calls_nb + 1] = node;
+        conditional_fun_calls_nb += 2;
+      } else {
+        replaced_fun_calls[replaced_fun_calls_nb] = sub1;
+        replaced_fun_calls[replaced_fun_calls_nb + 1] = node;
+        replaced_fun_calls_nb += 2;
+      }
       return sub1;
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
       OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=')
       OR (op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)
       OR (op == '[')) {
       /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
-      sub1 = handle_side_effects_go(get_child(node, 0));
-      sub2 = handle_side_effects_go(get_child(node, 1)); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
+      sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
+      sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
       return new_ast2(op, sub1, sub2);
     } else if ((op == AMP_AMP) OR (op == BAR_BAR)) {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
     }
   } else if (nb_children == 3) {
+    /* TODO: Ternary expression */
     printf("3: op=%d %c\n", op, op);
     fatal_error("unexpected operator");
   } else if (nb_children == 4) {
@@ -1777,9 +1783,8 @@ ast handle_side_effects(ast node) {
   replaced_fun_calls_nb = 0;
   conditional_fun_calls_nb = 0;
   literals_inits_nb = 0;
-  executes_conditionally = 0;
   contains_side_effects = 0;
-  return handle_side_effects_go(node);
+  return handle_side_effects_go(node, false);
 }
 
 string_tree env_var(ast ident) {
