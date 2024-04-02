@@ -2214,8 +2214,9 @@ int main() {
   get_tok();
 
   while (tok != EOF) {
-    node = parse_definition(0);
-    /*    codegen_statement(node); */
+    /* node = parse_definition(0); */
+    node = parse_statement();
+    codegen_statement(node);
   }
   print_glo_decls();
   /*
