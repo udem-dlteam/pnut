@@ -1730,7 +1730,7 @@ ast handle_side_effects_go(ast node) {
         if (get_op(sub2) == ',') {
           while (get_op(sub2) == ',') {
             sub1 = handle_side_effects_go(get_child(sub2, 0));
-            sub2 = get_child(sub2, 1);
+            set_child(sub2, 0, sub1);
           }
         } else { /* sub2 is the first argument, not wrapped in a cons cell */
           sub2 = handle_side_effects_go(sub2);
