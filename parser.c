@@ -1600,16 +1600,22 @@ void print_string_tree(string_tree t) {
 #define GLO_DECL_SIZE 100000
 string_tree glo_decls[GLO_DECL_SIZE];
 int glo_decl_ix = 0;
+int nest_level = 0;
 
 void append_glo_decl(string_tree decl) {
-  glo_decls[glo_decl_ix] = decl;
-  glo_decl_ix += 1;
+  glo_decls[glo_decl_ix] = nest_level;
+  glo_decls[glo_decl_ix + 1] = decl;
+  glo_decl_ix += 2;
 }
 
 void print_glo_decls() {
   int i;
-  for (i = 0; i < glo_decl_ix; i++) {
-    print_string_tree(glo_decls[i]);
+  for (i = 0; i < glo_decl_ix; i += 2) {
+    while (glo_decls[i] > 0) {
+      putchar(' '); putchar(' ');
+      glo_decls[i] -= 1;
+    }
+    print_string_tree(glo_decls[i + 1]);
     putchar('\n');
   }
 }
