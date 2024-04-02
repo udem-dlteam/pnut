@@ -1491,7 +1491,7 @@ void print_string_char(int c) {
 
 #define string_tree int
 #define STRING_TREE_SIZE 1000000
-void_ptr string_tree_pool[STRING_TREE_SIZE];
+int string_tree_pool[STRING_TREE_SIZE];
 int string_tree_alloc = 0;
 
 #ifndef SIX_CC
@@ -1510,21 +1510,6 @@ void comp_statement(ast node, int else_if);
   At the end of the codegen process, the tree will be flattened into a single
   string.
 */
-
-string_tree wrap_str(char_ptr s) {
-  if (string_tree_alloc + 2 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE_STRING;
-  string_tree_pool[string_tree_alloc + 1] = s;
-  return (string_tree_alloc += 2) - 2;
-}
-
-string_tree wrap_substr(char_ptr s, int len) {
-  if (string_tree_alloc + 3 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE_SUBSTRING;
-  string_tree_pool[string_tree_alloc + 1] = s;
-  string_tree_pool[string_tree_alloc + 2] = len;
-  return (string_tree_alloc += 3) - 3;
-}
 
 string_tree wrap_int(int i) {
   if (string_tree_alloc + 3 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
@@ -1547,6 +1532,35 @@ string_tree string_concat(string_tree t1, string_tree t2) {
   string_tree_pool[string_tree_alloc + 2] = t1;
   string_tree_pool[string_tree_alloc + 3] = t2;
   return (string_tree_alloc += 4) - 4;
+}
+
+/*
+  TODO: Optimize wrap_str and wrap_substr
+  For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
+  Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
+*/
+string_tree wrap_str(char_ptr s) {
+  int i = 0;
+  int result = 0;
+
+  while (s[i] != 0) {
+    result = string_concat(result, wrap_char(s[i]));
+    i += 1;
+  }
+
+  return result;
+}
+
+string_tree wrap_substr(char_ptr s, int len) {
+  int i = 0;
+  int result = 0;
+
+  while (s[i] != 0 AND i < len) {
+    result = string_concat(result, wrap_char(s[i]));
+    i += 1;
+  }
+
+  return result;
 }
 
 string_tree string_concat3(string_tree t1, string_tree t2, string_tree t3) {
@@ -1584,19 +1598,22 @@ string_tree string_concat5(string_tree t1, string_tree t2, string_tree t3, strin
 void print_string_tree(string_tree t) {
   int i;
 
+  if (t == 0) return;
+
   if (string_tree_pool[t] == STRING_TREE) {
     for (i = 0; i < string_tree_pool[t + 1]; i++) {
       print_string_tree(string_tree_pool[t + i + 2]);
     }
-  } else if (string_tree_pool[t] == STRING_TREE_STRING) {
+  } /* else if (string_tree_pool[t] == STRING_TREE_STRING) {
     printf("%s", string_tree_pool[t + 1]);
   } else if (string_tree_pool[t] == STRING_TREE_SUBSTRING) {
     printf("%.*s", string_tree_pool[t + 2], string_tree_pool[t + 1]);
-  } else if (string_tree_pool[t] == STRING_TREE_INTEGER) {
+  } */ else if (string_tree_pool[t] == STRING_TREE_INTEGER) {
     printf("%d", string_tree_pool[t + 1]);
   } else if (string_tree_pool[t] == STRING_TREE_CHAR) {
     putchar(string_tree_pool[t + 1]);
   } else {
+    printf("\nt=%d %d\n", t, string_tree_pool[t]);
     fatal_error("unexpected string tree node");
   }
 }
