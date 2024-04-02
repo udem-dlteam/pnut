@@ -889,7 +889,7 @@ ast parse_definition(int local) {
           body = parse_compound_statement();
         }
 
-        new_ast4(FN_DECL, name, this_type, params, body);
+        new_ast4(FUN_DECL, name, this_type, params, body);
 
         break;
 
