@@ -744,7 +744,7 @@ ast new_ast2(int op, ast child0, ast child1) {
 
 ast new_ast3(int op, ast child0, ast child1, ast child2) {
 
-  ast_result = alloc_obj(3);
+  ast_result = alloc_obj(4);
 
   heap[ast_result] = op + 3072;
   set_child(ast_result, 0, child0);
@@ -756,7 +756,7 @@ ast new_ast3(int op, ast child0, ast child1, ast child2) {
 
 ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
 
-  ast_result = alloc_obj(4);
+  ast_result = alloc_obj(5);
 
   heap[ast_result] = op + 4096;
   set_child(ast_result, 0, child0);
