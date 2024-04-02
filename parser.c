@@ -1443,24 +1443,35 @@ ast parse_compound_statement() {
 
   ast result = 0;
   ast child1;
+  ast tail = 0;
 
   expect_tok('{');
 
-  while ((tok != '}') AND (tok != EOF)) {
+  /* TODO: Simplify this */
+  if ((tok != '}') AND (tok != EOF)) {
     if (is_type_starter(tok)) {
       child1 = parse_definition(1);
     } else {
       child1 = parse_statement();
     }
-    result = new_ast2('{', result, child1);
+    result = new_ast2('{', child1, 0);
+    tail = result;
+    while ((tok != '}') AND (tok != EOF)) {
+      if (is_type_starter(tok)) {
+        child1 = parse_definition(1);
+      } else {
+        child1 = parse_statement();
+      }
+      child1 = new_ast2('{', child1, 0);
+      set_child(tail, 1, child1);
+      tail = child1;
+    }
   }
 
   expect_tok('}');
 
   return result;
 }
-
-
 
 void print_string_char(int c) {
   if (c == 7) printf("\\a");
