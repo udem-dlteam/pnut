@@ -83,7 +83,7 @@ int CHARACTER  = 402;
 int STRING     = 403;
 
 int AMP_AMP    = 404;
-int AMP_EQ     = 404;
+int AMP_EQ     = 431; /* TODO: Renumber these */
 int ARROW      = 405;
 int BAR_BAR    = 406;
 int BAR_EQ     = 407;
@@ -112,6 +112,7 @@ int STRING_TREE_SUBSTRING = 428;
 
 int IDENTIFIER_INTERNAL = 429;
 int IDENTIFIER_EMPTY = 430;
+/* Note: 431 is already taken by AMP_EQ */
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
