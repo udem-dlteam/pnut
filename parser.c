@@ -1499,6 +1499,7 @@ int string_tree_alloc = 0;
 /* Place prototype of mutually recursive functions here */
 string_tree comp_array_lvalue(ast node);
 string_tree comp_lvalue(ast node);
+string_tree comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
 void comp_body(ast node);
 void comp_statement(ast node, int else_if);
@@ -1708,11 +1709,11 @@ int contains_side_effects = 0;
 ast handle_side_effects_go(ast node, int executes_conditionally) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
-  int val;
   ast sub1;
   ast sub2;
-  ast sub3;
-  int i;
+  ast previous_conditional_fun_calls;
+  ast left_conditional_fun_calls;
+  ast right_conditional_fun_calls;
 
   if (nb_children == 0) {
     if (op == IDENTIFIER OR op == INTEGER OR op == CHARACTER) {
@@ -1764,12 +1765,26 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
       OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=')
       OR (op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)
-      OR (op == '[')) {
+      OR (op == '[') ) {
       /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
       return new_ast2(op, sub1, sub2);
     } else if ((op == AMP_AMP) OR (op == BAR_BAR)) {
+      previous_conditional_fun_calls = conditional_fun_calls;
+      conditional_fun_calls = 0;
+      /*
+        The left side is always executed, unless the whole expression is executed conditionally.
+        We could compile it as always executed, but it makes the Shell code less regular so we compile it conditionally.
+      */
+      sub1 = handle_side_effects_go(get_child(node, 0), true);
+      left_conditional_fun_calls = conditional_fun_calls;
+      conditional_fun_calls = 0;
+      sub2 = handle_side_effects_go(get_child(node, 1), true);
+      right_conditional_fun_calls = conditional_fun_calls;
+      conditional_fun_calls = previous_conditional_fun_calls;
+      return new_ast4(op, sub1, sub2, left_conditional_fun_calls, right_conditional_fun_calls);
+    } else {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
     }
@@ -1807,45 +1822,70 @@ string_tree env_var(ast ident) {
   }
 }
 
+string_tree with_prefixed_side_effects(ast test_side_effects, string_tree code) {
+
+  string_tree test_side_effects_code = 0;
+
+  while (test_side_effects != 0) {
+    test_side_effects_code =
+      string_concat3(test_side_effects_code,
+                     comp_fun_call_code(get_child(get_child(test_side_effects, 0), 1), get_child(get_child(test_side_effects, 0), 0)),
+                     wrap_str("; "));
+    test_side_effects = get_child(test_side_effects, 1);
+  }
+  if (test_side_effects_code != 0) {
+    return string_concat4(wrap_str("{ "), test_side_effects_code, code, wrap_str("; }"));
+  } else {
+    return code;
+  }
+}
+
 /*
   Wrap code in $((...)) if it's not already (flagged via wrapped), and if it's
   already in $(( )), wrap it in parentheses if parens_otherwise is true. If it's
   not wrapped and we're compiling tests, we also add the test condition to make
   it a valid test.
 */
-string_tree wrap_if_needed(int wrapped, int parens_otherwise, int compiling_test, string_tree code) {
+string_tree wrap_if_needed(int wrapped, int parens_otherwise, int compiling_tests, ast test_side_effects, string_tree code) {
   if (wrapped) {
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
   } else {
-    if (compiling_test) return string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) - ne 0 ]"));
+    if (compiling_tests) return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) - ne 0 ]")));
     else return string_concat3(wrap_str("$(( "), code, wrap_str(" ))"));
   }
 }
 
-/* TODO: Side effects */
-string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests) {
+/*
+  Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
+  This is otherwise handled by wrap-if-needed, but we don't want to wrap in $(( ... )) here.
+*/
+string_tree wrap_in_condition_if_needed(int compiling_tests, ast test_side_effects, string_tree code) {
+  if (compiling_tests) {
+    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ "), code, wrap_str(" -ne 0 ]")));
+  } else {
+    return code;
+  }
+}
+
+string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests, ast test_side_effects) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int val;
   string_tree sub1;
   string_tree sub2;
-  string_tree sub3;
 
   if (wrapped AND compiling_tests) { fatal_error("comp_rvalue_go: Can't compile as a test while wrapped in $(( ... ))"); }
 
   if (nb_children == 0) {
     if (op == INTEGER) {
-      return wrap_int(-get_val(node));
+      return wrap_in_condition_if_needed(compiling_tests, test_side_effects, wrap_int(-get_val(node)));
     } else if (op == CHARACTER) {
-      return wrap_int(get_val(node));
+      /* TODO: Map characters to constant instead of hardcoding ascii code */
+      return wrap_in_condition_if_needed(compiling_tests, test_side_effects, wrap_int(get_val(node)));
     } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL) {
-      if (wrapped) {
-        return env_var(node);
-      } else {
-        /* TODO: */
-        return string_concat3(wrap_str("$(("), env_var(node), wrap_str("))"));
-      }
+      if (wrapped) { return env_var(node); }
+      else { return wrap_in_condition_if_needed(compiling_tests, test_side_effects, string_concat(wrap_char('$'), env_var(node))); }
       return env_var(node);
     } else if (op == STRING) {
       fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
@@ -1861,35 +1901,34 @@ string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests) {
         need another layer of wrapping if it's a complex expression, i.e. not a
         literal or a variable.
       */
-      sub1 = comp_rvalue_go(get_child(node, 0), false, false);
-      return wrap_if_needed(wrapped, compiling_tests, true, string_concat(wrap_char('_'), sub1));
+      sub1 = comp_rvalue_go(get_child(node, 0), false, false, 0);
+      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat(wrap_char('_'), sub1));
     } else if (op == '+') {
       /* +x is equivalent to x */
-      comp_rvalue_go(get_child(node, 0), wrapped, compiling_tests);
+      return comp_rvalue_go(get_child(node, 0), wrapped, compiling_tests, test_side_effects);
     } else if (op == '-') {
       /*
         Check if the rest of ast is a literal, if so directly return the negated value.
         Note: I think this can be simplified by not wrapped in () in the else case.
       */
       if (get_op(get_child(node, 0)) == INTEGER) {
-        /* TODO: Call wrap-in-condition-if-needed when implemented */
-        return wrap_int(-get_val(get_child(node, 0)));
+        return wrap_in_condition_if_needed(compiling_tests, test_side_effects, wrap_int(-get_val(get_child(node, 0))));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), true, false);
-        return wrap_if_needed(wrapped, compiling_tests, false, string_concat3(wrap_str("-("), sub1, wrap_char(')')));
+        sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
+        return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat3(wrap_str("-("), sub1, wrap_char(')')));
       }
     } else if (op == '~') {
-      sub1 = comp_rvalue_go(get_child(node, 0), true, false);
-      return wrap_if_needed(wrapped, compiling_tests, false, string_concat3(wrap_str("~("), sub1, wrap_char(')')));
+      sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
+      return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat3(wrap_str("~("), sub1, wrap_char(')')));
     } else if (op == '!') {
-      sub1 = comp_rvalue_go(get_child(node, 0), true, false);
-      return wrap_if_needed(wrapped, compiling_tests, false, string_concat(wrap_char('!'), sub1));
+      sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
+      return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat(wrap_char('!'), sub1));
     } else if (op == MINUS_MINUS) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(wrapped, compiling_tests, true, string_concat(sub1, wrap_str(" -= 1")));
+      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat(sub1, wrap_str(" -= 1")));
     } else if (op == PLUS_PLUS) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(wrapped, compiling_tests, true, string_concat(sub1, wrap_str(" += 1")));
+      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
     } else if (op == '&') {
       fatal_error("comp_rvalue_go: address of operator not supported");
     } else {
@@ -1898,30 +1937,39 @@ string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests) {
     }
   } else if (nb_children == 2) {
     if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT) {
-      sub1 = comp_rvalue_go(get_child(node, 0), true, false);
-      sub2 = comp_rvalue_go(get_child(node, 1), true, false);
-      return wrap_if_needed(wrapped, true, compiling_tests, string_concat3(sub1, op_to_str(op), sub2));
+      sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
+      sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
+      return wrap_if_needed(wrapped, true, compiling_tests, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == PLUS_EQ OR op == MINUS_EQ OR op == STAR_EQ OR op == SLASH_EQ OR op == PERCENT_EQ OR op == '=') {
       sub1 = comp_lvalue(get_child(node, 0));
-      sub2 = comp_rvalue_go(get_child(node, 1), true, false);
-      return wrap_if_needed(wrapped, compiling_tests, true, string_concat4(sub1, op_to_str(op), sub2, wrap_char(';')));
+      sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
+      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat4(sub1, op_to_str(op), sub2, wrap_char(';')));
     } else if (op == '[') { /* six.index */
       sub1 = comp_array_lvalue(get_child(node, 0));
-      sub2 = comp_rvalue_go(get_child(node, 1), true, false);
-      return wrap_if_needed(wrapped, compiling_tests, false,
-        string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
+      sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
+      return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
     } else if (op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '<' OR op == '>') {
       if (compiling_tests) {
-        /* TODO: Call wrap-in-condition-if-needed when implemented */
-        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, false);
-        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, false);
-        return wrap_if_needed(wrapped, compiling_tests, false, string_concat5(wrap_str("[ "), sub1, test_op_to_str(op), sub2, wrap_str(" ]")));
+        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, false, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, false, 0);
+        return with_prefixed_side_effects(test_side_effects, string_concat5(wrap_str("[ "), sub1, test_op_to_str(op), sub2, wrap_str(" ]")));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), true, false);
-        sub2 = comp_rvalue_go(get_child(node, 1), true, false);
-        return wrap_if_needed(wrapped, compiling_tests, true, string_concat3(sub1, op_to_str(op), sub2));
+        sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
+        return wrap_if_needed(wrapped, compiling_tests, true, string_concat3(sub1, op_to_str(op), sub2), test_side_effects);
       }
     } else if (op == AMP_AMP OR op == BAR_BAR) {
+      fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
+    } else {
+      fatal_error("comp_rvalue_go: unknown rvalue");
+      return -1;
+    }
+  } else if (nb_children == 3) {
+    /* TODO: ternary operator */
+    fatal_error("comp_rvalue_go: there are no 3 children operators in the grammar");
+    return -1;
+  } else if (nb_children == 4) {
+    if (op == AMP_AMP OR op == BAR_BAR) {
       /*
         Note, this could also be compiled in a single [ ] block using -a and -o,
         which I think are POSIX compliant but are deprecated.
@@ -1938,30 +1986,25 @@ string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests) {
           As a heuristic, we add parenthesis whenever the left or right side of
           the operator is a different comparison operator.
         */
-        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, true);
-        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, true);
+        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, true, get_child(node, 2));
+        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, true, get_child(node, 3));
         if ((get_op(get_child(node, 0)) == AMP_AMP OR get_op(get_child(node, 0)) == BAR_BAR) AND get_op(get_child(node, 0)) != op) {
           sub1 = string_concat3(wrap_str("{ "), sub1, wrap_str(" }"));
         }
         if ((get_op(get_child(node, 1)) == AMP_AMP OR get_op(get_child(node, 1)) == BAR_BAR) AND get_op(get_child(node, 1)) != op) {
           sub2 = string_concat3(wrap_str("{ "), sub2, wrap_str(" }"));
         }
-        return string_concat3(sub1, test_op_to_str(op), sub2);
+        return string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2);
       } else {
-        /* TODO: Fail when there are conditional side-effects */
-        sub1 = comp_rvalue_go(get_child(node, 0), true, false);
-        sub2 = comp_rvalue_go(get_child(node, 1), true, false);
+        if (test_side_effects != 0) { fatal_error("comp_rvalue_go: Arithmetic with function calls in && and || not supported"); }
+        sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
         return wrap_if_needed(wrapped, compiling_tests, false,
-          string_concat3(sub1, test_op_to_str(op), sub2));
+          string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2), test_side_effects);
       }
     } else {
-      fatal_error("comp_rvalue_go: unknown rvalue");
-      return -1;
+
     }
-  } else if (nb_children == 3) {
-    /* TODO: ternary operator */
-    fatal_error("comp_rvalue_go: should have returned before the end");
-    return -1;
   }
   fatal_error("comp_rvalue_go: should have returned before the end");
   return -1;
@@ -2010,7 +2053,7 @@ string_tree comp_rvalue(ast node, int context) {
   if (context == RVALUE_CTX_PURE) {
     if (replaced_fun_calls != 0 OR conditional_fun_calls != 0 OR literals_inits != 0)
       fatal_error("comp_rvalue: side effects not allowed in pure context");
-    return comp_rvalue_go(simple_ast, true, false);
+    return comp_rvalue_go(simple_ast, true, false, 0);
   }
 
   while (literals_inits != 0) {
@@ -2028,13 +2071,13 @@ string_tree comp_rvalue(ast node, int context) {
   }
 
   if (context == RVALUE_CTX_BASE) {
-    return comp_rvalue_go(simple_ast, false, false);
+    return comp_rvalue_go(simple_ast, false, false, 0);
   } else if (context == RVALUE_CTX_BASE_WRAPPED) {
-    return comp_rvalue_go(simple_ast, true, false);
+    return comp_rvalue_go(simple_ast, true, false, 0);
   } else if (context == RVALUE_CTX_TEST) {
-    return comp_rvalue_go(simple_ast, false, true);
+    return comp_rvalue_go(simple_ast, false, true, 0);
   } else if (context == RVALUE_CTX_STATEMENT) {
-    return comp_rvalue_go(simple_ast, false, false);
+    return comp_rvalue_go(simple_ast, false, false, 0);
   } else {
     fatal_error("comp_rvalue: unknown context");
   }
@@ -2077,7 +2120,7 @@ string_tree comp_lvalue(ast node) {
   }
 }
 
-void comp_fun_call(ast node, ast assign_to) {
+string_tree comp_fun_call_code(ast node, ast assign_to) {
   ast name = get_child(node, 0);
   ast params = get_child(node, 1);
   ast param;
@@ -2101,13 +2144,17 @@ void comp_fun_call(ast node, ast assign_to) {
     code_params = wrap_str("");
   }
 
-  append_glo_decl(string_concat5(
+  return string_concat5(
     wrap_str(string_pool + heap[get_val(name)+1]), /* Function name*/
     wrap_char(' '),
     env_var(assign_to),
     wrap_char(' '),
     code_params
-  ));
+  );
+}
+
+void comp_fun_call(ast node, ast assign_to) {
+  append_glo_decl(comp_fun_call_code(node, assign_to));
 }
 
 void comp_assignment(ast node) {
