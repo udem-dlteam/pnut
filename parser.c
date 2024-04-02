@@ -1693,12 +1693,9 @@ ast fresh_ident() {
   return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
 }
 
-int replaced_fun_calls[100];
-int replaced_fun_calls_nb = 0;
-int conditional_fun_calls[100];
-int conditional_fun_calls_nb = 0;
-int literals_inits[100];
-int literals_inits_nb = 0;
+ast replaced_fun_calls = 0;
+ast conditional_fun_calls = 0;
+ast literals_inits = 0;
 int executes_conditionally = 0;
 int contains_side_effects = 0;
 
@@ -1723,9 +1720,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
       sub1 = fresh_ident();
-      literals_inits[literals_inits_nb] = sub1;
-      literals_inits[literals_inits_nb + 1] = get_val(node);
-      literals_inits_nb += 2;
+      literals_inits = new_ast2(',', new_ast2(',', sub1, get_val(node)), literals_inits);
       return sub1;
     } else {
       printf("0: op=%d %c", op, op);
@@ -1762,15 +1757,9 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
 
       sub1 = fresh_ident();
 
-      if (executes_conditionally) {
-        conditional_fun_calls[conditional_fun_calls_nb] = sub1;
-        conditional_fun_calls[conditional_fun_calls_nb + 1] = node;
-        conditional_fun_calls_nb += 2;
-      } else {
-        replaced_fun_calls[replaced_fun_calls_nb] = sub1;
-        replaced_fun_calls[replaced_fun_calls_nb + 1] = node;
-        replaced_fun_calls_nb += 2;
-      }
+      if (executes_conditionally) { conditional_fun_calls = new_ast2(',', new_ast2(',', sub1, node), conditional_fun_calls); }
+      else { replaced_fun_calls = new_ast2(',', new_ast2(',', sub1, node), replaced_fun_calls); }
+
       return sub1;
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
       OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=')
@@ -1798,10 +1787,10 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
 }
 
 ast handle_side_effects(ast node) {
-  replaced_fun_calls_nb = 0;
-  conditional_fun_calls_nb = 0;
-  literals_inits_nb = 0;
-  contains_side_effects = 0;
+  replaced_fun_calls = 0;
+  conditional_fun_calls = 0;
+  literals_inits = 0;
+  contains_side_effects = false;
   return handle_side_effects_go(node, false);
 }
 
@@ -2019,20 +2008,23 @@ string_tree comp_rvalue(ast node, int context) {
   int i;
 
   if (context == RVALUE_CTX_PURE) {
-    if (replaced_fun_calls_nb != 0 OR conditional_fun_calls_nb != 0 OR literals_inits_nb != 0)
+    if (replaced_fun_calls != 0 OR conditional_fun_calls != 0 OR literals_inits != 0)
       fatal_error("comp_rvalue: side effects not allowed in pure context");
     return comp_rvalue_go(simple_ast, true, false);
   }
 
-  for (i = 0; i < literals_inits_nb; i += 2) {
+  while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , env_var(literals_inits[i])
+                                  , env_var(get_child(get_child(literals_inits, 0), 0))
                                   , wrap_str(" \"")
-                                  , escape_string(string_pool + literals_inits[i + 1])
+                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
                                   , wrap_char('\"')));
+    literals_inits = get_child(literals_inits, 1);
   }
-  for (i = 0; i < replaced_fun_calls_nb; i += 2) {
-    comp_fun_call(replaced_fun_calls[i + 1], replaced_fun_calls[i]);
+
+  while (replaced_fun_calls != 0) {
+    comp_fun_call(get_child(get_child(replaced_fun_calls, 0), 1), get_child(get_child(replaced_fun_calls, 0), 0));
+    replaced_fun_calls = get_child(replaced_fun_calls, 1);
   }
 
   if (context == RVALUE_CTX_BASE) {
@@ -2170,7 +2162,6 @@ void comp_statement(ast node, int else_if) {
           ));
     }
 
-    /* TODO: Nest this block */
     nest_level += 1;
     if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
     else { append_glo_decl(wrap_char(':')); }
