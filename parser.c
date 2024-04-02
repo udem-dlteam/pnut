@@ -111,6 +111,7 @@ int STRING_TREE_STRING = 427;
 int STRING_TREE_SUBSTRING = 428;
 
 int IDENTIFIER_INTERNAL = 429;
+int IDENTIFIER_EMPTY = 430;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -1497,6 +1498,9 @@ int string_tree_alloc = 0;
 /* Place prototype of mutually recursive functions here */
 string_tree comp_array_lvalue(ast node);
 string_tree comp_lvalue(ast node);
+void comp_fun_call(ast node, ast assign_to);
+void comp_body(ast node);
+void comp_statement(ast node, int else_if);
 #endif
 
 /*
@@ -1782,7 +1786,9 @@ string_tree env_var(ast ident) {
   if (get_op(ident) == IDENTIFIER) {
     return wrap_str(string_pool + heap[get_val(ident)+1]);
   } else if (get_op(ident) == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str("__"), get_val(ident));
+    return string_concat(wrap_str("__g"), get_val(ident));
+  } else if (get_op(ident) == IDENTIFIER_EMPTY) {
+    return wrap_str("__");
   } else {
     printf("op=%d %c", get_op(ident), get_op(ident));
     fatal_error("env_var: unknown identifier");
@@ -2109,6 +2115,67 @@ void comp_assignment(ast node) {
   }
 }
 
+void comp_body(ast node) {
+  int i;
+
+  /* TODO: Check that there aren't local variable declarations */
+
+  if (node != 0) {
+    while (get_op(node) == '{') {
+      /* TODO: Support tail calls */
+      comp_statement(get_child(node, 0), false);
+      node = get_child(node, 1);
+    }
+  }
+}
+
+void comp_statement(ast node, int else_if) {
+  int op = get_op(node);
+  if (op == IF_KW) {
+    /* TODO: Replace this with ternary expression? */
+    if (else_if) {
+      append_glo_decl(string_concat3(
+            wrap_str("elif "),
+            comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
+            wrap_str(" ; then")
+          ));
+    } else {
+      append_glo_decl(string_concat3(
+            wrap_str("if "),
+            comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
+            wrap_str(" ; then")
+          ));
+    }
+
+    /* TODO: Nest this block */
+    nest_level += 1;
+    if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
+    else { append_glo_decl(wrap_char(':')); }
+    nest_level -= 1;
+
+    if (get_child(node, 2) != 0) {
+      /* Compile sequence of if else if using elif */
+      if (get_op(get_child(node, 2)) == IF_KW) {
+        comp_statement(get_child(node, 2), true); /* comp_statement with else_if == true emits elif*/
+      } else {
+        append_glo_decl(wrap_str("else"));
+        /* TODO: Emit : if body is empty */
+        nest_level += 1;
+        comp_statement(get_child(node, 2), false);
+        nest_level -= 1;
+      }
+    }
+    if (!else_if) append_glo_decl(wrap_str("fi"));
+  } else if (op == '(') {
+    comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); /* Reuse IDENTIFIER_EMPTY ast? */
+  } else if (op == '{') {
+    comp_body(node);
+  } else {
+    printf("%d op=%d %c", node, op, op);
+    fatal_error("comp_statement: unknown statement");
+  }
+}
+
 /*
 This function compiles 1 top level declaration at the time.
 The 3 types of supported top level declarations are:
@@ -2122,14 +2189,14 @@ void comp_glo_decl(ast node) {
 
   if (op == '=') { /* Assignations */
    comp_assignment(node);
-  } else if (op == '(') {
-    /* comp_fun_call(); */
-    node = get_child(node, 1); /* Start of list*/
-    fatal_error("comp_glo_decl: function calls not yet supported");
   } else {
     /* Allow all operations to appear at the top level while fun and var decls can't be parsed */
+    /* TODO: Make this case an error when we support function declarations */
+    comp_statement(node, false);
+    /*
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
+    */
   }
 }
 
