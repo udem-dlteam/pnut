@@ -104,11 +104,11 @@ int RSHIFT     = 421;
 int SLASH_EQ   = 422;
 int STAR_EQ    = 423;
 
-int STRING_TREE = 424;
-int STRING_TREE_INTEGER = 425;
-int STRING_TREE_CHAR = 426;
-int STRING_TREE_STRING = 427;
-int STRING_TREE_SUBSTRING = 428;
+int TEXT_TREE = 424;
+int TEXT_INTEGER = 425;
+int TEXT_CHAR = 426;
+int TEXT_STRING = 427;
+int TEXT_SUBSTRING = 428;
 
 int IDENTIFIER_INTERNAL = 429;
 int IDENTIFIER_EMPTY = 430;
@@ -1490,16 +1490,16 @@ void print_string_char(int c) {
 
 /* codegen */
 
-#define string_tree int
-#define STRING_TREE_SIZE 1000000
-int string_tree_pool[STRING_TREE_SIZE];
-int string_tree_alloc = 0;
+#define text int
+#define TEXT_POOL_SIZE 1000000
+int text_pool[TEXT_POOL_SIZE];
+int text_alloc = 0;
 
 #ifndef SIX_CC
 /* Place prototype of mutually recursive functions here */
-string_tree comp_array_lvalue(ast node);
-string_tree comp_lvalue(ast node);
-string_tree comp_fun_call_code(ast node, ast assign_to);
+text comp_array_lvalue(ast node);
+text comp_lvalue(ast node);
+text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
 void comp_body(ast node);
 void comp_statement(ast node, int else_if);
@@ -1513,27 +1513,27 @@ void comp_statement(ast node, int else_if);
   string.
 */
 
-string_tree wrap_int(int i) {
-  if (string_tree_alloc + 3 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE_INTEGER;
-  string_tree_pool[string_tree_alloc + 1] = i;
-  return (string_tree_alloc += 2) - 2;
+text wrap_int(int i) {
+  if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_INTEGER;
+  text_pool[text_alloc + 1] = i;
+  return (text_alloc += 2) - 2;
 }
 
-string_tree wrap_char(char c) {
-  if (string_tree_alloc + 2 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE_CHAR;
-  string_tree_pool[string_tree_alloc + 1] = c;
-  return (string_tree_alloc += 2) - 2;
+text wrap_char(char c) {
+  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_CHAR;
+  text_pool[text_alloc + 1] = c;
+  return (text_alloc += 2) - 2;
 }
 
-string_tree string_concat(string_tree t1, string_tree t2) {
-  if (string_tree_alloc + 4 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE;
-  string_tree_pool[string_tree_alloc + 1] = 2;
-  string_tree_pool[string_tree_alloc + 2] = t1;
-  string_tree_pool[string_tree_alloc + 3] = t2;
-  return (string_tree_alloc += 4) - 4;
+text string_concat(text t1, text t2) {
+  if (text_alloc + 4 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_TREE;
+  text_pool[text_alloc + 1] = 2;
+  text_pool[text_alloc + 2] = t1;
+  text_pool[text_alloc + 3] = t2;
+  return (text_alloc += 4) - 4;
 }
 
 /*
@@ -1541,7 +1541,7 @@ string_tree string_concat(string_tree t1, string_tree t2) {
   For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
   Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
 */
-string_tree wrap_str(char_ptr s) {
+text wrap_str(char_ptr s) {
   int i = 0;
   int result = 0;
 
@@ -1553,7 +1553,7 @@ string_tree wrap_str(char_ptr s) {
   return result;
 }
 
-string_tree wrap_substr(char_ptr s, int len) {
+text wrap_substr(char_ptr s, int len) {
   int i = 0;
   int result = 0;
 
@@ -1565,69 +1565,69 @@ string_tree wrap_substr(char_ptr s, int len) {
   return result;
 }
 
-string_tree string_concat3(string_tree t1, string_tree t2, string_tree t3) {
-  if (string_tree_alloc + 5 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE;
-  string_tree_pool[string_tree_alloc + 1] = 3;
-  string_tree_pool[string_tree_alloc + 2] = t1;
-  string_tree_pool[string_tree_alloc + 3] = t2;
-  string_tree_pool[string_tree_alloc + 4] = t3;
-  return (string_tree_alloc += 5) - 5;
+text string_concat3(text t1, text t2, text t3) {
+  if (text_alloc + 5 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_TREE;
+  text_pool[text_alloc + 1] = 3;
+  text_pool[text_alloc + 2] = t1;
+  text_pool[text_alloc + 3] = t2;
+  text_pool[text_alloc + 4] = t3;
+  return (text_alloc += 5) - 5;
 }
 
-string_tree string_concat4(string_tree t1, string_tree t2, string_tree t3, string_tree t4) {
-  if (string_tree_alloc + 6 >= STRING_TREE_SIZE) fatal_error("string tree pool overflow");
-  string_tree_pool[string_tree_alloc] = STRING_TREE;
-  string_tree_pool[string_tree_alloc + 1] = 4;
-  string_tree_pool[string_tree_alloc + 2] = t1;
-  string_tree_pool[string_tree_alloc + 3] = t2;
-  string_tree_pool[string_tree_alloc + 4] = t3;
-  string_tree_pool[string_tree_alloc + 5] = t4;
-  return (string_tree_alloc += 6) - 6;
+text string_concat4(text t1, text t2, text t3, text t4) {
+  if (text_alloc + 6 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_TREE;
+  text_pool[text_alloc + 1] = 4;
+  text_pool[text_alloc + 2] = t1;
+  text_pool[text_alloc + 3] = t2;
+  text_pool[text_alloc + 4] = t3;
+  text_pool[text_alloc + 5] = t4;
+  return (text_alloc += 6) - 6;
 }
 
-string_tree string_concat5(string_tree t1, string_tree t2, string_tree t3, string_tree t4, string_tree t5) {
-  string_tree_pool[string_tree_alloc] = STRING_TREE;
-  string_tree_pool[string_tree_alloc + 1] = 5;
-  string_tree_pool[string_tree_alloc + 2] = t1;
-  string_tree_pool[string_tree_alloc + 3] = t2;
-  string_tree_pool[string_tree_alloc + 4] = t3;
-  string_tree_pool[string_tree_alloc + 5] = t4;
-  string_tree_pool[string_tree_alloc + 6] = t5;
-  return (string_tree_alloc += 7) - 7;
+text string_concat5(text t1, text t2, text t3, text t4, text t5) {
+  text_pool[text_alloc] = TEXT_TREE;
+  text_pool[text_alloc + 1] = 5;
+  text_pool[text_alloc + 2] = t1;
+  text_pool[text_alloc + 3] = t2;
+  text_pool[text_alloc + 4] = t3;
+  text_pool[text_alloc + 5] = t4;
+  text_pool[text_alloc + 6] = t5;
+  return (text_alloc += 7) - 7;
 }
 
-void print_string_tree(string_tree t) {
+void print_text(text t) {
   int i;
 
   if (t == 0) return;
 
-  if (string_tree_pool[t] == STRING_TREE) {
-    for (i = 0; i < string_tree_pool[t + 1]; i++) {
-      print_string_tree(string_tree_pool[t + i + 2]);
+  if (text_pool[t] == TEXT_TREE) {
+    for (i = 0; i < text_pool[t + 1]; i++) {
+      print_text(text_pool[t + i + 2]);
     }
-  } /* else if (string_tree_pool[t] == STRING_TREE_STRING) {
-    printf("%s", string_tree_pool[t + 1]);
-  } else if (string_tree_pool[t] == STRING_TREE_SUBSTRING) {
-    printf("%.*s", string_tree_pool[t + 2], string_tree_pool[t + 1]);
-  } */ else if (string_tree_pool[t] == STRING_TREE_INTEGER) {
-    printf("%d", string_tree_pool[t + 1]);
-  } else if (string_tree_pool[t] == STRING_TREE_CHAR) {
-    putchar(string_tree_pool[t + 1]);
+  } /* else if (text_pool[t] == TEXT_STRING) {
+    printf("%s", text_pool[t + 1]);
+  } else if (text_pool[t] == TEXT_SUBSTRING) {
+    printf("%.*s", text_pool[t + 2], text_pool[t + 1]);
+  } */ else if (text_pool[t] == TEXT_INTEGER) {
+    printf("%d", text_pool[t + 1]);
+  } else if (text_pool[t] == TEXT_CHAR) {
+    putchar(text_pool[t + 1]);
   } else {
-    printf("\nt=%d %d\n", t, string_tree_pool[t]);
+    printf("\nt=%d %d\n", t, text_pool[t]);
     fatal_error("unexpected string tree node");
   }
 }
 
 #define GLO_DECL_SIZE 100000
-string_tree glo_decls[GLO_DECL_SIZE];
+text glo_decls[GLO_DECL_SIZE];
 int glo_decl_ix = 0;
 int nest_level = 0;
 int is_tail_call = false;
 int loop_nesting_level = 0; /* Number of loops were in */
 
-void append_glo_decl(string_tree decl) {
+void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
   glo_decls[glo_decl_ix + 1] = decl;
   glo_decl_ix += 2;
@@ -1640,12 +1640,12 @@ void print_glo_decls() {
       putchar(' '); putchar(' ');
       glo_decls[i] -= 1;
     }
-    print_string_tree(glo_decls[i + 1]);
+    print_text(glo_decls[i + 1]);
     putchar('\n');
   }
 }
 
-string_tree op_to_str(int op) {
+text op_to_str(int op) {
   if      (op < 256)         return wrap_char(op);
   else if (op == AMP_AMP)    return wrap_str("&&");
   else if (op == AMP_EQ)     return wrap_str("&=");
@@ -1675,7 +1675,7 @@ string_tree op_to_str(int op) {
 /*
   Similar to op_to_str, but returns the shell test operand instead of the C-style operands.
 */
-string_tree test_op_to_str(int op) {
+text test_op_to_str(int op) {
   if      (op == EQ_EQ)      return wrap_str(" -eq ");
   else if (op == EXCL_EQ)    return wrap_str(" -ne ");
   else if (op == '<')        return wrap_str(" -lt ");
@@ -1815,7 +1815,7 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-string_tree env_var(ast ident) {
+text env_var(ast ident) {
   if (get_op(ident) == IDENTIFIER) {
     return wrap_str(string_pool + heap[get_val(ident)+1]);
   } else if (get_op(ident) == IDENTIFIER_INTERNAL) {
@@ -1828,9 +1828,9 @@ string_tree env_var(ast ident) {
   }
 }
 
-string_tree with_prefixed_side_effects(ast test_side_effects, string_tree code) {
+text with_prefixed_side_effects(ast test_side_effects, text code) {
 
-  string_tree test_side_effects_code = 0;
+  text test_side_effects_code = 0;
 
   while (test_side_effects != 0) {
     test_side_effects_code =
@@ -1852,7 +1852,7 @@ string_tree with_prefixed_side_effects(ast test_side_effects, string_tree code) 
   not wrapped and we're compiling tests, we also add the test condition to make
   it a valid test.
 */
-string_tree wrap_if_needed(int wrapped, int compiling_tests, int parens_otherwise, ast test_side_effects, string_tree code) {
+text wrap_if_needed(int wrapped, int compiling_tests, int parens_otherwise, ast test_side_effects, text code) {
   if (wrapped) {
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
@@ -1866,7 +1866,7 @@ string_tree wrap_if_needed(int wrapped, int compiling_tests, int parens_otherwis
   Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
   This is otherwise handled by wrap-if-needed, but we don't want to wrap in $(( ... )) here.
 */
-string_tree wrap_in_condition_if_needed(int compiling_tests, ast test_side_effects, string_tree code) {
+text wrap_in_condition_if_needed(int compiling_tests, ast test_side_effects, text code) {
   if (compiling_tests) {
     return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ "), code, wrap_str(" -ne 0 ]")));
   } else {
@@ -1874,12 +1874,12 @@ string_tree wrap_in_condition_if_needed(int compiling_tests, ast test_side_effec
   }
 }
 
-string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests, ast test_side_effects) {
+text comp_rvalue_go(ast node, int wrapped, int compiling_tests, ast test_side_effects) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int val;
-  string_tree sub1;
-  string_tree sub2;
+  text sub1;
+  text sub2;
 
   if (wrapped AND compiling_tests) { fatal_error("comp_rvalue_go: Can't compile as a test while wrapped in $(( ... ))"); }
 
@@ -2031,9 +2031,9 @@ char escaped_char(char c) {
   }
 }
 
-string_tree escape_string(char_ptr str) {
+text escape_string(char_ptr str) {
   char_ptr seq = str;
-  string_tree res = wrap_str("");
+  text res = wrap_str("");
   char c;
   while (*str != '\0') {
     c = *str;
@@ -2051,7 +2051,7 @@ int RVALUE_CTX_BASE = 1;
 int RVALUE_CTX_BASE_WRAPPED = 2; /* Like base context, except that we're already in $(( ... )) */
 int RVALUE_CTX_TEST = 3;
 
-string_tree comp_rvalue(ast node, int context) {
+text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
   int i;
 
@@ -2086,9 +2086,9 @@ string_tree comp_rvalue(ast node, int context) {
   }
 }
 
-string_tree comp_array_lvalue(ast node) {
+text comp_array_lvalue(ast node) {
   int op = get_op(node);
-  string_tree rvalue;
+  text rvalue;
   if (op == IDENTIFIER) {
     return env_var(node);
   } else if (op == '*') {
@@ -2100,10 +2100,10 @@ string_tree comp_array_lvalue(ast node) {
   }
 }
 
-string_tree comp_lvalue(ast node) {
+text comp_lvalue(ast node) {
   int op = get_op(node);
-  string_tree sub1;
-  string_tree sub2;
+  text sub1;
+  text sub2;
 
   if (op == IDENTIFIER) {
     return env_var(node);
@@ -2123,11 +2123,11 @@ string_tree comp_lvalue(ast node) {
   }
 }
 
-string_tree comp_fun_call_code(ast node, ast assign_to) {
+text comp_fun_call_code(ast node, ast assign_to) {
   ast name = get_child(node, 0);
   ast params = get_child(node, 1);
   ast param;
-  string_tree code_params = 0;
+  text code_params = 0;
 
   if (params != 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
@@ -2199,7 +2199,7 @@ void comp_body(ast node) {
 
 void comp_statement(ast node, int else_if) {
   int op = get_op(node);
-  string_tree str;
+  text str;
 
   if (op == IF_KW) {
     /* TODO: Replace this with ternary expression? */
