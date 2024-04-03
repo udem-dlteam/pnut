@@ -515,6 +515,7 @@
 ; It also keep tracks of variables that are assigned to.
 (define (gather-function-var-used ast)
   (define (go ast)
+    (if (not (pair? ast)) (set! ast (list 'six.literal ast)))
     (case (car ast)
       ((six.return six.break six.continue six.literal six.list six.identifier six.internal-identifier) '())
       ((six.define-variable)
