@@ -1765,10 +1765,14 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
 
       return sub1;
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=')
-      OR (op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)
-      OR (op == '[') ) {
+      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') ) {
       /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
+      sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
+      sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
+      return new_ast2(op, sub1, sub2);
+    } else if ((op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)) {
+      /* Just like previous case, except that we update contains_side_effects */
+      contains_side_effects = true;
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
       return new_ast2(op, sub1, sub2);
@@ -1848,7 +1852,7 @@ string_tree with_prefixed_side_effects(ast test_side_effects, string_tree code) 
   not wrapped and we're compiling tests, we also add the test condition to make
   it a valid test.
 */
-string_tree wrap_if_needed(int wrapped, int parens_otherwise, int compiling_tests, ast test_side_effects, string_tree code) {
+string_tree wrap_if_needed(int wrapped, int compiling_tests, int parens_otherwise, ast test_side_effects, string_tree code) {
   if (wrapped) {
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
@@ -1941,7 +1945,7 @@ string_tree comp_rvalue_go(ast node, int wrapped, int compiling_tests, ast test_
     if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT) {
       sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
       sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
-      return wrap_if_needed(wrapped, true, compiling_tests, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
+      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == PLUS_EQ OR op == MINUS_EQ OR op == STAR_EQ OR op == SLASH_EQ OR op == PERCENT_EQ OR op == '=') {
       sub1 = comp_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
@@ -2198,6 +2202,8 @@ void comp_body(ast node) {
 
 void comp_statement(ast node, int else_if) {
   int op = get_op(node);
+  string_tree str;
+
   if (op == IF_KW) {
     /* TODO: Replace this with ternary expression? */
     if (else_if) {
@@ -2292,8 +2298,14 @@ void comp_statement(ast node, int else_if) {
   } else if (op == '=') { /* six.x=y */
     comp_assignment(node);
   } else {
+    /*
     printf("%d op=%d %c", node, op, op);
     fatal_error("comp_statement: unknown statement");
+    */
+    str = comp_rvalue(node, RVALUE_CTX_STATEMENT);
+    if (contains_side_effects) {
+      append_glo_decl(string_concat(wrap_str(": "), str));
+    }
   }
 }
 
