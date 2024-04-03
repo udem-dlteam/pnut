@@ -91,87 +91,100 @@ void write_elf() {
   }
 }
 
-int X86_AX = 0;
-int X86_CX = 1;
-int X86_DX = 2;
-int X86_BX = 3;
-int X86_SP = 4;
-int X86_BP = 5;
-int X86_SI = 6;
-int X86_DI = 7;
+int AX = 0;
+int CX = 1;
+int DX = 2;
+int BX = 3;
+int SP = 4;
+int BP = 5;
+int SI = 6;
+int DI = 7;
 
-void x86_op_reg_reg(int opcode, int dst, int src) {
-  /*  emit_i8(#x48);  REX.W */
+int x86_64 = 0;
+
+void rex_prefix() {
+  if (x86_64) emit_i8(#x48); /* REX.W */
+}
+
+void op_reg_reg(int opcode, int dst, int src) {
+  rex_prefix();
   emit_i8(opcode);
   emit_i8(#xc0 + 8*src + dst); /* ModR/M */
 }
 
-void x86_mov_reg_reg(int dst, int src) { x86_op_reg_reg(#x89, dst, src); }
-void x86_add_reg_reg(int dst, int src) { x86_op_reg_reg(#x01, dst, src); }
-void x86_or_reg_reg (int dst, int src) { x86_op_reg_reg(#x09, dst, src); }
-void x86_adc_reg_reg(int dst, int src) { x86_op_reg_reg(#x11, dst, src); }
-void x86_sbb_reg_reg(int dst, int src) { x86_op_reg_reg(#x19, dst, src); }
-void x86_and_reg_reg(int dst, int src) { x86_op_reg_reg(#x21, dst, src); }
-void x86_sub_reg_reg(int dst, int src) { x86_op_reg_reg(#x29, dst, src); }
-void x86_xor_reg_reg(int dst, int src) { x86_op_reg_reg(#x31, dst, src); }
-void x86_cmp_reg_reg(int dst, int src) { x86_op_reg_reg(#x39, dst, src); }
+/* probably not essential */
+void inc_reg(int dst) { rex_prefix(); emit_2_i8(#xff, #xc0 + dst); }
+void dec_reg(int dst) { rex_prefix(); emit_2_i8(#xff, #xc8 + dst); }
+void xchg_reg_reg(int dst, int src) { op_reg_reg(#x87, dst, src); }
+void test_reg_reg(int dst, int src) { op_reg_reg(#x85, dst, src); }
 
-void x86_test_reg_reg(int dst, int src) { x86_op_reg_reg(#x85, dst, src); }
-void x86_xchg_reg_reg(int dst, int src) { x86_op_reg_reg(#x87, dst, src); }
+void not_reg(int dst) { rex_prefix(); emit_2_i8(#xf7, #xd0 + dst); }
+void neg_reg(int dst) { rex_prefix(); emit_2_i8(#xf7, #xd8 + dst); }
 
-void x86_mov_reg_i32(int dst, int n) { emit_i8(#xb8 + dst); emit_i32_le(n); }
-void x86_push_reg(int src) { emit_i8(#x50 + src); }
-void x86_pop_reg (int dst) { emit_i8(#x58 + dst); }
+void shl_reg_cl(int dst) { rex_prefix(); emit_2_i8(#xd3, #xe0 + dst); }
+void shr_reg_cl(int dst) { rex_prefix(); emit_2_i8(#xd3, #xe8 + dst); }
+void sar_reg_cl(int dst) { rex_prefix(); emit_2_i8(#xd3, #xf8 + dst); }
 
-void x86_dec_eax() { emit_i8(#x48); } /* dec eax */
-void x86_test_eax_eax() { emit_2_i8(#x85, #xc0); } /* test eax, eax */
-void x86_jne_short(int n) { emit_2_i8(#x75, n); } /* jne .+$1 */
-void x86_int_i8(int n) { emit_2_i8(#xcd, n); } /* int <i8> */
-void x86_ret() { emit_i8(#xc3); } /* ret */
+void mov_reg_reg(int dst, int src) { op_reg_reg(#x89, dst, src); }
+void add_reg_reg(int dst, int src) { op_reg_reg(#x01, dst, src); }
+void or_reg_reg (int dst, int src) { op_reg_reg(#x09, dst, src); }
+void and_reg_reg(int dst, int src) { op_reg_reg(#x21, dst, src); }
+void sub_reg_reg(int dst, int src) { op_reg_reg(#x29, dst, src); }
+void xor_reg_reg(int dst, int src) { op_reg_reg(#x31, dst, src); }
+void cmp_reg_reg(int dst, int src) { op_reg_reg(#x39, dst, src); }
 
-void x86_linux32_getchar() {
-  x86_mov_reg_i32(X86_AX, 0); /* mov  eax, 0 */
-  x86_push_reg(X86_AX);       /* push eax      # buffer to read byte */
-  x86_mov_reg_i32(X86_BX, 0); /* mov  ebx, 0   # ebx = 0 = STDIN */
-  x86_mov_reg_i32(X86_DX, 1); /* mov  edx, 1   # edx = 1 = number of bytes to read */
-  x86_mov_reg_reg(X86_CX, X86_SP);  /* mov  ecx, esp # to the stack */
-  x86_mov_reg_i32(X86_AX, 3); /* mov  eax, 3   # SYS_READ */
-  x86_int_i8(#x80);           /* int  0x80     # system call */
-  x86_test_eax_eax();         /* test eax, eax */
-  x86_pop_reg(X86_AX);        /* pop  eax */
-  x86_jne_short(1);           /* jne  .+1      # skip dec */
-  x86_dec_eax();              /* dec  eax      # -1 on EOF */
+void mov_reg_i32(int dst, int n) { emit_i8(#xb8 + dst); emit_i32_le(n); }
+void push_reg(int src) { emit_i8(#x50 + src); }
+void pop_reg (int dst) { emit_i8(#x58 + dst); }
+
+void ret() { emit_i8(#xc3); }
+
+void jne_short(int n) { emit_2_i8(#x75, n); } /* jne .+$1 */
+void int_i8(int n) { emit_2_i8(#xcd, n); } /* int <i8> */
+
+void linux32_getchar() {
+  mov_reg_i32(AX, 0);    /* mov  eax, 0 */
+  push_reg(AX);          /* push eax      # buffer to read byte */
+  mov_reg_i32(BX, 0);    /* mov  ebx, 0   # ebx = 0 = STDIN */
+  mov_reg_i32(DX, 1);    /* mov  edx, 1   # edx = 1 = number of bytes to read */
+  mov_reg_reg(CX, SP);   /* mov  ecx, esp # to the stack */
+  mov_reg_i32(AX, 3);    /* mov  eax, 3   # SYS_READ */
+  int_i8(#x80);          /* int  0x80     # system call */
+  test_reg_reg(AX, AX);  /* test eax, eax */
+  pop_reg(AX);           /* pop  eax */
+  jne_short(2+x86_64);   /* jne  .+2      # skip dec */
+  dec_reg(AX);           /* dec  eax      # -1 on EOF */
 }
 
-void x86_linux32_putchar() {
-  x86_push_reg(X86_AX);       /* push eax      # buffer to write byte */
-  x86_mov_reg_i32(X86_BX, 1); /* mov  ebx, 1   # ebx = 1 = STDOUT */
-  x86_mov_reg_i32(X86_DX, 1); /* mov  edx, 1   # edx = 1 = number of bytes to write */
-  x86_mov_reg_reg(X86_CX, X86_SP);  /* mov  ecx, esp # from the stack */
-  x86_mov_reg_i32(X86_AX, 4); /* mov  eax, 4   # SYS_WRITE */
-  x86_int_i8(#x80);           /* int  0x80     # system call */
-  x86_pop_reg(X86_AX);        /* pop  eax */
+void linux32_putchar() {
+  push_reg(AX);         /* push eax      # buffer to write byte */
+  mov_reg_i32(BX, 1);   /* mov  ebx, 1   # ebx = 1 = STDOUT */
+  mov_reg_i32(DX, 1);   /* mov  edx, 1   # edx = 1 = number of bytes to write */
+  mov_reg_reg(CX, SP);  /* mov  ecx, esp # from the stack */
+  mov_reg_i32(AX, 4);   /* mov  eax, 4   # SYS_WRITE */
+  int_i8(#x80);         /* int  0x80     # system call */
+  pop_reg(AX);          /* pop  eax */
 }
 
-void x86_linux32_exit() {
-  x86_mov_reg_reg(X86_BX, X86_AX);  /* mov  ebx, eax */
-  x86_mov_reg_i32(X86_AX, 1);       /* mov  eax, 1   # SYS_EXIT */
-  x86_int_i8(#x80);                 /* int  0x80     # system call */
+void linux32_exit() {
+  mov_reg_reg(BX, AX);  /* mov  ebx, eax */
+  mov_reg_i32(AX, 1);   /* mov  eax, 1   # SYS_EXIT */
+  int_i8(#x80);         /* int  0x80     # system call */
 }
 
-void x86_linux32_print_msg(char_ptr msg) {
+void linux32_print_msg(char_ptr msg) {
   char c;
   char_ptr p = msg;
   while ((c = *(p++)) != 0) {
-    x86_mov_reg_i32(X86_AX, c);    /* mov  eax, c */
-    x86_linux32_putchar(); /* putchar */
+    mov_reg_i32(AX, c);    /* mov  eax, c */
+    linux32_putchar(); /* putchar */
   }
 }
 
 void codegen() {
-  x86_linux32_print_msg("hello world!\n");
-  x86_mov_reg_i32(X86_AX, 0); /* mov  eax, 0 */
-  x86_linux32_exit(); /* exit process with code 0 */
+  linux32_print_msg("hello world!\n");
+  mov_reg_i32(AX, 0); /* mov  eax, 0 */
+  linux32_exit(); /* exit process with code 0 */
 }
 
 int main() {
