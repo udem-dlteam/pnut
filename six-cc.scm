@@ -104,7 +104,6 @@
 (define-type local-var
   position    ; Position of the variable in the local environment
   type        ; Function param or local
-  initialized ; If the variable has been initialized
   written-to  ; If the variable has been written to
   )
 
@@ -114,11 +113,6 @@
 ;                 (local-var-position-set! (cdr p) (+ 1 (local-var-position (cdr p))))))
 ;             (table->list (ctx-loc-env ctx))))
 
-(define (mark-ctx-loc-env-initialized ctx ident)
-  (let* ((env (ctx-loc-env ctx))
-         (loc (table-ref (ctx-loc-env ctx) ident #f)))
-    (if loc
-      (local-var-initialized-set! loc #t))))
 
 ; Assumes that l1 and l2 are sorted by identifier
 ; l1 and l2 are lists of (ident . local-var) objects
@@ -131,7 +125,6 @@
                           (make-local-var
                             (or (local-var-position    e) (local-var-position    (cdr l)))
                             (or (local-var-type        e) (local-var-type        (cdr l)))
-                            (or (local-var-initialized e) (local-var-initialized (cdr l)))
                             (or (local-var-written-to  e) (local-var-written-to  (cdr l)))))
           (table-set! tbl (car l) (cdr l)))))
     ls))
@@ -143,13 +136,12 @@
     ls)
   (table->list tbl))
 
-(define (add-new-local-var ctx ident initialized #!optional (position #f))
+(define (add-new-local-var ctx ident #!optional (position #f))
   (table-set! (ctx-loc-env ctx)
               ident
               (make-local-var
                 (or position (+ 1 (table-length (ctx-loc-env ctx))))
                 (if position 'param 'local)
-                initialized
                 #f))
   ; Gather the list of all local variables.
   ; Used to initialize them all at the beginning of the execution so
@@ -519,9 +511,8 @@
     (case (car ast)
       ((six.return six.break six.continue six.literal six.list six.identifier six.internal-identifier) '())
       ((six.define-variable)
-        (let* ((var-name (cadr ast))
-               (var-init (car (cddddr ast))))
-          (list (cons var-name (make-local-var #f 'local var-init #f)))))
+        (let* ((var-name (cadr ast)))
+          (list (cons var-name (make-local-var #f 'local #f)))))
       ((six.while) (go (caddr ast)))
       ((six.for)
 
@@ -533,12 +524,12 @@
           (merge-local-variables
             (go rhs)
             (if (equal? (car lhs) 'six.identifier)
-              (list (cons lhs (make-local-var #f #f #f #t)))
+              (list (cons lhs (make-local-var #f #f #t)))
               '()))))
       ((six.x++ six.++x six.--x six.x--)
         (let ((lhs (cadr ast)))
           (if (equal? (car lhs) 'six.identifier)
-            (list (cons lhs (make-local-var #f #f #f #t)))
+            (list (cons lhs (make-local-var #f #f #t)))
             '())))
       ((six.switch)
         (apply merge-local-variables (map go (cdaddr ast))))
@@ -569,7 +560,7 @@
          (indexed-parameters
           (map cons parameters
                     (iota (length parameters)
-                          (if (or use-$1-for-return-loc?) 2 1)))))
+                          (if use-$1-for-return-loc? 2 1)))))
     (ctx-add-glo-decl!
      ctx
      (list
@@ -584,18 +575,18 @@
              (new-local-vars (cdr body-decls))
              (variables-used (gather-function-var-used body)))
 
-        (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
+        (assert-variable-names-are-safe (map car parameters))
         (assert-variable-names-are-safe (map car new-local-vars))
 
-        (add-new-local-var ctx result-loc-ident #t 1)
+        (add-new-local-var ctx result-loc-ident 1)
 
         (for-each
-          (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) #t (cdr param-and-pos)))
+          (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) (cdr param-and-pos)))
           indexed-parameters)
 
         ; Add local variables to the environment
         (for-each
-          (lambda (param) (add-new-local-var ctx (car param) (cdr param)))
+          (lambda (param) (add-new-local-var ctx (car param)))
           new-local-vars)
 
         ; Mark local variables as written to or constant
@@ -653,7 +644,7 @@
 
     (for-each
       (lambda (new-local-var)
-        (add-new-local-var ctx (car new-local-var) (cdr new-local-var))
+        (add-new-local-var ctx (car new-local-var))
 
         (if (cdr new-local-var)
           (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
@@ -662,7 +653,6 @@
 
     (comp-statement-list ctx body-rest)
 
-    ; Bug: We need to propagate the is_initialized flag of local variables to start-loc-env?
     (ctx-loc-env-set! ctx start-loc-env)))
 
 (define (comp-statement-list ctx lst)
@@ -1027,13 +1017,7 @@
               (list (comp-lvalue ctx lhs) "=" rvalue))
             (ctx-add-glo-decl!
               ctx
-              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))"))))))
-
-       ; Mark the variable as used written to, used to determine if we need to save and restore it
-       ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
-       ; but this is simple and works for now.
-       (if (is-local-var ctx lhs)
-        (mark-ctx-loc-env-initialized ctx lhs))) ; Mark local var as initialized
+              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))")))))))
       (else
        (error "unknown lhs" lhs)))))
 
