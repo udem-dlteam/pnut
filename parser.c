@@ -1624,6 +1624,8 @@ void print_string_tree(string_tree t) {
 string_tree glo_decls[GLO_DECL_SIZE];
 int glo_decl_ix = 0;
 int nest_level = 0;
+int is_tail_call = false;
+int loop_nesting_level = 0; /* Number of loops were in */
 
 void append_glo_decl(string_tree decl) {
   glo_decls[glo_decl_ix] = nest_level;
@@ -2161,11 +2163,11 @@ void comp_assignment(ast node) {
   int lhs = get_child(node, 0);
   int rhs = get_child(node, 1);
   int lhs_op = get_op(lhs);
-  int rhs_op = get_op(rhs);
   if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
-    if (rhs_op == '(') {
+    if (get_op(rhs) == '(') {
       comp_fun_call(rhs, lhs);
     } else {
+      /* If lhs is an identifier, we generate x=$(( ... )) instead of : $(( x = ... )) */
       if (lhs_op == IDENTIFIER) {
         append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_STATEMENT)));
       } else {
@@ -2179,12 +2181,15 @@ void comp_assignment(ast node) {
 
 void comp_body(ast node) {
   int i;
+  int start_is_tail_call = is_tail_call;
+  is_tail_call = false;
 
   /* TODO: Check that there aren't local variable declarations */
 
   if (node != 0) {
     while (get_op(node) == '{') {
-      /* TODO: Support tail calls */
+      /* Last statement of body is tail call if the body itself is in tail call position */
+      if (get_op(get_child(node, 1)) != '{') is_tail_call = start_is_tail_call;
       comp_statement(get_child(node, 0), false);
       node = get_child(node, 1);
     }
@@ -2227,10 +2232,65 @@ void comp_statement(ast node, int else_if) {
       }
     }
     if (!else_if) append_glo_decl(wrap_str("fi"));
-  } else if (op == '(') {
+  } else if (op == WHILE_KW) {
+    append_glo_decl(string_concat3(
+      wrap_str("while "),
+      comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
+      wrap_str(" ; do")
+    ));
+
+    loop_nesting_level += 1;
+    nest_level += 1;
+    if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
+    else { append_glo_decl(wrap_char(':')); }
+    nest_level -= 1;
+    loop_nesting_level -= 1;
+
+    append_glo_decl(wrap_str("done"));
+  } else if (op == FOR_KW) {
+    append_glo_decl(string_concat3(
+      wrap_str("while "),
+      comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
+      wrap_str(" ; do")
+    ));
+
+    loop_nesting_level += 1;
+    nest_level += 1;
+    if (get_child(node, 3) != 0) { comp_statement(get_child(node, 3), false); }
+    else { append_glo_decl(wrap_char(':')); }
+    if (get_child(node, 2)) comp_statement(get_child(node, 2), false);
+    nest_level -= 1;
+    loop_nesting_level -= 1;
+
+    append_glo_decl(wrap_str("done"));
+  }  else if (op == BREAK_KW) {
+    if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
+    /* TODO: What's the semantic of break? Should we run the end of loop action before breaking? */
+    append_glo_decl(wrap_str("break"));
+  } else if (op == CONTINUE_KW) {
+    if (loop_nesting_level == 0) fatal_error("comp_statement: continue not in loop");
+    /* We could remove the continue when in tail call position, but it's not worth doing */
+    append_glo_decl(wrap_str("continue"));
+  } else if (op == RETURN_KW) {
+    if (get_child(node, 0) != 0) {
+      append_glo_decl(string_concat3(
+        wrap_str(": $(( $1 = "),
+        comp_rvalue(get_child(node, 0), RVALUE_CTX_STATEMENT),
+        wrap_str(" ))")
+      ));
+    }
+    if (is_tail_call AND loop_nesting_level == 1) {
+      append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
+    } else {
+      /* TODO: Restore local vars */
+      append_glo_decl(wrap_str("return"));
+    }
+  } else if (op == '(') { /* six.call */
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); /* Reuse IDENTIFIER_EMPTY ast? */
-  } else if (op == '{') {
+  } else if (op == '{') { /* six.compound */
     comp_body(node);
+  } else if (op == '=') { /* six.x=y */
+    comp_assignment(node);
   } else {
     printf("%d op=%d %c", node, op, op);
     fatal_error("comp_statement: unknown statement");
