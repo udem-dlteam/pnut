@@ -2050,7 +2050,6 @@ int RVALUE_CTX_PURE = 0;
 int RVALUE_CTX_BASE = 1;
 int RVALUE_CTX_BASE_WRAPPED = 2; /* Like base context, except that we're already in $(( ... )) */
 int RVALUE_CTX_TEST = 3;
-int RVALUE_CTX_STATEMENT = 4;
 
 string_tree comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
@@ -2082,8 +2081,6 @@ string_tree comp_rvalue(ast node, int context) {
     return comp_rvalue_go(simple_ast, true, false, 0);
   } else if (context == RVALUE_CTX_TEST) {
     return comp_rvalue_go(simple_ast, false, true, 0);
-  } else if (context == RVALUE_CTX_STATEMENT) {
-    return comp_rvalue_go(simple_ast, false, false, 0);
   } else {
     fatal_error("comp_rvalue: unknown context");
   }
@@ -2173,9 +2170,9 @@ void comp_assignment(ast node) {
     } else {
       /* If lhs is an identifier, we generate x=$(( ... )) instead of : $(( x = ... )) */
       if (lhs_op == IDENTIFIER) {
-        append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_STATEMENT)));
+        append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
       } else {
-        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_STATEMENT), wrap_str(" ))")));
+        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_BASE), wrap_str(" ))")));
       }
     }
   } else {
@@ -2281,7 +2278,7 @@ void comp_statement(ast node, int else_if) {
     if (get_child(node, 0) != 0) {
       append_glo_decl(string_concat3(
         wrap_str(": $(( $1 = "),
-        comp_rvalue(get_child(node, 0), RVALUE_CTX_STATEMENT),
+        comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE),
         wrap_str(" ))")
       ));
     }
@@ -2302,7 +2299,7 @@ void comp_statement(ast node, int else_if) {
     printf("%d op=%d %c", node, op, op);
     fatal_error("comp_statement: unknown statement");
     */
-    str = comp_rvalue(node, RVALUE_CTX_STATEMENT);
+    str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str(": "), str));
     }
