@@ -54,6 +54,8 @@
   loop-nested-level   ; Are many nested loops are we in?
   loop-end-actions    ; What to do at the end of a loop. Typically an increment.
   block-type          ; What kind of block are we in? (function, loop, switch, if, ...)
+  gensym-counter      ; Counter for generating unique identifiers
+  max-gensym-counter  ; Maximum value of the gensym counter
   )
 
 (define (empty-ctx)
@@ -72,10 +74,12 @@
     0            ; loop-nested-level
     '()          ; loop-end-actions
     'default     ; block-type
+    0            ; gensym-counter
+    0            ; max-gensym-counter
     ))
 
-(define (ctx-add-glo-decl! ctx decl)
-  (ctx-glo-decls-set! ctx (cons (cons decl (ctx-level ctx)) (ctx-glo-decls ctx))))
+(define (ctx-add-glo-decl! ctx decl #!optional (level #f) )
+  (ctx-glo-decls-set! ctx (cons (cons decl (or level (ctx-level ctx))) (ctx-glo-decls ctx))))
 
 (define (scope-glo-decls ctx body)
   (let ((old-glo-decls (ctx-glo-decls ctx)))
@@ -84,6 +88,14 @@
           (new-glo-decls (ctx-glo-decls ctx)))
       (ctx-glo-decls-set! ctx old-glo-decls) ; Reset the global declarations to the previous state
       (cons res (reverse (map car new-glo-decls))))))
+
+(define (scope-glo-decls-with-level ctx body)
+  (let ((old-glo-decls (ctx-glo-decls ctx)))
+    (ctx-glo-decls-set! ctx '())
+    (let ((res (body))
+          (new-glo-decls (ctx-glo-decls ctx)))
+      (ctx-glo-decls-set! ctx old-glo-decls) ; Reset the global declarations to the previous state
+      (reverse new-glo-decls))))
 
 (define (glo-decl-unlines decls)
   (define (concat-line l) (if (pair? l) (string-concatenate l) l))
@@ -162,7 +174,7 @@
 (define (env-var ctx ident #!optional (prefixed-by-dollar #f))
   (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
     (cond
-      ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
+      ((and (number? (cadr ident)) (equal? 'six.identifier (car ident))) ; Number identifiers are always local and don't appear in the local environment
         (string-append (if prefixed-by-dollar "" "$") (number->string (cadr ident))))
       (local-var
         (if (or (or (local-var-written-to local-var) (equal? 'local (local-var-type local-var)))
@@ -199,7 +211,9 @@
     (symbol->string (cadr ident))))
 
 (define (internal-ref ident)
-  (string+symbol "__" (cadr ident)))
+  (if (exact-integer? (cadr ident))
+    (string-append "__g" (number->string (cadr ident))) ; From alloc-identifier
+    (string+symbol "__" (cadr ident))))
 
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
@@ -592,35 +606,43 @@
         ; Mark local variables as written to or constant
         (ctx-loc-env-set! ctx (list->table (filter (lambda (v) (local-var-position (cdr v))) (merge-local-variables (table->list (ctx-loc-env ctx)) variables-used))))
 
-        ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-        (save-local-variables ctx)
-        (if (not use-$1-for-return-loc?)
-          (ctx-add-glo-decl!
-            ctx
-            (list result-loc-var
-                  "=\"$1\"; shift "
-                  "# Remove result_loc param")))
+        ; After setting the environment, we compile the body of the function
+        ; and then call save-local-variables so it can save the local variables
+        ; and synthetic variables that were used in the function.
+        (let ((comped-body (scope-glo-decls-with-level ctx (lambda () (comp-body ctx body-rest)))))
 
-        (for-each
-          (lambda (p)
-            (if (or (is-mutable-local-var ctx (caar p)) (not optimize-readonly-params?))
-              (comp-assignment ctx `(six.x=y ,(caar p) (six.identifier ,(cdr p))))))
-          indexed-parameters)
+          ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
+          (save-local-variables ctx)
+          (if (not use-$1-for-return-loc?)
+            (ctx-add-glo-decl!
+              ctx
+              (list result-loc-var
+                    "=\"$1\"; shift "
+                    "# Remove result_loc param")))
 
-        (for-each
-          (lambda (new-local-var)
-            (if (cdr new-local-var)
-              (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
-              (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
-          new-local-vars)
+          (for-each
+            (lambda (p)
+              (if (or (is-mutable-local-var ctx (caar p)) (not optimize-readonly-params?))
+                (comp-assignment ctx `(six.x=y ,(caar p) (six.identifier ,(cdr p))))))
+            indexed-parameters)
 
-        (if (null? body)
-          (ctx-add-glo-decl! ctx (list ":"))
-          (comp-body ctx body-rest))
+          (for-each
+            (lambda (new-local-var)
+              (if (cdr new-local-var)
+                (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+                (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+            new-local-vars)
 
-        (restore-local-variables ctx)
+          (if (null? comped-body)
+            (ctx-add-glo-decl! ctx (list ":"))
+            (for-each (lambda (l) (ctx-add-glo-decl! ctx (car l) (cdr l))) comped-body))
 
-        (ctx-loc-env-set! ctx start-loc-env)))
+          (restore-local-variables ctx)
+
+          (ctx-max-gensym-counter-set! ctx (max (ctx-max-gensym-counter ctx) (ctx-gensym-counter ctx))) ; Keep track of the maximum gensym counter
+          (ctx-gensym-counter-set! ctx 0) ; Reset the gensym counter
+
+          (ctx-loc-env-set! ctx start-loc-env))))
 
     (ctx-add-glo-decl!
      ctx
@@ -902,7 +924,6 @@
 ; Remove the variable we are assigning to from the list of local variables to save.
 ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
 ; Some ideas on how to reduce the number of variables saved:
-;  [x] Only save the variables that have been written to/initialized.
 ;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
 ;     - [x] Primitives
 ;     - [ ] For user-defined functions
@@ -922,13 +943,14 @@
                    (or (local-var-written-to local-var)           ; Save because it's a mutable variable
                        (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
                        (not optimize-readonly-params?))))))       ; or save because optimization is disabled
-         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
+         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident))
+         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-gensym-counter ctx) 1))))
 
-      (if (or (pair? local-vars-to-save) (not use-$1-for-return-loc?))
+      (if (or (pair? local-vars-to-save) (pair? synthetic-vars) (not use-$1-for-return-loc?))
         ; Idea: Pass the value to save directly to save_loc_var instead of the variable name
         (ctx-add-glo-decl!
           ctx
-          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))))
+          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) (append local-vars-to-save synthetic-vars))) " "))))))
 
 (define (restore-local-variables ctx)
   (let* ((sorted-local-vars
@@ -941,14 +963,15 @@
                    (or (local-var-written-to local-var)           ; Save because it's a mutable variable
                        (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
                        (not optimize-readonly-params?))))))       ; or save because optimization is disabled
-         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
+         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident))
+         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-gensym-counter ctx) 1))))
 
-      (if (or (pair? local-vars-to-save) (not use-$1-for-return-loc?))
+      (if (or (pair? local-vars-to-save) (pair? synthetic-vars) (not use-$1-for-return-loc?))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var "
                 (if use-$1-for-return-loc? "$1 " "")
-                (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save) " "))))))
+                (string-concatenate (map (lambda (l) (env-var ctx l)) (append local-vars-to-save synthetic-vars)) " "))))))
 
 ; Like comp-fun-call, but checks that the parameters are simple and not nested function calls.
 ; This function is not necessary, but we don't want to silently compile complexe function calls
@@ -1056,8 +1079,8 @@
   (define literal-inits (make-table))
   (define contains-side-effect #f)
   (define (alloc-identifier)
-    (let ((id (gensym)))
-      (list 'six.internal-identifier id)))
+    (ctx-gensym-counter-set! ctx (+ (ctx-gensym-counter ctx) 1))
+    (list 'six.internal-identifier (ctx-gensym-counter ctx)))
 
   (define (go-inplace-arithmetic-op assigned-op inplace-arith #!optional (side-effect #f))
     (if inline-inplace-arithmetic-ops
@@ -1527,13 +1550,18 @@
     (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=$__argv")
     ; This must be after make_argv because if one of the local variable is argv,
     ; writing to it will overwrite the $@ array in zsh.
-    (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
+    (let ((local-vars
+              (map format-local-var
+                   (map car (table->list (ctx-all-variables ctx)))))
+          (synthetic-vars
+              (map (lambda (c) (internal-ref (list 'six.internal-identifier c)))
+                   (iota (ctx-max-gensym-counter ctx) 1))))
       (if (not (null? local-vars))
         (unlines
           ""
           "# Initialize local vars so set -u can be used"
           (string-append ": $(( "
-                        (string-concatenate (map (lambda (l) (format-local-var l)) local-vars) " = ")
+                        (string-concatenate (append local-vars synthetic-vars) " = ")
                         " = 0 ))"))))
     ""
     ))
