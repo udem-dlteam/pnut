@@ -51,7 +51,7 @@
   level               ; The current level of nesting
   tail?               ; Is the current statement is in tail position?
   single-statement?   ; If the current block has only one statement
-  loop?               ; Are we enclosed in loop?
+  loop-nested-level   ; Are many nested loops are we in?
   loop-end-actions    ; What to do at the end of a loop. Typically an increment.
   block-type          ; What kind of block are we in? (function, loop, switch, if, ...)
   )
@@ -69,7 +69,7 @@
     0            ; level
     #f           ; tail?
     #f           ; single-statement?
-    #f           ; loop?
+    0            ; loop-nested-level
     '()          ; loop-end-actions
     'default     ; block-type
     ))
@@ -754,19 +754,18 @@
     ((six.while)
       (let ((code-test (comp-loop-test ctx (cadr ast)))
             (body (caddr ast))
-            (start-loop? (ctx-loop? ctx))
             (start-block-type (ctx-block-type ctx)))
         (ctx-add-glo-decl!
           ctx
           (list "while " code-test " ; do"))
-        (ctx-loop?-set! ctx #t)
+        (ctx-loop-nested-level-set! ctx (+ (ctx-loop-nested-level ctx) 1))
         (ctx-block-type-set! ctx 'loop)
         (nest ctx
           ;; If the body is empty, add a : to avoid syntax errors
           (if (equal? '(six.compound) body)
             (ctx-add-glo-decl! ctx (list ":")))
           (comp-statement ctx (caddr ast)))
-        (ctx-loop?-set! ctx start-loop?)
+        (ctx-loop-nested-level-set! ctx (- (ctx-loop-nested-level ctx) 1))
         (ctx-block-type-set! ctx start-block-type)
         (ctx-add-glo-decl!
           ctx
@@ -777,7 +776,6 @@
            (expr2 (caddr ast))
            (expr3 (cadddr ast))
            (body (car (cddddr ast)))
-           (start-loop? (ctx-loop? ctx))
            (start-loop-end-actions (ctx-loop-end-actions ctx))
            (start-block-type (ctx-block-type ctx)))
        (comp-statement ctx expr1)
@@ -789,7 +787,7 @@
          (ctx-add-glo-decl!
             ctx
             (list "while " code-test " ; do"))
-         (ctx-loop?-set! ctx #t)
+         (ctx-loop-nested-level-set! ctx (+ (ctx-loop-nested-level ctx) 1))
          (ctx-loop-end-actions-set! ctx loop-end-actions)
          (ctx-block-type-set! ctx 'loop)
          (nest ctx
@@ -801,7 +799,7 @@
             (lambda (action) (ctx-add-glo-decl! ctx action))
             loop-end-actions)
          )
-         (ctx-loop?-set! ctx start-loop?)
+         (ctx-loop-nested-level-set! ctx (- (ctx-loop-nested-level ctx) 1))
          (ctx-loop-end-actions-set! ctx start-loop-end-actions)
          (ctx-block-type-set! ctx start-block-type)
          (ctx-add-glo-decl!
@@ -864,8 +862,8 @@
      (if (ctx-tail? ctx)
       (begin
         ; We're in a loop, so we won't fall through to the next statement without a break statement
-        (if (ctx-loop? ctx)
-          (ctx-add-glo-decl! ctx (list "break"))
+        (if (eq? 1 (ctx-loop-nested-level ctx))
+          (ctx-add-glo-decl! ctx (list "break")) ; Does this work in 2 nested loops?
           ; The block only has one statement (a return without a value), and we
           ; can't have the block empty unless it's a case statement.
           (if (and (ctx-single-statement? ctx)
@@ -878,12 +876,12 @@
         (restore-local-variables ctx)
         (ctx-add-glo-decl! ctx (list "return")))))
     ((six.break)
-      (if (not (ctx-loop? ctx)) (error "break statement outside of a loop"))
+      (if (eq? 0 (ctx-loop-nested-level ctx)) (error "break statement outside of a loop"))
       (ctx-add-glo-decl!
             ctx
             (list "break")))
     ((six.continue)
-      (if (not (ctx-loop? ctx)) (error "continue statement outside of a loop"))
+      (if (eq? 0 (ctx-loop-nested-level ctx)) (error "continue statement outside of a loop"))
       (if (or (not (ctx-tail? ctx)) (ctx-single-statement? ctx))
         (begin
           (for-each
