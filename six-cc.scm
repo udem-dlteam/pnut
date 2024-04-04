@@ -1505,6 +1505,7 @@
     (string-append sp-var "=0 # Note: Stack grows up, not down")
     ""
     "save_loc_var() {"
+    "  __count=$#"
     (if (not use-$1-for-return-loc?)
       (unlines
       (string-append
@@ -1521,11 +1522,16 @@
     "    : $((save_loc_var_$" sp-var "=$1))")
     "    shift"
     "  done"
+    "  # Save the number of arguments. Used in rest_loc_var"
+    "  : $((__SP += 1))"
+    "  : $((save_loc_var_$__SP=$__count))"
     "}"
     ""
     "rest_loc_var() {"
     (if use-$1-for-return-loc?
     "  __result_loc=$1; shift")
+    "  __adjust=$((save_loc_var_$__SP - $#)) # Number of saved variables not being restored"
+    "  : $((__SP -= 1))"
     "  while [ $# -gt 0 ]; do"
     "    # Make sure result_loc is not overwritten"
     (if use-$1-for-return-loc?
@@ -1543,6 +1549,8 @@
     "  eval \"" result-loc-var "=\\$save_loc_var_$" sp-var "\"")
     (string-append
     "  : $((" sp-var " -= 1))")))
+    (string-append
+    "  : $((" sp-var " -= __adjust))")
     "}"
     ""
     ""
