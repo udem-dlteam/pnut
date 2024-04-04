@@ -1206,14 +1206,14 @@
       (ctx-add-glo-decl! ctx (def_str_code (env-var ctx id) val))))
   (for-each comp-literal-init literal-inits))
 
-(define (comp-rvalue ctx ast context-tag)
+(define (comp-rvalue ctx ast context)
   (let* ((side-effects-res (handle-side-effects ctx ast))
          (new-ast (car side-effects-res))
          (fun-calls-to-replace (cadr side-effects-res))
          (pre-side-effects (caddr side-effects-res))
          (literal-inits (cadddr side-effects-res))
          (contains-side-effect (car (cddddr side-effects-res))))
-    (define (comp-side-effects-then-rvalue wrapped compiling-test)
+    (define (comp-side-effects-then-rvalue rvalue-context)
       (begin
         (for-each
           (lambda (e) (ctx-add-glo-decl! ctx e))
@@ -1222,21 +1222,23 @@
         (for-each
           (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
           fun-calls-to-replace)
-        (comp-rvalue-go ctx new-ast wrapped compiling-test '())))
+        (comp-rvalue-go ctx new-ast rvalue-context '())))
 
-    (case (car context-tag)
-      ((return index-lvalue assignment)
-        (comp-side-effects-then-rvalue (cadr context-tag) #f))
+    (case (car context)
+      ((index-lvalue assignment)
+        (comp-side-effects-then-rvalue (if (cadr context) 'in-arithmetic-expansion 'need-arithmetic-expansion)))
+      ((return)
+        (comp-side-effects-then-rvalue 'in-arithmetic-expansion))
       ((argument switch-control)
-        (comp-side-effects-then-rvalue #f #f))
+        (comp-side-effects-then-rvalue 'need-arithmetic-expansion))
       ((statement-expr)
         (cons contains-side-effect
-              (comp-side-effects-then-rvalue #f #f)))
+              (comp-side-effects-then-rvalue 'need-arithmetic-expansion)))
       ((test-if test-loop)
         ; TODO: This can create long lines, use \ to split them.
         (let ((side-effects-and-res
                 (scope-glo-decls ctx
-                  (lambda () (comp-side-effects-then-rvalue #f (not arithmetic-conditions?))))))
+                  (lambda () (comp-side-effects-then-rvalue (if arithmetic-conditions? 'need-arithmetic-expansion 'test))))))
           (if arithmetic-conditions?
             (string-append
               (glo-decl-unlines (cdr side-effects-and-res))
@@ -1246,10 +1248,10 @@
             (string-append (glo-decl-unlines (cdr side-effects-and-res)) (car side-effects-and-res)))))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
-          (comp-rvalue-go ctx new-ast #t #f '())
+          (comp-rvalue-go ctx new-ast 'in-arithmetic-expansion '())
           (error "function calls, side effects and string literals in pure context not supported" ast)))
       (else
-        (error "unknown context tag" context-tag)))))
+        (error "unknown context tag" context)))))
 
 (define (six-op-string op #!optional (test-operand #f))
   (case op
@@ -1280,7 +1282,7 @@
     (else           (error "unknown six op" op))))
 
 ; TODO: Distinguish between wrapped in $(( ... )) and wrapped in ( ... )?
-(define (comp-rvalue-go ctx ast wrapped compiling-test test-side-effects)
+(define (comp-rvalue-go ctx ast rvalue-context test-side-effects)
   (define (with-prefixed-side-effects . strs)
     (let ((comped-side-effects
             (cdr (scope-glo-decls ctx
@@ -1296,26 +1298,27 @@
                        "; }"))))
 
   (define (wrap-if-needed parens-otherwise? . lines)
-    (if (not wrapped)
-      (if compiling-test
-        (with-prefixed-side-effects "[ $((" (apply string-append lines) ")) -ne 0 ]")
+    (case rvalue-context
+      ((in-arithmetic-expansion)
+        (if parens-otherwise?
+          (string-append "(" (apply string-append lines) ")")
+          (apply string-append lines)))
+      ((need-arithmetic-expansion)
         (string-append "$((" (apply string-append lines) "))"))
-      (if parens-otherwise?
-        (string-append "(" (apply string-append lines) ")")
-        (apply string-append lines))))
+      ((test)
+        (with-prefixed-side-effects "[ $((" (apply string-append lines) ")) -ne 0 ]"))
+      (else
+        (error "unknown rvalue context" rvalue-context))))
 
   ; Used to supports the case `if/while (c) { ... }`, where c is a variable.
   ; This is otherwise handled by wrap-if-needed, but we don't want to wrap
   ; in $(( ... )) here.
   (define (wrap-in-condition-if-needed . lines)
-    (if compiling-test
+    (if (eq? rvalue-context 'test)
       (with-prefixed-side-effects "[ " (apply string-append lines) " -ne 0 ]")
       (apply string-append lines)))
 
-  (if (and wrapped compiling-test)
-    (error "Can't be compiling in a test context and wrapped in $(( ... ))" ast))
-
-  (if (and (not compiling-test) (pair? test-side-effects))
+  (if (and (not (eq? rvalue-context 'test)) (pair? test-side-effects))
     (error "Can't have test side effects in a non-test context" ast test-side-effects))
 
   (case (car ast)
@@ -1330,12 +1333,12 @@
                   (let ((ident (character-ident (string-ref val 0))))
                     (table-set! (ctx-characters ctx) (string-ref val 0) ident)
                     (wrap-in-condition-if-needed
-                      (string-append (if wrapped "" "$") (format-non-local-var ident))))
+                      (string-append (if (eq? rvalue-context 'in-arithmetic-expansion) "" "$") (format-non-local-var ident))))
                   (wrap-in-condition-if-needed (number->string (char->integer (string-ref val 0)))))
                 (begin
                   (ctx-data-set! ctx (cons val (ctx-data ctx)))
                   (wrap-in-condition-if-needed
-                    (string-append (if wrapped "" "$") (obj-ref (- (length (ctx-data ctx)) 1)))))))
+                    (string-append (if (eq? rvalue-context 'in-arithmetic-expansion) "" "$") (obj-ref (- (length (ctx-data ctx)) 1)))))))
              (else
               "unknown literal" ast))))
     ((six.list)
@@ -1348,13 +1351,15 @@
               (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
               (string-append "$" (obj-ref (- (length (ctx-data ctx)) 1)))))))
     ((six.identifier six.internal-identifier)
-      (if wrapped
+      ; This may be wrong when the identifier is modified by the arithmetic operation,
+      ; since the value is only read once before the arithmetic expansion is evaluated.
+      (if (eq? rvalue-context 'in-arithmetic-expansion)
         (env-var ctx ast)
         (wrap-in-condition-if-needed "$" (env-var ctx ast #t) "")))
     ((six.x&&y |six.x\|\|y|)
       ; Note, this could also be compiled in a single [ ] block using -a and -o,
       ; which I think are POSIX compliant but are deprecated.
-      (if compiling-test
+      (if (eq? rvalue-context 'test)
         (let ((wrap-left (and (member (caadr ast) '(six.x&&y |six.x\|\|y|))
                               (not (equal? (car ast) (caadr ast)))))
               (wrap-right (and (member (caaddr ast) '(six.x&&y |six.x\|\|y|))
@@ -1369,11 +1374,11 @@
                         ; wrap it in parenthesis. It adds parenthesis that
                         ; sometimes aren't needed, but it hopefully helps readability.
                         (if wrap-left "{ " "")
-                        (comp-rvalue-go ctx (cadr ast) wrapped #t (cadddr ast))
+                        (comp-rvalue-go ctx (cadr ast) 'test (cadddr ast))
                         (if wrap-left "; }" "")
                         (six-op-string (car ast) #t)
                         (if wrap-right "{ " "")
-                        (comp-rvalue-go ctx (caddr ast) wrapped #t (car (cddddr ast)))
+                        (comp-rvalue-go ctx (caddr ast) 'test (car (cddddr ast)))
                         (if wrap-right "; }" "")))
         (begin
           ; Check if left-side-conditional-fun-calls and right-side-conditional-fun-calls are empty
@@ -1383,41 +1388,41 @@
               (error "Arithmetic with function calls in && and || not supported")))
 
           (wrap-if-needed #f
-                          (comp-rvalue-go ctx (cadr ast) #t #f '())
+                          (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                           (six-op-string (car ast) #t)
-                          (comp-rvalue-go ctx (caddr ast) #t #f '())))))
+                          (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))))
     ((six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
-     (if compiling-test
+      (if (equal? rvalue-context 'test)
         (with-prefixed-side-effects "[ "
-                                    (comp-rvalue-go ctx (cadr ast) wrapped #f '())
+                                    (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '())
                                     (six-op-string (car ast) #t)
-                                    (comp-rvalue-go ctx (caddr ast) wrapped #f '())
+                                    (comp-rvalue-go ctx (caddr ast) 'need-arithmetic-expansion '())
                                     " ]"))
          (wrap-if-needed #t
-                        (comp-rvalue-go ctx (cadr ast) #t #f '())
+                        (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                         (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) #t #f '())))
+                        (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y)
      (wrap-if-needed #t
-                    (comp-rvalue-go ctx (cadr ast) #t #f '())
+                    (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion'())
                     (six-op-string (car ast))
-                    (comp-rvalue-go ctx (caddr ast) #t #f '())))
+                    (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
     ((six.-x)
      ; Check if the rest of ast is a literal, if so directly return the negated value
      (if (and (equal? 'six.literal (caadr ast)) (exact-integer? (cadadr ast)))
-       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) wrapped #f test-side-effects)
-       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) wrapped #f '()) ")"))))
+       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) rvalue-context test-side-effects)
+       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '()) ")"))))
     ((six.x?y:z)
       (wrap-if-needed #t
-                      (comp-rvalue-go ctx (cadr ast) #t #f '())
+                      (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                       " ? "
-                      (comp-rvalue-go ctx (caddr ast) #t #f '())
+                      (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())
                       " : "
-                      (comp-rvalue-go ctx (cadddr ast) #t #f '())))
+                      (comp-rvalue-go ctx (cadddr ast) 'in-arithmetic-expansion '())))
     ((six.index)
-     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f '()) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '()) "))"))
     ((six.arrow)
-     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f '()) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '()) "))"))
     ((six.++x)
      (wrap-if-needed #t (comp-lvalue ctx (cadr ast)) " += 1"))
     ((six.--x)
@@ -1428,19 +1433,19 @@
      ; to generate clearer code.
      ; Case where it would be useful: !(a == b && b == c) is compiled as
      ; [ $(( a == b && b == c)) -ne 0 ] instead of [ $a -ne $b ] [ $b -ne $c ].
-     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) #t #f '())))
+     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())))
     ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x=y)
      (wrap-if-needed #t (comp-lvalue ctx (cadr ast))
                         (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) #t #f '())))
+                        (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
     ((six.*x)
-     ; Setting wrapped to false even if it's wrapped in $(( ... )) because
+     ; Using need-arithmetic-expansion even if it's wrapped in $(( ... )) because
      ; we need another layer of wrapping if it's a complex expression, i.e. not
      ; a literal or a variable.
-     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) #f #f '())))
+     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '())))
     ((six.**x)
      ; ^ Same reason here
-     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) #f #f '()) "))"))
+     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '()) "))"))
     ((six.x++)
      (error "x++ should have been replaced with x - 1 (and ++x side effect) by comp-rvalue"))
     ((six.x--)
