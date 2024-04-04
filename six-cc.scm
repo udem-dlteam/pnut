@@ -1573,11 +1573,22 @@
         (unlines
           ""
           "# Initialize local vars so set -u can be used"
-          (string-append ": $(( "
-                        (string-concatenate (append local-vars synthetic-vars) " = ")
-                        " = 0 ))"))))
-    ""
-    ))
+          (apply unlines
+          (map
+            (lambda (s) (string-append ": $(( " s " = 0 ))"))
+            ; 107 = 120 - 13 (length of ": $(( " + " = 0 ))")
+            (string-concatenate-with-breaks 107 " = " (append local-vars synthetic-vars)))))))))
+
+; Like string-concatenate, but returns a list of string with maximum length N.
+(define (string-concatenate-with-breaks N sep lst)
+  (let loop ((lst lst) (acc '()))
+    (if (null? lst)
+      (list (string-concatenate (reverse acc) sep))
+      (let ((new-acc (cons (car lst) acc)))
+        (if (<= N (string-length (string-concatenate new-acc sep)))
+          (cons (string-concatenate (reverse acc) sep)
+                (loop lst '()))
+          (loop (cdr lst) new-acc))))))
 
 (define (runtime-postlude)
   (unlines
