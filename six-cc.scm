@@ -55,6 +55,7 @@
   loop-end-actions    ; What to do at the end of a loop. Typically an increment.
   block-type          ; What kind of block are we in? (function, loop, switch, if, ...)
   gensym-counter      ; Counter for generating unique identifiers
+  fun-gensym-counter  ; Maximum value of the gensym counter, scoped to the function
   max-gensym-counter  ; Maximum value of the gensym counter
   )
 
@@ -75,6 +76,7 @@
     '()          ; loop-end-actions
     'default     ; block-type
     0            ; gensym-counter
+    0            ; max-fun-gensym-counter
     0            ; max-gensym-counter
     ))
 
@@ -639,9 +641,6 @@
 
           (restore-local-variables ctx)
 
-          (ctx-max-gensym-counter-set! ctx (max (ctx-max-gensym-counter ctx) (ctx-gensym-counter ctx))) ; Keep track of the maximum gensym counter
-          (ctx-gensym-counter-set! ctx 0) ; Reset the gensym counter
-
           (ctx-loc-env-set! ctx start-loc-env))))
 
     (ctx-add-glo-decl!
@@ -772,6 +771,7 @@
         (loop new-rest)))))
 
 (define (comp-statement ctx ast #!optional (else-if? #f))
+  (ctx-gensym-counter-set! ctx 0) ; Reset the gensym counter for each statement
   (case (car ast)
     ((six.while)
       (let ((code-test (comp-loop-test ctx (cadr ast)))
@@ -880,7 +880,7 @@
      (if (pair? (cdr ast))
       (ctx-add-glo-decl!
         ctx
-        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " ))")))
+        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return)) " ))")))
      (if (ctx-tail? ctx)
       (begin
         ; We're in a loop, so we won't fall through to the next statement without a break statement
@@ -944,7 +944,7 @@
                        (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
                        (not optimize-readonly-params?))))))       ; or save because optimization is disabled
          (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident))
-         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-gensym-counter ctx) 1))))
+         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-fun-gensym-counter ctx) 1))))
 
       (if (or (pair? local-vars-to-save) (pair? synthetic-vars) (not use-$1-for-return-loc?))
         ; Idea: Pass the value to save directly to save_loc_var instead of the variable name
@@ -964,7 +964,7 @@
                        (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
                        (not optimize-readonly-params?))))))       ; or save because optimization is disabled
          (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident))
-         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-gensym-counter ctx) 1))))
+         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-fun-gensym-counter ctx) 1))))
 
       (if (or (pair? local-vars-to-save) (pair? synthetic-vars) (not use-$1-for-return-loc?))
         (ctx-add-glo-decl!
@@ -1080,6 +1080,9 @@
   (define contains-side-effect #f)
   (define (alloc-identifier)
     (ctx-gensym-counter-set! ctx (+ (ctx-gensym-counter ctx) 1))
+    (ctx-fun-gensym-counter-set! ctx (max (ctx-fun-gensym-counter ctx) (ctx-gensym-counter ctx))) ; Keep track of the maximum gensym counter for the function
+    (ctx-max-gensym-counter-set! ctx (max (ctx-max-gensym-counter ctx) (ctx-gensym-counter ctx))) ; Keep track of the maximum gensym counter globally
+
     (list 'six.internal-identifier (ctx-gensym-counter ctx)))
 
   (define (go-inplace-arithmetic-op assigned-op inplace-arith #!optional (side-effect #f))
@@ -1098,8 +1101,11 @@
         (let* ((id (alloc-identifier))
                (fun-name (car ast))
                (fun-params (cdr ast))
+               (start-gensym-counter (ctx-gensym-counter ctx))
                (replaced-params (map (lambda (p) (go p executes-conditionally)) fun-params))
                (new-fun-call (cons fun-name replaced-params)))
+          ; Release the allocated identifiers used to store the function parameters.
+          (ctx-gensym-counter-set! ctx start-gensym-counter)
           (if (and executes-conditionally (not arithmetic-conditions?))
             (set! conditional-fun-calls (cons (cons id new-fun-call) conditional-fun-calls))
             (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls)))
