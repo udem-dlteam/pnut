@@ -1965,7 +1965,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == PLUS_EQ OR op == MINUS_EQ OR op == STAR_EQ OR op == SLASH_EQ OR op == PERCENT_EQ OR op == '=') {
       sub1 = comp_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
-      return wrap_if_needed(true, context, test_side_effects, string_concat4(sub1, op_to_str(op), sub2, wrap_char(';')));
+      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == '[') { /* six.index */
       sub1 = comp_array_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
