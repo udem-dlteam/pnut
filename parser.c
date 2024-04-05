@@ -2156,9 +2156,7 @@ void comp_fun_call(ast node, ast assign_to) {
   append_glo_decl(comp_fun_call_code(node, assign_to));
 }
 
-void comp_assignment(ast node) {
-  int lhs = get_child(node, 0);
-  int rhs = get_child(node, 1);
+void comp_assignment(ast lhs, ast rhs) {
   int lhs_op = get_op(lhs);
   if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
     if (get_op(rhs) == '(') {
@@ -2172,6 +2170,7 @@ void comp_assignment(ast node) {
       }
     }
   } else {
+    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
     fatal_error("unknown lhs");
   }
 }
@@ -2309,7 +2308,7 @@ void comp_statement(ast node, int else_if) {
   } else if (op == '{') { /* six.compound */
     comp_body(node);
   } else if (op == '=') { /* six.x=y */
-    comp_assignment(node);
+    comp_assignment(get_child(node, 0), get_child(node, 1));
   } else {
     /*
     printf("%d op=%d %c", node, op, op);
@@ -2334,7 +2333,7 @@ void comp_glo_decl(ast node) {
   int op = get_op(node);
 
   if (op == '=') { /* Assignations */
-   comp_assignment(node);
+   comp_assignment(get_child(node, 0), get_child(node, 1));
   } else {
     /* Allow all operations to appear at the top level while fun and var decls can't be parsed */
     /* TODO: Make this case an error when we support function declarations */
