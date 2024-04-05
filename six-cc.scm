@@ -1316,7 +1316,7 @@
       (else
         (error "unknown rvalue context" rvalue-context))))
 
-  ; Used to supports the case `if/while (c) { ... }`, where c is a variable.
+  ; Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
   ; This is otherwise handled by wrap-if-needed, but we don't want to wrap
   ; in $(( ... )) here.
   (define (wrap-in-condition-if-needed . lines)
@@ -1398,19 +1398,19 @@
                           (six-op-string (car ast) #t)
                           (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))))
     ((six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
-      (if (equal? rvalue-context 'test)
+      (if (eq? rvalue-context 'test)
         (with-prefixed-side-effects "[ "
                                     (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '())
                                     (six-op-string (car ast) #t)
                                     (comp-rvalue-go ctx (caddr ast) 'need-arithmetic-expansion '())
-                                    " ]"))
+                                    " ]")
          (wrap-if-needed #t
                         (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                         (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
+                        (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '()))))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y)
      (wrap-if-needed #t
-                    (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion'())
+                    (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                     (six-op-string (car ast))
                     (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
     ((six.-x)
