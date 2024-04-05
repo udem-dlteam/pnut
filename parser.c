@@ -851,6 +851,7 @@ ast parse_definition(int local) {
   ast params;
   ast body;
   ast this_type;
+  ast result = 0;
 
   /* use a simplified syntax for definitions */
 
@@ -867,9 +868,8 @@ ast parse_definition(int local) {
         this_type = new_ast0(get_op(type), stars);
       }
 
-      name = val;
-
       expect_tok(IDENTIFIER);
+      name = val;
 
       if (tok == '(') {
 
@@ -891,9 +891,7 @@ ast parse_definition(int local) {
           body = parse_compound_statement();
         }
 
-        new_ast4(FUN_DECL, name, this_type, params, body);
-
-        break;
+        return new_ast4(FUN_DECL, name, this_type, params, body);
 
       } else {
 
@@ -908,7 +906,7 @@ ast parse_definition(int local) {
           init = parse_conditional_expression();
         }
 
-        new_ast3(VAR_DECL, name, this_type, init);
+        result = new_ast3(VAR_DECL, name, this_type, init);
 
         if (tok == ';') {
           get_tok();
@@ -922,6 +920,7 @@ ast parse_definition(int local) {
       }
     }
   }
+  return result;
 }
 
 ast parse_parenthesized_expression() {
