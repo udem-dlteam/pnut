@@ -166,7 +166,7 @@ endif
 	done
 
 c4-for-six.sh: six-cc.scm c4-for-six.c
-	gsi six-cc.scm c4-for-six.c --initialize-memory-when-alloc false > c4-for-six.sh
+	gsi six-cc.scm c4-for-six.c --malloc-init > c4-for-six.sh
 
 c4_by_c4-for-six-op.golden: c4-for-six.sh c4.c
 	ksh ./c4-for-six.sh -b c4.c > c4_by_c4-for-six-op.golden
