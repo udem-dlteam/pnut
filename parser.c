@@ -2469,7 +2469,7 @@ void comp_statement(ast node, int else_if) {
     if (is_tail_call AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
     } else {
-      /* TODO: Restore local vars */
+      restore_local_vars();
       append_glo_decl(wrap_str("return"));
     }
   } else if (op == '(') { /* six.call */
@@ -2490,6 +2490,89 @@ void comp_statement(ast node, int else_if) {
   }
 }
 
+ast get_leading_var_declarations(ast node) {
+  ast result = 0;
+
+  while (get_op(node) == '{') {
+    if (get_op(get_child(node, 0)) != VAR_DECL) break;
+
+    result = new_ast2(',', get_child(node, 0), result);
+    node = get_child(node, 1);
+  }
+
+  return new_ast2(',', result, node);
+}
+
+void comp_glo_define_procedure(ast node) {
+  ast name = get_child(node, 0);
+  /* ast fun_type = get_child(node, 1); */
+  ast params = get_child(node, 2);
+  ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
+  ast local_vars = get_child(local_vars_and_body, 0);
+  ast body = get_child(local_vars_and_body, 1);
+  text body_code;
+  int body_start_decl_ix;
+  int body_end_decl_ix;
+  ast car;
+
+  assert_idents_are_safe(params);
+  assert_idents_are_safe(local_vars);
+
+  add_vars_to_local_env(params, 2); /* Start position at 2 because 1 is taken by result_loc */
+  add_vars_to_local_env(local_vars, local_env_size + 2);
+
+  /* TODO: Analyze vars that are mutable */
+
+  append_glo_decl(string_concat3(
+    wrap_str("function "), /* TODO: Something is overwriting the first character of this string */
+    wrap_str(string_pool + heap[name + 1]),
+    wrap_str("() {")
+  ));
+  /* TODO: Add indexed parameters */
+
+  is_tail_call = true;
+  nest_level += 1;
+
+  /*
+    After setting the environment, we compile the body of the function and then
+    call save-local-variables so it can save the local variables and synthetic
+    variables that were used in the function.
+  */
+  body_start_decl_ix = glo_decl_ix;
+  comp_body(body);
+  body_end_decl_ix = glo_decl_ix;
+  undo_glo_decls(body_start_decl_ix);
+
+  save_local_vars();
+
+  /* TODO: Assign parameters */
+
+  /* Initialize local vars */
+  while (local_vars != 0) {
+    car = get_child(local_vars, 0);
+    /* TODO: Replace with ternary expression? */
+    if (get_child(car, 2) == 0) { comp_assignment(new_ast1(IDENTIFIER, get_child(car, 0)), new_ast1(INTEGER, 0)); }
+    else { comp_assignment(new_ast1(IDENTIFIER, get_child(car, 0)), get_child(car, 2)); }
+    local_vars = get_child(local_vars, 1);
+  }
+
+  replay_glo_decls(body_start_decl_ix, body_end_decl_ix, false);
+
+  restore_local_vars();
+
+  nest_level -= 1;
+
+  append_glo_decl(wrap_str("}\n"));
+
+  /* Reset local env */
+  local_env_size = 0;
+  local_env = 0;
+}
+
+void comp_glo_variable_declaration(ast node) {
+  fatal_error("Global variable declaration not yet supported");
+}
+
 /*
 This function compiles 1 top level declaration at the time.
 The 3 types of supported top level declarations are:
@@ -2503,19 +2586,14 @@ void comp_glo_decl(ast node) {
 
   if (op == '=') { /* Assignations */
    comp_assignment(get_child(node, 0), get_child(node, 1));
+  } else if (op == VAR_DECL) {
+
+  } else if (op == FUN_DECL) {
+    comp_glo_define_procedure(node);
   } else {
-    /* Allow all operations to appear at the top level while fun and var decls can't be parsed */
-    /* TODO: Make this case an error when we support function declarations */
-    comp_statement(node, false);
-    /*
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
-    */
   }
-}
-
-void codegen_statement(ast node) {
-  comp_glo_decl(node);
 }
 
 int main() {
@@ -2528,9 +2606,7 @@ int main() {
   get_tok();
 
   while (tok != EOF) {
-    /* node = parse_definition(0); */
-    node = parse_statement();
-    codegen_statement(node);
+    comp_glo_decl(parse_definition(0));
   }
   print_glo_decls();
   /*
