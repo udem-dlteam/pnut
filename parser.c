@@ -35,6 +35,16 @@ int in_range(int x, int lo, int hi) {
 #define in_range(x, lo, hi) ((x >= lo) AND (x <= hi))
 #endif
 
+/* Redefining strcmp because it's not part of the Shell runtime */
+int strcmp(char_ptr str1, char_ptr str2) {
+  int i = 0;
+  while (str1[i] == str2[i]) {
+    if (str1[i] == '\0') return 0;
+    i += 1;
+  }
+  return str1[i] - str2[i];
+}
+
 int AUTO_KW        = 300;
 int BREAK_KW       = 301;
 int CASE_KW        = 302;
@@ -113,6 +123,9 @@ int TEXT_SUBSTRING = 428;
 int IDENTIFIER_INTERNAL = 429;
 int IDENTIFIER_EMPTY = 430;
 /* Note: 431 is already taken by AMP_EQ */
+int LOCAL_VAR = 432;
+int KIND_LOCAL = 433;
+int KIND_PARAM = 434;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -1629,6 +1642,8 @@ int is_tail_call = false;
 int loop_nesting_level = 0; /* Number of loops were in */
 int loop_end_actions_start = 0; /* Start position of declarations for the last action in a for loop */
 int loop_end_actions_end = 0;   /* End position of declarations for the last action in a for loop */
+ast local_env = 0;
+ast local_env_size = 0;
 
 void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
@@ -1682,6 +1697,127 @@ void print_glo_decls() {
       print_text(glo_decls[i + 2]);
       putchar('\n');
     }
+  }
+}
+
+/* TODO: Remove this eventually or move to debug module */
+void print_local_env() {
+  ast env = local_env;
+  ast ident;
+  printf("##### print_local_env\n");
+  while (env != 0) {
+    ident = get_child(get_child(env, 0), 0);
+
+    printf("Ident: %d = %s\n", ident, string_pool + heap[ident+1]);
+    env = get_child(env, 1);
+  }
+}
+
+/*
+The local environment is a list of variables represented using ',' nodes.
+A variable is a LOCAL_VAR node with 4 children:
+  1. Ident
+  2. Position of the variable in the shell environment ($1, $2, ...)
+  3. Kind of variable (function param or local var)
+  4. Constant: if the variable is never assigned to
+*/
+void add_var_to_local_env(ast ident, int position) {
+  ast env = local_env;
+
+  /* Check if the variable is not in env. This should always do nothing */
+  while (env != 0) {
+    if (get_child(get_child(env, 0), 0) == ident) {
+      fatal_error("add_var_to_local_env: variable already in local environment");
+    }
+    env = get_child(env, 1);
+  }
+
+  /* The var is not part of the environment, so we add it */
+  ident = new_ast4(LOCAL_VAR, ident, position, KIND_LOCAL, false);
+  local_env = new_ast2(',', ident, local_env);
+  local_env_size += 1;
+}
+
+void add_vars_to_local_env(ast lst, int position) {
+  ast decl;
+  while (lst != 0) {
+    decl = get_child(lst, 0);
+    add_var_to_local_env(get_child(decl, 0), position);
+    lst = get_child(lst, 1);
+    position += 1;
+  }
+}
+
+/*
+  Since global and internal variables are prefixed with _, we restrict the name
+  of variables to not start with _. Also, because some shells treat some
+  variables as special, we prevent their use. Additionally, EOF and NULL cannot
+  be redefined.
+*/
+void assert_idents_are_safe(ast lst) {
+  ast ident;
+  char_ptr name;
+  while (lst != 0) {
+    ident = get_child(get_child(lst, 0), 0);
+    name = string_pool + heap[ident+1];
+    if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+      printf("%s ", name);
+      fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    }
+
+    lst = get_child(lst, 1);
+  }
+}
+
+void save_local_vars() {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    ident = get_child(local_var, 0);
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
+
+    if (res != 0) { res = string_concat3(wrap_str(string_pool + heap[ident+1]), wrap_char(' '), res); }
+    else { res = wrap_str(string_pool + heap[ident+1]); }
+
+    env = get_child(env, 1);
+  }
+
+  /* TODO: Add synthetic args */
+
+  if (res != 0) {
+    append_glo_decl(string_concat(wrap_str("save_loc_var "), res));
+  }
+}
+
+/*
+  The only difference between save_local_vars and restore_local_vars is the
+  order of the arguments and the call to rest_loc_var instead of save_loc_var.
+*/
+void restore_local_vars() {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    ident = get_child(local_var, 0);
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
+
+    if (res != 0) { res = string_concat3(res, wrap_char(' '), wrap_str(string_pool + heap[ident+1])); }
+    else { res = wrap_str(string_pool + heap[ident+1]); }
+
+    env = get_child(env, 1);
+  }
+
+  /* TODO: Add synthetic args */
+
+  if (res != 0) {
+    append_glo_decl(string_concat(wrap_str("rest_loc_var $1 "), res));
   }
 }
 
