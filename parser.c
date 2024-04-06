@@ -1638,7 +1638,7 @@ void print_text(text t) {
 text glo_decls[GLO_DECL_SIZE];
 int glo_decl_ix = 0;
 int nest_level = 0;
-int is_tail_call = false;
+int in_tail_position = false;   /* Is the current statement in tail position */
 int loop_nesting_level = 0; /* Number of loops were in */
 int loop_end_actions_start = 0; /* Start position of declarations for the last action in a for loop */
 int loop_end_actions_end = 0;   /* End position of declarations for the last action in a for loop */
@@ -2340,15 +2340,15 @@ void comp_assignment(ast lhs, ast rhs) {
 
 void comp_body(ast node) {
   int i;
-  int start_is_tail_call = is_tail_call;
-  is_tail_call = false;
+  int start_in_tail_position = in_tail_position;
+  in_tail_position = false;
 
   /* TODO: Check that there aren't local variable declarations */
 
   if (node != 0) {
     while (get_op(node) == '{') {
-      /* Last statement of body is tail call if the body itself is in tail call position */
-      if (get_op(get_child(node, 1)) != '{') is_tail_call = start_is_tail_call;
+      /* Last statement of body is in tail position if the body itself is in tail position */
+      if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
       comp_statement(get_child(node, 0), false);
       node = get_child(node, 1);
     }
@@ -2456,7 +2456,7 @@ void comp_statement(ast node, int else_if) {
   } else if (op == CONTINUE_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: continue not in loop");
     replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
-    /* We could remove the continue when in tail call position, but it's not worth doing */
+    /* We could remove the continue when in tail position, but it's not worth doing */
     append_glo_decl(wrap_str("continue"));
   } else if (op == RETURN_KW) {
     if (get_child(node, 0) != 0) {
@@ -2466,7 +2466,7 @@ void comp_statement(ast node, int else_if) {
         wrap_str(" ))")
       ));
     }
-    if (is_tail_call AND loop_nesting_level == 1) {
+    if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
     } else {
       restore_local_vars();
@@ -2530,7 +2530,7 @@ void comp_glo_define_procedure(ast node) {
   ));
   /* TODO: Add indexed parameters */
 
-  is_tail_call = true;
+  in_tail_position = true;
   nest_level += 1;
 
   /*
