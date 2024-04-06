@@ -1894,7 +1894,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
   ast right_conditional_fun_calls;
 
   if (nb_children == 0) {
-    if (op == IDENTIFIER OR op == INTEGER OR op == CHARACTER) {
+    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == INTEGER OR op == CHARACTER) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
@@ -1927,6 +1927,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
           while (get_op(sub2) == ',') {
             sub1 = handle_side_effects_go(get_child(sub2, 0), executes_conditionally);
             set_child(sub2, 0, sub1);
+            sub2 = get_child(sub2, 1);
           }
         } else { /* sub2 is the first argument, not wrapped in a cons cell */
           sub2 = handle_side_effects_go(sub2, executes_conditionally);
