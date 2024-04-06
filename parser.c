@@ -1635,15 +1635,18 @@ void print_text(text t) {
 /* Codegen context */
 
 #define GLO_DECL_SIZE 100000
-text glo_decls[GLO_DECL_SIZE];
-int glo_decl_ix = 0;
-int nest_level = 0;
-int in_tail_position = false;   /* Is the current statement in tail position */
-int loop_nesting_level = 0; /* Number of loops were in */
+text glo_decls[GLO_DECL_SIZE];  /* Generated code */
+int glo_decl_ix = 0;            /* Index of last generated line of code  */
+int nest_level = 0;             /* Current level of indentation */
+int in_tail_position = false;   /* Is the current statement in tail position? */
+int loop_nesting_level = 0;     /* Number of loops surrounding the current statement */
 int loop_end_actions_start = 0; /* Start position of declarations for the last action in a for loop */
 int loop_end_actions_end = 0;   /* End position of declarations for the last action in a for loop */
-ast local_env = 0;
-ast local_env_size = 0;
+ast local_env = 0;              /* List of local variables */
+ast local_env_size = 0;         /* Size of the environment */
+int gensym_ix = 0;              /* Counter for fresh_ident */
+int fun_gensym_ix = 0;          /* Maximum value of gensym_ix for the current function */
+int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions */
 
 void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
@@ -1698,6 +1701,13 @@ void print_glo_decls() {
       putchar('\n');
     }
   }
+}
+
+ast fresh_ident() {
+  gensym_ix++;
+  fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
+  max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
+  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
 }
 
 /* TODO: Remove this eventually or move to debug module */
@@ -1774,6 +1784,16 @@ void save_local_vars() {
   ast local_var;
   ast ident;
   text res = 0;
+  int counter = fun_gensym_ix;
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    /* This is a common pattern, extract in its own function? */
+    if (res != 0) { res = string_concat3(env_var(ident), wrap_char(' '), res); }
+    else { res = env_var(ident); }
+    counter -= 1;
+  }
+
   while (env != 0) {
     local_var = get_child(env, 0);
     ident = get_child(local_var, 0);
@@ -1802,6 +1822,16 @@ void restore_local_vars() {
   ast local_var;
   ast ident;
   text res = 0;
+  int counter = fun_gensym_ix;
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    /* This is a common pattern, extract in its own function? */
+    if (res != 0) { res = string_concat3(res, wrap_char(' '), env_var(ident)); }
+    else { res = env_var(ident); }
+    counter -= 1;
+  }
+
   while (env != 0) {
     local_var = get_child(env, 0);
     ident = get_child(local_var, 0);
@@ -1865,13 +1895,6 @@ text test_op_to_str(int op) {
   }
 }
 
-int gensym_ix = 0;
-
-ast fresh_ident() {
-  gensym_ix++;
-  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
-}
-
 ast replaced_fun_calls = 0;
 ast conditional_fun_calls = 0;
 ast literals_inits = 0;
@@ -1887,6 +1910,7 @@ int contains_side_effects = 0;
 ast handle_side_effects_go(ast node, int executes_conditionally) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
+  int start_gensym_ix;
   ast sub1;
   ast sub2;
   ast previous_conditional_fun_calls;
@@ -1919,14 +1943,16 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     }
   } else if (nb_children == 2) {
     if ((op == '(')) { /* Function call */
+      sub1 = fresh_ident(); /* Unique identifier for the function call */
+
+      start_gensym_ix = gensym_ix;
 
       /* Traverse the arguments and replace them with the result of handle_side_effects_go */
       sub2 = get_child(node, 1);
       if (sub2 != 0) { /* Check if not an empty list */
         if (get_op(sub2) == ',') {
           while (get_op(sub2) == ',') {
-            sub1 = handle_side_effects_go(get_child(sub2, 0), executes_conditionally);
-            set_child(sub2, 0, sub1);
+            set_child(sub2, 0, handle_side_effects_go(get_child(sub2, 0), executes_conditionally));
             sub2 = get_child(sub2, 1);
           }
         } else { /* sub2 is the first argument, not wrapped in a cons cell */
@@ -1935,7 +1961,11 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
         }
       }
 
-      sub1 = fresh_ident();
+      /*
+        All the temporary variables used for the function parameters can be
+        reused after the function call, so resetting the gensym counter.
+      */
+      gensym_ix = start_gensym_ix;
 
       if (executes_conditionally) { conditional_fun_calls = new_ast2(',', new_ast2(',', sub1, node), conditional_fun_calls); }
       else { replaced_fun_calls = new_ast2(',', new_ast2(',', sub1, node), replaced_fun_calls); }
@@ -2532,6 +2562,7 @@ void comp_glo_define_procedure(ast node) {
   /* TODO: Add indexed parameters */
 
   in_tail_position = true;
+  fun_gensym_ix = 0;
   nest_level += 1;
 
   /*
