@@ -93,40 +93,40 @@ int CHARACTER  = 402;
 int STRING     = 403;
 
 int AMP_AMP    = 404;
-int AMP_EQ     = 431; /* TODO: Renumber these */
-int ARROW      = 405;
-int BAR_BAR    = 406;
-int BAR_EQ     = 407;
-int CARET_EQ   = 408;
-int EQ_EQ      = 409;
-int GT_EQ      = 410;
-int LSHIFT_EQ  = 411;
-int LSHIFT     = 412;
-int LT_EQ      = 413;
-int MINUS_EQ   = 414;
-int MINUS_MINUS= 415;
-int EXCL_EQ    = 416;
-int PERCENT_EQ = 417;
-int PLUS_EQ    = 418;
-int PLUS_PLUS  = 419;
-int RSHIFT_EQ  = 420;
-int RSHIFT     = 421;
-int SLASH_EQ   = 422;
-int STAR_EQ    = 423;
+int AMP_EQ     = 405;
+int ARROW      = 406;
+int BAR_BAR    = 407;
+int BAR_EQ     = 408;
+int CARET_EQ   = 409;
+int EQ_EQ      = 410;
+int GT_EQ      = 411;
+int LSHIFT_EQ  = 412;
+int LSHIFT     = 413;
+int LT_EQ      = 414;
+int MINUS_EQ   = 415;
+int MINUS_MINUS= 416;
+int EXCL_EQ    = 417;
+int PERCENT_EQ = 418;
+int PLUS_EQ    = 419;
+int PLUS_PLUS  = 420;
+int RSHIFT_EQ  = 421;
+int RSHIFT     = 422;
+int SLASH_EQ   = 423;
+int STAR_EQ    = 424;
 
-int TEXT_TREE = 424;
-int TEXT_INTEGER = 425;
-int TEXT_CHAR = 426;
-int TEXT_STRING = 427;
-int TEXT_SUBSTRING = 428;
+int TEXT_TREE = 425;
+int TEXT_INTEGER = 426;
+int TEXT_CHAR = 427;
+int TEXT_STRING = 428;
+int TEXT_SUBSTRING = 429;
 
-int IDENTIFIER_INTERNAL = 429;
-int IDENTIFIER_STRING = 430;
-int IDENTIFIER_EMPTY = 432;
-/* Note: 431 is already taken by AMP_EQ */
-int LOCAL_VAR = 433;
-int KIND_LOCAL = 434;
-int KIND_PARAM = 435;
+int IDENTIFIER_INTERNAL = 430;
+int IDENTIFIER_STRING = 431;
+int IDENTIFIER_DOLLAR = 432;
+int IDENTIFIER_EMPTY = 433;
+int LOCAL_VAR = 434;
+int KIND_LOCAL = 435;
+int KIND_PARAM = 436;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -856,6 +856,61 @@ int is_type_starter(int tok) {
   return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW);
 }
 
+ast parse_declaration() {
+  ast type;
+  int stars;
+  int name;
+  ast this_type;
+  ast result = 0;
+
+  if (is_type_starter(tok)) {
+
+    type = parse_type();
+    stars = parse_stars();
+
+    if (stars != 0)
+      this_type = new_ast0(get_op(type), stars);
+
+    name = val;
+
+    expect_tok(IDENTIFIER);
+
+    if ((stars == 0) AND (get_op(type) == VOID_KW))
+      syntax_error("variable with void type");
+
+    if (tok == '[')
+      syntax_error("array declaration only allowed at global level");
+
+
+    result = new_ast3(VAR_DECL, new_ast0(IDENTIFIER, name), this_type, 0);
+  }
+
+  return result;
+}
+
+int parse_declaration_list() {
+  ast decl = parse_declaration(true);
+  ast result = 0;
+  ast tail;
+  if (decl != 0) {
+    result = new_ast2(',', decl, 0);
+    tail = result;
+
+    while (tok == ',') {
+      get_tok();
+      decl = parse_declaration(true);
+      if (decl == 0) { break; }
+
+      decl = new_ast2(',', decl, 0);
+      set_child(tail, 1, decl);
+      tail = decl;
+    }
+  }
+
+  return result;
+}
+
+/* Note: Uses a simplified syntax for definitions */
 ast parse_definition(int local) {
 
   ast type;
@@ -866,8 +921,6 @@ ast parse_definition(int local) {
   ast body;
   ast this_type;
   ast result = 0;
-
-  /* use a simplified syntax for definitions */
 
   if (is_type_starter(tok)) {
 
@@ -882,8 +935,9 @@ ast parse_definition(int local) {
         this_type = new_ast0(get_op(type), stars);
       }
 
-      expect_tok(IDENTIFIER);
       name = val;
+
+      expect_tok(IDENTIFIER);
 
       if (tok == '(') {
 
@@ -893,9 +947,9 @@ ast parse_definition(int local) {
 
         get_tok();
 
-        params = 0;
+        params = parse_declaration_list();
 
-        expect_tok(')'); /* TODO: parse parameter list */
+        expect_tok(')');
 
         if (tok == ';') {
           /* forward declaration */
@@ -1753,9 +1807,11 @@ text format_non_local_var(ast ident) {
     return string_concat(wrap_str("__g"), get_val(ident));
   } else if (op == IDENTIFIER_STRING) {
     return string_concat(wrap_str("__str_"), get_val(ident));
+  } else if (op == IDENTIFIER_DOLLAR) {
+    return wrap_int(get_val(ident));
   } else if (op == IDENTIFIER_EMPTY) {
     return wrap_str("__");
-  } if (op == IDENTIFIER) { /* Global var */
+  } else if (op == IDENTIFIER) { /* Global var */
     return string_concat(wrap_char('_'), wrap_str(string_pool + heap[get_val(ident)+1]));
   } else {
     printf("op=%d %c", op, op);
@@ -1764,27 +1820,26 @@ text format_non_local_var(ast ident) {
 }
 
 text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
-  ast env = local_env;
   ast var;
+  text res;
 
   if (get_op(ident) == IDENTIFIER) {
     var = find_var_in_local_env(ident);
     if (var != -1) {
       if (get_child(var, 2) == KIND_PARAM AND get_child(var, 3)) {
-        if (prefixed_with_dollar) {
-          return wrap_int(get_child(var, 2));
-        } else {
-          return string_concat(wrap_char('$'), wrap_int(get_child(var, 2)));
-        }
+        res = wrap_int(get_child(var, 2));
+        if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
       } else {
-        return wrap_str(string_pool + heap[get_val(ident)+1]);
+        res = wrap_str(string_pool + heap[get_val(ident)+1]);
       }
     } else {
-      return format_non_local_var(ident);
+      res = format_non_local_var(ident);
     }
   } else {
-    return format_non_local_var(ident);
+    res = format_non_local_var(ident);
   }
+
+  return res;
 }
 
 text env_var(ast ident) {
@@ -2006,7 +2061,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
   ast right_conditional_fun_calls;
 
   if (nb_children == 0) {
-    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == INTEGER OR op == CHARACTER) {
+    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
@@ -2174,7 +2229,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == CHARACTER) {
       /* TODO: Map characters to constant instead of hardcoding ascii code */
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
-    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
+    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var(node); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
@@ -2631,10 +2686,11 @@ void comp_glo_define_procedure(ast node) {
   ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
   ast local_vars = get_child(local_vars_and_body, 0);
   ast body = get_child(local_vars_and_body, 1);
-  text body_code;
+  text comment = 0;
+  int i;
   int body_start_decl_ix;
   int body_end_decl_ix;
-  ast local_var;
+  ast var;
 
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
@@ -2644,12 +2700,22 @@ void comp_glo_define_procedure(ast node) {
 
   /* TODO: Analyze vars that are mutable */
 
-  append_glo_decl(string_concat3(
-    wrap_str("function "), /* TODO: Something is overwriting the first character of this string */
-    wrap_str(string_pool + heap[name + 1]),
-    wrap_str("() {")
+  /* Show the mapping between the function parameters and $1, $2, etc. */
+  i = 2; /* Start at 2 because $1 is assigned to result location */
+  while (params != 0) {
+    var = get_child(params, 0);
+    comment = concatenate_strings_with(comment, string_concat3(env_var(get_child(var, 0)), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    params = get_child(params, 1);
+    i += 1;
+  }
+  if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
+
+  append_glo_decl(string_concat4(
+    wrap_str("function "),
+    wrap_str(string_pool + heap[get_val(name) + 1]),
+    wrap_str("() {"),
+    comment
   ));
-  /* TODO: Add indexed parameters */
 
   in_tail_position = true;
   fun_gensym_ix = 0;
@@ -2667,14 +2733,22 @@ void comp_glo_define_procedure(ast node) {
 
   save_local_vars();
 
-  /* TODO: Assign parameters */
+  /* Initialize parameters */
+  params = get_child(node, 2); /* Reload params because params is now = 0 */
+  i = 2;
+  while (params != 0) {
+    var = get_child(params, 0);
+    comp_assignment(get_child(var, 0), new_ast0(IDENTIFIER_DOLLAR, i));
+    params = get_child(params, 1);
+    i += 1;
+  }
 
   /* Initialize local vars */
   while (local_vars != 0) {
-    local_var = get_child(local_vars, 0);
+    var = get_child(local_vars, 0);
     /* TODO: Replace with ternary expression? */
-    if (get_child(local_var, 2) == 0) { comp_assignment(get_child(local_var, 0), new_ast0(INTEGER, 0)); }
-    else { comp_assignment(get_child(local_var, 0), get_child(local_var, 2)); }
+    if (get_child(var, 2) == 0) { comp_assignment(get_child(var, 0), new_ast0(INTEGER, 0)); }
+    else { comp_assignment(get_child(var, 0), get_child(var, 2)); }
     local_vars = get_child(local_vars, 1);
   }
 
@@ -2728,7 +2802,7 @@ void comp_glo_variable_declaration(ast node) {
     if (init != 0) {
       init_text = comp_constant(init);
     } else {
-      init_text = wrap_str("0");
+      init_text = wrap_char('0');
     }
     append_glo_decl(
       string_concat4(
