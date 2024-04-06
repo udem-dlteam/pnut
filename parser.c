@@ -1521,7 +1521,7 @@ void print_string_char(int c) {
 #define text int
 #define TEXT_POOL_SIZE 1000000
 int text_pool[TEXT_POOL_SIZE];
-int text_alloc = 0;
+int text_alloc = 1; /* Start at 0 because 0 is the empty text */
 
 #ifndef SIX_CC
 /* Place prototype of mutually recursive functions here */
@@ -1615,6 +1615,7 @@ text string_concat4(text t1, text t2, text t3, text t4) {
 }
 
 text string_concat5(text t1, text t2, text t3, text t4, text t5) {
+  if (text_alloc + 7 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_TREE;
   text_pool[text_alloc + 1] = 5;
   text_pool[text_alloc + 2] = t1;
@@ -1631,7 +1632,7 @@ void print_text(text t) {
   if (t == 0) return;
 
   if (text_pool[t] == TEXT_TREE) {
-    for (i = 0; i < text_pool[t + 1]; i++) {
+    for (i = 0; i < text_pool[t + 1]; i += 1) {
       print_text(text_pool[t + i + 2]);
     }
   } /* else if (text_pool[t] == TEXT_STRING) {
