@@ -2448,8 +2448,6 @@ void comp_body(ast node) {
   int start_in_tail_position = in_tail_position;
   in_tail_position = false;
 
-  /* TODO: Check that there aren't local variable declarations */
-
   if (node != 0) {
     while (get_op(node) == '{') {
       /* Last statement of body is in tail position if the body itself is in tail position */
@@ -2584,6 +2582,8 @@ void comp_statement(ast node, int else_if) {
     comp_body(node);
   } else if (op == '=') { /* six.x=y */
     comp_assignment(get_child(node, 0), get_child(node, 1));
+  } else if (op == VAR_DECL) {
+    fatal_error("Variable declaration must be at the beginning of a function");
   } else {
     /*
     printf("%d op=%d %c", node, op, op);
