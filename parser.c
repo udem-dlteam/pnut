@@ -1565,35 +1565,6 @@ text string_concat(text t1, text t2) {
   return (text_alloc += 4) - 4;
 }
 
-/*
-  TODO: Optimize wrap_str and wrap_substr
-  For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
-  Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
-*/
-text wrap_str(char_ptr s) {
-  int i = 0;
-  int result = 0;
-
-  while (s[i] != 0) {
-    result = string_concat(result, wrap_char(s[i]));
-    i += 1;
-  }
-
-  return result;
-}
-
-text wrap_substr(char_ptr s, int len) {
-  int i = 0;
-  int result = 0;
-
-  while (s[i] != 0 AND i < len) {
-    result = string_concat(result, wrap_char(s[i]));
-    i += 1;
-  }
-
-  return result;
-}
-
 text string_concat3(text t1, text t2, text t3) {
   if (text_alloc + 5 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_TREE;
@@ -1625,6 +1596,41 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   text_pool[text_alloc + 5] = t4;
   text_pool[text_alloc + 6] = t5;
   return (text_alloc += 7) - 7;
+}
+
+/*
+  TODO: Optimize wrap_str and wrap_substr
+  For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
+  Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
+*/
+text wrap_str(char_ptr s) {
+  int i = 0;
+  int result = 0;
+
+  while (s[i] != 0) {
+    result = string_concat(result, wrap_char(s[i]));
+    i += 1;
+  }
+
+  return result;
+}
+
+text wrap_substr(char_ptr s, int len) {
+  int i = 0;
+  int result = 0;
+
+  while (s[i] != 0 AND i < len) {
+    result = string_concat(result, wrap_char(s[i]));
+    i += 1;
+  }
+
+  return result;
+}
+
+text concatenate_strings_with(text t1, text t2, text sep) {
+  if (t1 == 0) return t2;
+  if (t2 == 0) return t1;
+  return string_concat3(t1, sep, t2);
 }
 
 void print_text(text t) {
@@ -1875,8 +1881,7 @@ void save_local_vars() {
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
     /* This is a common pattern, extract in its own function? */
-    if (res != 0) { res = string_concat3(format_non_local_var(ident), wrap_char(' '), res); }
-    else { res = format_non_local_var(ident); }
+    res = concatenate_strings_with(format_non_local_var(ident), res, wrap_char(' '));
     counter -= 1;
   }
 
@@ -1886,8 +1891,7 @@ void save_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    if (res != 0) { res = string_concat3(env_var(ident), wrap_char(' '), res); }
-    else { res = env_var(ident); }
+    res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
 
     env = get_child(env, 1);
   }
@@ -1913,8 +1917,7 @@ void restore_local_vars() {
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
     /* This is a common pattern, extract in its own function? */
-    if (res != 0) { res = string_concat3(res, wrap_char(' '), format_non_local_var(ident)); }
-    else { res = format_non_local_var(ident); }
+    res = concatenate_strings_with(res, format_non_local_var(ident), wrap_char(' '));
     counter -= 1;
   }
 
@@ -1924,8 +1927,7 @@ void restore_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    if (res != 0) { res = string_concat3(res, wrap_char(' '), env_var(ident)); }
-    else { res = env_var(ident); }
+    res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
 
     env = get_child(env, 1);
   }
