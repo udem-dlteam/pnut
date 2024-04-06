@@ -904,12 +904,28 @@ ast parse_definition(int local) {
           body = parse_compound_statement();
         }
 
-        return new_ast4(FUN_DECL, name, this_type, params, body);
+        return new_ast4(FUN_DECL, new_ast0(IDENTIFIER, name), this_type, params, body);
 
       } else {
 
         if ((stars == 0) AND (get_op(type) == VOID_KW)) {
           syntax_error("variable with void type");
+        }
+
+        if (tok == '[') {
+          if (local) {
+            syntax_error("array declaration only allowed at global level");
+          }
+
+          get_tok();
+          if (tok == INTEGER) {
+            this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
+            get_tok();
+          } else {
+            syntax_error("array size must be an integer constant");
+          }
+
+          expect_tok(']');
         }
 
         init = 0;
@@ -919,7 +935,7 @@ ast parse_definition(int local) {
           init = parse_conditional_expression();
         }
 
-        result = new_ast3(VAR_DECL, name, this_type, init);
+        result = new_ast3(VAR_DECL, new_ast0(IDENTIFIER, name), this_type, init);
 
         if (tok == ';') {
           get_tok();
@@ -2601,8 +2617,54 @@ void comp_glo_define_procedure(ast node) {
   local_env = 0;
 }
 
+text comp_constant(ast node) {
+  int op = get_op(node);
+  if (op == INTEGER) {
+    return wrap_int(-get_val(node));
+  } else if (op == CHARACTER) {
+    return wrap_int(get_val(node));
+  } else if (op == STRING) {
+    return wrap_str(string_pool + get_val(node));
+  } else if ((op == '-') AND get_nb_children(node) == 1) {
+    return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
+  } else {
+    fatal_error("comp_constant: unknown constant");
+    return -1;
+  }
+}
+
 void comp_glo_variable_declaration(ast node) {
-  fatal_error("Global variable declaration not yet supported");
+  ast name = get_child(node, 0);
+  ast type = get_child(node, 1);
+  ast init = get_child(node, 2);
+
+  text init_text;
+
+  if (get_op(type) == '[') { /* Array declaration */
+    append_glo_decl(
+      string_concat4(
+        wrap_str("defarr "),
+        env_var(name),
+        wrap_char(' '),
+        wrap_int(get_val(get_child(type, 0)))
+      )
+    );
+  } else {
+    /* TODO: Replace with ternary expression? */
+    if (init != 0) {
+      init_text = comp_constant(init);
+    } else {
+      init_text = wrap_str("0");
+    }
+    append_glo_decl(
+      string_concat4(
+        wrap_str("defglo "),
+        env_var(name),
+        wrap_char(' '),
+        init_text
+      )
+    );
+  }
 }
 
 /*
@@ -2619,7 +2681,7 @@ void comp_glo_decl(ast node) {
   if (op == '=') { /* Assignations */
    comp_assignment(get_child(node, 0), get_child(node, 1));
   } else if (op == VAR_DECL) {
-
+    comp_glo_variable_declaration(node);
   } else if (op == FUN_DECL) {
     comp_glo_define_procedure(node);
   } else {
