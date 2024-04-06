@@ -1575,7 +1575,7 @@
           (synthetic-vars
               (map (lambda (c) (internal-ref (list 'six.internal-identifier c)))
                    (iota (ctx-max-gensym-counter ctx) 1))))
-      (if (not (null? local-vars))
+      (if (or (not (null? local-vars)) (not (null? synthetic-vars)))
         (unlines
           ""
           "# Initialize local vars so set -u can be used"
