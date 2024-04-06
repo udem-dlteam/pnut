@@ -80,7 +80,7 @@
     0            ; max-gensym-counter
     ))
 
-(define (ctx-add-glo-decl! ctx decl #!optional (level #f) )
+(define (ctx-add-glo-decl! ctx decl #!optional (level #f))
   (ctx-glo-decls-set! ctx (cons (cons decl (or level (ctx-level ctx))) (ctx-glo-decls ctx))))
 
 (define (scope-glo-decls ctx body)
@@ -531,7 +531,6 @@
           (list (cons var-name (make-local-var #f 'local #f)))))
       ((six.while) (go (caddr ast)))
       ((six.for)
-
         (merge-local-variables (go (cadr ast)) (go (car (cddddr ast)))))
       ((six.if)    (merge-local-variables (go (caddr ast)) (if (pair? (cdddr ast)) (go (cadddr ast)) '())))
       ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
@@ -584,6 +583,7 @@
       (if (pair? indexed-parameters) " # " "")
       (string-concatenate (map (lambda (p) (string-append (symbol->string (cadaar p)) ": $" (number->string (cdr p)))) indexed-parameters) ", ")))
     (ctx-tail?-set! ctx #t)
+    (ctx-fun-gensym-counter-set! ctx 0) ; Reset the gensym counter
     (nest ctx
       (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
              (body-decls (get-body-declarations body))
@@ -608,9 +608,9 @@
         ; Mark local variables as written to or constant
         (ctx-loc-env-set! ctx (list->table (filter (lambda (v) (local-var-position (cdr v))) (merge-local-variables (table->list (ctx-loc-env ctx)) variables-used))))
 
-        ; After setting the environment, we compile the body of the function
-        ; and then call save-local-variables so it can save the local variables
-        ; and synthetic variables that were used in the function.
+        ; After setting the environment, we compile the body of the function and
+        ; then call save-local-variables so it can save the local variables and
+        ; synthetic variables that were used in the function.
         (let ((comped-body (scope-glo-decls-with-level ctx (lambda () (comp-body ctx body-rest)))))
 
           ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
