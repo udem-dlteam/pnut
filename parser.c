@@ -2462,13 +2462,14 @@ void comp_statement(ast node, int else_if) {
     start_loop_end_actions_start = loop_end_actions_start;
     start_loop_end_actions_end = loop_end_actions_end;
 
-    comp_statement(get_child(node, 0), false);
+    if (get_child(node, 0)) comp_statement(get_child(node, 0), false);
 
-    append_glo_decl(string_concat3(
-      wrap_str("while "),
-      comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST),
-      wrap_str(" ; do")
-    ));
+    str = wrap_char(':'); /* Empty statement */
+    if (get_child(node, 1)) {
+      str = comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST);
+    }
+
+    append_glo_decl(string_concat3(wrap_str("while "), str, wrap_str(" ; do")));
 
     /*
       This is a little bit of a hack, but it makes things so much simpler.
@@ -2487,7 +2488,7 @@ void comp_statement(ast node, int else_if) {
     loop_nesting_level += 1;
     nest_level += 1;
     if (get_child(node, 3) != 0) { comp_statement(get_child(node, 3), false); }
-    else { append_glo_decl(wrap_char(':')); }
+    else if (get_child(node, 2) == 0) { append_glo_decl(wrap_char(':')); }
     replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
 
     nest_level -= 1;
