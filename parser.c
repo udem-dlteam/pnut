@@ -121,11 +121,12 @@ int TEXT_STRING = 427;
 int TEXT_SUBSTRING = 428;
 
 int IDENTIFIER_INTERNAL = 429;
-int IDENTIFIER_EMPTY = 430;
+int IDENTIFIER_STRING = 430;
+int IDENTIFIER_EMPTY = 432;
 /* Note: 431 is already taken by AMP_EQ */
-int LOCAL_VAR = 432;
-int KIND_LOCAL = 433;
-int KIND_PARAM = 434;
+int LOCAL_VAR = 433;
+int KIND_LOCAL = 434;
+int KIND_PARAM = 435;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -1473,7 +1474,7 @@ ast parse_compound_statement() {
 
   ast result = 0;
   ast child1;
-  ast tail = 0;
+  ast tail;
 
   expect_tok('{');
 
@@ -1664,6 +1665,7 @@ ast local_env_size = 0;         /* Size of the environment */
 int gensym_ix = 0;              /* Counter for fresh_ident */
 int fun_gensym_ix = 0;          /* Maximum value of gensym_ix for the current function */
 int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions */
+int string_counter = 0;         /* Counter for string literals */
 
 void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
@@ -1720,11 +1722,80 @@ void print_glo_decls() {
   }
 }
 
+ast find_var_in_local_env(ast ident) {
+  ast env = local_env;
+  ast var;
+  while (env != 0) {
+    var = get_child(env, 0);
+    /* Because string are interned, we can compare their address to check if they are the same. */
+    if (get_child(get_child(var, 0), 0) == get_child(ident, 0)) {
+      return var;
+    }
+    env = get_child(env, 1);
+  }
+  return -1;
+}
+
+/*
+  Similar to env_var, but doesn't use the local environment and assumes that the
+  identifier is internal or global. This is faster than env_var when we know that
+  the variable is not local.
+*/
+text format_non_local_var(ast ident) {
+  int op = get_op(ident);
+  if (op == IDENTIFIER_INTERNAL) {
+    return string_concat(wrap_str("__g"), get_val(ident));
+  } else if (op == IDENTIFIER_STRING) {
+    return string_concat(wrap_str("__str_"), get_val(ident));
+  } else if (op == IDENTIFIER_EMPTY) {
+    return wrap_str("__");
+  } if (op == IDENTIFIER) { /* Global var */
+    return string_concat(wrap_char('_'), wrap_str(string_pool + heap[get_val(ident)+1]));
+  } else {
+    printf("op=%d %c", op, op);
+    fatal_error("env_var: unknown identifier type");
+  }
+}
+
+text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
+  ast env = local_env;
+  ast var;
+
+  if (get_op(ident) == IDENTIFIER) {
+    var = find_var_in_local_env(ident);
+    if (var != -1) {
+      if (get_child(var, 2) == KIND_PARAM AND get_child(var, 3)) {
+        if (prefixed_with_dollar) {
+          return wrap_int(get_child(var, 2));
+        } else {
+          return string_concat(wrap_char('$'), wrap_int(get_child(var, 2)));
+        }
+      } else {
+        return wrap_str(string_pool + heap[get_val(ident)+1]);
+      }
+    } else {
+      return format_non_local_var(ident);
+    }
+  } else {
+    return format_non_local_var(ident);
+  }
+}
+
+text env_var(ast ident) {
+  return env_var_with_prefix(ident, false);
+}
+
 ast fresh_ident() {
-  gensym_ix++;
+  gensym_ix += 1;
   fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
   max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
   return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
+}
+
+/* TODO: Reuse identifier for strings used in multiple places */
+ast fresh_string_ident() {
+  string_counter += 1;
+  return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter));
 }
 
 /* TODO: Remove this eventually or move to debug module */
@@ -1750,18 +1821,16 @@ A variable is a LOCAL_VAR node with 4 children:
 */
 void add_var_to_local_env(ast ident, int position) {
   ast env = local_env;
+  ast var;
 
   /* Check if the variable is not in env. This should always do nothing */
-  while (env != 0) {
-    if (get_child(get_child(env, 0), 0) == ident) {
-      fatal_error("add_var_to_local_env: variable already in local environment");
-    }
-    env = get_child(env, 1);
+  if (find_var_in_local_env(ident) != -1) {
+    fatal_error("add_var_to_local_env: variable already in local environment");
   }
 
   /* The var is not part of the environment, so we add it */
-  ident = new_ast4(LOCAL_VAR, ident, position, KIND_LOCAL, false);
-  local_env = new_ast2(',', ident, local_env);
+  var = new_ast4(LOCAL_VAR, ident, position, KIND_LOCAL, false);
+  local_env = new_ast2(',', var, local_env);
   local_env_size += 1;
 }
 
@@ -1806,8 +1875,8 @@ void save_local_vars() {
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
     /* This is a common pattern, extract in its own function? */
-    if (res != 0) { res = string_concat3(env_var(ident), wrap_char(' '), res); }
-    else { res = env_var(ident); }
+    if (res != 0) { res = string_concat3(format_non_local_var(ident), wrap_char(' '), res); }
+    else { res = format_non_local_var(ident); }
     counter -= 1;
   }
 
@@ -1817,8 +1886,8 @@ void save_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    if (res != 0) { res = string_concat3(wrap_str(string_pool + heap[ident+1]), wrap_char(' '), res); }
-    else { res = wrap_str(string_pool + heap[ident+1]); }
+    if (res != 0) { res = string_concat3(env_var(ident), wrap_char(' '), res); }
+    else { res = env_var(ident); }
 
     env = get_child(env, 1);
   }
@@ -1844,8 +1913,8 @@ void restore_local_vars() {
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
     /* This is a common pattern, extract in its own function? */
-    if (res != 0) { res = string_concat3(res, wrap_char(' '), env_var(ident)); }
-    else { res = env_var(ident); }
+    if (res != 0) { res = string_concat3(res, wrap_char(' '), format_non_local_var(ident)); }
+    else { res = format_non_local_var(ident); }
     counter -= 1;
   }
 
@@ -1855,8 +1924,8 @@ void restore_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    if (res != 0) { res = string_concat3(res, wrap_char(' '), wrap_str(string_pool + heap[ident+1])); }
-    else { res = wrap_str(string_pool + heap[ident+1]); }
+    if (res != 0) { res = string_concat3(res, wrap_char(' '), env_var(ident)); }
+    else { res = env_var(ident); }
 
     env = get_child(env, 1);
   }
@@ -1935,11 +2004,11 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
   ast right_conditional_fun_calls;
 
   if (nb_children == 0) {
-    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == INTEGER OR op == CHARACTER) {
+    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == INTEGER OR op == CHARACTER) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
-      sub1 = fresh_ident();
+      sub1 = fresh_string_ident();
       literals_inits = new_ast2(',', new_ast2(',', sub1, get_val(node)), literals_inits);
       return sub1;
     } else {
@@ -2039,19 +2108,6 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-text env_var(ast ident) {
-  if (get_op(ident) == IDENTIFIER) {
-    return wrap_str(string_pool + heap[get_val(ident)+1]);
-  } else if (get_op(ident) == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str("__g"), get_val(ident));
-  } else if (get_op(ident) == IDENTIFIER_EMPTY) {
-    return wrap_str("__");
-  } else {
-    printf("op=%d %c", get_op(ident), get_op(ident));
-    fatal_error("env_var: unknown identifier");
-  }
-}
-
 int RVALUE_CTX_BASE = 0;
 int RVALUE_CTX_ARITH_EXPANSION = 1; /* Like base context, except that we're already in $(( ... )) */
 int RVALUE_CTX_TEST = 2;
@@ -2116,10 +2172,9 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == CHARACTER) {
       /* TODO: Map characters to constant instead of hardcoding ascii code */
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
-    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL) {
+    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var(node); }
-      else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var(node))); }
-      return env_var(node);
+      else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
       fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
       return -1;
@@ -2278,7 +2333,7 @@ text comp_rvalue(ast node, int context) {
 
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , env_var(get_child(get_child(literals_inits, 0), 0))
+                                  , format_non_local_var(get_child(get_child(literals_inits, 0), 0))
                                   , wrap_str(" \"")
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
                                   , wrap_char('\"')));
@@ -2296,7 +2351,7 @@ text comp_rvalue(ast node, int context) {
 text comp_array_lvalue(ast node) {
   int op = get_op(node);
   text rvalue;
-  if (op == IDENTIFIER) {
+  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
     return env_var(node);
   } else if (op == '*') {
     rvalue = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
@@ -2312,7 +2367,7 @@ text comp_lvalue(ast node) {
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER) {
+  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
     return env_var(node);
   } else if (op == '[') {
     sub1 = comp_array_lvalue(get_child(node, 0));
@@ -2541,12 +2596,27 @@ void comp_statement(ast node, int else_if) {
 
 ast get_leading_var_declarations(ast node) {
   ast result = 0;
+  ast local_var;
+  ast tail;
+  ast new_tail;
 
-  while (get_op(node) == '{') {
-    if (get_op(get_child(node, 0)) != VAR_DECL) break;
+  if (get_op(node) == '{') {
+    while (get_op(node) == '{') {
+      local_var = get_child(node, 0);
+      if (get_op(local_var) != VAR_DECL) break;
 
-    result = new_ast2(',', get_child(node, 0), result);
-    node = get_child(node, 1);
+      /* Initialize list */
+      if (result == 0) {
+        result = new_ast2(',', local_var, 0);
+        tail = result;
+      } else {
+        new_tail = new_ast2(',', local_var, 0);
+        set_child(tail, 1, new_tail);
+        tail = new_tail;
+      }
+
+      node = get_child(node, 1);
+    }
   }
 
   return new_ast2(',', result, node);
@@ -2562,7 +2632,7 @@ void comp_glo_define_procedure(ast node) {
   text body_code;
   int body_start_decl_ix;
   int body_end_decl_ix;
-  ast car;
+  ast local_var;
 
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
@@ -2599,10 +2669,10 @@ void comp_glo_define_procedure(ast node) {
 
   /* Initialize local vars */
   while (local_vars != 0) {
-    car = get_child(local_vars, 0);
+    local_var = get_child(local_vars, 0);
     /* TODO: Replace with ternary expression? */
-    if (get_child(car, 2) == 0) { comp_assignment(new_ast1(IDENTIFIER, get_child(car, 0)), new_ast1(INTEGER, 0)); }
-    else { comp_assignment(new_ast1(IDENTIFIER, get_child(car, 0)), get_child(car, 2)); }
+    if (get_child(local_var, 2) == 0) { comp_assignment(get_child(local_var, 0), new_ast0(INTEGER, 0)); }
+    else { comp_assignment(get_child(local_var, 0), get_child(local_var, 2)); }
     local_vars = get_child(local_vars, 1);
   }
 
