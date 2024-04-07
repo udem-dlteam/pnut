@@ -2302,7 +2302,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       } else {
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
-        return wrap_if_needed(true, context, string_concat3(sub1, op_to_str(op), sub2), test_side_effects);
+        return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
@@ -2348,7 +2348,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         if (test_side_effects != 0) { fatal_error("comp_rvalue_go: Arithmetic with function calls in && and || not supported"); }
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
-        return wrap_if_needed(false, context, string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2), test_side_effects);
+        return wrap_if_needed(false, context, test_side_effects, string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2));
       }
     } else {
 
