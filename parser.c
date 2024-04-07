@@ -2393,6 +2393,7 @@ text escape_string(char_ptr str) {
 text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
   int i;
+  ast replaced_fun_calls2 = replaced_fun_calls; /* Calling comp_fun_call can overwrite replaced_fun_calls, so it's saved */
 
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
@@ -2403,9 +2404,9 @@ text comp_rvalue(ast node, int context) {
     literals_inits = get_child(literals_inits, 1);
   }
 
-  while (replaced_fun_calls != 0) {
-    comp_fun_call(get_child(get_child(replaced_fun_calls, 0), 1), get_child(get_child(replaced_fun_calls, 0), 0));
-    replaced_fun_calls = get_child(replaced_fun_calls, 1);
+  while (replaced_fun_calls2 != 0) {
+    comp_fun_call(get_child(get_child(replaced_fun_calls2, 0), 1), get_child(get_child(replaced_fun_calls2, 0), 0));
+    replaced_fun_calls2 = get_child(replaced_fun_calls2, 1);
   }
 
   return comp_rvalue_go(simple_ast, context, 0);
