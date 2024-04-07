@@ -1846,6 +1846,10 @@ text env_var(ast ident) {
   return env_var_with_prefix(ident, false);
 }
 
+text function_name(ast ident) {
+  return string_concat(wrap_char('_'), wrap_str(string_pool + heap[get_val(ident)+1]));
+}
+
 ast fresh_ident() {
   gensym_ix += 1;
   if (gensym_ix > fun_gensym_ix) {
@@ -2458,7 +2462,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   }
 
   return string_concat5(
-    wrap_str(string_pool + heap[get_val(name)+1]), /* Function name*/
+    function_name(name),
     wrap_char(' '),
     env_var(assign_to),
     wrap_char(' '),
@@ -2703,7 +2707,7 @@ void comp_glo_define_procedure(ast node) {
 
   append_glo_decl(string_concat4(
     wrap_str("function "),
-    wrap_str(string_pool + heap[get_val(name) + 1]),
+    function_name(name),
     wrap_str("() {"),
     comment
   ));
