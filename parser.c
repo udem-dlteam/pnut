@@ -2636,9 +2636,11 @@ void comp_statement(ast node, int else_if) {
     }
     if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
-    } else {
+    } else if (!in_tail_position OR loop_nesting_level != 0) {
       restore_local_vars();
       append_glo_decl(wrap_str("return"));
+    } else {
+      /* TODO: Make sure this can't create empty bodies */
     }
   } else if (op == '(') { /* six.call */
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); /* Reuse IDENTIFIER_EMPTY ast? */
