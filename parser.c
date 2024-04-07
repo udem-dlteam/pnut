@@ -1848,8 +1848,12 @@ text env_var(ast ident) {
 
 ast fresh_ident() {
   gensym_ix += 1;
-  fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
-  max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
+  if (gensym_ix > fun_gensym_ix) {
+    fun_gensym_ix = gensym_ix;
+  }
+  if (gensym_ix > max_gensym_ix) {
+    max_gensym_ix = gensym_ix;
+  }
   return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
 }
 
@@ -2310,8 +2314,12 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       return -1;
     }
   } else if (nb_children == 3) {
-    /* TODO: ternary operator */
-    fatal_error("comp_rvalue_go: there are no 3 children operators in the grammar");
+    if (op == '?') {
+      fatal_error("comp_rvalue_go: ternary operator not supported");
+    } else {
+      printf("op=%d %c\n", op, op);
+      fatal_error("comp_rvalue_go: unknown rvalue with 3 children");
+    }
     return -1;
   } else if (nb_children == 4) {
     if (op == AMP_AMP OR op == BAR_BAR) {
@@ -2355,18 +2363,16 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
 }
 
 char escaped_char(char c) {
-  switch (c) {
-    case '\a': return 'a';
-    case '\b': return 'b';
-    case '\f': return 'f';
-    case '\n': return 'n';
-    case '\r': return 'r';
-    case '\t': return 't';
-    case '\v': return 'v';
-    case '\\': return '\\';
-    case '"':  return '"';
-    default:   return c;
-  }
+  if (c == '\a') return 'a';
+  if (c == '\b') return 'b';
+  if (c == '\f') return 'f';
+  if (c == '\n') return 'n';
+  if (c == '\r') return 'r';
+  if (c == '\t') return 't';
+  if (c == '\v') return 'v';
+  if (c == '\\') return '\\';
+  if (c == '"')  return '"';
+  return c;
 }
 
 text escape_string(char_ptr str) {
