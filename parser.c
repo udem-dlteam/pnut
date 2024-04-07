@@ -2860,10 +2860,12 @@ int main() {
 
   while (tok != EOF) {
     comp_glo_decl(parse_definition(0));
+    print_glo_decls();
+    /* Reset state */
+    glo_decl_ix = 0;
+    /* TODO: Clear heap */
   }
-  print_glo_decls();
-  /*
+
   printf("// string_pool_alloc=%d heap_alloc=%d\n", string_pool_alloc, heap_alloc);
-  */
   return 0;
 }
