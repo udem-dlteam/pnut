@@ -2526,6 +2526,8 @@ void comp_statement(ast node, int else_if) {
   int start_loop_end_actions_start;
   int start_loop_end_actions_end;
 
+  gensym_ix = 0;
+
   if (op == IF_KW) {
     /* TODO: Replace this with ternary expression? */
     if (else_if) {
