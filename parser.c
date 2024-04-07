@@ -1955,8 +1955,6 @@ void save_local_vars() {
     env = get_child(env, 1);
   }
 
-  /* TODO: Add synthetic args */
-
   if (res != 0) {
     append_glo_decl(string_concat(wrap_str("save_loc_var "), res));
   }
@@ -1991,8 +1989,6 @@ void restore_local_vars() {
     env = get_child(env, 1);
   }
 
-  /* TODO: Add synthetic args */
-
   if (res != 0) {
     append_glo_decl(string_concat(wrap_str("rest_loc_var $1 "), res));
   }
@@ -2021,7 +2017,6 @@ text op_to_str(int op) {
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("op_to_str: unexpected operator");
-    return -1;
   }
 }
 
@@ -2038,7 +2033,6 @@ text test_op_to_str(int op) {
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("test_op_to_str: unexpected operator");
-    return -1;
   }
 }
 
@@ -2238,7 +2232,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
       fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
-      return -1;
     } else {
       printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
@@ -2311,7 +2304,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
     } else {
       fatal_error("comp_rvalue_go: unknown rvalue");
-      return -1;
     }
   } else if (nb_children == 3) {
     if (op == '?') {
@@ -2359,7 +2351,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     }
   }
   fatal_error("comp_rvalue_go: should have returned before the end");
-  return -1;
 }
 
 char escaped_char(char c) {
@@ -2422,7 +2413,6 @@ text comp_array_lvalue(ast node) {
     return string_concat(wrap_char('_'), rvalue);
   } else {
     fatal_error("comp_array_lvalue: unknown lvalue");
-    return -1;
   }
 }
 
@@ -2442,10 +2432,8 @@ text comp_lvalue(ast node) {
     return string_concat(wrap_char('_'), sub1);
   } else if (op == ARROW) {
     fatal_error("comp_lvalue: struct not yet supported");
-    return -1;
   } else {
     fatal_error("comp_lvalue: unknown lvalue");
-    return -1;
   }
 }
 
@@ -2459,11 +2447,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     if (get_op(params) == ',') {
       while (get_op(params) == ',') {
         param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
-        if(code_params == 0) { /* Doing so prevents removes an extra whitespace that would otherwise be inserted */
-          code_params = param;
-        } else {
-          code_params = string_concat3(code_params, wrap_char(' '), param);
-        }
+        code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
         params = get_child(params, 1);
       }
     } else {
@@ -2651,10 +2635,6 @@ void comp_statement(ast node, int else_if) {
   } else if (op == VAR_DECL) {
     fatal_error("Variable declaration must be at the beginning of a function");
   } else {
-    /*
-    printf("%d op=%d %c", node, op, op);
-    fatal_error("comp_statement: unknown statement");
-    */
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str(": "), str));
@@ -2788,7 +2768,6 @@ text comp_constant(ast node) {
     return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
   } else {
     fatal_error("comp_constant: unknown constant");
-    return -1;
   }
 }
 
