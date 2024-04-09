@@ -2280,7 +2280,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       }
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
     } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
-      if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var(node); }
+      if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
       fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
