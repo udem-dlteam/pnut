@@ -1801,14 +1801,18 @@ ast find_var_in_local_env(ast ident) {
   identifier is internal or global. This is faster than env_var when we know that
   the variable is not local.
 */
-text format_non_local_var(ast ident) {
+text format_non_local_var(ast ident, ast prefixed_with_dollar) {
   int op = get_op(ident);
   if (op == IDENTIFIER_INTERNAL) {
     return string_concat(wrap_str("__g"), get_val(ident));
   } else if (op == IDENTIFIER_STRING) {
     return string_concat(wrap_str("__str_"), get_val(ident));
   } else if (op == IDENTIFIER_DOLLAR) {
-    return wrap_int(get_val(ident));
+    if (prefixed_with_dollar) {
+      return wrap_int(get_val(ident));
+    } else {
+      return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+    }
   } else if (op == IDENTIFIER_EMPTY) {
     return wrap_str("__");
   } else if (op == IDENTIFIER) { /* Global var */
@@ -1833,10 +1837,10 @@ text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
         res = wrap_str(string_pool + heap[get_val(ident)+1]);
       }
     } else {
-      res = format_non_local_var(ident);
+      res = format_non_local_var(ident, prefixed_with_dollar);
     }
   } else {
-    res = format_non_local_var(ident);
+    res = format_non_local_var(ident, prefixed_with_dollar);
   }
 
   return res;
@@ -1943,8 +1947,7 @@ void save_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    /* This is a common pattern, extract in its own function? */
-    res = concatenate_strings_with(format_non_local_var(ident), res, wrap_char(' '));
+    res = concatenate_strings_with(format_non_local_var(ident, false), res, wrap_char(' '));
     counter -= 1;
   }
 
@@ -1977,8 +1980,7 @@ void restore_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    /* This is a common pattern, extract in its own function? */
-    res = concatenate_strings_with(res, format_non_local_var(ident), wrap_char(' '));
+    res = concatenate_strings_with(res, format_non_local_var(ident, false), wrap_char(' '));
     counter -= 1;
   }
 
@@ -2392,7 +2394,7 @@ text comp_rvalue(ast node, int context) {
 
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , format_non_local_var(get_child(get_child(literals_inits, 0), 0))
+                                  , format_non_local_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
                                   , wrap_char('\"')));
