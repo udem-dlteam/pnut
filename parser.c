@@ -1947,7 +1947,7 @@ void save_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(format_non_local_var(ident, false), res, wrap_char(' '));
+    res = concatenate_strings_with(res, format_non_local_var(ident, false), wrap_char(' '));
     counter -= 1;
   }
 
@@ -1957,7 +1957,7 @@ void save_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
+    res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
 
     env = get_child(env, 1);
   }
@@ -1980,7 +1980,7 @@ void restore_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(res, format_non_local_var(ident, false), wrap_char(' '));
+    res = concatenate_strings_with(format_non_local_var(ident, false), res, wrap_char(' '));
     counter -= 1;
   }
 
@@ -1990,7 +1990,7 @@ void restore_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
+    res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
 
     env = get_child(env, 1);
   }
