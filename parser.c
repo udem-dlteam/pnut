@@ -2771,8 +2771,7 @@ void comp_glo_define_procedure(ast node) {
   }
   if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
 
-  append_glo_decl(string_concat4(
-    wrap_str("function "),
+  append_glo_decl(string_concat3(
     function_name(name),
     wrap_str("() {"),
     comment
