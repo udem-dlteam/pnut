@@ -1754,6 +1754,20 @@ void replay_glo_decls(int start, int end, int reindent) {
   }
 }
 
+text replay_glo_decls_inline(int start, int end) {
+  int i;
+  text res = 0;
+  while (start < end) {
+    if (glo_decls[start + 1] == 0) { /* Skip inactive declarations */
+      res = concatenate_strings_with(res, glo_decls[start + 2], wrap_str("; "));
+    }
+    start += 3;
+  }
+  if (res != 0) { res = string_concat(res, wrap_str("; ")); }
+
+  return res;
+}
+
 void print_glo_decls() {
   int i;
   int level;
@@ -2436,8 +2450,9 @@ text escape_string(char_ptr str) {
 
 text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
-  int i;
   ast replaced_fun_calls2 = replaced_fun_calls; /* Calling comp_fun_call can overwrite replaced_fun_calls, so it's saved */
+  int fun_call_decl_start;
+  text side_effects_text;
 
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
@@ -2448,12 +2463,26 @@ text comp_rvalue(ast node, int context) {
     literals_inits = get_child(literals_inits, 1);
   }
 
+  /* We don't want to call defstr on every iteration, so only capturing fun calls */
+  fun_call_decl_start = glo_decl_ix;
+
   while (replaced_fun_calls2 != 0) {
     comp_fun_call(get_child(get_child(replaced_fun_calls2, 0), 1), get_child(get_child(replaced_fun_calls2, 0), 0));
     replaced_fun_calls2 = get_child(replaced_fun_calls2, 1);
   }
 
-  return comp_rvalue_go(simple_ast, context, 0);
+  /*
+    When compiling a test, we place the function side effects inline with the condition.
+    That way, any side effect performed in the condition of a while loop is repeated on each iteration.
+    For if statements, it makes things shorter, but not always more readable.
+  */
+  if (context == RVALUE_CTX_TEST) {
+    undo_glo_decls(fun_call_decl_start);
+    side_effects_text = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
+    return string_concat(side_effects_text, comp_rvalue_go(simple_ast, context, 0));
+  } else {
+    return comp_rvalue_go(simple_ast, context, 0);
+  }
 }
 
 text comp_array_lvalue(ast node) {
