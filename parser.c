@@ -2540,12 +2540,18 @@ void comp_assignment(ast lhs, ast rhs) {
     if (get_op(rhs) == '(') {
       comp_fun_call(rhs, lhs);
     } else {
+      /*
+        Disabled because of arithmetic precision issues with some shells.
+        It looks like assignments in $((...)) are done with more bits with ksh.
+      */
       /* If lhs is an identifier, we generate x=$(( ... )) instead of : $(( x = ... )) */
-      if (lhs_op == IDENTIFIER) {
+      /* if (lhs_op == IDENTIFIER) {
         append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
       } else {
-        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_BASE), wrap_str(" ))")));
+        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
       }
+      */
+     append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
     }
   } else {
     printf("lhs_op=%d %c\n", lhs_op, lhs_op);
