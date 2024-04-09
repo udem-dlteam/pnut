@@ -2042,6 +2042,60 @@ text test_op_to_str(int op) {
   }
 }
 
+text character_ident(int c) {
+  if (in_range(c, 'a', 'z')) {
+    return string_concat(wrap_str("__LOWER_"), wrap_char(c));
+  } else if (in_range(c, 'A', 'Z')) {
+    return string_concat(wrap_str("__UPPER_"), wrap_char(c));
+  } else if (in_range(c, '0', '9')) {
+    return string_concat(wrap_str("__DIGIT_"), wrap_int(c - 48));
+  } else {
+    if      (c == '\0') return wrap_str("__NULL_CH");
+    else if (c == '\n') return wrap_str("__NEWLINE_CH");
+    else if (c == ' ')  return wrap_str("__SPACE_CH");
+    else if (c == '!')  return wrap_str("__EXCL_CH");
+    else if (c == '"')  return wrap_str("__DQUOTE_CH");
+    else if (c == '#')  return wrap_str("__SHARP_CH");
+    else if (c == '$')  return wrap_str("__DOLLAR_CH");
+    else if (c == '%')  return wrap_str("__PERCENT_CH");
+    else if (c == '&')  return wrap_str("__AMP_CH");
+    else if (c == '\'') return wrap_str("__QUOTE_CH");
+    else if (c == '(')  return wrap_str("__LPAREN_CH");
+    else if (c == ')')  return wrap_str("__RPAREN_CH");
+    else if (c == '*')  return wrap_str("__STAR_CH");
+    else if (c == '+')  return wrap_str("__PLUS_CH");
+    else if (c == ',')  return wrap_str("__COMMA_CH");
+    else if (c == '-')  return wrap_str("__MINUS_CH");
+    else if (c == '.')  return wrap_str("__PERIOD_CH");
+    else if (c == '/')  return wrap_str("__SLASH_CH");
+    else if (c == ':')  return wrap_str("__COLON_CH");
+    else if (c == ';')  return wrap_str("__SEMICOLON_CH");
+    else if (c == '<')  return wrap_str("__LT_CH");
+    else if (c == '=')  return wrap_str("__EQ_CH");
+    else if (c == '>')  return wrap_str("__GT_CH");
+    else if (c == '?')  return wrap_str("__QUESTION_CH");
+    else if (c == '@')  return wrap_str("__AT_CH");
+    else if (c == '^')  return wrap_str("__CARET_CH");
+    else if (c == '[')  return wrap_str("__LBRACK_CH");
+    else if (c == '\\') return wrap_str("__BACKSLASH_CH");
+    else if (c == ']')  return wrap_str("__RBRACK_CH");
+    else if (c == '_')  return wrap_str("__UNDERSCORE_CH");
+    else if (c == '`')  return wrap_str("__BACKTICK_CH");
+    else if (c == '{')  return wrap_str("__LBRACE_CH");
+    else if (c == '|')  return wrap_str("__BAR_CH");
+    else if (c == '}')  return wrap_str("__RBRACE_CH");
+    else if (c == '~')  return wrap_str("__TILDE_CH");
+    else if (c == '\a') return wrap_str("__ALARM_CH");
+    else if (c == '\b') return wrap_str("__BACKSPACE_CH");
+    else if (c == '\f') return wrap_str("__PAGE_CH");
+    else if (c == '\r') return wrap_str("__RET_CH");
+    else if (c == '\t') return wrap_str("__TAB_CH");
+    else if (c == '\v') return wrap_str("__VTAB_CH");
+    else fatal_error("Unknown character");
+  }
+}
+
+
 ast replaced_fun_calls = 0;
 ast conditional_fun_calls = 0;
 ast literals_inits = 0;
@@ -2231,7 +2285,11 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     if (op == INTEGER) {
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(node)));
     } else if (op == CHARACTER) {
-      /* TODO: Map characters to constant instead of hardcoding ascii code */
+      if (context == RVALUE_CTX_ARITH_EXPANSION) {
+        return character_ident(get_val(node));
+      } else {
+        return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
+      }
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
     } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var(node); }
@@ -2767,7 +2825,7 @@ text comp_constant(ast node) {
   if (op == INTEGER) {
     return wrap_int(-get_val(node));
   } else if (op == CHARACTER) {
-    return wrap_int(get_val(node));
+    return string_concat(wrap_char('$'), character_ident(get_val(node)));
   } else if (op == STRING) {
     return wrap_str(string_pool + get_val(node));
   } else if ((op == '-') AND get_nb_children(node) == 1) {
