@@ -1856,7 +1856,7 @@ ast fresh_ident() {
 /* TODO: Reuse identifier for strings used in multiple places */
 ast fresh_string_ident() {
   string_counter += 1;
-  return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter));
+  return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter - 1));
 }
 
 /* TODO: Remove this eventually or move to debug module */
@@ -1989,25 +1989,25 @@ void restore_local_vars() {
 }
 
 text op_to_str(int op) {
-  if      (op < 256)         return wrap_char(op);
-  else if (op == AMP_AMP)    return wrap_str("&&");
-  else if (op == AMP_EQ)     return wrap_str("&=");
-  else if (op == BAR_BAR)    return wrap_str("||");
-  else if (op == BAR_EQ)     return wrap_str("|=");
-  else if (op == CARET_EQ)   return wrap_str("^=");
-  else if (op == EQ_EQ)      return wrap_str("==");
-  else if (op == GT_EQ)      return wrap_str(">=");
-  else if (op == LSHIFT_EQ)  return wrap_str("<<=");
-  else if (op == LT_EQ)      return wrap_str("<=");
-  else if (op == LSHIFT)     return wrap_str("<<");
-  else if (op == MINUS_EQ)   return wrap_str("-=");
-  else if (op == EXCL_EQ)    return wrap_str("!=");
-  else if (op == PERCENT_EQ) return wrap_str("%%=");
-  else if (op == PLUS_EQ)    return wrap_str("+=");
-  else if (op == RSHIFT_EQ)  return wrap_str(">>=");
-  else if (op == RSHIFT)     return wrap_str(">>");
-  else if (op == SLASH_EQ)   return wrap_str("/=");
-  else if (op == STAR_EQ)    return wrap_str("*=");
+  if      (op < 256)         return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
+  else if (op == AMP_AMP)    return wrap_str(" && ");
+  else if (op == AMP_EQ)     return wrap_str(" &= ");
+  else if (op == BAR_BAR)    return wrap_str(" || ");
+  else if (op == BAR_EQ)     return wrap_str(" |= ");
+  else if (op == CARET_EQ)   return wrap_str(" ^= ");
+  else if (op == EQ_EQ)      return wrap_str(" == ");
+  else if (op == GT_EQ)      return wrap_str(" >= ");
+  else if (op == LSHIFT_EQ)  return wrap_str(" <<= ");
+  else if (op == LT_EQ)      return wrap_str(" <= ");
+  else if (op == LSHIFT)     return wrap_str(" << ");
+  else if (op == MINUS_EQ)   return wrap_str(" -= ");
+  else if (op == EXCL_EQ)    return wrap_str(" != ");
+  else if (op == PERCENT_EQ) return wrap_str(" %%= ");
+  else if (op == PLUS_EQ)    return wrap_str(" += ");
+  else if (op == RSHIFT_EQ)  return wrap_str(" >>= ");
+  else if (op == RSHIFT)     return wrap_str(" >> ");
+  else if (op == SLASH_EQ)   return wrap_str(" /= ");
+  else if (op == STAR_EQ)    return wrap_str(" *= ");
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("op_to_str: unexpected operator");
@@ -2244,9 +2244,9 @@ text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, te
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
   } else if (context == RVALUE_CTX_TEST) {
-    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) - ne 0 ]")));
+    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) -ne 0 ]")));
   } else {
-    return string_concat3(wrap_str("$(( "), code, wrap_str(" ))"));
+    return string_concat3(wrap_str("$(("), code, wrap_str("))"));
   }
 }
 
@@ -2386,17 +2386,17 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_TEST, get_child(node, 2));
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_TEST, get_child(node, 3));
         if ((get_op(get_child(node, 0)) == AMP_AMP OR get_op(get_child(node, 0)) == BAR_BAR) AND get_op(get_child(node, 0)) != op) {
-          sub1 = string_concat3(wrap_str("{ "), sub1, wrap_str(" }"));
+          sub1 = string_concat3(wrap_str("{ "), sub1, wrap_str("; }"));
         }
         if ((get_op(get_child(node, 1)) == AMP_AMP OR get_op(get_child(node, 1)) == BAR_BAR) AND get_op(get_child(node, 1)) != op) {
-          sub2 = string_concat3(wrap_str("{ "), sub2, wrap_str(" }"));
+          sub2 = string_concat3(wrap_str("{ "), sub2, wrap_str("; }"));
         }
-        return string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2);
+        return string_concat3(sub1, op_to_str(op), sub2);
       } else {
         if (test_side_effects != 0) { fatal_error("comp_rvalue_go: Arithmetic with function calls in && and || not supported"); }
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
-        return wrap_if_needed(false, context, test_side_effects, string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2));
+        return wrap_if_needed(false, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else {
 
@@ -2673,7 +2673,7 @@ void comp_statement(ast node, int else_if) {
     if (get_child(node, 0) != 0) {
       append_glo_decl(string_concat3(
         wrap_str(": $(( $1 = "),
-        comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE),
+        comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
         wrap_str(" ))")
       ));
     }
