@@ -1653,7 +1653,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 }
 
 /*
-  TODO: Optimize wrap_str and wrap_substr
+  TODO: Optimize wrap_str
   For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
   Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
 */
@@ -1662,18 +1662,6 @@ text wrap_str(char_ptr s) {
   int result = 0;
 
   while (s[i] != 0) {
-    result = string_concat(result, wrap_char(s[i]));
-    i += 1;
-  }
-
-  return result;
-}
-
-text wrap_substr(char_ptr s, int len) {
-  int i = 0;
-  int result = 0;
-
-  while (s[i] != 0 AND i < len) {
     result = string_concat(result, wrap_char(s[i]));
     i += 1;
   }
@@ -2417,32 +2405,33 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   fatal_error("comp_rvalue_go: should have returned before the end");
 }
 
-char escaped_char(char c) {
-  if (c == '\a') return 'a';
-  if (c == '\b') return 'b';
-  if (c == '\f') return 'f';
-  if (c == '\n') return 'n';
-  if (c == '\r') return 'r';
-  if (c == '\t') return 't';
-  if (c == '\v') return 'v';
-  if (c == '\\') return '\\';
-  if (c == '"')  return '"';
-  return c;
+text escaped_char(char c) {
+  if (c == '\a') return wrap_str("\\a");
+  if (c == '\b') return wrap_str("\\b");
+  if (c == '\f') return wrap_str("\\f");
+  if (c == '\n') return wrap_str("\\n");
+  if (c == '\r') return wrap_str("\\r");
+  if (c == '\t') return wrap_str("\\t");
+  if (c == '\v') return wrap_str("\\v");
+  if (c == '\\') return wrap_str("\\\\");
+  if (c == '"')  return wrap_str("\\\"");
+  if (c == '\'') return wrap_str("\\\'");
+  if (c == '?')  return wrap_str("\\\?");
+  if (c == '$')  return wrap_str("\\$");
+  return wrap_char(c);
 }
 
 text escape_string(char_ptr str) {
-  char_ptr seq = str;
   text res = wrap_str("");
-  char c;
-  while (*str != '\0') {
-    c = *str;
-    if (c == '\a' OR c == '\b' OR c == '\f' OR c == '\n' OR c == '\r' OR c == '\t' OR c == '\v' OR c == '\\' OR c == '"') {
-      res = string_concat4(res, wrap_substr(seq, str - seq), wrap_char('\\'), wrap_char(escaped_char(*str)));
-      seq = str;
-    }
-    str += 1;
+  text char_text;
+  int i = 0;
+
+  while (str[i] != '\0') {
+    char_text = escaped_char(str[i]);
+    res = string_concat(res, char_text);
+    i += 1;
   }
-  return string_concat(wrap_substr(seq, str - seq), res);
+  return res;
 }
 
 text comp_rvalue(ast node, int context) {
