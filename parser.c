@@ -2720,11 +2720,15 @@ void comp_statement(ast node, int else_if) {
     append_glo_decl(wrap_str("continue"));
   } else if (op == RETURN_KW) {
     if (get_child(node, 0) != 0) {
-      append_glo_decl(string_concat3(
-        wrap_str(": $(( $1 = "),
-        comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
-        wrap_str(" ))")
-      ));
+      if (get_op(get_child(node, 0)) == '(') { /* Check if function call */
+        comp_fun_call(get_child(node, 0), new_ast0(IDENTIFIER_DOLLAR, 1));
+      } else {
+        append_glo_decl(string_concat3(
+          wrap_str(": $(( $1 = "),
+          comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
+          wrap_str(" ))")
+        ));
+      }
     }
     if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */

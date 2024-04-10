@@ -244,8 +244,8 @@
 (define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
 (define init-globals-var     (format-non-local-var init-globals-ident))
 
-(define (get-result-var ctx) (if use-$1-for-return-loc? "1" result-loc-ident))
-(define (get-result-loc ctx) (if use-$1-for-return-loc? "1" result-loc-var))
+(define (get-result-loc ctx) (if use-$1-for-return-loc? '(six.identifier 1) result-loc-ident))
+(define (get-result-var ctx) (if use-$1-for-return-loc? "1" result-loc-var))
 
 (define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
@@ -878,9 +878,11 @@
           (list "esac"))))
     ((six.return)
      (if (pair? (cdr ast))
-      (ctx-add-glo-decl!
-        ctx
-        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return)) " ))")))
+      (if (equal? 'six.call (caadr ast))
+        (comp-fun-call ctx (cdadr ast) (get-result-loc ctx))
+        (ctx-add-glo-decl!
+          ctx
+          (list ": $(( $" (get-result-var ctx) " = " (comp-rvalue ctx (cadr ast) '(return)) " ))"))))
      (if (ctx-tail? ctx)
       (begin
         ; We're in a loop, so we won't fall through to the next statement without a break statement
