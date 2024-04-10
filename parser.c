@@ -2427,19 +2427,19 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
 }
 
 text escaped_char(char c) {
-  if (c == '\a') return wrap_str("\\a");
-  if (c == '\b') return wrap_str("\\b");
-  if (c == '\f') return wrap_str("\\f");
-  if (c == '\n') return wrap_str("\\n");
-  if (c == '\r') return wrap_str("\\r");
-  if (c == '\t') return wrap_str("\\t");
-  if (c == '\v') return wrap_str("\\v");
-  if (c == '\\') return wrap_str("\\\\");
-  if (c == '"')  return wrap_str("\\\"");
-  if (c == '\'') return wrap_str("\\\'");
-  /* if (c == '?')  return wrap_str("\\?"); */
-  if (c == '$')  return wrap_str("\\$");
-  return wrap_char(c);
+  if      (c == '\a') return wrap_str("\\a");
+  else if (c == '\b') return wrap_str("\\b");
+  else if (c == '\f') return wrap_str("\\f");
+  else if (c == '\n') return wrap_str("\\n");
+  else if (c == '\r') return wrap_str("\\r");
+  else if (c == '\t') return wrap_str("\\t");
+  else if (c == '\v') return wrap_str("\\v");
+  else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
+  else if (c == '"')  return wrap_str("\\\"");
+  else if (c == '\'') return wrap_str("\\\'");
+  else if (c == '?')  return wrap_str("\\?");
+  else if (c == '$')  return wrap_str("\\$");
+  else                return wrap_char(c);
 }
 
 text escape_string(char_ptr str) {
