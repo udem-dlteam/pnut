@@ -1714,6 +1714,8 @@ int gensym_ix = 0;              /* Counter for fresh_ident */
 int fun_gensym_ix = 0;          /* Maximum value of gensym_ix for the current function */
 int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions */
 int string_counter = 0;         /* Counter for string literals */
+#define CHARACTERS_BITFIELD_SIZE 16
+int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 
 void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
@@ -2047,6 +2049,9 @@ text test_op_to_str(int op) {
 }
 
 text character_ident(int c) {
+  /* Mark character as used */
+  characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
+
   if (in_range(c, 'a', 'z')) {
     return string_concat(wrap_str("__LOWER_"), wrap_char(c));
   } else if (in_range(c, 'A', 'Z')) {
@@ -2432,7 +2437,7 @@ text escaped_char(char c) {
   if (c == '\\') return wrap_str("\\\\");
   if (c == '"')  return wrap_str("\\\"");
   if (c == '\'') return wrap_str("\\\'");
-  if (c == '?')  return wrap_str("\\\?");
+  /* if (c == '?')  return wrap_str("\\?"); */
   if (c == '$')  return wrap_str("\\$");
   return wrap_char(c);
 }
@@ -2839,10 +2844,6 @@ void comp_glo_define_procedure(ast node) {
   nest_level -= 1;
 
   append_glo_decl(wrap_str("}\n"));
-
-  /* Reset local env */
-  local_env_size = 0;
-  local_env = 0;
 }
 
 text comp_constant(ast node) {
@@ -2917,6 +2918,110 @@ void comp_glo_decl(ast node) {
   }
 }
 
+void prologue() {
+  int i;
+  printf("set -e -u\n\n");
+
+  printf("# Handle runtime options\n");
+  printf("__STRICT_MODE=1\n");
+  printf("__FREE_UNSETS_VARS=1\n");
+  printf("__INIT_GLOBALS=1\n\n");
+
+  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-init\" ] ;      then __STRICT_MODE=1; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-no-init\" ] ;   then __STRICT_MODE=0; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then __FREE_UNSETS_VARS=1; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then __FREE_UNSETS_VARS=0; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then __INIT_GLOBALS=0; shift; fi\n\n");
+
+  printf("# Load runtime library and primitives\n");
+  printf(". ./runtime.sh\n\n");
+
+  printf("# Local variables\n\n");
+
+  printf("__SP=0 # Note: Stack grows up, not down\n\n");
+
+  printf("save_loc_var() {\n");
+  printf("  __count=$#\n");
+  printf("  while [ $# -gt 0 ]; do\n");
+  printf("    : $((__SP += 1))\n");
+  printf("    : $((save_loc_var_$__SP=$1))\n");
+  printf("    shift\n");
+  printf("  done\n");
+  printf("  # Save the number of arguments. Used in rest_loc_var\n");
+  printf("  : $((__SP += 1))\n");
+  printf("  : $((save_loc_var_$__SP=$__count))\n");
+  printf("}\n\n");
+
+  printf("rest_loc_var() {\n");
+  printf("  __result_loc=$1; shift\n");
+  printf("  __adjust=$((save_loc_var_$__SP - $#)) # Number of saved variables not being restored\n");
+  printf("  : $((__SP -= 1))\n");
+  printf("  while [ $# -gt 0 ]; do\n");
+  printf("    # Make sure result_loc is not overwritten\n");
+  printf("    if [ $1 != \"$__result_loc\" ]; then : $(($1=save_loc_var_$__SP)); fi\n");
+  printf("    : $((__SP -= 1))\n");
+  printf("    shift\n");
+  printf("  done\n");
+  printf("  : $((__SP -= __adjust))\n");
+  printf("}\n\n");
+
+  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
+  printf("defglo() { : $(($1 = $2)) ; }\n\n");
+
+  printf("# Setup argc, argv\n");
+  printf("__argc_for_main=$(($# + 1))\n");
+  printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
+}
+
+void epilogue() {
+  int c;
+
+  printf("# Character constants\n");
+  for(c = 0; c < 256; c += 1) {
+    if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
+      print_text(character_ident(c));
+      printf("=%d\n", c);
+    }
+  }
+
+  printf("\n__=0 # Required for zsh");
+  putchar('\n');
+  printf("_main __ $__argc_for_main $__argv_for_main\n");
+}
+
+/* Initialize local and synthetic variables used by function */
+void initialize_function_variables() {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str(" = "));
+    counter -= 1;
+  }
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
+
+    res = concatenate_strings_with(res, env_var(ident), wrap_str(" = "));
+
+    env = get_child(env, 1);
+  }
+
+  if (res != 0) {
+    res = string_concat3(wrap_str(": $(("), res, wrap_str(" = 0))"));
+    print_text(res);
+    putchar('\n');
+  }
+}
+
 int main() {
 
   ast node;
@@ -2926,14 +3031,22 @@ int main() {
   ch = '\n';
   get_tok();
 
+  prologue();
+
   while (tok != EOF) {
     comp_glo_decl(parse_definition(0));
+    initialize_function_variables();
+
     print_glo_decls();
     /* Reset state */
     glo_decl_ix = 0;
+    local_env_size = 0;
+    local_env = 0;
     /* TODO: Clear heap */
   }
 
-  printf("// string_pool_alloc=%d heap_alloc=%d\n", string_pool_alloc, heap_alloc);
+  epilogue();
+
+  /* printf("// string_pool_alloc=%d heap_alloc=%d\n", string_pool_alloc, heap_alloc); */
   return 0;
 }
