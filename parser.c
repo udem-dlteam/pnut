@@ -2106,7 +2106,9 @@ text character_ident(int c) {
 
 
 ast replaced_fun_calls = 0;
+ast replaced_fun_calls_tail = 0;
 ast conditional_fun_calls = 0;
+ast conditional_fun_calls_tail = 0;
 ast literals_inits = 0;
 int executes_conditionally = 0;
 int contains_side_effects = 0;
@@ -2126,6 +2128,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
   ast previous_conditional_fun_calls;
   ast left_conditional_fun_calls;
   ast right_conditional_fun_calls;
+  ast new_tail;
 
   if (nb_children == 0) {
     if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER) {
@@ -2177,8 +2180,18 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       */
       gensym_ix = start_gensym_ix;
 
-      if (executes_conditionally) { conditional_fun_calls = new_ast2(',', new_ast2(',', sub1, node), conditional_fun_calls); }
-      else { replaced_fun_calls = new_ast2(',', new_ast2(',', sub1, node), replaced_fun_calls); }
+      new_tail = new_ast2(',', sub1, node);
+      new_tail = new_ast2(',', new_tail, 0);
+      if (executes_conditionally) {
+        if (conditional_fun_calls == 0) { conditional_fun_calls = new_tail; }
+        else { set_child(conditional_fun_calls_tail, 1, new_tail); }
+        conditional_fun_calls_tail = new_tail;
+      }
+      else {
+        if (replaced_fun_calls == 0) { replaced_fun_calls = new_tail; }
+        else { set_child(replaced_fun_calls_tail, 1, new_tail); }
+        replaced_fun_calls_tail = new_tail;
+      }
 
       return sub1;
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
@@ -2749,14 +2762,10 @@ ast get_leading_var_declarations(ast node) {
       if (get_op(local_var) != VAR_DECL) break;
 
       /* Initialize list */
-      if (result == 0) {
-        result = new_ast2(',', local_var, 0);
-        tail = result;
-      } else {
-        new_tail = new_ast2(',', local_var, 0);
-        set_child(tail, 1, new_tail);
-        tail = new_tail;
-      }
+      new_tail = new_ast2(',', local_var, 0);
+      if (result == 0) { result = new_tail; }
+      else { set_child(tail, 1, new_tail); }
+      tail = new_tail;
 
       node = get_child(node, 1);
     }
