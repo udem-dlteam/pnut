@@ -2,10 +2,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-typedef FILE *FILE_ptr;
-typedef int *int_ptr;
-typedef char *char_ptr;
-typedef void *void_ptr;
+#define FILE_ptr  FILE *
+#define int_ptr   int  *
+#define char_ptr  char *
+#define void_ptr  void *
 
 #endif
 
