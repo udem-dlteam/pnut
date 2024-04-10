@@ -330,7 +330,6 @@ void init_ident_table() {
 
 int accum_digit(int base) {
   int digit = 99;
-  int MININT = -2147483648;
   int limit;
   if (in_range(ch, '0', '9')) {
     digit = ch - '0';
@@ -342,13 +341,14 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; /* character is not a digit in that base */
   } else {
-    limit = MININT / base;
+    /*
+    TODO: Put overflow check back
     if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
       fatal_error("literal integer overflow");
-    } else {
-      val = val * base - digit;
-      get_ch();
     }
+    */
+    val = val * base - digit;
+    get_ch();
     return 1;
   }
 }
