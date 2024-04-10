@@ -2470,9 +2470,11 @@ text escape_string(char_ptr str) {
 
 text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
-  ast replaced_fun_calls2 = replaced_fun_calls; /* Calling comp_fun_call can overwrite replaced_fun_calls, so it's saved */
+  /* Calling comp_fun_call/comp_rvalue can overwrite replaced_fun_calls and contains_side_effects, so they are saved */
+  ast replaced_fun_calls2 = replaced_fun_calls;
+  int contains_side_effects2 = contains_side_effects;
   int fun_call_decl_start;
-  text side_effects_text;
+  text result;
 
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
@@ -2498,11 +2500,13 @@ text comp_rvalue(ast node, int context) {
   */
   if (context == RVALUE_CTX_TEST) {
     undo_glo_decls(fun_call_decl_start);
-    side_effects_text = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
-    return string_concat(side_effects_text, comp_rvalue_go(simple_ast, context, 0));
+    result = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
+    result = string_concat(result, comp_rvalue_go(simple_ast, context, 0));
   } else {
-    return comp_rvalue_go(simple_ast, context, 0);
+    result = comp_rvalue_go(simple_ast, context, 0);
   }
+  contains_side_effects |= contains_side_effects2;
+  return result;
 }
 
 text comp_array_lvalue(ast node) {
@@ -2709,7 +2713,7 @@ void comp_statement(ast node, int else_if) {
     loop_end_actions_end = start_loop_end_actions_end;
 
     append_glo_decl(wrap_str("done"));
-  }  else if (op == BREAK_KW) {
+  } else if (op == BREAK_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
     /* TODO: What's the semantic of break? Should we run the end of loop action before breaking? */
     append_glo_decl(wrap_str("break"));
