@@ -1570,7 +1570,7 @@
     ""
     ""
     (string-append
-    "defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $" init-globals-var  " -ne 0 ]; then initialize_memory $1 $2; fi; }")
+    "defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $" init-globals-var " -ne 0 ]; then initialize_memory $(($1)) $2; fi; }")
     "defglo() { : $(($1 = $2)) ; }"
     ""
     "# Setup argc, argv"
