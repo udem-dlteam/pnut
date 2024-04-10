@@ -1,7 +1,12 @@
 #ifndef SIX_CC
 
+#ifndef SIX_CC_BOOTSTRAP
+
 #include <stdio.h>
 #include <stdlib.h>
+
+#endif
+
 #define FILE_ptr  FILE *
 #define int_ptr   int  *
 #define char_ptr  char *
@@ -801,10 +806,12 @@ void expect_tok(int expected_tok) {
 }
 
 #ifndef SIX_CC
+#ifndef SIX_CC_BOOTSTRAP
 ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
+#endif
 #endif
 
 ast parse_type() {
