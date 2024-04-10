@@ -18,7 +18,7 @@
 #define true 1
 #define false 0
 
-#define AVOID_AMPAMP_BARBAR
+#define AVOID_AMPAMP_BARBAR_not
 #define USE_IN_RANGE_FUNCTION_not
 #define INLINE_get_ch
 
@@ -335,7 +335,6 @@ void init_ident_table() {
 
 int accum_digit(int base) {
   int digit = 99;
-  int limit;
   if (in_range(ch, '0', '9')) {
     digit = ch - '0';
   } else if (in_range(ch, 'A', 'Z')) {
@@ -1666,7 +1665,6 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 text wrap_str(char_ptr s) {
   int i = 0;
   int result = 0;
-  int len;
 
   result = text_alloc;
   text_pool[result] = TEXT_TREE;
@@ -1735,7 +1733,7 @@ int characters_useds[16];       /* Characters used in string literals. Bitfield,
 
 void init_comp_context() {
   int i;
-  // Initialize characters_useds table
+  /* Initialize characters_useds table */
   for (i = 0; i < 16; i += 1) {
     characters_useds[i] = 0;
   }
@@ -1781,7 +1779,6 @@ void replay_glo_decls(int start, int end, int reindent) {
 }
 
 text replay_glo_decls_inline(int start, int end) {
-  int i;
   text res = 0;
   while (start < end) {
     if (glo_decls[start + 1] == 0) { /* Skip inactive declarations */
@@ -1845,6 +1842,7 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
   } else {
     printf("op=%d %c", op, op);
     fatal_error("format_special_var: unknown identifier type");
+    return 0;
   }
 }
 
@@ -1922,7 +1920,6 @@ A variable is a LOCAL_VAR node with 4 children:
   4. Constant: if the variable is never assigned to
 */
 void add_var_to_local_env(ast ident_tok, int position) {
-  ast env = local_env;
   ast var;
 
   /* Check if the variable is not in env. This should always do nothing */
@@ -2053,6 +2050,7 @@ text op_to_str(int op) {
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("op_to_str: unexpected operator");
+    return 0;
   }
 }
 
@@ -2069,6 +2067,7 @@ text test_op_to_str(int op) {
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("test_op_to_str: unexpected operator");
+    return 0;
   }
 }
 
@@ -2124,7 +2123,7 @@ text character_ident(int c) {
     else if (c == '\r') return wrap_str("__RET_CH");
     else if (c == '\t') return wrap_str("__TAB_CH");
     else if (c == '\v') return wrap_str("__VTAB_CH");
-    else fatal_error("Unknown character");
+    else { fatal_error("Unknown character"); return 0; }
   }
 }
 
@@ -2165,6 +2164,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else {
       printf("handle_side_effects_go: op=%d %c", op, op);
       fatal_error("unexpected operator");
+      return 0;
     }
   } else if (nb_children == 1) {
     if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
@@ -2177,6 +2177,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("unexpected operator");
+      return 0;
     }
   } else if (nb_children == 2) {
     if ((op == '(')) { /* Function call */
@@ -2247,17 +2248,21 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
+      return 0;
     }
   } else if (nb_children == 3) {
     /* TODO: Ternary expression */
     printf("3: op=%d %c\n", op, op);
     fatal_error("unexpected operator");
+    return 0;
   } else if (nb_children == 4) {
     printf("4: op=%d %c\n", op, op);
     fatal_error("unexpected operator");
+    return 0;
   } else {
     printf("5: op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("unexpected operator");
+    return 0;
   }
 }
 
@@ -2323,7 +2328,6 @@ text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) 
 text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
-  int val;
   text sub1;
   text sub2;
 
@@ -2336,15 +2340,16 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       } else {
         return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
       }
-      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
     } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
       fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
+      return 0;
     } else {
       printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
+      return 0;
     }
   } else if (nb_children == 1) {
     if (op == '*') {
@@ -2383,9 +2388,11 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
     } else if (op == '&') {
       fatal_error("comp_rvalue_go: address of operator not supported");
+      return 0;
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
+      return 0;
     }
   } else if (nb_children == 2) {
     if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT) {
@@ -2412,17 +2419,20 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       }
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
+      return 0;
     } else {
       fatal_error("comp_rvalue_go: unknown rvalue");
+      return 0;
     }
   } else if (nb_children == 3) {
     if (op == '?') {
       fatal_error("comp_rvalue_go: ternary operator not supported");
+      return 0;
     } else {
       printf("op=%d %c\n", op, op);
       fatal_error("comp_rvalue_go: unknown rvalue with 3 children");
+      return 0;
     }
-    return -1;
   } else if (nb_children == 4) {
     if (op == AMP_AMP OR op == BAR_BAR) {
       /*
@@ -2457,10 +2467,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         return wrap_if_needed(false, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else {
-
+      printf("op=%d %c\n", op, op);
+      fatal_error("comp_rvalue_go: unknown rvalue with 4 children");
+      return 0;
     }
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("comp_rvalue_go: unknown rvalue with >4 children");
+    return 0;
   }
-  fatal_error("comp_rvalue_go: should have returned before the end");
 }
 
 text escaped_char(char c) {
@@ -2543,6 +2558,7 @@ text comp_array_lvalue(ast node) {
     return string_concat(wrap_char('_'), rvalue);
   } else {
     fatal_error("comp_array_lvalue: unknown lvalue");
+    return 0;
   }
 }
 
@@ -2560,10 +2576,9 @@ text comp_lvalue(ast node) {
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
-  } else if (op == ARROW) {
-    fatal_error("comp_lvalue: struct not yet supported");
   } else {
     fatal_error("comp_lvalue: unknown lvalue");
+    return 0;
   }
 }
 
@@ -2626,7 +2641,6 @@ void comp_assignment(ast lhs, ast rhs) {
 }
 
 void comp_body(ast node) {
-  int i;
   int start_in_tail_position = in_tail_position;
   in_tail_position = false;
 
@@ -2899,6 +2913,7 @@ text comp_constant(ast node) {
     return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
   } else {
     fatal_error("comp_constant: unknown constant");
+    return 0;
   }
 }
 
@@ -2960,7 +2975,6 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
-  int i;
   printf("set -e -u\n\n");
 
   printf("# Handle runtime options\n");
@@ -3064,9 +3078,6 @@ void initialize_function_variables() {
 }
 
 int main() {
-
-  ast node;
-
   init_ident_table();
   init_comp_context();
 
@@ -3078,7 +3089,6 @@ int main() {
   while (tok != EOF) {
     comp_glo_decl(parse_definition(0));
     initialize_function_variables();
-
     print_glo_decls();
     /* Reset state */
     glo_decl_ix = 0;
