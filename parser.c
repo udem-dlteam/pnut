@@ -1604,10 +1604,14 @@ text wrap_int(int i) {
 }
 
 text wrap_char(char c) {
+  /* Characters are represent using negative numbers */
+  return -c;
+  /*
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_CHAR;
-  text_pool[text_alloc + 1] = c;
+  text_pool[text_alloc + 1] = - c;
   return (text_alloc += 2) - 2;
+  */
 }
 
 text string_concat(text t1, text t2) {
@@ -1652,19 +1656,21 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
-/*
-  TODO: Optimize wrap_str
-  For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
-  Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
-*/
 text wrap_str(char_ptr s) {
   int i = 0;
   int result = 0;
+  int len;
 
+  result = text_alloc;
+  text_pool[result] = TEXT_TREE;
+  text_alloc += 2;
   while (s[i] != 0) {
-    result = string_concat(result, wrap_char(s[i]));
+    text_pool[text_alloc] = -s[i];
+    text_alloc += 1;
     i += 1;
   }
+
+  text_pool[result + 1] = i;
 
   return result;
 }
@@ -1680,7 +1686,10 @@ void print_text(text t) {
 
   if (t == 0) return;
 
-  if (text_pool[t] == TEXT_TREE) {
+  if (t < 0) {
+    /* it's a character */
+    putchar(-t);
+  } else if (text_pool[t] == TEXT_TREE) {
     for (i = 0; i < text_pool[t + 1]; i += 1) {
       print_text(text_pool[t + i + 2]);
     }
@@ -1691,7 +1700,7 @@ void print_text(text t) {
   } */ else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_CHAR) {
-    putchar(text_pool[t + 1]);
+    fatal_error("unexpected character");
   } else {
     printf("\nt=%d %d\n", t, text_pool[t]);
     fatal_error("unexpected string tree node");
@@ -3059,11 +3068,13 @@ int main() {
     glo_decl_ix = 0;
     local_env_size = 0;
     local_env = 0;
+    text_alloc = 1;
+
     /* TODO: Clear heap */
   }
 
   epilogue();
 
-  /* printf("// string_pool_alloc=%d heap_alloc=%d\n", string_pool_alloc, heap_alloc); */
+  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
   return 0;
 }
