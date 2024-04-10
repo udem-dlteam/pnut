@@ -1733,6 +1733,14 @@ int string_counter = 0;         /* Counter for string literals */
 #define CHARACTERS_BITFIELD_SIZE 16
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 
+void init_comp_context() {
+  int i;
+  // Initialize characters_useds table
+  for (i = 0; i < 16; i += 1) {
+    characters_useds[i] = 0;
+  }
+}
+
 void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
   glo_decls[glo_decl_ix + 1] = 1; /* If it's active or not. Used by undo_glo_decls and replay_glo_decls */
@@ -3060,6 +3068,7 @@ int main() {
   ast node;
 
   init_ident_table();
+  init_comp_context();
 
   ch = '\n';
   get_tok();
