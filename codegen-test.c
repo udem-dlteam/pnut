@@ -2,9 +2,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-typedef FILE *FILE_ptr;
-typedef int *int_ptr;
-typedef char *char_ptr;
 
 #endif
 
@@ -13,7 +10,8 @@ int code_alloc = 0;
 
 
 void emit_i8(int a) {
-  code[code_alloc++] = (a & 0xff);
+  code[code_alloc] = (a & 0xff);
+  code_alloc += 1;
 }
 
 void emit_2_i8(int a, int b) {
@@ -87,7 +85,8 @@ void write_elf() {
   write_Elf32_Phdr();
 
   while (i < code_alloc) {
-     write_i8(code[i++]);
+     write_i8(code[i]);
+     i += 1;
   }
 }
 
@@ -160,11 +159,12 @@ int GE = 0xd;
 int LE = 0xe;
 int GT = 0xf;
 
-void jcond(int cond, int n) { emit_2_i8(0x0f, 0x80 + cond); emit_i32_le(n); }
+void jcond(int cond) { emit_2_i8(0x0f, 0x80 + cond); emit_i32_le(0); }
 
 void int_i8(int n) { emit_2_i8(0xcd, n); } /* int <n> */
 
 void linux32_getchar() {
+  int lbl = alloc_label();
   mov_reg_i32(AX, 0);    /* mov  eax, 0 */
   push_reg(AX);          /* push eax      # buffer to read byte */
   mov_reg_i32(BX, 0);    /* mov  ebx, 0   # ebx = 0 = STDIN */
@@ -174,8 +174,9 @@ void linux32_getchar() {
   int_i8(0x80);          /* int  0x80     # system call */
   test_reg_reg(AX, AX);  /* test eax, eax */
   pop_reg(AX);           /* pop  eax */
-  jcond(NE, 2+x86_64);   /* jne  .+2      # skip dec */
+  jcond(NE); use_label(lbl);   /* jne  lbl     # skip dec */
   dec_reg(AX);           /* dec  eax      # -1 on EOF */
+  def_label(lbl);        /* lbl: */
 }
 
 void linux32_putchar() {
@@ -194,10 +195,11 @@ void linux32_exit() {
   int_i8(0x80);         /* int  0x80     # system call */
 }
 
-void linux32_print_msg(char_ptr msg) {
+void linux32_print_msg(char *msg) {
   char c;
-  char_ptr p = msg;
-  while ((c = *(p++)) != 0) {
+  char *p = msg;
+  while ((c = *p) != 0) {
+    p += 1;
     mov_reg_i32(AX, c);  /* mov  eax, c */
     linux32_putchar();   /* putchar */
   }
@@ -207,6 +209,7 @@ void binop(int op) {
 
   int result_reg = AX;
   int cond;
+  int lbl;
 
   pop_reg(CX); /* rhs operand */
   pop_reg(AX); /* lhs operand */
@@ -230,28 +233,97 @@ void binop(int op) {
     else if (op == '!') cond = NE;
     else if (op == '[') cond = LE;
     else                cond = GE;
-    jcond(cond, 5+x86_64);
+    lbl = alloc_label();
+    jcond(cond); use_label(lbl);
     mov_reg_i32(AX, 0);
+    def_label(lbl);
   }
 
   push_reg(result_reg);
 }
 
+#define HEAP_SIZE 100000
+int heap[HEAP_SIZE];
+int heap_alloc = 0;
+
+int alloc_result;
+
+int alloc_obj(int size) {
+
+  alloc_result = heap_alloc;
+
+  heap_alloc += size;
+
+  if (heap_alloc > HEAP_SIZE) {
+    fatal_error("heap overflow");
+  }
+
+  return alloc_result;
+}
+
+int alloc_label() {
+  int lbl = alloc_obj(1);
+  heap[lbl] = 0;
+  return lbl;
+}
+
+void use_label(int lbl) {
+  int addr = heap[lbl];
+  if (addr < 0) {
+    /* label address is currently known */
+    addr = -addr - code_alloc; /* compute relative address */
+    code_alloc -= 4;
+    emit_i32_le(addr);
+  } else {
+    /* label address is not yet known */
+    code[code_alloc-1] = addr; /* chain with previous patch address */
+    heap[lbl] = code_alloc;
+  }
+}
+
+void def_label(int lbl) {
+  int addr = heap[lbl];
+  int label_addr = code_alloc;
+  int next;
+  heap[lbl] = -label_addr; /* define label's address */
+  while (addr != 0) {
+    next = heap[addr-1]; /* get pointer to next patch address */
+    code_alloc = addr;
+    addr = label_addr - addr; /* compute relative address */
+    code_alloc -= 4;
+    emit_i32_le(addr);
+    addr = next;
+  }
+  code_alloc = label_addr;
+}
+
 void codegen() {
+
+  int lbl;
 
   linux32_print_msg("hello world!\n");
 
   /* test evaluation of 49 % 5 */
 
-  mov_reg_i32(AX, 19);
-  push_reg(AX);
-
   mov_reg_i32(AX, 3);
   push_reg(AX);
 
-  binop('/');
+  mov_reg_i32(AX, 19);
+  push_reg(AX);
+
+  binop('<');
 
   pop_reg(AX);
+
+  lbl = alloc_label();
+
+  test_reg_reg(AX, AX);  /* test eax, eax */
+  mov_reg_i32(AX, 111);
+  jcond(NE); use_label(lbl);
+  mov_reg_i32(AX, 222);
+
+  def_label(lbl);
+
   linux32_exit(); /* exit process with code 0 */
 }
 
