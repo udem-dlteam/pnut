@@ -1,11 +1,16 @@
 #ifndef SIX_CC
 
+#ifndef SIX_CC_BOOTSTRAP
+
 #include <stdio.h>
 #include <stdlib.h>
-typedef FILE *FILE_ptr;
-typedef int *int_ptr;
-typedef char *char_ptr;
-typedef void *void_ptr;
+
+#endif
+
+#define FILE_ptr  FILE *
+#define int_ptr   int  *
+#define char_ptr  char *
+#define void_ptr  void *
 
 #endif
 
@@ -13,7 +18,7 @@ typedef void *void_ptr;
 #define true 1
 #define false 0
 
-#define AVOID_AMPAMP_BARBAR
+#define AVOID_AMPAMP_BARBAR_not
 #define USE_IN_RANGE_FUNCTION_not
 #define INLINE_get_ch
 
@@ -34,6 +39,16 @@ int in_range(int x, int lo, int hi) {
 #else
 #define in_range(x, lo, hi) ((x >= lo) AND (x <= hi))
 #endif
+
+/* Redefining strcmp because it's not part of the Shell runtime */
+int strcmp(char_ptr str1, char_ptr str2) {
+  int i = 0;
+  while (str1[i] == str2[i]) {
+    if (str1[i] == '\0') return 0;
+    i += 1;
+  }
+  return str1[i] - str2[i];
+}
 
 int AUTO_KW        = 300;
 int BREAK_KW       = 301;
@@ -83,36 +98,40 @@ int CHARACTER  = 402;
 int STRING     = 403;
 
 int AMP_AMP    = 404;
-int AMP_EQ     = 431; /* TODO: Renumber these */
-int ARROW      = 405;
-int BAR_BAR    = 406;
-int BAR_EQ     = 407;
-int CARET_EQ   = 408;
-int EQ_EQ      = 409;
-int GT_EQ      = 410;
-int LSHIFT_EQ  = 411;
-int LSHIFT     = 412;
-int LT_EQ      = 413;
-int MINUS_EQ   = 414;
-int MINUS_MINUS= 415;
-int EXCL_EQ    = 416;
-int PERCENT_EQ = 417;
-int PLUS_EQ    = 418;
-int PLUS_PLUS  = 419;
-int RSHIFT_EQ  = 420;
-int RSHIFT     = 421;
-int SLASH_EQ   = 422;
-int STAR_EQ    = 423;
+int AMP_EQ     = 405;
+int ARROW      = 406;
+int BAR_BAR    = 407;
+int BAR_EQ     = 408;
+int CARET_EQ   = 409;
+int EQ_EQ      = 410;
+int GT_EQ      = 411;
+int LSHIFT_EQ  = 412;
+int LSHIFT     = 413;
+int LT_EQ      = 414;
+int MINUS_EQ   = 415;
+int MINUS_MINUS= 416;
+int EXCL_EQ    = 417;
+int PERCENT_EQ = 418;
+int PLUS_EQ    = 419;
+int PLUS_PLUS  = 420;
+int RSHIFT_EQ  = 421;
+int RSHIFT     = 422;
+int SLASH_EQ   = 423;
+int STAR_EQ    = 424;
 
-int TEXT_TREE = 424;
-int TEXT_INTEGER = 425;
-int TEXT_CHAR = 426;
-int TEXT_STRING = 427;
-int TEXT_SUBSTRING = 428;
+int TEXT_TREE = 425;
+int TEXT_INTEGER = 426;
+int TEXT_CHAR = 427;
+int TEXT_STRING = 428;
+int TEXT_SUBSTRING = 429;
 
-int IDENTIFIER_INTERNAL = 429;
-int IDENTIFIER_EMPTY = 430;
-/* Note: 431 is already taken by AMP_EQ */
+int IDENTIFIER_INTERNAL = 430;
+int IDENTIFIER_STRING = 431;
+int IDENTIFIER_DOLLAR = 432;
+int IDENTIFIER_EMPTY = 433;
+int LOCAL_VAR = 434;
+int KIND_LOCAL = 435;
+int KIND_PARAM = 436;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -316,8 +335,6 @@ void init_ident_table() {
 
 int accum_digit(int base) {
   int digit = 99;
-  int MININT = -2147483648;
-  int limit;
   if (in_range(ch, '0', '9')) {
     digit = ch - '0';
   } else if (in_range(ch, 'A', 'Z')) {
@@ -328,13 +345,14 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; /* character is not a digit in that base */
   } else {
-    limit = MININT / base;
+    /*
+    TODO: Put overflow check back
     if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
       fatal_error("literal integer overflow");
-    } else {
-      val = val * base - digit;
-      get_ch();
     }
+    */
+    val = val * base - digit;
+    get_ch();
     return 1;
   }
 }
@@ -787,10 +805,12 @@ void expect_tok(int expected_tok) {
 }
 
 #ifndef SIX_CC
+#ifndef SIX_CC_BOOTSTRAP
 ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
+#endif
 #endif
 
 ast parse_type() {
@@ -842,6 +862,61 @@ int is_type_starter(int tok) {
   return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW);
 }
 
+ast parse_declaration() {
+  ast type;
+  int stars;
+  int name;
+  ast this_type;
+  ast result = 0;
+
+  if (is_type_starter(tok)) {
+
+    type = parse_type();
+    stars = parse_stars();
+
+    if (stars != 0)
+      this_type = new_ast0(get_op(type), stars);
+
+    name = val;
+
+    expect_tok(IDENTIFIER);
+
+    if ((stars == 0) AND (get_op(type) == VOID_KW))
+      syntax_error("variable with void type");
+
+    if (tok == '[')
+      syntax_error("array declaration only allowed at global level");
+
+
+    result = new_ast3(VAR_DECL, name, this_type, 0);
+  }
+
+  return result;
+}
+
+int parse_declaration_list() {
+  ast decl = parse_declaration(true);
+  ast result = 0;
+  ast tail;
+  if (decl != 0) {
+    result = new_ast2(',', decl, 0);
+    tail = result;
+
+    while (tok == ',') {
+      get_tok();
+      decl = parse_declaration(true);
+      if (decl == 0) { break; }
+
+      decl = new_ast2(',', decl, 0);
+      set_child(tail, 1, decl);
+      tail = decl;
+    }
+  }
+
+  return result;
+}
+
+/* Note: Uses a simplified syntax for definitions */
 ast parse_definition(int local) {
 
   ast type;
@@ -851,8 +926,7 @@ ast parse_definition(int local) {
   ast params;
   ast body;
   ast this_type;
-
-  /* use a simplified syntax for definitions */
+  ast result = 0;
 
   if (is_type_starter(tok)) {
 
@@ -879,9 +953,9 @@ ast parse_definition(int local) {
 
         get_tok();
 
-        params = 0;
+        params = parse_declaration_list();
 
-        expect_tok(')'); /* TODO: parse parameter list */
+        expect_tok(')');
 
         if (tok == ';') {
           /* forward declaration */
@@ -891,14 +965,28 @@ ast parse_definition(int local) {
           body = parse_compound_statement();
         }
 
-        new_ast4(FUN_DECL, name, this_type, params, body);
-
-        break;
+        return new_ast4(FUN_DECL, name, this_type, params, body);
 
       } else {
 
         if ((stars == 0) AND (get_op(type) == VOID_KW)) {
           syntax_error("variable with void type");
+        }
+
+        if (tok == '[') {
+          if (local) {
+            syntax_error("array declaration only allowed at global level");
+          }
+
+          get_tok();
+          if (tok == INTEGER) {
+            this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
+            get_tok();
+          } else {
+            syntax_error("array size must be an integer constant");
+          }
+
+          expect_tok(']');
         }
 
         init = 0;
@@ -908,7 +996,7 @@ ast parse_definition(int local) {
           init = parse_conditional_expression();
         }
 
-        new_ast3(VAR_DECL, name, this_type, init);
+        result = new_ast3(VAR_DECL, name, this_type, init);
 
         if (tok == ';') {
           get_tok();
@@ -922,6 +1010,7 @@ ast parse_definition(int local) {
       }
     }
   }
+  return result;
 }
 
 ast parse_parenthesized_expression() {
@@ -1445,7 +1534,7 @@ ast parse_compound_statement() {
 
   ast result = 0;
   ast child1;
-  ast tail = 0;
+  ast tail;
 
   expect_tok('{');
 
@@ -1493,7 +1582,7 @@ void print_string_char(int c) {
 #define text int
 #define TEXT_POOL_SIZE 1000000
 int text_pool[TEXT_POOL_SIZE];
-int text_alloc = 0;
+int text_alloc = 1; /* Start at 0 because 0 is the empty text */
 
 #ifndef SIX_CC
 /* Place prototype of mutually recursive functions here */
@@ -1521,10 +1610,14 @@ text wrap_int(int i) {
 }
 
 text wrap_char(char c) {
+  /* Characters are represent using negative numbers */
+  return -c;
+  /*
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_CHAR;
-  text_pool[text_alloc + 1] = c;
+  text_pool[text_alloc + 1] = - c;
   return (text_alloc += 2) - 2;
+  */
 }
 
 text string_concat(text t1, text t2) {
@@ -1534,35 +1627,6 @@ text string_concat(text t1, text t2) {
   text_pool[text_alloc + 2] = t1;
   text_pool[text_alloc + 3] = t2;
   return (text_alloc += 4) - 4;
-}
-
-/*
-  TODO: Optimize wrap_str and wrap_substr
-  For N char, we store it using 6*N (4 from string_concat, 2 from wrap_char) bytes, so not very efficient...
-  Also, most of the strings passed to wrap_str are hardcoded, and could probably be unpacked once instead of every time.
-*/
-text wrap_str(char_ptr s) {
-  int i = 0;
-  int result = 0;
-
-  while (s[i] != 0) {
-    result = string_concat(result, wrap_char(s[i]));
-    i += 1;
-  }
-
-  return result;
-}
-
-text wrap_substr(char_ptr s, int len) {
-  int i = 0;
-  int result = 0;
-
-  while (s[i] != 0 AND i < len) {
-    result = string_concat(result, wrap_char(s[i]));
-    i += 1;
-  }
-
-  return result;
 }
 
 text string_concat3(text t1, text t2, text t3) {
@@ -1587,6 +1651,7 @@ text string_concat4(text t1, text t2, text t3, text t4) {
 }
 
 text string_concat5(text t1, text t2, text t3, text t4, text t5) {
+  if (text_alloc + 7 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_TREE;
   text_pool[text_alloc + 1] = 5;
   text_pool[text_alloc + 2] = t1;
@@ -1597,13 +1662,40 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
+text wrap_str(char_ptr s) {
+  int i = 0;
+  int result = 0;
+
+  result = text_alloc;
+  text_pool[result] = TEXT_TREE;
+  text_alloc += 2;
+  while (s[i] != 0) {
+    text_pool[text_alloc] = -s[i];
+    text_alloc += 1;
+    i += 1;
+  }
+
+  text_pool[result + 1] = i;
+
+  return result;
+}
+
+text concatenate_strings_with(text t1, text t2, text sep) {
+  if (t1 == 0) return t2;
+  if (t2 == 0) return t1;
+  return string_concat3(t1, sep, t2);
+}
+
 void print_text(text t) {
   int i;
 
   if (t == 0) return;
 
-  if (text_pool[t] == TEXT_TREE) {
-    for (i = 0; i < text_pool[t + 1]; i++) {
+  if (t < 0) {
+    /* it's a character */
+    putchar(-t);
+  } else if (text_pool[t] == TEXT_TREE) {
+    for (i = 0; i < text_pool[t + 1]; i += 1) {
       print_text(text_pool[t + i + 2]);
     }
   } /* else if (text_pool[t] == TEXT_STRING) {
@@ -1613,7 +1705,7 @@ void print_text(text t) {
   } */ else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_CHAR) {
-    putchar(text_pool[t + 1]);
+    fatal_error("unexpected character");
   } else {
     printf("\nt=%d %d\n", t, text_pool[t]);
     fatal_error("unexpected string tree node");
@@ -1623,66 +1715,342 @@ void print_text(text t) {
 /* Codegen context */
 
 #define GLO_DECL_SIZE 100000
-text glo_decls[GLO_DECL_SIZE];
-int glo_decl_ix = 0;
-int nest_level = 0;
-int is_tail_call = false;
-int loop_nesting_level = 0; /* Number of loops were in */
-text loop_end_actions = 0;
+text glo_decls[GLO_DECL_SIZE];  /* Generated code */
+int glo_decl_ix = 0;            /* Index of last generated line of code  */
+int nest_level = 0;             /* Current level of indentation */
+int in_tail_position = false;   /* Is the current statement in tail position? */
+int loop_nesting_level = 0;     /* Number of loops surrounding the current statement */
+int loop_end_actions_start = 0; /* Start position of declarations for the last action in a for loop */
+int loop_end_actions_end = 0;   /* End position of declarations for the last action in a for loop */
+ast local_env = 0;              /* List of local variables */
+ast local_env_size = 0;         /* Size of the environment */
+int gensym_ix = 0;              /* Counter for fresh_ident */
+int fun_gensym_ix = 0;          /* Maximum value of gensym_ix for the current function */
+int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions */
+int string_counter = 0;         /* Counter for string literals */
+#define CHARACTERS_BITFIELD_SIZE 16
+int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 
-/* Remove the n last declarations and string_concat them with the given separator */
-text pop_glo_decls(int n, text sep) {
-  text decl = 0;
-  while (n > 0) {
-    decl = string_concat3(glo_decls[glo_decl_ix - 1], sep, decl);
-    glo_decl_ix -= 2;
-    n -= 1;
+void init_comp_context() {
+  int i;
+  /* Initialize characters_useds table */
+  for (i = 0; i < 16; i += 1) {
+    characters_useds[i] = 0;
   }
-  return decl;
 }
 
 void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
-  glo_decls[glo_decl_ix + 1] = decl;
-  glo_decl_ix += 2;
+  glo_decls[glo_decl_ix + 1] = 1; /* If it's active or not. Used by undo_glo_decls and replay_glo_decls */
+  glo_decls[glo_decl_ix + 2] = decl;
+  glo_decl_ix += 3;
+}
+
+/*
+  Remove the n last declarations by decrementing the active field.
+  A non-positive active value means that the declaration is active,
+  A 0 value means that the declaration was unset once.
+  A negative value means that the declaration was unset multiple times.
+  Because undone declarations are generally replayed, declarations with negative
+  values are ignored when replayed since they have already been replayed before.
+  This is useful to compile some code at a different time than it is used.
+*/
+void undo_glo_decls(int start) {
+  while (start < glo_decl_ix) {
+    glo_decls[start + 1] -= 1; /* To support nested undone declarations */
+    start += 3;
+  }
+}
+
+/*
+  Replay the declarations betwee start and end. Replayed declarations must first
+  be undone with undo_glo_decls.
+  The reindent parameter controls if the declarations should be replayed at the
+  current nest level or at the nest level when they were added.
+*/
+void replay_glo_decls(int start, int end, int reindent) {
+  while (start < end) {
+    if (glo_decls[start + 1] == 0) { /* Skip inactive declarations that are at the current level */
+      append_glo_decl(glo_decls[start + 2]);
+      if (!reindent) glo_decls[glo_decl_ix - 3] = glo_decls[start]; /* Replace nest_level */
+    }
+    start += 3;
+  }
+}
+
+text replay_glo_decls_inline(int start, int end) {
+  text res = 0;
+  while (start < end) {
+    if (glo_decls[start + 1] == 0) { /* Skip inactive declarations */
+      res = concatenate_strings_with(res, glo_decls[start + 2], wrap_str("; "));
+    }
+    start += 3;
+  }
+  if (res != 0) { res = string_concat(res, wrap_str("; ")); }
+
+  return res;
 }
 
 void print_glo_decls() {
   int i;
-  for (i = 0; i < glo_decl_ix; i += 2) {
-    while (glo_decls[i] > 0) {
-      putchar(' '); putchar(' ');
-      glo_decls[i] -= 1;
+  int level;
+  for (i = 0; i < glo_decl_ix; i += 3) {
+    if (glo_decls[i + 1] == 1) { /* Skip inactive declarations */
+      level = glo_decls[i];
+      while (level > 0) {
+        putchar(' '); putchar(' ');
+        level -= 1;
+      }
+      print_text(glo_decls[i + 2]);
+      putchar('\n');
     }
-    print_text(glo_decls[i + 1]);
-    putchar('\n');
+  }
+}
+
+ast find_var_in_local_env(ast ident_tok) {
+  ast env = local_env;
+  ast var;
+  while (env != 0) {
+    var = get_child(env, 0);
+    /* Because identifier tokens are unique, we can compare their address to check if they are the same. */
+    if (get_child(var, 0) == ident_tok) return var;
+
+    env = get_child(env, 1);
+  }
+  return -1;
+}
+
+/*
+  Similar to env_var, but doesn't use the local environment and assumes that the
+  identifier is internal or global. This is faster than env_var when we know that
+  the variable is not local.
+*/
+text format_special_var(ast ident, ast prefixed_with_dollar) {
+  int op = get_op(ident);
+  if (op == IDENTIFIER_INTERNAL) {
+    return string_concat(wrap_str("__g"), get_val(ident));
+  } else if (op == IDENTIFIER_STRING) {
+    return string_concat(wrap_str("__str_"), get_val(ident));
+  } else if (op == IDENTIFIER_DOLLAR) {
+    if (prefixed_with_dollar) {
+      return wrap_int(get_val(ident));
+    } else {
+      return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+    }
+  } else if (op == IDENTIFIER_EMPTY) {
+    return wrap_str("__");
+  } else {
+    printf("op=%d %c", op, op);
+    fatal_error("format_special_var: unknown identifier type");
+    return 0;
+  }
+}
+
+text global_var(ast ident_tok) {
+  return string_concat(wrap_char('_'), wrap_str(string_pool + get_val(ident_tok)));
+}
+
+text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
+  ast var;
+  text res;
+
+  if (get_op(ident) == IDENTIFIER) {
+    var = find_var_in_local_env(get_val(ident));
+    if (var != -1) {
+      if (get_child(var, 2) == KIND_PARAM AND get_child(var, 3)) {
+        res = wrap_int(get_child(var, 2));
+        if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
+      } else {
+        res = wrap_str(string_pool + get_val(get_val(ident)));
+      }
+    } else {
+      res = global_var(get_val(ident));
+    }
+  } else {
+    res = format_special_var(ident, prefixed_with_dollar);
+  }
+
+  return res;
+}
+
+text env_var(ast ident) {
+  return env_var_with_prefix(ident, false);
+}
+
+text function_name(int ident_tok) {
+  return string_concat(wrap_char('_'), wrap_str(string_pool + get_val(ident_tok)));
+}
+
+ast fresh_ident() {
+  gensym_ix += 1;
+  if (gensym_ix > fun_gensym_ix) {
+    fun_gensym_ix = gensym_ix;
+  }
+  if (gensym_ix > max_gensym_ix) {
+    max_gensym_ix = gensym_ix;
+  }
+  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
+}
+
+/* TODO: Reuse identifier for strings used in multiple places */
+ast fresh_string_ident() {
+  string_counter += 1;
+  return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter - 1));
+}
+
+/* TODO: Remove this eventually or move to debug module */
+void print_local_env() {
+  ast env = local_env;
+  ast ident;
+  printf("##### print_local_env\n");
+  while (env != 0) {
+    ident = get_child(get_child(env, 0), 0);
+
+    printf("Ident: %d = %s\n", ident, string_pool + get_val(ident));
+    env = get_child(env, 1);
+  }
+}
+
+/*
+The local environment is a list of variables represented using ',' nodes.
+A variable is a LOCAL_VAR node with 4 children:
+  1. Ident
+  2. Position of the variable in the shell environment ($1, $2, ...)
+  3. Kind of variable (function param or local var)
+  4. Constant: if the variable is never assigned to
+*/
+void add_var_to_local_env(ast ident_tok, int position) {
+  ast var;
+
+  /* Check if the variable is not in env. This should always do nothing */
+  if (find_var_in_local_env(ident_tok) != -1) {
+    fatal_error("add_var_to_local_env: variable already in local environment");
+  }
+
+  /* The var is not part of the environment, so we add it */
+  var = new_ast4(LOCAL_VAR, ident_tok, position, KIND_LOCAL, false);
+  local_env = new_ast2(',', var, local_env);
+  local_env_size += 1;
+}
+
+void add_vars_to_local_env(ast lst, int position) {
+  ast decl;
+  while (lst != 0) {
+    decl = get_child(lst, 0);
+    add_var_to_local_env(get_child(decl, 0), position);
+    lst = get_child(lst, 1);
+    position += 1;
+  }
+}
+
+/*
+  Since global and internal variables are prefixed with _, we restrict the name
+  of variables to not start with _. Also, because some shells treat some
+  variables as special, we prevent their use. Additionally, EOF and NULL cannot
+  be redefined.
+*/
+void assert_idents_are_safe(ast lst) {
+  ast ident_tok;
+  char_ptr name;
+  while (lst != 0) {
+    ident_tok = get_child(get_child(lst, 0), 0);
+    name = string_pool + get_val(ident_tok);
+
+    if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+      printf("%s ", name);
+      fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    }
+
+    lst = get_child(lst, 1);
+  }
+}
+
+void save_local_vars() {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
+    counter -= 1;
+  }
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
+
+    res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
+
+    env = get_child(env, 1);
+  }
+
+  if (res != 0) {
+    append_glo_decl(string_concat(wrap_str("save_loc_var "), res));
+  }
+}
+
+/*
+  The only difference between save_local_vars and restore_local_vars is the
+  order of the arguments and the call to rest_loc_var instead of save_loc_var.
+*/
+void restore_local_vars() {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    res = concatenate_strings_with(format_special_var(ident, false), res, wrap_char(' '));
+    counter -= 1;
+  }
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
+
+    res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
+
+    env = get_child(env, 1);
+  }
+
+  if (res != 0) {
+    append_glo_decl(string_concat(wrap_str("rest_loc_var $1 "), res));
   }
 }
 
 text op_to_str(int op) {
-  if      (op < 256)         return wrap_char(op);
-  else if (op == AMP_AMP)    return wrap_str("&&");
-  else if (op == AMP_EQ)     return wrap_str("&=");
-  else if (op == BAR_BAR)    return wrap_str("||");
-  else if (op == BAR_EQ)     return wrap_str("|=");
-  else if (op == CARET_EQ)   return wrap_str("^=");
-  else if (op == EQ_EQ)      return wrap_str("==");
-  else if (op == GT_EQ)      return wrap_str(">=");
-  else if (op == LSHIFT_EQ)  return wrap_str("<<=");
-  else if (op == LT_EQ)      return wrap_str("<=");
-  else if (op == LSHIFT)     return wrap_str("<<");
-  else if (op == MINUS_EQ)   return wrap_str("-=");
-  else if (op == EXCL_EQ)    return wrap_str("!=");
-  else if (op == PERCENT_EQ) return wrap_str("%%=");
-  else if (op == PLUS_EQ)    return wrap_str("+=");
-  else if (op == RSHIFT_EQ)  return wrap_str(">>=");
-  else if (op == RSHIFT)     return wrap_str(">>");
-  else if (op == SLASH_EQ)   return wrap_str("/=");
-  else if (op == STAR_EQ)    return wrap_str("*=");
+  if      (op < 256)         return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
+  else if (op == AMP_AMP)    return wrap_str(" && ");
+  else if (op == AMP_EQ)     return wrap_str(" &= ");
+  else if (op == BAR_BAR)    return wrap_str(" || ");
+  else if (op == BAR_EQ)     return wrap_str(" |= ");
+  else if (op == CARET_EQ)   return wrap_str(" ^= ");
+  else if (op == EQ_EQ)      return wrap_str(" == ");
+  else if (op == GT_EQ)      return wrap_str(" >= ");
+  else if (op == LSHIFT_EQ)  return wrap_str(" <<= ");
+  else if (op == LT_EQ)      return wrap_str(" <= ");
+  else if (op == LSHIFT)     return wrap_str(" << ");
+  else if (op == MINUS_EQ)   return wrap_str(" -= ");
+  else if (op == EXCL_EQ)    return wrap_str(" != ");
+  else if (op == PERCENT_EQ) return wrap_str(" %%= ");
+  else if (op == PLUS_EQ)    return wrap_str(" += ");
+  else if (op == RSHIFT_EQ)  return wrap_str(" >>= ");
+  else if (op == RSHIFT)     return wrap_str(" >> ");
+  else if (op == SLASH_EQ)   return wrap_str(" /= ");
+  else if (op == STAR_EQ)    return wrap_str(" *= ");
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("op_to_str: unexpected operator");
-    return -1;
+    return 0;
   }
 }
 
@@ -1699,19 +2067,71 @@ text test_op_to_str(int op) {
   else {
     printf("op=%d %c\n", op, op);
     fatal_error("test_op_to_str: unexpected operator");
-    return -1;
+    return 0;
   }
 }
 
-int gensym_ix = 0;
+text character_ident(int c) {
+  /* Mark character as used */
+  characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
 
-ast fresh_ident() {
-  gensym_ix++;
-  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
+  if (in_range(c, 'a', 'z')) {
+    return string_concat(wrap_str("__LOWER_"), wrap_char(c));
+  } else if (in_range(c, 'A', 'Z')) {
+    return string_concat(wrap_str("__UPPER_"), wrap_char(c));
+  } else if (in_range(c, '0', '9')) {
+    return string_concat(wrap_str("__DIGIT_"), wrap_int(c - 48));
+  } else {
+    if      (c == '\0') return wrap_str("__NULL_CH");
+    else if (c == '\n') return wrap_str("__NEWLINE_CH");
+    else if (c == ' ')  return wrap_str("__SPACE_CH");
+    else if (c == '!')  return wrap_str("__EXCL_CH");
+    else if (c == '"')  return wrap_str("__DQUOTE_CH");
+    else if (c == '#')  return wrap_str("__SHARP_CH");
+    else if (c == '$')  return wrap_str("__DOLLAR_CH");
+    else if (c == '%')  return wrap_str("__PERCENT_CH");
+    else if (c == '&')  return wrap_str("__AMP_CH");
+    else if (c == '\'') return wrap_str("__QUOTE_CH");
+    else if (c == '(')  return wrap_str("__LPAREN_CH");
+    else if (c == ')')  return wrap_str("__RPAREN_CH");
+    else if (c == '*')  return wrap_str("__STAR_CH");
+    else if (c == '+')  return wrap_str("__PLUS_CH");
+    else if (c == ',')  return wrap_str("__COMMA_CH");
+    else if (c == '-')  return wrap_str("__MINUS_CH");
+    else if (c == '.')  return wrap_str("__PERIOD_CH");
+    else if (c == '/')  return wrap_str("__SLASH_CH");
+    else if (c == ':')  return wrap_str("__COLON_CH");
+    else if (c == ';')  return wrap_str("__SEMICOLON_CH");
+    else if (c == '<')  return wrap_str("__LT_CH");
+    else if (c == '=')  return wrap_str("__EQ_CH");
+    else if (c == '>')  return wrap_str("__GT_CH");
+    else if (c == '?')  return wrap_str("__QUESTION_CH");
+    else if (c == '@')  return wrap_str("__AT_CH");
+    else if (c == '^')  return wrap_str("__CARET_CH");
+    else if (c == '[')  return wrap_str("__LBRACK_CH");
+    else if (c == '\\') return wrap_str("__BACKSLASH_CH");
+    else if (c == ']')  return wrap_str("__RBRACK_CH");
+    else if (c == '_')  return wrap_str("__UNDERSCORE_CH");
+    else if (c == '`')  return wrap_str("__BACKTICK_CH");
+    else if (c == '{')  return wrap_str("__LBRACE_CH");
+    else if (c == '|')  return wrap_str("__BAR_CH");
+    else if (c == '}')  return wrap_str("__RBRACE_CH");
+    else if (c == '~')  return wrap_str("__TILDE_CH");
+    else if (c == '\a') return wrap_str("__ALARM_CH");
+    else if (c == '\b') return wrap_str("__BACKSPACE_CH");
+    else if (c == '\f') return wrap_str("__PAGE_CH");
+    else if (c == '\r') return wrap_str("__RET_CH");
+    else if (c == '\t') return wrap_str("__TAB_CH");
+    else if (c == '\v') return wrap_str("__VTAB_CH");
+    else { fatal_error("Unknown character"); return 0; }
+  }
 }
 
+
 ast replaced_fun_calls = 0;
+ast replaced_fun_calls_tail = 0;
 ast conditional_fun_calls = 0;
+ast conditional_fun_calls_tail = 0;
 ast literals_inits = 0;
 int executes_conditionally = 0;
 int contains_side_effects = 0;
@@ -1725,23 +2145,26 @@ int contains_side_effects = 0;
 ast handle_side_effects_go(ast node, int executes_conditionally) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
+  int start_gensym_ix;
   ast sub1;
   ast sub2;
   ast previous_conditional_fun_calls;
   ast left_conditional_fun_calls;
   ast right_conditional_fun_calls;
+  ast new_tail;
 
   if (nb_children == 0) {
-    if (op == IDENTIFIER OR op == INTEGER OR op == CHARACTER) {
+    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
-      sub1 = fresh_ident();
+      sub1 = fresh_string_ident();
       literals_inits = new_ast2(',', new_ast2(',', sub1, get_val(node)), literals_inits);
       return sub1;
     } else {
       printf("handle_side_effects_go: op=%d %c", op, op);
       fatal_error("unexpected operator");
+      return 0;
     }
   } else if (nb_children == 1) {
     if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
@@ -1754,17 +2177,21 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("unexpected operator");
+      return 0;
     }
   } else if (nb_children == 2) {
     if ((op == '(')) { /* Function call */
+      sub1 = fresh_ident(); /* Unique identifier for the function call */
+
+      start_gensym_ix = gensym_ix;
 
       /* Traverse the arguments and replace them with the result of handle_side_effects_go */
       sub2 = get_child(node, 1);
       if (sub2 != 0) { /* Check if not an empty list */
         if (get_op(sub2) == ',') {
           while (get_op(sub2) == ',') {
-            sub1 = handle_side_effects_go(get_child(sub2, 0), executes_conditionally);
-            set_child(sub2, 0, sub1);
+            set_child(sub2, 0, handle_side_effects_go(get_child(sub2, 0), executes_conditionally));
+            sub2 = get_child(sub2, 1);
           }
         } else { /* sub2 is the first argument, not wrapped in a cons cell */
           sub2 = handle_side_effects_go(sub2, executes_conditionally);
@@ -1772,14 +2199,28 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
         }
       }
 
-      sub1 = fresh_ident();
+      /*
+        All the temporary variables used for the function parameters can be
+        reused after the function call, so resetting the gensym counter.
+      */
+      gensym_ix = start_gensym_ix;
 
-      if (executes_conditionally) { conditional_fun_calls = new_ast2(',', new_ast2(',', sub1, node), conditional_fun_calls); }
-      else { replaced_fun_calls = new_ast2(',', new_ast2(',', sub1, node), replaced_fun_calls); }
+      new_tail = new_ast2(',', sub1, node);
+      new_tail = new_ast2(',', new_tail, 0);
+      if (executes_conditionally) {
+        if (conditional_fun_calls == 0) { conditional_fun_calls = new_tail; }
+        else { set_child(conditional_fun_calls_tail, 1, new_tail); }
+        conditional_fun_calls_tail = new_tail;
+      }
+      else {
+        if (replaced_fun_calls == 0) { replaced_fun_calls = new_tail; }
+        else { set_child(replaced_fun_calls_tail, 1, new_tail); }
+        replaced_fun_calls_tail = new_tail;
+      }
 
       return sub1;
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == LT_EQ) OR (op == GT_EQ) OR (op == EQ_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') ) {
+      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') ) {
       /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
@@ -1807,17 +2248,21 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
+      return 0;
     }
   } else if (nb_children == 3) {
     /* TODO: Ternary expression */
     printf("3: op=%d %c\n", op, op);
     fatal_error("unexpected operator");
+    return 0;
   } else if (nb_children == 4) {
     printf("4: op=%d %c\n", op, op);
     fatal_error("unexpected operator");
+    return 0;
   } else {
     printf("5: op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("unexpected operator");
+    return 0;
   }
 }
 
@@ -1829,18 +2274,9 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-text env_var(ast ident) {
-  if (get_op(ident) == IDENTIFIER) {
-    return wrap_str(string_pool + heap[get_val(ident)+1]);
-  } else if (get_op(ident) == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str("__g"), get_val(ident));
-  } else if (get_op(ident) == IDENTIFIER_EMPTY) {
-    return wrap_str("__");
-  } else {
-    printf("op=%d %c", get_op(ident), get_op(ident));
-    fatal_error("env_var: unknown identifier");
-  }
-}
+int RVALUE_CTX_BASE = 0;
+int RVALUE_CTX_ARITH_EXPANSION = 1; /* Like base context, except that we're already in $(( ... )) */
+int RVALUE_CTX_TEST = 2;
 
 text with_prefixed_side_effects(ast test_side_effects, text code) {
 
@@ -1861,18 +2297,19 @@ text with_prefixed_side_effects(ast test_side_effects, text code) {
 }
 
 /*
-  Wrap code in $((...)) if it's not already (flagged via wrapped), and if it's
-  already in $(( )), wrap it in parentheses if parens_otherwise is true. If it's
-  not wrapped and we're compiling tests, we also add the test condition to make
-  it a valid test.
+  Wrap code in $((...)) if it's not already and if it's already in $(( )), wrap
+  it in parentheses if parens_otherwise is true. If it's not in an arithmetic
+  expansion and we're compiling tests, we also add the test condition to make it
+  a valid test.
 */
-text wrap_if_needed(int wrapped, int compiling_tests, int parens_otherwise, ast test_side_effects, text code) {
-  if (wrapped) {
+text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, text code) {
+  if (context == RVALUE_CTX_ARITH_EXPANSION) {
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
+  } else if (context == RVALUE_CTX_TEST) {
+    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) -ne 0 ]")));
   } else {
-    if (compiling_tests) return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) - ne 0 ]")));
-    else return string_concat3(wrap_str("$(( "), code, wrap_str(" ))"));
+    return string_concat3(wrap_str("$(("), code, wrap_str("))"));
   }
 }
 
@@ -1880,121 +2317,129 @@ text wrap_if_needed(int wrapped, int compiling_tests, int parens_otherwise, ast 
   Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
   This is otherwise handled by wrap-if-needed, but we don't want to wrap in $(( ... )) here.
 */
-text wrap_in_condition_if_needed(int compiling_tests, ast test_side_effects, text code) {
-  if (compiling_tests) {
+text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) {
+  if (context == RVALUE_CTX_TEST) {
     return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ "), code, wrap_str(" -ne 0 ]")));
   } else {
     return code;
   }
 }
 
-text comp_rvalue_go(ast node, int wrapped, int compiling_tests, ast test_side_effects) {
+text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
-  int val;
   text sub1;
   text sub2;
 
-  if (wrapped AND compiling_tests) { fatal_error("comp_rvalue_go: Can't compile as a test while wrapped in $(( ... ))"); }
-
   if (nb_children == 0) {
     if (op == INTEGER) {
-      return wrap_in_condition_if_needed(compiling_tests, test_side_effects, wrap_int(-get_val(node)));
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(node)));
     } else if (op == CHARACTER) {
-      /* TODO: Map characters to constant instead of hardcoding ascii code */
-      return wrap_in_condition_if_needed(compiling_tests, test_side_effects, wrap_int(get_val(node)));
-    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL) {
-      if (wrapped) { return env_var(node); }
-      else { return wrap_in_condition_if_needed(compiling_tests, test_side_effects, string_concat(wrap_char('$'), env_var(node))); }
-      return env_var(node);
+      if (context == RVALUE_CTX_ARITH_EXPANSION) {
+        return character_ident(get_val(node));
+      } else {
+        return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
+      }
+    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
+      if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
+      else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
       fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
-      return -1;
+      return 0;
     } else {
       printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
+      return 0;
     }
   } else if (nb_children == 1) {
     if (op == '*') {
       /*
-        Setting wrapped to false even if it's wrapped in $(( ... )) because we
+        Setting context to RVALUE_CTX_BASE even if it's wrapped in $(( ... )) because we
         need another layer of wrapping if it's a complex expression, i.e. not a
         literal or a variable.
       */
-      sub1 = comp_rvalue_go(get_child(node, 0), false, false, 0);
-      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat(wrap_char('_'), sub1));
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0);
+      return wrap_if_needed(true, context, test_side_effects, string_concat(wrap_char('_'), sub1));
     } else if (op == '+') {
       /* +x is equivalent to x */
-      return comp_rvalue_go(get_child(node, 0), wrapped, compiling_tests, test_side_effects);
+      return comp_rvalue_go(get_child(node, 0), context, test_side_effects);
     } else if (op == '-') {
       /*
         Check if the rest of ast is a literal, if so directly return the negated value.
         Note: I think this can be simplified by not wrapped in () in the else case.
       */
       if (get_op(get_child(node, 0)) == INTEGER) {
-        return wrap_in_condition_if_needed(compiling_tests, test_side_effects, wrap_int(-get_val(get_child(node, 0))));
+        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(get_child(node, 0))));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
-        return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat3(wrap_str("-("), sub1, wrap_char(')')));
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+        return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str("-("), sub1, wrap_char(')')));
       }
     } else if (op == '~') {
-      sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
-      return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat3(wrap_str("~("), sub1, wrap_char(')')));
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str("~("), sub1, wrap_char(')')));
     } else if (op == '!') {
-      sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
-      return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat(wrap_char('!'), sub1));
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('!'), sub1));
     } else if (op == MINUS_MINUS) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat(sub1, wrap_str(" -= 1")));
+      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" -= 1")));
     } else if (op == PLUS_PLUS) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
+      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
     } else if (op == '&') {
       fatal_error("comp_rvalue_go: address of operator not supported");
+      return 0;
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
+      return 0;
     }
   } else if (nb_children == 2) {
     if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT) {
-      sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
-      sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
-      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
-    } else if (op == PLUS_EQ OR op == MINUS_EQ OR op == STAR_EQ OR op == SLASH_EQ OR op == PERCENT_EQ OR op == '=') {
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
+    } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
       sub1 = comp_lvalue(get_child(node, 0));
-      sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
-      return wrap_if_needed(wrapped, compiling_tests, true, test_side_effects, string_concat4(sub1, op_to_str(op), sub2, wrap_char(';')));
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == '[') { /* six.index */
       sub1 = comp_array_lvalue(get_child(node, 0));
-      sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
-      return wrap_if_needed(wrapped, compiling_tests, false, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
     } else if (op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '<' OR op == '>') {
-      if (compiling_tests) {
-        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, false, 0);
-        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, false, 0);
+      if (context == RVALUE_CTX_TEST) {
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_BASE, 0);
         return with_prefixed_side_effects(test_side_effects, string_concat5(wrap_str("[ "), sub1, test_op_to_str(op), sub2, wrap_str(" ]")));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
-        sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
-        return wrap_if_needed(wrapped, compiling_tests, true, string_concat3(sub1, op_to_str(op), sub2), test_side_effects);
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+        return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
+      return 0;
     } else {
       fatal_error("comp_rvalue_go: unknown rvalue");
-      return -1;
+      return 0;
     }
   } else if (nb_children == 3) {
-    /* TODO: ternary operator */
-    fatal_error("comp_rvalue_go: there are no 3 children operators in the grammar");
-    return -1;
+    if (op == '?') {
+      fatal_error("comp_rvalue_go: ternary operator not supported");
+      return 0;
+    } else {
+      printf("op=%d %c\n", op, op);
+      fatal_error("comp_rvalue_go: unknown rvalue with 3 children");
+      return 0;
+    }
   } else if (nb_children == 4) {
     if (op == AMP_AMP OR op == BAR_BAR) {
       /*
         Note, this could also be compiled in a single [ ] block using -a and -o,
         which I think are POSIX compliant but are deprecated.
       */
-      if (compiling_tests) {
+      if (context == RVALUE_CTX_TEST) {
         /*
           When compiling in a test context, && and || can be compiled to Shell's
           && and || with [ ... ] blocks.
@@ -2006,111 +2451,114 @@ text comp_rvalue_go(ast node, int wrapped, int compiling_tests, ast test_side_ef
           As a heuristic, we add parenthesis whenever the left or right side of
           the operator is a different comparison operator.
         */
-        sub1 = comp_rvalue_go(get_child(node, 0), wrapped, true, get_child(node, 2));
-        sub2 = comp_rvalue_go(get_child(node, 1), wrapped, true, get_child(node, 3));
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_TEST, get_child(node, 2));
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_TEST, get_child(node, 3));
         if ((get_op(get_child(node, 0)) == AMP_AMP OR get_op(get_child(node, 0)) == BAR_BAR) AND get_op(get_child(node, 0)) != op) {
-          sub1 = string_concat3(wrap_str("{ "), sub1, wrap_str(" }"));
+          sub1 = string_concat3(wrap_str("{ "), sub1, wrap_str("; }"));
         }
         if ((get_op(get_child(node, 1)) == AMP_AMP OR get_op(get_child(node, 1)) == BAR_BAR) AND get_op(get_child(node, 1)) != op) {
-          sub2 = string_concat3(wrap_str("{ "), sub2, wrap_str(" }"));
+          sub2 = string_concat3(wrap_str("{ "), sub2, wrap_str("; }"));
         }
-        return string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2);
+        return string_concat3(sub1, op_to_str(op), sub2);
       } else {
         if (test_side_effects != 0) { fatal_error("comp_rvalue_go: Arithmetic with function calls in && and || not supported"); }
-        sub1 = comp_rvalue_go(get_child(node, 0), true, false, 0);
-        sub2 = comp_rvalue_go(get_child(node, 1), true, false, 0);
-        return wrap_if_needed(wrapped, compiling_tests, false,
-          string_concat5(sub1, wrap_char(' '), op_to_str(op), wrap_char(' '), sub2), test_side_effects);
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+        return wrap_if_needed(false, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else {
-
+      printf("op=%d %c\n", op, op);
+      fatal_error("comp_rvalue_go: unknown rvalue with 4 children");
+      return 0;
     }
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("comp_rvalue_go: unknown rvalue with >4 children");
+    return 0;
   }
-  fatal_error("comp_rvalue_go: should have returned before the end");
-  return -1;
 }
 
-char escaped_char(char c) {
-  switch (c) {
-    case '\a': return 'a';
-    case '\b': return 'b';
-    case '\f': return 'f';
-    case '\n': return 'n';
-    case '\r': return 'r';
-    case '\t': return 't';
-    case '\v': return 'v';
-    case '\\': return '\\';
-    case '"':  return '"';
-    default:   return c;
-  }
+text escaped_char(char c) {
+  if      (c == '\a') return wrap_str("\\a");
+  else if (c == '\b') return wrap_str("\\b");
+  else if (c == '\f') return wrap_str("\\f");
+  else if (c == '\n') return wrap_str("\\n");
+  else if (c == '\r') return wrap_str("\\r");
+  else if (c == '\t') return wrap_str("\\t");
+  else if (c == '\v') return wrap_str("\\v");
+  else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
+  else if (c == '"')  return wrap_str("\\\"");
+  else if (c == '\'') return wrap_str("\\\'");
+  else if (c == '?')  return wrap_str("\\?");
+  else if (c == '$')  return wrap_str("\\$");
+  else                return wrap_char(c);
 }
 
 text escape_string(char_ptr str) {
-  char_ptr seq = str;
   text res = wrap_str("");
-  char c;
-  while (*str != '\0') {
-    c = *str;
-    if (c == '\a' OR c == '\b' OR c == '\f' OR c == '\n' OR c == '\r' OR c == '\t' OR c == '\v' OR c == '\\' OR c == '"') {
-      res = string_concat4(res, wrap_substr(seq, str - seq), wrap_char('\\'), wrap_char(escaped_char(*str)));
-      seq = str;
-    }
-    str += 1;
-  }
-  return string_concat(wrap_substr(seq, str - seq), res);
-}
+  text char_text;
+  int i = 0;
 
-int RVALUE_CTX_PURE = 0;
-int RVALUE_CTX_BASE = 1;
-int RVALUE_CTX_BASE_WRAPPED = 2; /* Like base context, except that we're already in $(( ... )) */
-int RVALUE_CTX_TEST = 3;
+  while (str[i] != '\0') {
+    char_text = escaped_char(str[i]);
+    res = string_concat(res, char_text);
+    i += 1;
+  }
+  return res;
+}
 
 text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
-  int i;
-
-  if (context == RVALUE_CTX_PURE) {
-    if (replaced_fun_calls != 0 OR conditional_fun_calls != 0 OR literals_inits != 0)
-      fatal_error("comp_rvalue: side effects not allowed in pure context");
-    return comp_rvalue_go(simple_ast, true, false, 0);
-  }
+  /* Calling comp_fun_call/comp_rvalue can overwrite replaced_fun_calls and contains_side_effects, so they are saved */
+  ast replaced_fun_calls2 = replaced_fun_calls;
+  int contains_side_effects2 = contains_side_effects;
+  int fun_call_decl_start;
+  text result;
 
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , env_var(get_child(get_child(literals_inits, 0), 0))
+                                  , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
                                   , wrap_char('\"')));
     literals_inits = get_child(literals_inits, 1);
   }
 
-  while (replaced_fun_calls != 0) {
-    comp_fun_call(get_child(get_child(replaced_fun_calls, 0), 1), get_child(get_child(replaced_fun_calls, 0), 0));
-    replaced_fun_calls = get_child(replaced_fun_calls, 1);
+  /* We don't want to call defstr on every iteration, so only capturing fun calls */
+  fun_call_decl_start = glo_decl_ix;
+
+  while (replaced_fun_calls2 != 0) {
+    comp_fun_call(get_child(get_child(replaced_fun_calls2, 0), 1), get_child(get_child(replaced_fun_calls2, 0), 0));
+    replaced_fun_calls2 = get_child(replaced_fun_calls2, 1);
   }
 
-  if (context == RVALUE_CTX_BASE) {
-    return comp_rvalue_go(simple_ast, false, false, 0);
-  } else if (context == RVALUE_CTX_BASE_WRAPPED) {
-    return comp_rvalue_go(simple_ast, true, false, 0);
-  } else if (context == RVALUE_CTX_TEST) {
-    return comp_rvalue_go(simple_ast, false, true, 0);
+  /*
+    When compiling a test, we place the function side effects inline with the condition.
+    That way, any side effect performed in the condition of a while loop is repeated on each iteration.
+    For if statements, it makes things shorter, but not always more readable.
+  */
+  if (context == RVALUE_CTX_TEST) {
+    undo_glo_decls(fun_call_decl_start);
+    result = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
+    result = string_concat(result, comp_rvalue_go(simple_ast, context, 0));
   } else {
-    fatal_error("comp_rvalue: unknown context");
+    result = comp_rvalue_go(simple_ast, context, 0);
   }
+  contains_side_effects |= contains_side_effects2;
+  return result;
 }
 
 text comp_array_lvalue(ast node) {
   int op = get_op(node);
   text rvalue;
-  if (op == IDENTIFIER) {
+  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
     return env_var(node);
   } else if (op == '*') {
     rvalue = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), rvalue);
   } else {
     fatal_error("comp_array_lvalue: unknown lvalue");
-    return -1;
+    return 0;
   }
 }
 
@@ -2119,21 +2567,18 @@ text comp_lvalue(ast node) {
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER) {
+  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
     return env_var(node);
   } else if (op == '[') {
     sub1 = comp_array_lvalue(get_child(node, 0));
-    sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_BASE_WRAPPED);
+    sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
-  } else if (op == ARROW) {
-    fatal_error("comp_lvalue: struct not yet supported");
-    return -1;
   } else {
     fatal_error("comp_lvalue: unknown lvalue");
-    return -1;
+    return 0;
   }
 }
 
@@ -2147,11 +2592,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     if (get_op(params) == ',') {
       while (get_op(params) == ',') {
         param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
-        if(code_params == 0) { /* Doing so prevents removes an extra whitespace that would otherwise be inserted */
-          code_params = param;
-        } else {
-          code_params = string_concat3(code_params, wrap_char(' '), param);
-        }
+        code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
         params = get_child(params, 1);
       }
     } else {
@@ -2162,7 +2603,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   }
 
   return string_concat5(
-    wrap_str(string_pool + heap[get_val(name)+1]), /* Function name*/
+    function_name(get_val(name)),
     wrap_char(' '),
     env_var(assign_to),
     wrap_char(' '),
@@ -2174,37 +2615,39 @@ void comp_fun_call(ast node, ast assign_to) {
   append_glo_decl(comp_fun_call_code(node, assign_to));
 }
 
-void comp_assignment(ast node) {
-  int lhs = get_child(node, 0);
-  int rhs = get_child(node, 1);
+void comp_assignment(ast lhs, ast rhs) {
   int lhs_op = get_op(lhs);
   if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
     if (get_op(rhs) == '(') {
       comp_fun_call(rhs, lhs);
     } else {
+      /*
+        Disabled because of arithmetic precision issues with some shells.
+        It looks like assignments in $((...)) are done with more bits with ksh.
+      */
       /* If lhs is an identifier, we generate x=$(( ... )) instead of : $(( x = ... )) */
-      if (lhs_op == IDENTIFIER) {
+      /* if (lhs_op == IDENTIFIER) {
         append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
       } else {
-        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_BASE), wrap_str(" ))")));
+        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
       }
+      */
+     append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
     }
   } else {
+    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
     fatal_error("unknown lhs");
   }
 }
 
 void comp_body(ast node) {
-  int i;
-  int start_is_tail_call = is_tail_call;
-  is_tail_call = false;
-
-  /* TODO: Check that there aren't local variable declarations */
+  int start_in_tail_position = in_tail_position;
+  in_tail_position = false;
 
   if (node != 0) {
     while (get_op(node) == '{') {
-      /* Last statement of body is tail call if the body itself is in tail call position */
-      if (get_op(get_child(node, 1)) != '{') is_tail_call = start_is_tail_call;
+      /* Last statement of body is in tail position if the body itself is in tail position */
+      if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
       comp_statement(get_child(node, 0), false);
       node = get_child(node, 1);
     }
@@ -2214,7 +2657,10 @@ void comp_body(ast node) {
 void comp_statement(ast node, int else_if) {
   int op = get_op(node);
   text str;
-  int i;
+  int start_loop_end_actions_start;
+  int start_loop_end_actions_end;
+
+  gensym_ix = 0;
 
   if (op == IF_KW) {
     /* TODO: Replace this with ternary expression? */
@@ -2266,77 +2712,242 @@ void comp_statement(ast node, int else_if) {
 
     append_glo_decl(wrap_str("done"));
   } else if (op == FOR_KW) {
-    str = loop_end_actions; /* Save loop end actions from possible outer loop */
+    /* Save loop end actions from possible outer loop */
+    start_loop_end_actions_start = loop_end_actions_start;
+    start_loop_end_actions_end = loop_end_actions_end;
 
-    append_glo_decl(string_concat3(
-      wrap_str("while "),
-      comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
-      wrap_str(" ; do")
-    ));
+    if (get_child(node, 0)) comp_statement(get_child(node, 0), false);
+
+    str = wrap_char(':'); /* Empty statement */
+    if (get_child(node, 1)) {
+      str = comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST);
+    }
+
+    append_glo_decl(string_concat3(wrap_str("while "), str, wrap_str(" ; do")));
+
     /*
       This is a little bit of a hack, but it makes things so much simpler.
-      Because we need to capture the code for the end of loop actions (increment, etc.),
-      and those can be any statement expression, we somehow need to get the text
-      generated by the call to comp_statement. Instead of modifying comp_statement
-      to accomodate this, we just remove the code generated by comp_statement using
-      pop_glo_decls.
-      Because comp_statement can generate multiple lines, the lines are concatenated
-      using "; ". This is not 100% equivalent to what six-cc does, but most end of loop
-      actions only occupy one line.
+      Because we need to capture the code for the end of loop actions
+      (increment, etc.), and those can be any statement expression, we somehow
+      need to get the text generated by the call to comp_statement. Instead of
+      modifying comp_statement to accomodate this, we just remove the code
+      generated by comp_statement using undo_glo_decls and save the indices of
+      the declarations of the loop end actions so they can replayed later.
     */
-    i = glo_decl_ix;
+    loop_end_actions_start = glo_decl_ix;
     if (get_child(node, 2)) comp_statement(get_child(node, 2), false);
-    loop_end_actions = pop_glo_decls((glo_decl_ix - i) / 2, wrap_str("; "));
+    undo_glo_decls(loop_end_actions_start);
+    loop_end_actions_end = glo_decl_ix;
 
     loop_nesting_level += 1;
     nest_level += 1;
     if (get_child(node, 3) != 0) { comp_statement(get_child(node, 3), false); }
-    else { append_glo_decl(wrap_char(':')); }
-    append_glo_decl(loop_end_actions);
+    else if (get_child(node, 2) == 0) { append_glo_decl(wrap_char(':')); }
+    replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
 
     nest_level -= 1;
     loop_nesting_level -= 1;
-    loop_end_actions = str;
+    loop_end_actions_start = start_loop_end_actions_start;
+    loop_end_actions_end = start_loop_end_actions_end;
 
     append_glo_decl(wrap_str("done"));
-  }  else if (op == BREAK_KW) {
+  } else if (op == BREAK_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
     /* TODO: What's the semantic of break? Should we run the end of loop action before breaking? */
     append_glo_decl(wrap_str("break"));
   } else if (op == CONTINUE_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: continue not in loop");
-    append_glo_decl(loop_end_actions);
-    /* We could remove the continue when in tail call position, but it's not worth doing */
+    replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
+    /* We could remove the continue when in tail position, but it's not worth doing */
     append_glo_decl(wrap_str("continue"));
   } else if (op == RETURN_KW) {
     if (get_child(node, 0) != 0) {
-      append_glo_decl(string_concat3(
-        wrap_str(": $(( $1 = "),
-        comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE),
-        wrap_str(" ))")
-      ));
+      if (get_op(get_child(node, 0)) == '(') { /* Check if function call */
+        comp_fun_call(get_child(node, 0), new_ast0(IDENTIFIER_DOLLAR, 1));
+      } else {
+        append_glo_decl(string_concat3(
+          wrap_str(": $(( $1 = "),
+          comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
+          wrap_str(" ))")
+        ));
+      }
     }
-    if (is_tail_call AND loop_nesting_level == 1) {
+    if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
-    } else {
-      /* TODO: Restore local vars */
+    } else if (!in_tail_position OR loop_nesting_level != 0) {
+      restore_local_vars();
       append_glo_decl(wrap_str("return"));
+    } else {
+      /* TODO: Make sure this can't create empty bodies */
     }
   } else if (op == '(') { /* six.call */
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); /* Reuse IDENTIFIER_EMPTY ast? */
   } else if (op == '{') { /* six.compound */
     comp_body(node);
   } else if (op == '=') { /* six.x=y */
-    comp_assignment(node);
+    comp_assignment(get_child(node, 0), get_child(node, 1));
+  } else if (op == VAR_DECL) {
+    fatal_error("Variable declaration must be at the beginning of a function");
   } else {
-    /*
-    printf("%d op=%d %c", node, op, op);
-    fatal_error("comp_statement: unknown statement");
-    */
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str(": "), str));
     }
+  }
+}
+
+ast get_leading_var_declarations(ast node) {
+  ast result = 0;
+  ast local_var;
+  ast tail;
+  ast new_tail;
+
+  if (get_op(node) == '{') {
+    while (get_op(node) == '{') {
+      local_var = get_child(node, 0);
+      if (get_op(local_var) != VAR_DECL) break;
+
+      /* Initialize list */
+      new_tail = new_ast2(',', local_var, 0);
+      if (result == 0) { result = new_tail; }
+      else { set_child(tail, 1, new_tail); }
+      tail = new_tail;
+
+      node = get_child(node, 1);
+    }
+  }
+
+  return new_ast2(',', result, node);
+}
+
+void comp_glo_define_procedure(ast node) {
+  ast name = get_child(node, 0);
+  /* ast fun_type = get_child(node, 1); */
+  ast params = get_child(node, 2);
+  ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
+  ast local_vars = get_child(local_vars_and_body, 0);
+  ast body = get_child(local_vars_and_body, 1);
+  text comment = 0;
+  int i;
+  int body_start_decl_ix;
+  int body_end_decl_ix;
+  ast var;
+
+  assert_idents_are_safe(params);
+  assert_idents_are_safe(local_vars);
+
+  add_vars_to_local_env(params, 2); /* Start position at 2 because 1 is taken by result_loc */
+  add_vars_to_local_env(local_vars, local_env_size + 2);
+
+  /* TODO: Analyze vars that are mutable */
+
+  /* Show the mapping between the function parameters and $1, $2, etc. */
+  i = 2; /* Start at 2 because $1 is assigned to result location */
+  while (params != 0) {
+    var = get_child(params, 0);
+    comment = concatenate_strings_with(comment, string_concat3(env_var(new_ast0(IDENTIFIER, get_child(var, 0))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    params = get_child(params, 1);
+    i += 1;
+  }
+  if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
+
+  append_glo_decl(string_concat3(
+    function_name(name),
+    wrap_str("() {"),
+    comment
+  ));
+
+  in_tail_position = true;
+  fun_gensym_ix = 0;
+  nest_level += 1;
+
+  /*
+    After setting the environment, we compile the body of the function and then
+    call save-local-variables so it can save the local variables and synthetic
+    variables that were used in the function.
+  */
+  body_start_decl_ix = glo_decl_ix;
+  comp_body(body);
+  body_end_decl_ix = glo_decl_ix;
+  undo_glo_decls(body_start_decl_ix);
+
+  save_local_vars();
+
+  /* Initialize parameters */
+  params = get_child(node, 2); /* Reload params because params is now = 0 */
+  i = 2;
+  while (params != 0) {
+    var = get_child(params, 0);
+    comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, i));
+    params = get_child(params, 1);
+    i += 1;
+  }
+
+  /* Initialize local vars */
+  while (local_vars != 0) {
+    var = get_child(local_vars, 0);
+    /* TODO: Replace with ternary expression? */
+    if (get_child(var, 2) == 0) { comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0)); }
+    else { comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2)); }
+    local_vars = get_child(local_vars, 1);
+  }
+
+  replay_glo_decls(body_start_decl_ix, body_end_decl_ix, false);
+
+  restore_local_vars();
+
+  nest_level -= 1;
+
+  append_glo_decl(wrap_str("}\n"));
+}
+
+text comp_constant(ast node) {
+  int op = get_op(node);
+  if (op == INTEGER) {
+    return wrap_int(-get_val(node));
+  } else if (op == CHARACTER) {
+    return string_concat(wrap_char('$'), character_ident(get_val(node)));
+  } else if (op == STRING) {
+    return wrap_str(string_pool + get_val(node));
+  } else if ((op == '-') AND get_nb_children(node) == 1) {
+    return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
+  } else {
+    fatal_error("comp_constant: unknown constant");
+    return 0;
+  }
+}
+
+void comp_glo_variable_declaration(ast node) {
+  ast name = get_child(node, 0);
+  ast type = get_child(node, 1);
+  ast init = get_child(node, 2);
+
+  text init_text;
+
+  if (get_op(type) == '[') { /* Array declaration */
+    append_glo_decl(
+      string_concat4(
+        wrap_str("defarr "),
+        env_var(new_ast0(IDENTIFIER, name)),
+        wrap_char(' '),
+        wrap_int(get_val(get_child(type, 0)))
+      )
+    );
+  } else {
+    /* TODO: Replace with ternary expression? */
+    if (init != 0) {
+      init_text = comp_constant(init);
+    } else {
+      init_text = wrap_char('0');
+    }
+    append_glo_decl(
+      string_concat4(
+        wrap_str("defglo "),
+        env_var(new_ast0(IDENTIFIER, name)),
+        wrap_char(' '),
+        init_text
+      )
+    );
   }
 }
 
@@ -2352,39 +2963,144 @@ void comp_glo_decl(ast node) {
   int op = get_op(node);
 
   if (op == '=') { /* Assignations */
-   comp_assignment(node);
+   comp_assignment(get_child(node, 0), get_child(node, 1));
+  } else if (op == VAR_DECL) {
+    comp_glo_variable_declaration(node);
+  } else if (op == FUN_DECL) {
+    comp_glo_define_procedure(node);
   } else {
-    /* Allow all operations to appear at the top level while fun and var decls can't be parsed */
-    /* TODO: Make this case an error when we support function declarations */
-    comp_statement(node, false);
-    /*
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
-    */
   }
 }
 
-void codegen_statement(ast node) {
-  comp_glo_decl(node);
+void prologue() {
+  printf("set -e -u\n\n");
+
+  printf("# Handle runtime options\n");
+  printf("__STRICT_MODE=1\n");
+  printf("__FREE_UNSETS_VARS=1\n");
+  printf("__INIT_GLOBALS=1\n\n");
+
+  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-init\" ] ;      then __STRICT_MODE=1; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-no-init\" ] ;   then __STRICT_MODE=0; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then __FREE_UNSETS_VARS=1; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then __FREE_UNSETS_VARS=0; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");
+  printf("if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then __INIT_GLOBALS=0; shift; fi\n\n");
+
+  printf("# Load runtime library and primitives\n");
+  printf(". ./runtime.sh\n\n");
+
+  printf("# Local variables\n\n");
+
+  printf("__SP=0 # Note: Stack grows up, not down\n\n");
+
+  printf("save_loc_var() {\n");
+  printf("  __count=$#\n");
+  printf("  while [ $# -gt 0 ]; do\n");
+  printf("    : $((__SP += 1))\n");
+  printf("    : $((save_loc_var_$__SP=$1))\n");
+  printf("    shift\n");
+  printf("  done\n");
+  printf("  # Save the number of arguments. Used in rest_loc_var\n");
+  printf("  : $((__SP += 1))\n");
+  printf("  : $((save_loc_var_$__SP=$__count))\n");
+  printf("}\n\n");
+
+  printf("rest_loc_var() {\n");
+  printf("  __result_loc=$1; shift\n");
+  printf("  __adjust=$((save_loc_var_$__SP - $#)) # Number of saved variables not being restored\n");
+  printf("  : $((__SP -= 1))\n");
+  printf("  while [ $# -gt 0 ]; do\n");
+  printf("    # Make sure result_loc is not overwritten\n");
+  printf("    if [ $1 != \"$__result_loc\" ]; then : $(($1=save_loc_var_$__SP)); fi\n");
+  printf("    : $((__SP -= 1))\n");
+  printf("    shift\n");
+  printf("  done\n");
+  printf("  : $((__SP -= __adjust))\n");
+  printf("}\n\n");
+
+  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
+  printf("defglo() { : $(($1 = $2)) ; }\n\n");
+
+  printf("# Setup argc, argv\n");
+  printf("__argc_for_main=$(($# + 1))\n");
+  printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
+}
+
+void epilogue() {
+  int c;
+
+  printf("# Character constants\n");
+  for(c = 0; c < 256; c += 1) {
+    if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
+      print_text(character_ident(c));
+      printf("=%d\n", c);
+    }
+  }
+
+  printf("\n__=0 # Required for zsh");
+  putchar('\n');
+  printf("_main __ $__argc_for_main $__argv_for_main\n");
+}
+
+/* Initialize local and synthetic variables used by function */
+void initialize_function_variables() {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str(" = "));
+    counter -= 1;
+  }
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
+
+    res = concatenate_strings_with(res, env_var(ident), wrap_str(" = "));
+
+    env = get_child(env, 1);
+  }
+
+  if (res != 0) {
+    res = string_concat3(wrap_str(": $(("), res, wrap_str(" = 0))"));
+    print_text(res);
+    putchar('\n');
+  }
 }
 
 int main() {
-
-  ast node;
-
   init_ident_table();
+  init_comp_context();
 
   ch = '\n';
   get_tok();
 
+  prologue();
+
   while (tok != EOF) {
-    /* node = parse_definition(0); */
-    node = parse_statement();
-    codegen_statement(node);
+    comp_glo_decl(parse_definition(0));
+    initialize_function_variables();
+    print_glo_decls();
+    /* Reset state */
+    glo_decl_ix = 0;
+    local_env_size = 0;
+    local_env = 0;
+    text_alloc = 1;
+
+    /* TODO: Clear heap */
   }
-  print_glo_decls();
-  /*
-  printf("// string_pool_alloc=%d heap_alloc=%d\n", string_pool_alloc, heap_alloc);
-  */
+
+  epilogue();
+
+  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
   return 0;
 }

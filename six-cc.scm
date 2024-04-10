@@ -51,9 +51,12 @@
   level               ; The current level of nesting
   tail?               ; Is the current statement is in tail position?
   single-statement?   ; If the current block has only one statement
-  loop?               ; Are we enclosed in loop?
+  loop-nested-level   ; Are many nested loops are we in?
   loop-end-actions    ; What to do at the end of a loop. Typically an increment.
   block-type          ; What kind of block are we in? (function, loop, switch, if, ...)
+  gensym-counter      ; Counter for generating unique identifiers
+  fun-gensym-counter  ; Maximum value of the gensym counter, scoped to the function
+  max-gensym-counter  ; Maximum value of the gensym counter
   )
 
 (define (empty-ctx)
@@ -69,13 +72,16 @@
     0            ; level
     #f           ; tail?
     #f           ; single-statement?
-    #f           ; loop?
+    0            ; loop-nested-level
     '()          ; loop-end-actions
     'default     ; block-type
+    0            ; gensym-counter
+    0            ; max-fun-gensym-counter
+    0            ; max-gensym-counter
     ))
 
-(define (ctx-add-glo-decl! ctx decl)
-  (ctx-glo-decls-set! ctx (cons (cons decl (ctx-level ctx)) (ctx-glo-decls ctx))))
+(define (ctx-add-glo-decl! ctx decl #!optional (level #f))
+  (ctx-glo-decls-set! ctx (cons (cons decl (or level (ctx-level ctx))) (ctx-glo-decls ctx))))
 
 (define (scope-glo-decls ctx body)
   (let ((old-glo-decls (ctx-glo-decls ctx)))
@@ -84,6 +90,14 @@
           (new-glo-decls (ctx-glo-decls ctx)))
       (ctx-glo-decls-set! ctx old-glo-decls) ; Reset the global declarations to the previous state
       (cons res (reverse (map car new-glo-decls))))))
+
+(define (scope-glo-decls-with-level ctx body)
+  (let ((old-glo-decls (ctx-glo-decls ctx)))
+    (ctx-glo-decls-set! ctx '())
+    (let ((res (body))
+          (new-glo-decls (ctx-glo-decls ctx)))
+      (ctx-glo-decls-set! ctx old-glo-decls) ; Reset the global declarations to the previous state
+      (reverse new-glo-decls))))
 
 (define (glo-decl-unlines decls)
   (define (concat-line l) (if (pair? l) (string-concatenate l) l))
@@ -104,7 +118,6 @@
 (define-type local-var
   position    ; Position of the variable in the local environment
   type        ; Function param or local
-  initialized ; If the variable has been initialized
   written-to  ; If the variable has been written to
   )
 
@@ -114,11 +127,6 @@
 ;                 (local-var-position-set! (cdr p) (+ 1 (local-var-position (cdr p))))))
 ;             (table->list (ctx-loc-env ctx))))
 
-(define (mark-ctx-loc-env-initialized ctx ident)
-  (let* ((env (ctx-loc-env ctx))
-         (loc (table-ref (ctx-loc-env ctx) ident #f)))
-    (if loc
-      (local-var-initialized-set! loc #t))))
 
 ; Assumes that l1 and l2 are sorted by identifier
 ; l1 and l2 are lists of (ident . local-var) objects
@@ -131,7 +139,6 @@
                           (make-local-var
                             (or (local-var-position    e) (local-var-position    (cdr l)))
                             (or (local-var-type        e) (local-var-type        (cdr l)))
-                            (or (local-var-initialized e) (local-var-initialized (cdr l)))
                             (or (local-var-written-to  e) (local-var-written-to  (cdr l)))))
           (table-set! tbl (car l) (cdr l)))))
     ls))
@@ -143,13 +150,12 @@
     ls)
   (table->list tbl))
 
-(define (add-new-local-var ctx ident initialized #!optional (position #f))
+(define (add-new-local-var ctx ident #!optional (position #f))
   (table-set! (ctx-loc-env ctx)
               ident
               (make-local-var
                 (or position (+ 1 (table-length (ctx-loc-env ctx))))
                 (if position 'param 'local)
-                initialized
                 #f))
   ; Gather the list of all local variables.
   ; Used to initialize them all at the beginning of the execution so
@@ -170,7 +176,7 @@
 (define (env-var ctx ident #!optional (prefixed-by-dollar #f))
   (let ((local-var (table-ref (ctx-loc-env ctx) ident #f)))
     (cond
-      ((number? (cadr ident)) ; Number identifiers are always local and don't appear in the local environment
+      ((and (number? (cadr ident)) (equal? 'six.identifier (car ident))) ; Number identifiers are always local and don't appear in the local environment
         (string-append (if prefixed-by-dollar "" "$") (number->string (cadr ident))))
       (local-var
         (if (or (or (local-var-written-to local-var) (equal? 'local (local-var-type local-var)))
@@ -207,7 +213,9 @@
     (symbol->string (cadr ident))))
 
 (define (internal-ref ident)
-  (string+symbol "__" (cadr ident)))
+  (if (exact-integer? (cadr ident))
+    (string-append "__g" (number->string (cadr ident))) ; From alloc-identifier
+    (string+symbol "__" (cadr ident))))
 
 (define (obj-ref ident)
   (string-append "__" (number->string ident)))
@@ -236,8 +244,8 @@
 (define free-unsets-vars-var (format-non-local-var free-unsets-vars-ident))
 (define init-globals-var     (format-non-local-var init-globals-ident))
 
-(define (get-result-var ctx) (if use-$1-for-return-loc? "1" result-loc-ident))
-(define (get-result-loc ctx) (if use-$1-for-return-loc? "1" result-loc-var))
+(define (get-result-loc ctx) (if use-$1-for-return-loc? '(six.identifier 1) result-loc-ident))
+(define (get-result-var ctx) (if use-$1-for-return-loc? "1" result-loc-var))
 
 (define (def_str_code var_str str)
   (let ((escaped-str (escape-string str)))
@@ -519,26 +527,24 @@
     (case (car ast)
       ((six.return six.break six.continue six.literal six.list six.identifier six.internal-identifier) '())
       ((six.define-variable)
-        (let* ((var-name (cadr ast))
-               (var-init (car (cddddr ast))))
-          (list (cons var-name (make-local-var #f 'local var-init #f)))))
+        (let* ((var-name (cadr ast)))
+          (list (cons var-name (make-local-var #f 'local #f)))))
       ((six.while) (go (caddr ast)))
       ((six.for)
-
         (merge-local-variables (go (cadr ast)) (go (car (cddddr ast)))))
       ((six.if)    (merge-local-variables (go (caddr ast)) (if (pair? (cdddr ast)) (go (cadddr ast)) '())))
-      ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+      ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x&=y |six.x\|=y| six.x^=y six.x<<=y six.x>>=y)
         (let ((lhs (cadr ast))
               (rhs (caddr ast)))
           (merge-local-variables
             (go rhs)
             (if (equal? (car lhs) 'six.identifier)
-              (list (cons lhs (make-local-var #f #f #f #t)))
+              (list (cons lhs (make-local-var #f #f #t)))
               '()))))
       ((six.x++ six.++x six.--x six.x--)
         (let ((lhs (cadr ast)))
           (if (equal? (car lhs) 'six.identifier)
-            (list (cons lhs (make-local-var #f #f #f #t)))
+            (list (cons lhs (make-local-var #f #f #t)))
             '())))
       ((six.switch)
         (apply merge-local-variables (map go (cdaddr ast))))
@@ -549,7 +555,7 @@
       ((six.call)
         (let* ((fun-params (cdr ast)))
           (apply merge-local-variables (map go fun-params))))
-      ((six.-x six.!x six.*x six.**x)
+      ((six.-x six.!x six.*x six.**x six.+x six.~x)
         (go (cadr ast)))
       ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow six.x&&y |six.x\|\|y|)
         (merge-local-variables (go (cadr ast)) (go (caddr ast))))
@@ -569,7 +575,7 @@
          (indexed-parameters
           (map cons parameters
                     (iota (length parameters)
-                          (if (or use-$1-for-return-loc?) 2 1)))))
+                          (if use-$1-for-return-loc? 2 1)))))
     (ctx-add-glo-decl!
      ctx
      (list
@@ -577,6 +583,7 @@
       (if (pair? indexed-parameters) " # " "")
       (string-concatenate (map (lambda (p) (string-append (symbol->string (cadaar p)) ": $" (number->string (cdr p)))) indexed-parameters) ", ")))
     (ctx-tail?-set! ctx #t)
+    (ctx-fun-gensym-counter-set! ctx 0) ; Reset the gensym counter
     (nest ctx
       (let* ((start-loc-env (table-copy (ctx-loc-env ctx)))
              (body-decls (get-body-declarations body))
@@ -584,52 +591,57 @@
              (new-local-vars (cdr body-decls))
              (variables-used (gather-function-var-used body)))
 
-        (assert-variable-names-are-safe (map car parameters)) ; Parameters are always initialized
+        (assert-variable-names-are-safe (map car parameters))
         (assert-variable-names-are-safe (map car new-local-vars))
 
-        (add-new-local-var ctx result-loc-ident #t 1)
+        (add-new-local-var ctx result-loc-ident 1)
 
         (for-each
-          (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) #t (cdr param-and-pos)))
+          (lambda (param-and-pos) (add-new-local-var ctx (caar param-and-pos) (cdr param-and-pos)))
           indexed-parameters)
 
         ; Add local variables to the environment
         (for-each
-          (lambda (param) (add-new-local-var ctx (car param) (cdr param)))
+          (lambda (param) (add-new-local-var ctx (car param)))
           new-local-vars)
 
         ; Mark local variables as written to or constant
         (ctx-loc-env-set! ctx (list->table (filter (lambda (v) (local-var-position (cdr v))) (merge-local-variables (table->list (ctx-loc-env ctx)) variables-used))))
 
-        ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
-        (save-local-variables ctx)
-        (if (not use-$1-for-return-loc?)
-          (ctx-add-glo-decl!
-            ctx
-            (list result-loc-var
-                  "=\"$1\"; shift "
-                  "# Remove result_loc param")))
+        ; After setting the environment, we compile the body of the function and
+        ; then call save-local-variables so it can save the local variables and
+        ; synthetic variables that were used in the function.
+        (let ((comped-body (scope-glo-decls-with-level ctx (lambda () (comp-body ctx body-rest)))))
 
-        (for-each
-          (lambda (p)
-            (if (or (is-mutable-local-var ctx (caar p)) (not optimize-readonly-params?))
-              (comp-assignment ctx `(six.x=y ,(caar p) (six.identifier ,(cdr p))))))
-          indexed-parameters)
+          ; (shift-ctx-loc-env-position ctx) ; Make room for the result_loc var
+          (save-local-variables ctx)
+          (if (not use-$1-for-return-loc?)
+            (ctx-add-glo-decl!
+              ctx
+              (list result-loc-var
+                    "=\"$1\"; shift "
+                    "# Remove result_loc param")))
 
-        (for-each
-          (lambda (new-local-var)
-            (if (cdr new-local-var)
-              (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
-              (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
-          new-local-vars)
+          (for-each
+            (lambda (p)
+              (if (or (is-mutable-local-var ctx (caar p)) (not optimize-readonly-params?))
+                (comp-assignment ctx `(six.x=y ,(caar p) (six.identifier ,(cdr p))))))
+            indexed-parameters)
 
-        (if (null? body)
-          (ctx-add-glo-decl! ctx (list ":"))
-          (comp-body ctx body-rest))
+          (for-each
+            (lambda (new-local-var)
+              (if (cdr new-local-var)
+                (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
+                (comp-assignment ctx `(six.x=y ,(car new-local-var) (six.literal 0)))))
+            new-local-vars)
 
-        (restore-local-variables ctx)
+          (if (null? comped-body)
+            (ctx-add-glo-decl! ctx (list ":"))
+            (for-each (lambda (l) (ctx-add-glo-decl! ctx (car l) (cdr l))) comped-body))
 
-        (ctx-loc-env-set! ctx start-loc-env)))
+          (restore-local-variables ctx)
+
+          (ctx-loc-env-set! ctx start-loc-env))))
 
     (ctx-add-glo-decl!
      ctx
@@ -653,7 +665,7 @@
 
     (for-each
       (lambda (new-local-var)
-        (add-new-local-var ctx (car new-local-var) (cdr new-local-var))
+        (add-new-local-var ctx (car new-local-var))
 
         (if (cdr new-local-var)
           (comp-assignment ctx `(six.x=y ,(car new-local-var) ,(cdr new-local-var)))
@@ -662,7 +674,6 @@
 
     (comp-statement-list ctx body-rest)
 
-    ; Bug: We need to propagate the is_initialized flag of local variables to start-loc-env?
     (ctx-loc-env-set! ctx start-loc-env)))
 
 (define (comp-statement-list ctx lst)
@@ -760,23 +771,23 @@
         (loop new-rest)))))
 
 (define (comp-statement ctx ast #!optional (else-if? #f))
+  (ctx-gensym-counter-set! ctx 0) ; Reset the gensym counter for each statement
   (case (car ast)
     ((six.while)
       (let ((code-test (comp-loop-test ctx (cadr ast)))
             (body (caddr ast))
-            (start-loop? (ctx-loop? ctx))
             (start-block-type (ctx-block-type ctx)))
         (ctx-add-glo-decl!
           ctx
           (list "while " code-test " ; do"))
-        (ctx-loop?-set! ctx #t)
+        (ctx-loop-nested-level-set! ctx (+ (ctx-loop-nested-level ctx) 1))
         (ctx-block-type-set! ctx 'loop)
         (nest ctx
           ;; If the body is empty, add a : to avoid syntax errors
           (if (equal? '(six.compound) body)
             (ctx-add-glo-decl! ctx (list ":")))
           (comp-statement ctx (caddr ast)))
-        (ctx-loop?-set! ctx start-loop?)
+        (ctx-loop-nested-level-set! ctx (- (ctx-loop-nested-level ctx) 1))
         (ctx-block-type-set! ctx start-block-type)
         (ctx-add-glo-decl!
           ctx
@@ -787,7 +798,6 @@
            (expr2 (caddr ast))
            (expr3 (cadddr ast))
            (body (car (cddddr ast)))
-           (start-loop? (ctx-loop? ctx))
            (start-loop-end-actions (ctx-loop-end-actions ctx))
            (start-block-type (ctx-block-type ctx)))
        (comp-statement ctx expr1)
@@ -799,7 +809,7 @@
          (ctx-add-glo-decl!
             ctx
             (list "while " code-test " ; do"))
-         (ctx-loop?-set! ctx #t)
+         (ctx-loop-nested-level-set! ctx (+ (ctx-loop-nested-level ctx) 1))
          (ctx-loop-end-actions-set! ctx loop-end-actions)
          (ctx-block-type-set! ctx 'loop)
          (nest ctx
@@ -811,7 +821,7 @@
             (lambda (action) (ctx-add-glo-decl! ctx action))
             loop-end-actions)
          )
-         (ctx-loop?-set! ctx start-loop?)
+         (ctx-loop-nested-level-set! ctx (- (ctx-loop-nested-level ctx) 1))
          (ctx-loop-end-actions-set! ctx start-loop-end-actions)
          (ctx-block-type-set! ctx start-block-type)
          (ctx-add-glo-decl!
@@ -868,14 +878,16 @@
           (list "esac"))))
     ((six.return)
      (if (pair? (cdr ast))
-      (ctx-add-glo-decl!
-        ctx
-        (list ": $(( $" (get-result-loc ctx) " = " (comp-rvalue ctx (cadr ast) '(return #t)) " ))")))
+      (if (equal? 'six.call (caadr ast))
+        (comp-fun-call ctx (cdadr ast) (get-result-loc ctx))
+        (ctx-add-glo-decl!
+          ctx
+          (list ": $(( $" (get-result-var ctx) " = " (comp-rvalue ctx (cadr ast) '(return)) " ))"))))
      (if (ctx-tail? ctx)
       (begin
         ; We're in a loop, so we won't fall through to the next statement without a break statement
-        (if (ctx-loop? ctx)
-          (ctx-add-glo-decl! ctx (list "break"))
+        (if (eq? 1 (ctx-loop-nested-level ctx))
+          (ctx-add-glo-decl! ctx (list "break")) ; Does this work in 2 nested loops?
           ; The block only has one statement (a return without a value), and we
           ; can't have the block empty unless it's a case statement.
           (if (and (ctx-single-statement? ctx)
@@ -888,12 +900,12 @@
         (restore-local-variables ctx)
         (ctx-add-glo-decl! ctx (list "return")))))
     ((six.break)
-      (if (not (ctx-loop? ctx)) (error "break statement outside of a loop"))
+      (if (eq? 0 (ctx-loop-nested-level ctx)) (error "break statement outside of a loop"))
       (ctx-add-glo-decl!
             ctx
             (list "break")))
     ((six.continue)
-      (if (not (ctx-loop? ctx)) (error "continue statement outside of a loop"))
+      (if (eq? 0 (ctx-loop-nested-level ctx)) (error "continue statement outside of a loop"))
       (if (or (not (ctx-tail? ctx)) (ctx-single-statement? ctx))
         (begin
           (for-each
@@ -914,7 +926,6 @@
 ; Remove the variable we are assigning to from the list of local variables to save.
 ; Also, saving and restoring parameters on every function call will likely make the code harder to read and slower.
 ; Some ideas on how to reduce the number of variables saved:
-;  [x] Only save the variables that have been written to/initialized.
 ;  [ ] Only save the variables that are used by the function, or used by functions called transitively.
 ;     - [x] Primitives
 ;     - [ ] For user-defined functions
@@ -934,13 +945,14 @@
                    (or (local-var-written-to local-var)           ; Save because it's a mutable variable
                        (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
                        (not optimize-readonly-params?))))))       ; or save because optimization is disabled
-         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
+         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident))
+         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-fun-gensym-counter ctx) 1))))
 
-      (if (or (pair? local-vars-to-save) (not use-$1-for-return-loc?))
+      (if (or (pair? local-vars-to-save) (pair? synthetic-vars) (not use-$1-for-return-loc?))
         ; Idea: Pass the value to save directly to save_loc_var instead of the variable name
         (ctx-add-glo-decl!
           ctx
-          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) local-vars-to-save)) " "))))))
+          (list "save_loc_var " (string-concatenate (reverse (map (lambda (l) (env-var ctx l)) (append local-vars-to-save synthetic-vars))) " "))))))
 
 (define (restore-local-variables ctx)
   (let* ((sorted-local-vars
@@ -953,14 +965,15 @@
                    (or (local-var-written-to local-var)           ; Save because it's a mutable variable
                        (equal? 'local (local-var-type local-var)) ; Or save because it's a local (i.e. not param)
                        (not optimize-readonly-params?))))))       ; or save because optimization is disabled
-         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident)))
+         (local-vars-to-save (filter local-var-need-to-be-saved local-vars-ident))
+         (synthetic-vars (map (lambda (c) (list 'six.internal-identifier c)) (iota (ctx-fun-gensym-counter ctx) 1))))
 
-      (if (or (pair? local-vars-to-save) (not use-$1-for-return-loc?))
+      (if (or (pair? local-vars-to-save) (pair? synthetic-vars) (not use-$1-for-return-loc?))
         (ctx-add-glo-decl!
           ctx
           (list "rest_loc_var "
                 (if use-$1-for-return-loc? "$1 " "")
-                (string-concatenate (map (lambda (l) (env-var ctx l)) local-vars-to-save) " "))))))
+                (string-concatenate (map (lambda (l) (env-var ctx l)) (append local-vars-to-save synthetic-vars)) " "))))))
 
 ; Like comp-fun-call, but checks that the parameters are simple and not nested function calls.
 ; This function is not necessary, but we don't want to silently compile complexe function calls
@@ -1027,13 +1040,7 @@
               (list (comp-lvalue ctx lhs) "=" rvalue))
             (ctx-add-glo-decl!
               ctx
-              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))"))))))
-
-       ; Mark the variable as used written to, used to determine if we need to save and restore it
-       ; We could do a much smarter lifetime analysis, where we also determine when the variable becomes dead,
-       ; but this is simple and works for now.
-       (if (is-local-var ctx lhs)
-        (mark-ctx-loc-env-initialized ctx lhs))) ; Mark local var as initialized
+              (list ": $(( " (comp-lvalue ctx lhs) " = " rvalue " ))")))))))
       (else
        (error "unknown lhs" lhs)))))
 
@@ -1074,8 +1081,11 @@
   (define literal-inits (make-table))
   (define contains-side-effect #f)
   (define (alloc-identifier)
-    (let ((id (gensym)))
-      (list 'six.internal-identifier id)))
+    (ctx-gensym-counter-set! ctx (+ (ctx-gensym-counter ctx) 1))
+    (ctx-fun-gensym-counter-set! ctx (max (ctx-fun-gensym-counter ctx) (ctx-gensym-counter ctx))) ; Keep track of the maximum gensym counter for the function
+    (ctx-max-gensym-counter-set! ctx (max (ctx-max-gensym-counter ctx) (ctx-gensym-counter ctx))) ; Keep track of the maximum gensym counter globally
+
+    (list 'six.internal-identifier (ctx-gensym-counter ctx)))
 
   (define (go-inplace-arithmetic-op assigned-op inplace-arith #!optional (side-effect #f))
     (if inline-inplace-arithmetic-ops
@@ -1093,8 +1103,11 @@
         (let* ((id (alloc-identifier))
                (fun-name (car ast))
                (fun-params (cdr ast))
+               (start-gensym-counter (ctx-gensym-counter ctx))
                (replaced-params (map (lambda (p) (go p executes-conditionally)) fun-params))
                (new-fun-call (cons fun-name replaced-params)))
+          ; Release the allocated identifiers used to store the function parameters.
+          (ctx-gensym-counter-set! ctx start-gensym-counter)
           (if (and executes-conditionally (not arithmetic-conditions?))
             (set! conditional-fun-calls (cons (cons id new-fun-call) conditional-fun-calls))
             (set! replaced-fun-calls (cons (cons id new-fun-call) replaced-fun-calls)))
@@ -1118,7 +1131,7 @@
             ast)))
       ((six.list six.identifier six.internal-identifier)
         ast)
-      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow six.x=y)
+      ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow)
         (list (car ast)
               (go (cadr ast) executes-conditionally)
               (go (caddr ast) executes-conditionally)))
@@ -1144,7 +1157,7 @@
               (go (cadr ast) executes-conditionally)
               (go (caddr ast) ast)
               (go (cadddr ast) ast)))
-      ((six.-x six.!x six.*x six.**x)
+      ((six.-x six.!x six.*x six.**x six.+x six.~x)
         (list (car ast)
               (go (cadr ast) executes-conditionally)))
       ((six.++x)
@@ -1167,7 +1180,7 @@
           (go-inplace-arithmetic-op `(six.x+y ,new-op (six.literal 1))
                                     `(six.x+y (six.--x ,new-op) (six.literal 1))
                                     `(six.--x ,new-op))))
-      ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+      ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x&=y |six.x\|=y| six.x^=y six.x>>=y six.x<<=y)
         (let ((new-op1 (go (cadr ast) executes-conditionally)) (new-op2 (go (caddr ast) executes-conditionally)))
           (go-inplace-arithmetic-op new-op1
                                     `(,(car ast) ,new-op1 ,new-op2))))
@@ -1180,35 +1193,6 @@
         (table->list literal-inits)
         contains-side-effect))
 
-(define (replace-identifier ast old new)
-  (case (car ast)
-    ((six.identifier six.internal-identifier)
-      (if (equal? ast old)
-          new
-          ast))
-    ((six.literal six.list)
-      ast)
-    ((six.call six.x+y six.x-y six.x*y six.x/y six.x%y six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y six.index six.arrow six.x+=y six.x=y)
-      (list (car ast)
-            (replace-identifier (cadr ast) old new)
-            (replace-identifier (caddr ast) old new)))
-    ((six.x&&y |six.x\|\|y|)
-      (list (car ast)
-            (replace-identifier (cadr ast) old new)
-            (replace-identifier (caddr ast) old new)
-            (map (lambda (a) (replace-identifier a old new)) (cadddr ast))
-            (map (lambda (a) (replace-identifier a old new)) (car (cddddr ast)))))
-    ((six.x?y:z)
-      (list (car ast)
-            (replace-identifier (cadr ast) old new)
-            (replace-identifier (caddr ast) old new)
-            (replace-identifier (cadddr ast) old new)))
-    ((six.x++ six.x-- six.++x six.--x six.!x six.*x six.**x)
-      (list (car ast)
-            (replace-identifier (cadr ast) old new)))
-    (else
-      (error "unknown ast identifier" ast))))
-
 (define (comp-side-effects ctx side-effects)
   (define (comp-side-effect ast)
       (case (car ast)
@@ -1216,7 +1200,7 @@
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) " += 1 ))"))
         ((six.--x)
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) " -= 1 ))"))
-        ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y)
+        ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x&=y |six.x\|=y| six.x^=y six.x>>=y six.x<<=y)
           (string-append ": $((" (comp-lvalue ctx (cadr ast)) (six-op-string (car ast)) (comp-rvalue ctx (caddr ast) '(pure)) "))"))
         (else
           (error "unknown side effect" ast))))
@@ -1230,14 +1214,14 @@
       (ctx-add-glo-decl! ctx (def_str_code (env-var ctx id) val))))
   (for-each comp-literal-init literal-inits))
 
-(define (comp-rvalue ctx ast context-tag)
+(define (comp-rvalue ctx ast context)
   (let* ((side-effects-res (handle-side-effects ctx ast))
          (new-ast (car side-effects-res))
          (fun-calls-to-replace (cadr side-effects-res))
          (pre-side-effects (caddr side-effects-res))
          (literal-inits (cadddr side-effects-res))
          (contains-side-effect (car (cddddr side-effects-res))))
-    (define (comp-side-effects-then-rvalue wrapped compiling-test)
+    (define (comp-side-effects-then-rvalue rvalue-context)
       (begin
         (for-each
           (lambda (e) (ctx-add-glo-decl! ctx e))
@@ -1246,21 +1230,23 @@
         (for-each
           (lambda (call) (comp-fun-call ctx (cddr call) (car call)))
           fun-calls-to-replace)
-        (comp-rvalue-go ctx new-ast wrapped compiling-test '())))
+        (comp-rvalue-go ctx new-ast rvalue-context '())))
 
-    (case (car context-tag)
-      ((return index-lvalue assignment)
-        (comp-side-effects-then-rvalue (cadr context-tag) #f))
+    (case (car context)
+      ((index-lvalue assignment)
+        (comp-side-effects-then-rvalue (if (cadr context) 'in-arithmetic-expansion 'need-arithmetic-expansion)))
+      ((return)
+        (comp-side-effects-then-rvalue 'in-arithmetic-expansion))
       ((argument switch-control)
-        (comp-side-effects-then-rvalue #f #f))
+        (comp-side-effects-then-rvalue 'need-arithmetic-expansion))
       ((statement-expr)
         (cons contains-side-effect
-              (comp-side-effects-then-rvalue #f #f)))
+              (comp-side-effects-then-rvalue 'need-arithmetic-expansion)))
       ((test-if test-loop)
         ; TODO: This can create long lines, use \ to split them.
         (let ((side-effects-and-res
                 (scope-glo-decls ctx
-                  (lambda () (comp-side-effects-then-rvalue #f (not arithmetic-conditions?))))))
+                  (lambda () (comp-side-effects-then-rvalue (if arithmetic-conditions? 'need-arithmetic-expansion 'test))))))
           (if arithmetic-conditions?
             (string-append
               (glo-decl-unlines (cdr side-effects-and-res))
@@ -1270,10 +1256,10 @@
             (string-append (glo-decl-unlines (cdr side-effects-and-res)) (car side-effects-and-res)))))
       ((pure)
         (if (and (null? fun-calls-to-replace) (null? pre-side-effects) (null? literal-inits))
-          (comp-rvalue-go ctx new-ast #t #f '())
+          (comp-rvalue-go ctx new-ast 'in-arithmetic-expansion '())
           (error "function calls, side effects and string literals in pure context not supported" ast)))
       (else
-        (error "unknown context tag" context-tag)))))
+        (error "unknown context tag" context)))))
 
 (define (six-op-string op #!optional (test-operand #f))
   (case op
@@ -1287,12 +1273,17 @@
     ((six.x&y)      " & ")
     ((|six.x\|y|)   " | ")
     ((six.x^y)      " ^ ")
+    ((six.x=y)      " = ")
     ((six.x+=y)     " += ")
     ((six.x-=y)     " -= ")
     ((six.x*=y)     " *= ")
     ((six.x/=y)     " /= ")
     ((six.x%=y)     " %= ")
-    ((six.x=y)      " = ")
+    ((six.x&=y)     " &= ")
+    ((|six.x\|=y|)    " |= ")
+    ((six.x^=y)     " ^= ")
+    ((six.x>>=y)    " >>= ")
+    ((six.x<<=y)    " <<= ")
     ((six.x&&y)     " && ")
     ((|six.x\|\|y|) " || ")
     ((six.x==y)     (if test-operand " -eq " " == "))
@@ -1304,7 +1295,7 @@
     (else           (error "unknown six op" op))))
 
 ; TODO: Distinguish between wrapped in $(( ... )) and wrapped in ( ... )?
-(define (comp-rvalue-go ctx ast wrapped compiling-test test-side-effects)
+(define (comp-rvalue-go ctx ast rvalue-context test-side-effects)
   (define (with-prefixed-side-effects . strs)
     (let ((comped-side-effects
             (cdr (scope-glo-decls ctx
@@ -1320,26 +1311,27 @@
                        "; }"))))
 
   (define (wrap-if-needed parens-otherwise? . lines)
-    (if (not wrapped)
-      (if compiling-test
-        (with-prefixed-side-effects "[ $((" (apply string-append lines) ")) -ne 0 ]")
+    (case rvalue-context
+      ((in-arithmetic-expansion)
+        (if parens-otherwise?
+          (string-append "(" (apply string-append lines) ")")
+          (apply string-append lines)))
+      ((need-arithmetic-expansion)
         (string-append "$((" (apply string-append lines) "))"))
-      (if parens-otherwise?
-        (string-append "(" (apply string-append lines) ")")
-        (apply string-append lines))))
+      ((test)
+        (with-prefixed-side-effects "[ $((" (apply string-append lines) ")) -ne 0 ]"))
+      (else
+        (error "unknown rvalue context" rvalue-context))))
 
-  ; Used to supports the case `if/while (c) { ... }`, where c is a variable.
+  ; Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
   ; This is otherwise handled by wrap-if-needed, but we don't want to wrap
   ; in $(( ... )) here.
   (define (wrap-in-condition-if-needed . lines)
-    (if compiling-test
+    (if (eq? rvalue-context 'test)
       (with-prefixed-side-effects "[ " (apply string-append lines) " -ne 0 ]")
       (apply string-append lines)))
 
-  (if (and wrapped compiling-test)
-    (error "Can't be compiling in a test context and wrapped in $(( ... ))" ast))
-
-  (if (and (not compiling-test) (pair? test-side-effects))
+  (if (and (not (eq? rvalue-context 'test)) (pair? test-side-effects))
     (error "Can't have test side effects in a non-test context" ast test-side-effects))
 
   (case (car ast)
@@ -1354,12 +1346,12 @@
                   (let ((ident (character-ident (string-ref val 0))))
                     (table-set! (ctx-characters ctx) (string-ref val 0) ident)
                     (wrap-in-condition-if-needed
-                      (string-append (if wrapped "" "$") (format-non-local-var ident))))
+                      (string-append (if (eq? rvalue-context 'in-arithmetic-expansion) "" "$") (format-non-local-var ident))))
                   (wrap-in-condition-if-needed (number->string (char->integer (string-ref val 0)))))
                 (begin
                   (ctx-data-set! ctx (cons val (ctx-data ctx)))
                   (wrap-in-condition-if-needed
-                    (string-append (if wrapped "" "$") (obj-ref (- (length (ctx-data ctx)) 1)))))))
+                    (string-append (if (eq? rvalue-context 'in-arithmetic-expansion) "" "$") (obj-ref (- (length (ctx-data ctx)) 1)))))))
              (else
               "unknown literal" ast))))
     ((six.list)
@@ -1372,13 +1364,15 @@
               (ctx-data-set! ctx (cons (reverse acc) (ctx-data ctx)))
               (string-append "$" (obj-ref (- (length (ctx-data ctx)) 1)))))))
     ((six.identifier six.internal-identifier)
-      (if wrapped
+      ; This may be wrong when the identifier is modified by the arithmetic operation,
+      ; since the value is only read once before the arithmetic expansion is evaluated.
+      (if (eq? rvalue-context 'in-arithmetic-expansion)
         (env-var ctx ast)
         (wrap-in-condition-if-needed "$" (env-var ctx ast #t) "")))
     ((six.x&&y |six.x\|\|y|)
       ; Note, this could also be compiled in a single [ ] block using -a and -o,
       ; which I think are POSIX compliant but are deprecated.
-      (if compiling-test
+      (if (eq? rvalue-context 'test)
         (let ((wrap-left (and (member (caadr ast) '(six.x&&y |six.x\|\|y|))
                               (not (equal? (car ast) (caadr ast)))))
               (wrap-right (and (member (caaddr ast) '(six.x&&y |six.x\|\|y|))
@@ -1393,11 +1387,11 @@
                         ; wrap it in parenthesis. It adds parenthesis that
                         ; sometimes aren't needed, but it hopefully helps readability.
                         (if wrap-left "{ " "")
-                        (comp-rvalue-go ctx (cadr ast) wrapped #t (cadddr ast))
+                        (comp-rvalue-go ctx (cadr ast) 'test (cadddr ast))
                         (if wrap-left "; }" "")
                         (six-op-string (car ast) #t)
                         (if wrap-right "{ " "")
-                        (comp-rvalue-go ctx (caddr ast) wrapped #t (car (cddddr ast)))
+                        (comp-rvalue-go ctx (caddr ast) 'test (car (cddddr ast)))
                         (if wrap-right "; }" "")))
         (begin
           ; Check if left-side-conditional-fun-calls and right-side-conditional-fun-calls are empty
@@ -1407,41 +1401,41 @@
               (error "Arithmetic with function calls in && and || not supported")))
 
           (wrap-if-needed #f
-                          (comp-rvalue-go ctx (cadr ast) #t #f '())
+                          (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                           (six-op-string (car ast) #t)
-                          (comp-rvalue-go ctx (caddr ast) #t #f '())))))
+                          (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))))
     ((six.x==y six.x!=y six.x<y six.x>y six.x<=y six.x>=y)
-     (if compiling-test
+      (if (eq? rvalue-context 'test)
         (with-prefixed-side-effects "[ "
-                                    (comp-rvalue-go ctx (cadr ast) wrapped #f '())
+                                    (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '())
                                     (six-op-string (car ast) #t)
-                                    (comp-rvalue-go ctx (caddr ast) wrapped #f '())
-                                    " ]"))
+                                    (comp-rvalue-go ctx (caddr ast) 'need-arithmetic-expansion '())
+                                    " ]")
          (wrap-if-needed #t
-                        (comp-rvalue-go ctx (cadr ast) #t #f '())
+                        (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                         (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) #t #f '())))
+                        (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '()))))
     ((six.x+y six.x-y six.x*y six.x/y six.x%y six.x>>y six.x<<y six.x&y |six.x\|y| six.x^y)
      (wrap-if-needed #t
-                    (comp-rvalue-go ctx (cadr ast) #t #f '())
+                    (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                     (six-op-string (car ast))
-                    (comp-rvalue-go ctx (caddr ast) #t #f '())))
+                    (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
     ((six.-x)
      ; Check if the rest of ast is a literal, if so directly return the negated value
      (if (and (equal? 'six.literal (caadr ast)) (exact-integer? (cadadr ast)))
-       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) wrapped #f test-side-effects)
-       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) wrapped #f '()) ")"))))
+       (comp-rvalue-go ctx `(six.literal ,(- (cadadr ast))) rvalue-context test-side-effects)
+       (wrap-if-needed #f (string-append "-(" (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '()) ")"))))
     ((six.x?y:z)
       (wrap-if-needed #t
-                      (comp-rvalue-go ctx (cadr ast) #t #f '())
+                      (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())
                       " ? "
-                      (comp-rvalue-go ctx (caddr ast) #t #f '())
+                      (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())
                       " : "
-                      (comp-rvalue-go ctx (cadddr ast) #t #f '())))
+                      (comp-rvalue-go ctx (cadddr ast) 'in-arithmetic-expansion '())))
     ((six.index)
-     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f '()) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '()) "))"))
     ((six.arrow)
-     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) #t #f '()) "))"))
+     (wrap-if-needed #f "_$((" (comp-array-lvalue ctx (cadr ast)) "+" (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '()) "))"))
     ((six.++x)
      (wrap-if-needed #t (comp-lvalue ctx (cadr ast)) " += 1"))
     ((six.--x)
@@ -1452,19 +1446,23 @@
      ; to generate clearer code.
      ; Case where it would be useful: !(a == b && b == c) is compiled as
      ; [ $(( a == b && b == c)) -ne 0 ] instead of [ $a -ne $b ] [ $b -ne $c ].
-     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) #t #f '())))
-    ((six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x=y)
-     (wrap-if-needed #t (comp-lvalue ctx (cadr ast))
-                        (six-op-string (car ast))
-                        (comp-rvalue-go ctx (caddr ast) #t #f '())))
+     (wrap-if-needed #f "!" (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())))
     ((six.*x)
-     ; Setting wrapped to false even if it's wrapped in $(( ... )) because
+     ; Using need-arithmetic-expansion even if it's wrapped in $(( ... )) because
      ; we need another layer of wrapping if it's a complex expression, i.e. not
      ; a literal or a variable.
-     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) #f #f '())))
+     (wrap-if-needed #f "_" (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '())))
     ((six.**x)
      ; ^ Same reason here
-     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) #f #f '()) "))"))
+     (wrap-if-needed #f "_$(( _" (comp-rvalue-go ctx (cadr ast) 'need-arithmetic-expansion '()) "))"))
+    ((six.~x)
+      (wrap-if-needed #f "~" (comp-rvalue-go ctx (cadr ast) 'in-arithmetic-expansion '())))
+    ((six.+x)
+      (comp-rvalue-go ctx (cadr ast) rvalue-context '()))
+    ((six.x=y six.x+=y six.x-=y six.x*=y six.x/=y six.x%=y six.x&=y |six.x\|=y| six.x^=y six.x<<=y six.x>>=y)
+     (wrap-if-needed #t (comp-lvalue ctx (cadr ast))
+                        (six-op-string (car ast))
+                        (comp-rvalue-go ctx (caddr ast) 'in-arithmetic-expansion '())))
     ((six.x++)
      (error "x++ should have been replaced with x - 1 (and ++x side effect) by comp-rvalue"))
     ((six.x--)
@@ -1524,6 +1522,7 @@
     (string-append sp-var "=0 # Note: Stack grows up, not down")
     ""
     "save_loc_var() {"
+    "  __count=$#"
     (if (not use-$1-for-return-loc?)
       (unlines
       (string-append
@@ -1540,11 +1539,16 @@
     "    : $((save_loc_var_$" sp-var "=$1))")
     "    shift"
     "  done"
+    "  # Save the number of arguments. Used in rest_loc_var"
+    "  : $((__SP += 1))"
+    "  : $((save_loc_var_$__SP=$__count))"
     "}"
     ""
     "rest_loc_var() {"
     (if use-$1-for-return-loc?
     "  __result_loc=$1; shift")
+    "  __adjust=$((save_loc_var_$__SP - $#)) # Number of saved variables not being restored"
+    "  : $((__SP -= 1))"
     "  while [ $# -gt 0 ]; do"
     "    # Make sure result_loc is not overwritten"
     (if use-$1-for-return-loc?
@@ -1562,11 +1566,13 @@
     "  eval \"" result-loc-var "=\\$save_loc_var_$" sp-var "\"")
     (string-append
     "  : $((" sp-var " -= 1))")))
+    (string-append
+    "  : $((" sp-var " -= __adjust))")
     "}"
     ""
     ""
     (string-append
-    "defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $" init-globals-var  " -ne 0 ]; then initialize_memory $1 $2; fi; }")
+    "defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $" init-globals-var " -ne 0 ]; then initialize_memory $(($1)) $2; fi; }")
     "defglo() { : $(($1 = $2)) ; }"
     ""
     "# Setup argc, argv"
@@ -1574,16 +1580,32 @@
     (string-append "make_argv $" argc-var " \"$0\" $@; " argv-var "=$__argv")
     ; This must be after make_argv because if one of the local variable is argv,
     ; writing to it will overwrite the $@ array in zsh.
-    (let ((local-vars (map car (table->list (ctx-all-variables ctx)))))
-      (if (not (null? local-vars))
+    (let ((local-vars
+              (map format-local-var
+                   (map car (table->list (ctx-all-variables ctx)))))
+          (synthetic-vars
+              (map (lambda (c) (internal-ref (list 'six.internal-identifier c)))
+                   (iota (ctx-max-gensym-counter ctx) 1))))
+      (if (or (not (null? local-vars)) (not (null? synthetic-vars)))
         (unlines
           ""
           "# Initialize local vars so set -u can be used"
-          (string-append ": $(( "
-                        (string-concatenate (map (lambda (l) (format-local-var l)) local-vars) " = ")
-                        " = 0 ))"))))
-    ""
-    ))
+          (apply unlines
+          (map
+            (lambda (s) (string-append ": $(( " s " = 0 ))"))
+            ; 107 = 120 - 13 (length of ": $(( " + " = 0 ))")
+            (string-concatenate-with-breaks 107 " = " (append local-vars synthetic-vars)))))))))
+
+; Like string-concatenate, but returns a list of string with maximum length N.
+(define (string-concatenate-with-breaks N sep lst)
+  (let loop ((lst lst) (acc '()))
+    (if (null? lst)
+      (list (string-concatenate (reverse acc) sep))
+      (let ((new-acc (cons (car lst) acc)))
+        (if (<= N (string-length (string-concatenate new-acc sep)))
+          (cons (string-concatenate (reverse acc) sep)
+                (loop lst '()))
+          (loop (cdr lst) new-acc))))))
 
 (define (runtime-postlude)
   (unlines
