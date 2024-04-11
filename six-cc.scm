@@ -1150,8 +1150,8 @@
         (list (car ast)
               left-side
               right-side
-              left-side-conditional-fun-calls
-              right-side-conditional-fun-calls)))
+              (reverse left-side-conditional-fun-calls)
+              (reverse right-side-conditional-fun-calls))))
       ((six.x?y:z)
         (list (car ast)
               (go (cadr ast) executes-conditionally)
