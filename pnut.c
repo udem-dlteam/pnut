@@ -22,6 +22,8 @@
 #define USE_IN_RANGE_FUNCTION_not
 #define INLINE_get_ch
 
+#define OPTIMIZE_CONSTANT_PARAM
+
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
 #define OR |
@@ -799,6 +801,7 @@ void missing_feature_error(char_ptr msg) {
 
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
+    printf("expected_tok=%d tok=%d\n", expected_tok, tok);
     syntax_error("unexpected token");
   }
   get_tok();
@@ -1586,12 +1589,17 @@ int text_alloc = 1; /* Start at 0 because 0 is the empty text */
 
 #ifndef SIX_CC
 /* Place prototype of mutually recursive functions here */
+
+#ifndef SIX_CC_BOOTSTRAP
 text comp_array_lvalue(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
 void comp_body(ast node);
 void comp_statement(ast node, int else_if);
+void mark_mutable_variables_body(ast node);
+#endif
+
 #endif
 
 /*
@@ -1858,7 +1866,7 @@ text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
     var = find_var_in_local_env(get_val(ident));
     if (var != -1) {
       if (get_child(var, 2) == KIND_PARAM AND get_child(var, 3)) {
-        res = wrap_int(get_child(var, 2));
+        res = wrap_int(get_child(var, 1));
         if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
       } else {
         res = wrap_str(string_pool + get_val(get_val(ident)));
@@ -1901,12 +1909,21 @@ ast fresh_string_ident() {
 /* TODO: Remove this eventually or move to debug module */
 void print_local_env() {
   ast env = local_env;
+  ast var;
   ast ident;
-  printf("##### print_local_env\n");
-  while (env != 0) {
-    ident = get_child(get_child(env, 0), 0);
+  int pos;
+  int kind;
+  int constant;
 
-    printf("Ident: %d = %s\n", ident, string_pool + get_val(ident));
+  printf("##### Local environment #####\n");
+  while (env != 0) {
+    var = get_child(env, 0);
+    ident = get_child(var, 0);
+    pos = get_child(var, 1);
+    kind = get_child(var, 2);
+    constant = get_child(var, 3);
+
+    printf("# Ident[%d] %d = %s. kind = %d, constant = %d\n", pos, ident, string_pool + get_val(ident), kind, constant);
     env = get_child(env, 1);
   }
 }
@@ -1919,7 +1936,7 @@ A variable is a LOCAL_VAR node with 4 children:
   3. Kind of variable (function param or local var)
   4. Constant: if the variable is never assigned to
 */
-void add_var_to_local_env(ast ident_tok, int position) {
+void add_var_to_local_env(ast ident_tok, int position, int kind) {
   ast var;
 
   /* Check if the variable is not in env. This should always do nothing */
@@ -1927,20 +1944,42 @@ void add_var_to_local_env(ast ident_tok, int position) {
     fatal_error("add_var_to_local_env: variable already in local environment");
   }
 
-  /* The var is not part of the environment, so we add it */
-  var = new_ast4(LOCAL_VAR, ident_tok, position, KIND_LOCAL, false);
+  /*
+    The var is not part of the environment, so we add it.
+    Variables start as constant, and are marked as mutable by mark_mutable_variables_body.
+  */
+  #ifdef OPTIMIZE_CONSTANT_PARAM
+  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, true);
+  #else
+  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, false);
+  #endif
   local_env = new_ast2(',', var, local_env);
   local_env_size += 1;
 }
 
-void add_vars_to_local_env(ast lst, int position) {
+void add_vars_to_local_env(ast lst, int position, int kind) {
   ast decl;
   while (lst != 0) {
     decl = get_child(lst, 0);
-    add_var_to_local_env(get_child(decl, 0), position);
+    add_var_to_local_env(get_child(decl, 0), position, kind);
     lst = get_child(lst, 1);
     position += 1;
   }
+}
+
+void mark_variable_as_mutable(ast ident) {
+  ast var;
+  if (get_op(ident) == IDENTIFIER) {
+    var = find_var_in_local_env(get_val(ident));
+    if (var != -1) { set_child(var, 3, false); }
+  }
+}
+
+int variable_is_constant_param(ast local_var) {
+  if (local_var != -1 && get_child(local_var, 2) == KIND_PARAM && get_child(local_var, 3)) {
+    return true;
+  }
+  return false;
 }
 
 /*
@@ -1980,11 +2019,12 @@ void save_local_vars() {
 
   while (env != 0) {
     local_var = get_child(env, 0);
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
-    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (!variable_is_constant_param(local_var)) {
+      ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+      res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
+    }
 
     env = get_child(env, 1);
   }
@@ -2013,11 +2053,12 @@ void restore_local_vars() {
 
   while (env != 0) {
     local_var = get_child(env, 0);
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
-    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
+    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
+    if (!variable_is_constant_param(local_var)) {
+      ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+      res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
+    }
 
     env = get_child(env, 1);
   }
@@ -2820,6 +2861,73 @@ ast get_leading_var_declarations(ast node) {
   return new_ast2(',', result, node);
 }
 
+void mark_mutable_variables_statement(ast node) {
+  int op = get_op(node);
+  ast params;
+
+  if (op == IF_KW) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
+    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
+  } else if (op == WHILE_KW) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
+  } else if (op == FOR_KW) {
+    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
+    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
+    if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
+  } else if (op == BREAK_KW OR op == CONTINUE_KW) {
+    /* Do nothing */
+  } else if (op == RETURN_KW) {
+    if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
+  } else if (op == '(') {
+    params = get_child(node, 1);
+
+    if (params != 0) { /* Check if not an empty list */
+      if (get_op(params) == ',') {
+        while (get_op(params) == ',') {
+          mark_mutable_variables_statement(get_child(params, 0));
+          params = get_child(params, 1);
+        }
+      } else { /* params is the first argument, not wrapped in a cons cell */
+        mark_mutable_variables_statement(params);
+      }
+    }
+  } else if (op == '{') { /* six.compound */
+    mark_mutable_variables_body(node);
+  } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
+    /* Do nothing */
+  } else if (op == '=' OR op == PLUS_PLUS OR op == MINUS_MINUS OR op == PLUS_EQ
+         OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
+         OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+    mark_variable_as_mutable(get_child(node, 0));
+    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
+  } else if ((op == '~') OR (op == '!')
+      OR (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
+      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ)
+      OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') OR (op == AMP_AMP) OR (op == BAR_BAR)) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
+  } else if (op == '?') {
+    mark_mutable_variables_statement(get_child(node, 0));
+    mark_mutable_variables_statement(get_child(node, 1));
+    mark_mutable_variables_statement(get_child(node, 2));
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("mark_mutable_variables_statement: unknown statement");
+  }
+}
+
+void mark_mutable_variables_body(ast node) {
+  if (node != 0) {
+    while (get_op(node) == '{') {
+      mark_mutable_variables_statement(get_child(node, 0));
+      node = get_child(node, 1);
+    }
+  }
+}
+
 void comp_glo_define_procedure(ast node) {
   ast name = get_child(node, 0);
   /* ast fun_type = get_child(node, 1); */
@@ -2836,10 +2944,12 @@ void comp_glo_define_procedure(ast node) {
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
 
-  add_vars_to_local_env(params, 2); /* Start position at 2 because 1 is taken by result_loc */
-  add_vars_to_local_env(local_vars, local_env_size + 2);
+  add_vars_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
+  add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
 
-  /* TODO: Analyze vars that are mutable */
+  #ifdef OPTIMIZE_CONSTANT_PARAM
+  mark_mutable_variables_body(body);
+  #endif
 
   /* Show the mapping between the function parameters and $1, $2, etc. */
   i = 2; /* Start at 2 because $1 is assigned to result location */
@@ -2878,7 +2988,12 @@ void comp_glo_define_procedure(ast node) {
   i = 2;
   while (params != 0) {
     var = get_child(params, 0);
-    comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, i));
+
+    /* Constant parameters don't need to be initialized */
+    if (!variable_is_constant_param(find_var_in_local_env(get_val(var)))) {
+      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, i));
+    }
+
     params = get_child(params, 1);
     i += 1;
   }
@@ -3062,10 +3177,10 @@ void initialize_function_variables() {
   while (env != 0) {
     local_var = get_child(env, 0);
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
-    if (get_child(local_var, 2) == KIND_PARAM AND get_child(local_var, 3)) continue;
 
-    res = concatenate_strings_with(res, env_var(ident), wrap_str(" = "));
+    if (!variable_is_constant_param(local_var)) {
+      res = concatenate_strings_with(res, env_var(ident), wrap_str(" = "));
+    }
 
     env = get_child(env, 1);
   }
