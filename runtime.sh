@@ -306,7 +306,7 @@ char_to_int() {
 
 int_to_char() {
   case $1 in
-    [48-57]) __char=$(($1 - 48)) ;;
+    48|49|50|51|52|53|54|55|56|57) __char=$(($1 - 48)) ;;
     97)  __char="a" ;;
     98)  __char="b" ;;
     99)  __char="c" ;;
@@ -392,7 +392,10 @@ int_to_char() {
     124) __char="|" ;;
     125) __char="}" ;;
     126) __char="~" ;;
-    *)   __char=$(printf "\\$(printf "%o" "$1")") ;;
+    10)  __char="\n" ;;
+    *)
+      echo "Invalid character code: $1" ; exit 1
+      __char=$(printf "\\$(printf "%o" "$1")") ;;
   esac
 }
 
@@ -548,7 +551,7 @@ _printf() { # $1 = printf format string, $2... = printf args
           __str_len=$__res
 
           __head=$((_$__fmt_ptr))
-          __head_char=$(printf "\\$(printf "%o" "$__head")") # Decode
+          int_to_char $__head; __head_char=$__char
           __fmt_ptr=$((__fmt_ptr + 1))
           if [ "$__head_char" = 's' ]; then
             __str_ref=$1; shift
