@@ -1567,19 +1567,6 @@ ast parse_compound_statement() {
   return result;
 }
 
-void print_string_char(int c) {
-  if (c == 7) printf("\\a");
-  else if (c == 8) printf("\\b");
-  else if (c == 12) printf("\\f");
-  else if (c == 10) printf("\\n");
-  else if (c == 13) printf("\\r");
-  else if (c == 9) printf("\\t");
-  else if (c == 11) printf("\\v");
-  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) printf("\\%c", c);
-  else if ((c < 32) OR (c > 126)) printf("\\%d%d%d", c>>6, (c>>3)&7, c&7);
-  else putchar(c);
-}
-
 /* codegen */
 
 #define text int
