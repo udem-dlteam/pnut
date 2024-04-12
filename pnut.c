@@ -2951,7 +2951,6 @@ void comp_glo_define_procedure(ast node) {
   ));
 
   in_tail_position = true;
-  fun_gensym_ix = 0;
   nest_level += 1;
 
   /*
@@ -3059,6 +3058,7 @@ Structures, enums, and unions are not supported.
 */
 void comp_glo_decl(ast node) {
   int op = get_op(node);
+  fun_gensym_ix = 0;
 
   if (op == '=') { /* Assignations */
    comp_assignment(get_child(node, 0), get_child(node, 1));
