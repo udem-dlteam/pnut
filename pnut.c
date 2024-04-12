@@ -1659,9 +1659,8 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 
 text wrap_str(char_ptr s) {
   int i = 0;
-  int result = 0;
+  int result = text_alloc;
 
-  result = text_alloc;
   text_pool[result] = TEXT_TREE;
   text_alloc += 2;
   while (s[i] != 0) {
