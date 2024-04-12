@@ -3133,6 +3133,7 @@ void epilogue() {
   printf("# Character constants\n");
   for(c = 0; c < 256; c += 1) {
     if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
+      printf("readonly ");
       print_text(character_ident(c));
       printf("=%d\n", c);
     }
