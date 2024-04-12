@@ -159,19 +159,10 @@ int hash;
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
-int alloc_result;
-
 int alloc_obj(int size) {
+  if (heap_alloc > HEAP_SIZE) { fatal_error("heap overflow"); }
 
-  alloc_result = heap_alloc;
-
-  heap_alloc += size;
-
-  if (heap_alloc > HEAP_SIZE) {
-    fatal_error("heap overflow");
-  }
-
-  return alloc_result;
+  return (heap_alloc += size) - size;
 }
 
 void begin_string() {
