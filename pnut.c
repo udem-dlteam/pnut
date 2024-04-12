@@ -2942,7 +2942,7 @@ void comp_glo_define_procedure(ast node) {
   i = 2; /* Start at 2 because $1 is assigned to result location */
   while (params != 0) {
     var = get_child(params, 0);
-    comment = concatenate_strings_with(comment, string_concat3(env_var(new_ast0(IDENTIFIER, get_child(var, 0))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    comment = concatenate_strings_with(comment, string_concat3(wrap_str(string_pool + get_val(get_val(var))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
     params = get_child(params, 1);
     i += 1;
   }
