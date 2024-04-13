@@ -11,3 +11,7 @@ six-cc-tests/*.sh
 c4-for-six.sh
 c4_by_c4-for-six-op.golden.*
 tokenizer.sh
+pnut.exe
+pnut.sh
+pnut-twice-bootstrapped.sh
+pnut-after-cpp.c
