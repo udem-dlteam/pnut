@@ -1708,6 +1708,7 @@ int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions 
 int string_counter = 0;         /* Counter for string literals */
 #define CHARACTERS_BITFIELD_SIZE 16
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
+ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
 
 void init_comp_context() {
   int i;
@@ -1722,6 +1723,21 @@ void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix + 1] = 1; /* If it's active or not. Used by undo_glo_decls and replay_glo_decls */
   glo_decls[glo_decl_ix + 2] = decl;
   glo_decl_ix += 3;
+}
+
+int append_glo_decl_fixup() {
+  glo_decls[glo_decl_ix] = nest_level;
+  glo_decls[glo_decl_ix + 1] = 1; /* If it's active or not. Used by undo_glo_decls and replay_glo_decls */
+  glo_decls[glo_decl_ix + 2] = -1;
+  glo_decl_ix += 3;
+  return glo_decl_ix - 3;
+}
+
+void fixup_glo_decl(int fixup_ix, text decl) {
+  if (glo_decls[fixup_ix + 2] != -1)
+    fatal_error("fixup_glo_decl: invalid fixup");
+
+  glo_decls[fixup_ix + 2] = decl;
 }
 
 /*
@@ -1773,7 +1789,10 @@ void print_glo_decls() {
   int i;
   int level;
   for (i = 0; i < glo_decl_ix; i += 3) {
-    if (glo_decls[i + 1] == 1) { /* Skip inactive declarations */
+    if (glo_decls[i + 1] == 1 && glo_decls[i + 2] != 0) { /* Skip inactive or empty declarations */
+      if (glo_decls[i + 2] == -1)
+        fatal_error("print_glo_decls: fixup left");
+
       level = glo_decls[i];
       while (level > 0) {
         putchar(' '); putchar(' ');
