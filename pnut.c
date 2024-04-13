@@ -19,6 +19,7 @@
 #define INLINE_get_ch
 
 #define OPTIMIZE_CONSTANT_PARAM
+#define SUPPORT_ADDRESS_OF_OP
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -2983,12 +2984,21 @@ void comp_glo_define_procedure(ast node) {
 
 text comp_constant(ast node) {
   int op = get_op(node);
+  ast new_ident;
+
   if (op == INTEGER) {
     return wrap_int(-get_val(node));
   } else if (op == CHARACTER) {
     return string_concat(wrap_char('$'), character_ident(get_val(node)));
   } else if (op == STRING) {
-    return wrap_str(string_pool + get_val(node));
+    new_ident = fresh_string_ident();
+    append_glo_decl(string_concat5( wrap_str("defstr ")
+                                  , format_special_var(new_ident, false)
+                                  , wrap_str(" \"")
+                                  , escape_string(string_pool + get_val(node))
+                                  , wrap_char('\"')));
+
+    return format_special_var(new_ident, false);
   } else if ((op == '-') AND get_nb_children(node) == 1) {
     return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
   } else {
