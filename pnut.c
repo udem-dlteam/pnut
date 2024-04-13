@@ -1,6 +1,4 @@
-#ifndef SIX_CC
-
-#ifndef SIX_CC_BOOTSTRAP
+#ifndef PNUT_CC
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,8 +9,6 @@
 #define int_ptr   int  *
 #define char_ptr  char *
 #define void_ptr  void *
-
-#endif
 
 #define ast int
 #define true 1
@@ -798,13 +794,11 @@ void expect_tok(int expected_tok) {
   get_tok();
 }
 
-#ifndef SIX_CC
-#ifndef SIX_CC_BOOTSTRAP
+#ifndef PNUT_CC
 ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
-#endif
 #endif
 
 ast parse_type() {
@@ -1565,10 +1559,9 @@ ast parse_compound_statement() {
 int text_pool[TEXT_POOL_SIZE];
 int text_alloc = 1; /* Start at 0 because 0 is the empty text */
 
-#ifndef SIX_CC
+#ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
 
-#ifndef SIX_CC_BOOTSTRAP
 text comp_array_lvalue(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
@@ -1576,7 +1569,6 @@ void comp_fun_call(ast node, ast assign_to);
 void comp_body(ast node);
 void comp_statement(ast node, int else_if);
 void mark_mutable_variables_body(ast node);
-#endif
 
 #endif
 
