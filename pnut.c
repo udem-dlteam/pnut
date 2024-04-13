@@ -3002,7 +3002,7 @@ void comp_glo_variable_declaration(ast node) {
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
 
-  text init_text;
+  if (init == 0) init = new_ast0(INTEGER, 0);
 
   if (get_op(type) == '[') { /* Array declaration */
     append_glo_decl(
@@ -3014,20 +3014,18 @@ void comp_glo_variable_declaration(ast node) {
       )
     );
   } else {
-    /* TODO: Replace with ternary expression? */
-    if (init != 0) {
-      init_text = comp_constant(init);
-    } else {
-      init_text = wrap_char('0');
-    }
+    #ifdef SUPPORT_ADDRESS_OF_OP
     append_glo_decl(
       string_concat4(
         wrap_str("defglo "),
         env_var(new_ast0(IDENTIFIER, name)),
         wrap_char(' '),
-        init_text
+        comp_constant(init)
       )
     );
+    #else
+    comp_assignment(new_ast0(IDENTIFIER, name), init);
+    #endif
   }
 }
 
@@ -3103,7 +3101,10 @@ void prologue() {
   printf("}\n\n");
 
   printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
+
+  #ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { : $(($1 = $2)) ; }\n\n");
+  #endif
 
   printf("# Setup argc, argv\n");
   printf("__argc_for_main=$(($# + 1))\n");
