@@ -1993,7 +1993,7 @@ void assert_idents_are_safe(ast lst) {
   }
 }
 
-void save_local_vars() {
+text save_local_vars() {
   ast env = local_env;
   ast local_var;
   ast ident;
@@ -2019,7 +2019,9 @@ void save_local_vars() {
   }
 
   if (res != 0) {
-    append_glo_decl(string_concat(wrap_str("save_loc_var "), res));
+    return string_concat(wrap_str("save_loc_var "), res);
+  } else {
+    return 0;
   }
 }
 
@@ -2027,7 +2029,7 @@ void save_local_vars() {
   The only difference between save_local_vars and restore_local_vars is the
   order of the arguments and the call to rest_loc_var instead of save_loc_var.
 */
-void restore_local_vars() {
+text restore_local_vars() {
   ast env = local_env;
   ast local_var;
   ast ident;
@@ -2053,7 +2055,9 @@ void restore_local_vars() {
   }
 
   if (res != 0) {
-    append_glo_decl(string_concat(wrap_str("rest_loc_var $1 "), res));
+    return string_concat(wrap_str("rest_loc_var $1 "), res);
+  } else {
+    return 0;
   }
 }
 
@@ -2802,7 +2806,7 @@ void comp_statement(ast node, int else_if) {
     if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
     } else if (!in_tail_position OR loop_nesting_level != 0) {
-      restore_local_vars();
+      rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str("return"));
     } else {
       /* TODO: Make sure this can't create empty bodies */
@@ -2923,9 +2927,8 @@ void comp_glo_define_procedure(ast node) {
   ast body = get_child(local_vars_and_body, 1);
   text comment = 0;
   int i;
-  int body_start_decl_ix;
-  int body_end_decl_ix;
   ast var;
+  int save_loc_vars_fixup;
 
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
@@ -2956,17 +2959,7 @@ void comp_glo_define_procedure(ast node) {
   in_tail_position = true;
   nest_level += 1;
 
-  /*
-    After setting the environment, we compile the body of the function and then
-    call save-local-variables so it can save the local variables and synthetic
-    variables that were used in the function.
-  */
-  body_start_decl_ix = glo_decl_ix;
-  comp_body(body);
-  body_end_decl_ix = glo_decl_ix;
-  undo_glo_decls(body_start_decl_ix);
-
-  save_local_vars();
+  save_loc_vars_fixup = append_glo_decl_fixup(); /* Fixup is done after compiling body */
 
   /* Initialize parameters */
   params = get_child(node, 2); /* Reload params because params is now = 0 */
@@ -2992,9 +2985,19 @@ void comp_glo_define_procedure(ast node) {
     local_vars = get_child(local_vars, 1);
   }
 
-  replay_glo_decls(body_start_decl_ix, body_end_decl_ix, false);
+  comp_body(body);
 
-  restore_local_vars();
+  append_glo_decl(restore_local_vars());
+
+  /*
+    We only know the full set of temporary variables after compiling the function body.
+    So we fixup the calls to save_loc_var and rest_loc_var at the end.
+  */
+  fixup_glo_decl(save_loc_vars_fixup, save_local_vars());
+  while (rest_loc_var_fixups != 0) {
+    fixup_glo_decl(get_child(rest_loc_var_fixups, 0), restore_local_vars());
+    rest_loc_var_fixups = get_child(rest_loc_var_fixups, 1);
+  }
 
   nest_level -= 1;
 
