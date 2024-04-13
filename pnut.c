@@ -2002,7 +2002,7 @@ text save_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
+    res = concatenate_strings_with(res, string_concat(wrap_char('$'), format_special_var(ident, true)), wrap_char(' '));
     counter -= 1;
   }
 
@@ -2012,14 +2012,14 @@ text save_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (!variable_is_constant_param(local_var)) {
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-      res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
+      res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
     }
 
     env = get_child(env, 1);
   }
 
   if (res != 0) {
-    return string_concat(wrap_str("save_loc_var "), res);
+    return string_concat(wrap_str("save_vars "), res);
   } else {
     return 0;
   }
@@ -2027,7 +2027,7 @@ text save_local_vars() {
 
 /*
   The only difference between save_local_vars and restore_local_vars is the
-  order of the arguments and the call to rest_loc_var instead of save_loc_var.
+  order of the arguments and the call to unsave_vars instead of save_vars.
 */
 text restore_local_vars() {
   ast env = local_env;
@@ -2055,7 +2055,7 @@ text restore_local_vars() {
   }
 
   if (res != 0) {
-    return string_concat(wrap_str("rest_loc_var $1 "), res);
+    return string_concat(wrap_str("unsave_vars $1 "), res);
   } else {
     return 0;
   }
@@ -2991,7 +2991,7 @@ void comp_glo_define_procedure(ast node) {
 
   /*
     We only know the full set of temporary variables after compiling the function body.
-    So we fixup the calls to save_loc_var and rest_loc_var at the end.
+    So we fixup the calls to save_vars and unsave_vars at the end.
   */
   fixup_glo_decl(save_loc_vars_fixup, save_local_vars());
   while (rest_loc_var_fixups != 0) {
@@ -3107,29 +3107,22 @@ void prologue() {
 
   printf("__SP=0 # Note: Stack grows up, not down\n\n");
 
-  printf("save_loc_var() {\n");
-  printf("  __count=$#\n");
+  printf("save_vars() {\n");
   printf("  while [ $# -gt 0 ]; do\n");
   printf("    : $((__SP += 1))\n");
-  printf("    : $((save_loc_var_$__SP=$1))\n");
+  printf("    : $((__$__SP=$1))\n");
   printf("    shift\n");
   printf("  done\n");
-  printf("  # Save the number of arguments. Used in rest_loc_var\n");
-  printf("  : $((__SP += 1))\n");
-  printf("  : $((save_loc_var_$__SP=$__count))\n");
   printf("}\n\n");
 
-  printf("rest_loc_var() {\n");
+  printf("unsave_vars() {\n");
   printf("  __result_loc=$1; shift\n");
-  printf("  __adjust=$((save_loc_var_$__SP - $#)) # Number of saved variables not being restored\n");
-  printf("  : $((__SP -= 1))\n");
   printf("  while [ $# -gt 0 ]; do\n");
   printf("    # Make sure result_loc is not overwritten\n");
-  printf("    if [ $1 != \"$__result_loc\" ]; then : $(($1=save_loc_var_$__SP)); fi\n");
+  printf("    if [ $1 != \"$__result_loc\" ]; then : $(($1=__$__SP)); fi\n");
   printf("    : $((__SP -= 1))\n");
   printf("    shift\n");
   printf("  done\n");
-  printf("  : $((__SP -= __adjust))\n");
   printf("}\n\n");
 
   printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
