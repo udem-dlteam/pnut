@@ -20,6 +20,7 @@
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP
+#define HANDLE_SIMPLE_PRINTF_not // Have a special case for printf("...") calls
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -2512,7 +2513,11 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   }
 }
 
+#ifdef HANDLE_SIMPLE_PRINTF
+text escaped_char(char c, int c_style) {
+#else
 text escaped_char(char c) {
+#endif
   if      (c == '\a') return wrap_str("\\a");
   else if (c == '\b') return wrap_str("\\b");
   else if (c == '\f') return wrap_str("\\f");
@@ -2522,19 +2527,32 @@ text escaped_char(char c) {
   else if (c == '\v') return wrap_str("\\v");
   else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
   else if (c == '"')  return wrap_str("\\\"");
+#ifdef HANDLE_SIMPLE_PRINTF
+  else if (c == '\'' && c_style) return wrap_str("\\\'");
+  else if (c == '?'  && c_style) return wrap_str("\\?");
+#else
   else if (c == '\'') return wrap_str("\\\'");
   else if (c == '?')  return wrap_str("\\?");
-  else if (c == '$')  return wrap_str("\\$");
+#endif
+  else if (c == '$') return wrap_str("\\$");
   else                return wrap_char(c);
 }
 
+#ifdef HANDLE_SIMPLE_PRINTF
+text escape_string(char_ptr str, int c_style) {
+#else
 text escape_string(char_ptr str) {
+#endif
   text res = wrap_str("");
   text char_text;
   int i = 0;
 
   while (str[i] != '\0') {
+#ifdef HANDLE_SIMPLE_PRINTF
+    char_text = escaped_char(str[i], c_style);
+#else
     char_text = escaped_char(str[i]);
+#endif
     res = string_concat(res, char_text);
     i += 1;
   }
@@ -2553,7 +2571,11 @@ text comp_rvalue(ast node, int context) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
+#ifdef HANDLE_SIMPLE_PRINTF
+                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), true)
+#else
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
+#endif
                                   , wrap_char('\"')));
     literals_inits = get_child(literals_inits, 1);
   }
@@ -2621,6 +2643,15 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast params = get_child(node, 1);
   ast param;
   text code_params = 0;
+
+  #ifdef HANDLE_SIMPLE_PRINTF
+  if (get_op(assign_to) == IDENTIFIER_EMPTY
+    && strcmp("printf", string_pool + get_val(get_val(name))) == 0
+    && params != 0
+    && get_op(params) == STRING) {
+    return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), false), wrap_str("\""));
+  }
+  #endif
 
   if (params != 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
@@ -3017,7 +3048,11 @@ text comp_constant(ast node) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(new_ident, false)
                                   , wrap_str(" \"")
+#ifdef HANDLE_SIMPLE_PRINTF
+                                  , escape_string(string_pool + get_val(node), true)
+#else
                                   , escape_string(string_pool + get_val(node))
+#endif
                                   , wrap_char('\"')));
 
     return format_special_var(new_ident, false);
