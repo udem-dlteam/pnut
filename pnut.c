@@ -2110,53 +2110,53 @@ text character_ident(int c) {
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
 
   if (in_range(c, 'a', 'z')) {
-    return string_concat(wrap_str("__LOWER_"), wrap_char(c));
+    return string_concat(wrap_str("__CH_"), wrap_char(c));
   } else if (in_range(c, 'A', 'Z')) {
-    return string_concat(wrap_str("__UPPER_"), wrap_char(c));
+    return string_concat(wrap_str("__CH_"), wrap_char(c));
   } else if (in_range(c, '0', '9')) {
-    return string_concat(wrap_str("__DIGIT_"), wrap_int(c - 48));
+    return string_concat(wrap_str("__CH_"), wrap_int(c - 48));
   } else {
-    if      (c == '\0') return wrap_str("__NULL_CH");
-    else if (c == '\n') return wrap_str("__NEWLINE_CH");
-    else if (c == ' ')  return wrap_str("__SPACE_CH");
-    else if (c == '!')  return wrap_str("__EXCL_CH");
-    else if (c == '"')  return wrap_str("__DQUOTE_CH");
-    else if (c == '#')  return wrap_str("__SHARP_CH");
-    else if (c == '$')  return wrap_str("__DOLLAR_CH");
-    else if (c == '%')  return wrap_str("__PERCENT_CH");
-    else if (c == '&')  return wrap_str("__AMP_CH");
-    else if (c == '\'') return wrap_str("__QUOTE_CH");
-    else if (c == '(')  return wrap_str("__LPAREN_CH");
-    else if (c == ')')  return wrap_str("__RPAREN_CH");
-    else if (c == '*')  return wrap_str("__STAR_CH");
-    else if (c == '+')  return wrap_str("__PLUS_CH");
-    else if (c == ',')  return wrap_str("__COMMA_CH");
-    else if (c == '-')  return wrap_str("__MINUS_CH");
-    else if (c == '.')  return wrap_str("__PERIOD_CH");
-    else if (c == '/')  return wrap_str("__SLASH_CH");
-    else if (c == ':')  return wrap_str("__COLON_CH");
-    else if (c == ';')  return wrap_str("__SEMICOLON_CH");
-    else if (c == '<')  return wrap_str("__LT_CH");
-    else if (c == '=')  return wrap_str("__EQ_CH");
-    else if (c == '>')  return wrap_str("__GT_CH");
-    else if (c == '?')  return wrap_str("__QUESTION_CH");
-    else if (c == '@')  return wrap_str("__AT_CH");
-    else if (c == '^')  return wrap_str("__CARET_CH");
-    else if (c == '[')  return wrap_str("__LBRACK_CH");
-    else if (c == '\\') return wrap_str("__BACKSLASH_CH");
-    else if (c == ']')  return wrap_str("__RBRACK_CH");
-    else if (c == '_')  return wrap_str("__UNDERSCORE_CH");
-    else if (c == '`')  return wrap_str("__BACKTICK_CH");
-    else if (c == '{')  return wrap_str("__LBRACE_CH");
-    else if (c == '|')  return wrap_str("__BAR_CH");
-    else if (c == '}')  return wrap_str("__RBRACE_CH");
-    else if (c == '~')  return wrap_str("__TILDE_CH");
-    else if (c == '\a') return wrap_str("__ALARM_CH");
-    else if (c == '\b') return wrap_str("__BACKSPACE_CH");
-    else if (c == '\f') return wrap_str("__PAGE_CH");
-    else if (c == '\r') return wrap_str("__RET_CH");
-    else if (c == '\t') return wrap_str("__TAB_CH");
-    else if (c == '\v') return wrap_str("__VTAB_CH");
+    if      (c == '\0') return wrap_str("__CH_NULL");
+    else if (c == '\n') return wrap_str("__CH_NEWLINE");
+    else if (c == ' ')  return wrap_str("__CH_SPACE");
+    else if (c == '!')  return wrap_str("__CH_EXCL");
+    else if (c == '"')  return wrap_str("__CH_DQUOTE");
+    else if (c == '#')  return wrap_str("__CH_SHARP");
+    else if (c == '$')  return wrap_str("__CH_DOLLAR");
+    else if (c == '%')  return wrap_str("__CH_PERCENT");
+    else if (c == '&')  return wrap_str("__CH_AMP");
+    else if (c == '\'') return wrap_str("__CH_QUOTE");
+    else if (c == '(')  return wrap_str("__CH_LPAREN");
+    else if (c == ')')  return wrap_str("__CH_RPAREN");
+    else if (c == '*')  return wrap_str("__CH_STAR");
+    else if (c == '+')  return wrap_str("__CH_PLUS");
+    else if (c == ',')  return wrap_str("__CH_COMMA");
+    else if (c == '-')  return wrap_str("__CH_MINUS");
+    else if (c == '.')  return wrap_str("__CH_PERIOD");
+    else if (c == '/')  return wrap_str("__CH_SLASH");
+    else if (c == ':')  return wrap_str("__CH_COLON");
+    else if (c == ';')  return wrap_str("__CH_SEMICOLON");
+    else if (c == '<')  return wrap_str("__CH_LT");
+    else if (c == '=')  return wrap_str("__CH_EQ");
+    else if (c == '>')  return wrap_str("__CH_GT");
+    else if (c == '?')  return wrap_str("__CH_QUESTION");
+    else if (c == '@')  return wrap_str("__CH_AT");
+    else if (c == '^')  return wrap_str("__CH_CARET");
+    else if (c == '[')  return wrap_str("__CH_LBRACK");
+    else if (c == '\\') return wrap_str("__CH_BACKSLASH");
+    else if (c == ']')  return wrap_str("__CH_RBRACK");
+    else if (c == '_')  return wrap_str("__CH_UNDERSCORE");
+    else if (c == '`')  return wrap_str("__CH_BACKTICK");
+    else if (c == '{')  return wrap_str("__CH_LBRACE");
+    else if (c == '|')  return wrap_str("__CH_BAR");
+    else if (c == '}')  return wrap_str("__CH_RBRACE");
+    else if (c == '~')  return wrap_str("__CH_TILDE");
+    else if (c == '\a') return wrap_str("__CH_ALARM");
+    else if (c == '\b') return wrap_str("__CH_BACKSPACE");
+    else if (c == '\f') return wrap_str("__CH_PAGE");
+    else if (c == '\r') return wrap_str("__CH_RET");
+    else if (c == '\t') return wrap_str("__CH_TAB");
+    else if (c == '\v') return wrap_str("__CH_VTAB");
     else { fatal_error("Unknown character"); return 0; }
   }
 }
