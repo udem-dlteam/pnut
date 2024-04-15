@@ -1704,17 +1704,21 @@ text concatenate_strings_with(text t1, text t2, text sep) {
   return string_concat3(t1, sep, t2);
 }
 
+int temp;
 void print_text(text t) {
   int i;
 
   if (t == 0) return;
 
-  if (t < 0) {
-    /* it's a character */
+  if (t < 0) { /* it's a character */
     putchar(-t);
   } else if (text_pool[t] == TEXT_TREE) {
     for (i = 0; i < text_pool[t + 1]; i += 1) {
-      print_text(text_pool[t + i + 2]);
+      temp = text_pool[t + i + 2];
+      if (temp != 0) {
+        if (temp < 0) putchar(-temp);
+        else print_text(temp);
+      }
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
