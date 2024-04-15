@@ -3184,10 +3184,10 @@ void prologue() {
   printf("}\n\n");
 
   printf("unsave_vars() {\n");
-  printf("  __result_loc=$1; shift\n");
+  printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
+  printf("  __return_loc=$1; shift\n");
   printf("  while [ $# -gt 0 ]; do\n");
-  printf("    # Make sure result_loc is not overwritten\n");
-  printf("    if [ $1 != \"$__result_loc\" ]; then : $(($1=__$__SP)); fi\n");
+  printf("    if [ $1 != \"$__return_loc\" ]; then : $(($1=__$__SP)); fi\n");
   printf("    : $((__SP -= 1))\n");
   printf("    shift\n");
   printf("  done\n");
@@ -3216,7 +3216,6 @@ void epilogue() {
     }
   }
 
-  printf("\n__=0 # Required for zsh");
   putchar('\n');
   printf("_main __ $__argc_for_main $__argv_for_main\n");
 }
