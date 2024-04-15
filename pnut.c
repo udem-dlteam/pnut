@@ -21,6 +21,7 @@
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP
 #define HANDLE_SIMPLE_PRINTF_not // Have a special case for printf("...") calls
+#define RESET_MEMORY_BETWEEN_FUNCTIONS
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -209,16 +210,43 @@ int end_ident() {
 
   /* a new ident has been found */
 
+#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+  probe = alloc_obj(4);
+#else
   probe = alloc_obj(3);
+#endif
 
   heap[hash] = probe; /* add new ident at end of chain */
 
   heap[probe] = 0; /* no next ident */
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
+#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+  heap[probe+3] = false; /* is a C keyword? */
+#endif
 
   return probe;
 }
+
+#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+void reset_table() {
+  // Traverse the hash table and reset all non-keyword entries
+  int i;
+  int prev;
+  for (i = 0; i < HASH_PRIME; i += 1) {
+    probe = heap[i];
+    prev = i;
+    while (probe != 0) {
+      if (heap[probe+3]) { /* keyword */
+        prev = probe;
+      } else { /* non-keyword */
+        heap[prev] = heap[probe]; /* Point previous node to next node */
+      }
+      probe = heap[probe];
+    }
+  }
+}
+#endif
 
 #ifdef INLINE_get_ch
 
@@ -272,7 +300,12 @@ void init_kw(int tok, char_ptr name) {
     i += 1;
   }
 
-  heap[end_ident()+2] = tok;
+  i = end_ident();
+
+  heap[i+2] = tok;
+#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+  heap[i+3] = true; /* keyword */
+#endif
 }
 
 void init_ident_table() {
@@ -3221,29 +3254,55 @@ void initialize_function_variables() {
 }
 
 int main() {
+  int max_text_alloc = 0;
+  int max_heap_alloc = 0;
+  int max_string_pool_alloc = 0;
+  int heap_start;
+  int string_pool_alloc_start;
   init_ident_table();
   init_comp_context();
 
   ch = '\n';
   get_tok();
 
+  #ifdef INLINE_SMALL_RUNTIME
+  runtime();
+  #endif
+
   prologue();
+
+  heap_start = heap_alloc;
+  string_pool_alloc_start = string_pool_alloc;
 
   while (tok != EOF) {
     comp_glo_decl(parse_definition(0));
     initialize_function_variables();
+    // printf("# heap_alloc: %d\n", heap_alloc - heap_start);
     print_glo_decls();
+
     /* Reset state */
     glo_decl_ix = 0;
     local_env_size = 0;
     local_env = 0;
-    text_alloc = 1;
 
-    /* TODO: Clear heap */
+#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+    if (text_alloc > max_text_alloc) max_text_alloc = text_alloc;
+    if (heap_alloc - heap_start > max_heap_alloc) max_heap_alloc = heap_alloc - heap_start;
+    if (string_pool_alloc - string_pool_alloc_start > max_string_pool_alloc) max_string_pool_alloc = string_pool_alloc - string_pool_alloc_start;
+
+    reset_table();
+    text_alloc = 1;
+    heap_alloc = heap_start;
+    string_pool_alloc = string_pool_alloc_start;
+#endif
   }
 
   epilogue();
 
+#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+  printf("\n# max_string_pool_alloc=%d max_heap_alloc=%d max_text_alloc=%d\n", max_string_pool_alloc, max_heap_alloc, text_alloc);
+#else
   printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
+#endif
   return 0;
 }
