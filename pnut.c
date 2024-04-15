@@ -3280,7 +3280,7 @@ int main() {
   while (tok != EOF) {
     comp_glo_decl(parse_definition(0));
     initialize_function_variables();
-    // printf("# heap_alloc: %d\n", heap_alloc - heap_start);
+    printf("# string_pool_alloc: %d, heap_alloc: %d, text_alloc: %d\n", string_pool_alloc, heap_alloc, text_alloc);
     print_glo_decls();
 
     /* Reset state */
@@ -3289,21 +3289,21 @@ int main() {
     local_env = 0;
 
 #ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
+    if (string_pool_alloc > max_string_pool_alloc) max_string_pool_alloc = string_pool_alloc;
+    if (heap_alloc > max_heap_alloc) max_heap_alloc = heap_alloc;
     if (text_alloc > max_text_alloc) max_text_alloc = text_alloc;
-    if (heap_alloc - heap_start > max_heap_alloc) max_heap_alloc = heap_alloc - heap_start;
-    if (string_pool_alloc - string_pool_alloc_start > max_string_pool_alloc) max_string_pool_alloc = string_pool_alloc - string_pool_alloc_start;
 
     reset_table();
-    text_alloc = 1;
-    heap_alloc = heap_start;
     string_pool_alloc = string_pool_alloc_start;
+    heap_alloc = heap_start;
+    text_alloc = 1;
 #endif
   }
 
   epilogue();
 
 #ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-  printf("\n# max_string_pool_alloc=%d max_heap_alloc=%d max_text_alloc=%d\n", max_string_pool_alloc, max_heap_alloc, text_alloc);
+  printf("\n# max_string_pool_alloc=%d max_heap_alloc=%d max_text_alloc=%d\n", max_string_pool_alloc, max_heap_alloc, max_text_alloc);
 #else
   printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
 #endif
