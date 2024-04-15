@@ -123,8 +123,7 @@ int STAR_EQ    = 424;
 int TEXT_TREE = 425;
 int TEXT_INTEGER = 426;
 int TEXT_CHAR = 427;
-int TEXT_STRING = 428;
-int TEXT_SUBSTRING = 429;
+int TEXT_FROM_POOL = 428;
 
 int IDENTIFIER_INTERNAL = 430;
 int IDENTIFIER_STRING = 431;
@@ -1692,6 +1691,13 @@ text wrap_str(char_ptr s) {
   return result;
 }
 
+text wrap_str_pool(int s) {
+  if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_FROM_POOL;
+  text_pool[text_alloc + 1] = s;
+  return (text_alloc += 2) - 2;
+}
+
 text concatenate_strings_with(text t1, text t2, text sep) {
   if (t1 == 0) return t2;
   if (t2 == 0) return t1;
@@ -1710,12 +1716,10 @@ void print_text(text t) {
     for (i = 0; i < text_pool[t + 1]; i += 1) {
       print_text(text_pool[t + i + 2]);
     }
-  } /* else if (text_pool[t] == TEXT_STRING) {
-    printf("%s", text_pool[t + 1]);
-  } else if (text_pool[t] == TEXT_SUBSTRING) {
-    printf("%.*s", text_pool[t + 2], text_pool[t + 1]);
-  } */ else if (text_pool[t] == TEXT_INTEGER) {
+  } else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
+  } else if (text_pool[t] == TEXT_FROM_POOL) {
+    printf("%s", string_pool + text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_CHAR) {
     fatal_error("unexpected character");
   } else {
@@ -1878,7 +1882,7 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
 }
 
 text global_var(ast ident_tok) {
-  return string_concat(wrap_char('_'), wrap_str(string_pool + get_val(ident_tok)));
+  return string_concat(wrap_char('_'), wrap_str_pool(get_val(ident_tok)));
 }
 
 text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
@@ -1892,7 +1896,7 @@ text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
         res = wrap_int(get_child(var, 1));
         if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
       } else {
-        res = wrap_str(string_pool + get_val(get_val(ident)));
+        res = wrap_str_pool(get_val(get_val(ident)));
       }
     } else {
       res = global_var(get_val(ident));
@@ -1909,7 +1913,7 @@ text env_var(ast ident) {
 }
 
 text function_name(int ident_tok) {
-  return string_concat(wrap_char('_'), wrap_str(string_pool + get_val(ident_tok)));
+  return string_concat(wrap_char('_'), wrap_str_pool(get_val(ident_tok)));
 }
 
 ast fresh_ident() {
@@ -3008,7 +3012,7 @@ void comp_glo_define_procedure(ast node) {
   i = 2; /* Start at 2 because $1 is assigned to result location */
   while (params != 0) {
     var = get_child(params, 0);
-    comment = concatenate_strings_with(comment, string_concat3(wrap_str(string_pool + get_val(get_val(var))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    comment = concatenate_strings_with(comment, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
     params = get_child(params, 1);
     i += 1;
   }
