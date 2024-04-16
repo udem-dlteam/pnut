@@ -1,4 +1,4 @@
-#ifndef SIX_CC_BOOTSTRAP
+#ifndef PNUT_CC
 #include <stdio.h>
 #endif
 
