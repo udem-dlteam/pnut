@@ -19,7 +19,7 @@
 #define INLINE_get_ch
 
 #define OPTIMIZE_CONSTANT_PARAM_not
-#define SUPPORT_ADDRESS_OF_OP
+#define SUPPORT_ADDRESS_OF_OP_not
 #define HANDLE_SIMPLE_PRINTF_not // Have a special case for printf("...") calls
 #define RESET_MEMORY_BETWEEN_FUNCTIONS
 
@@ -3264,6 +3264,7 @@ int main() {
   int max_text_alloc = 0;
   int max_heap_alloc = 0;
   int max_string_pool_alloc = 0;
+  int glo_decl_ix_max = 0;
   int heap_start;
   int string_pool_alloc_start;
   init_ident_table();
@@ -3284,32 +3285,33 @@ int main() {
   while (tok != EOF) {
     comp_glo_decl(parse_definition(0));
     initialize_function_variables();
-    printf("# string_pool_alloc: %d, heap_alloc: %d, text_alloc: %d\n", string_pool_alloc, heap_alloc, text_alloc);
+    // printf("# string_pool_alloc: %d, heap_alloc: %d, text_alloc: %d, glo_decl_ix: %d\n", string_pool_alloc, heap_alloc, text_alloc, glo_decl_ix);
     print_glo_decls();
 
-    /* Reset state */
-    glo_decl_ix = 0;
-    local_env_size = 0;
-    local_env = 0;
 
+    /* Reset state */
 #ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
     if (string_pool_alloc > max_string_pool_alloc) max_string_pool_alloc = string_pool_alloc;
     if (heap_alloc > max_heap_alloc) max_heap_alloc = heap_alloc;
     if (text_alloc > max_text_alloc) max_text_alloc = text_alloc;
+    if (glo_decl_ix > glo_decl_ix_max) glo_decl_ix_max = glo_decl_ix;
 
     reset_table();
     string_pool_alloc = string_pool_alloc_start;
     heap_alloc = heap_start;
     text_alloc = 1;
+    glo_decl_ix = 0;
+    local_env_size = 0;
+    local_env = 0;
 #endif
   }
 
   epilogue();
 
 #ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-  printf("\n# max_string_pool_alloc=%d max_heap_alloc=%d max_text_alloc=%d\n", max_string_pool_alloc, max_heap_alloc, max_text_alloc);
+  // printf("\n# max_string_pool_alloc=%d max_heap_alloc=%d max_text_alloc=%d glo_decl_ix_max=%d\n", max_string_pool_alloc, max_heap_alloc, max_text_alloc, glo_decl_ix_max);
 #else
-  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
+  // printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d glo_decl_ix=%d\n", string_pool_alloc, heap_alloc, text_alloc, glo_decl_ix);
 #endif
   return 0;
 }
