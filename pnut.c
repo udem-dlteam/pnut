@@ -2445,7 +2445,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         Note: I think this can be simplified by not wrapped in () in the else case.
       */
       if (get_op(get_child(node, 0)) == INTEGER) {
-        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(get_child(node, 0))));
+        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(get_child(node, 0))));
       } else {
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
         return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str("-("), sub1, wrap_char(')')));
