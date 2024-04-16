@@ -2,6 +2,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdlib.h>
+#include <strings.h>
+#include <string.h>
 
 #endif
 
@@ -16,7 +19,7 @@
 
 #define AVOID_AMPAMP_BARBAR_not
 #define USE_IN_RANGE_FUNCTION_not
-#define INLINE_get_ch
+#define INLINE_get_ch_not
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -41,6 +44,12 @@ int in_range(int x, int lo, int hi) {
 #define in_range(x, lo, hi) ((x >= lo) AND (x <= hi))
 #endif
 
+#ifdef PNUT_CC
+
+#ifdef X86_CODEGEN
+#define EOF (-1)
+#endif
+
 /* Redefining strcmp because it's not part of the Shell runtime */
 int strcmp(char_ptr str1, char_ptr str2) {
   int i = 0;
@@ -50,6 +59,8 @@ int strcmp(char_ptr str1, char_ptr str2) {
   }
   return str1[i] - str2[i];
 }
+
+#endif
 
 int AUTO_KW        = 300;
 int BREAK_KW       = 301;
@@ -144,7 +155,7 @@ int ch;
 int tok;
 int val;
 
-#define STRING_POOL_SIZE 100000
+#define STRING_POOL_SIZE 200000
 char string_pool[STRING_POOL_SIZE];
 int string_pool_alloc = 0;
 int string_start;
@@ -153,7 +164,7 @@ int hash;
 /* These parameters give a perfect hashing of the C keywords */
 #define HASH_PARAM 12443
 #define HASH_PRIME 103
-#define HEAP_SIZE 100000 /* MUST BE > HASH_PRIME */
+#define HEAP_SIZE 200000 /* MUST BE > HASH_PRIME */
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
@@ -255,6 +266,7 @@ void reset_table() {
 
 void get_ch() {
   ch = getchar();
+  if (ch < 0) ch = EOF;
 }
 
 #endif
@@ -287,7 +299,7 @@ void get_ident() {
   */
 }
 
-void init_kw(int tok, char_ptr name) {
+int init_ident(int tok, char_ptr name) {
 
   int i = 0;
 
@@ -302,58 +314,65 @@ void init_kw(int tok, char_ptr name) {
   i = end_ident();
 
   heap[i+2] = tok;
-#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-  heap[i+3] = true; /* keyword */
-#endif
+
+  return i;
 }
 
 void init_ident_table() {
 
-  int i;
+  int i = 0;
 
-  for (i=0; i<HASH_PRIME; i += 1) {
+  //  string_pool_alloc = 0;
+  //  heap_alloc = HASH_PRIME;
+
+#ifdef DEBUG
+  putchar('&'); putchar(10);
+#endif
+
+  while (i < HASH_PRIME) {
     heap[i] = 0;
+    i += 1;
   }
 
-  init_kw(AUTO_KW,     "auto");
-  init_kw(BREAK_KW,    "break");
-  init_kw(CASE_KW,     "case");
-  init_kw(CHAR_KW,     "char");
-  init_kw(CONST_KW,    "const");
-  init_kw(CONTINUE_KW, "continue");
-  init_kw(DEFAULT_KW,  "default");
-  init_kw(DEFINE_KW,   "define");
-  init_kw(DO_KW,       "do");
-  init_kw(DOUBLE_KW,   "double");
-  init_kw(ELSE_KW,     "else");
-  init_kw(ENDIF_KW,    "endif");
-  init_kw(ENUM_KW,     "enum");
-  init_kw(ERROR_KW,    "error");
-  init_kw(EXTERN_KW,   "extern");
-  init_kw(FLOAT_KW,    "float");
-  init_kw(FOR_KW,      "for");
-  init_kw(GOTO_KW,     "goto");
-  init_kw(IF_KW,       "if");
-  init_kw(IFDEF_KW,    "ifdef");
-  init_kw(IFNDEF_KW,   "ifndef");
-  init_kw(INCLUDE_KW,  "include");
-  init_kw(INT_KW,      "int");
-  init_kw(LONG_KW,     "long");
-  init_kw(REGISTER_KW, "register");
-  init_kw(RETURN_KW,   "return");
-  init_kw(SHORT_KW,    "short");
-  init_kw(SIGNED_KW,   "signed");
-  init_kw(SIZEOF_KW,   "sizeof");
-  init_kw(STATIC_KW,   "static");
-  init_kw(STRUCT_KW,   "struct");
-  init_kw(SWITCH_KW,   "switch");
-  init_kw(TYPEDEF_KW,  "typedef");
-  init_kw(UNDEF_KW,    "undef");
-  init_kw(UNION_KW,    "union");
-  init_kw(UNSIGNED_KW, "unsigned");
-  init_kw(VOID_KW,     "void");
-  init_kw(VOLATILE_KW, "volatile");
-  init_kw(WHILE_KW,    "while");
+  init_ident(AUTO_KW,     "auto");
+  init_ident(BREAK_KW,    "break");
+  init_ident(CASE_KW,     "case");
+  init_ident(CHAR_KW,     "char");
+  init_ident(CONST_KW,    "const");
+  init_ident(CONTINUE_KW, "continue");
+  init_ident(DEFAULT_KW,  "default");
+  init_ident(DEFINE_KW,   "define");
+  init_ident(DO_KW,       "do");
+  init_ident(DOUBLE_KW,   "double");
+  init_ident(ELSE_KW,     "else");
+  init_ident(ENDIF_KW,    "endif");
+  init_ident(ENUM_KW,     "enum");
+  init_ident(ERROR_KW,    "error");
+  init_ident(EXTERN_KW,   "extern");
+  init_ident(FLOAT_KW,    "float");
+  init_ident(FOR_KW,      "for");
+  init_ident(GOTO_KW,     "goto");
+  init_ident(IF_KW,       "if");
+  init_ident(IFDEF_KW,    "ifdef");
+  init_ident(IFNDEF_KW,   "ifndef");
+  init_ident(INCLUDE_KW,  "include");
+  init_ident(INT_KW,      "int");
+  init_ident(LONG_KW,     "long");
+  init_ident(REGISTER_KW, "register");
+  init_ident(RETURN_KW,   "return");
+  init_ident(SHORT_KW,    "short");
+  init_ident(SIGNED_KW,   "signed");
+  init_ident(SIZEOF_KW,   "sizeof");
+  init_ident(STATIC_KW,   "static");
+  init_ident(STRUCT_KW,   "struct");
+  init_ident(SWITCH_KW,   "switch");
+  init_ident(TYPEDEF_KW,  "typedef");
+  init_ident(UNDEF_KW,    "undef");
+  init_ident(UNION_KW,    "union");
+  init_ident(UNSIGNED_KW, "unsigned");
+  init_ident(VOID_KW,     "void");
+  init_ident(VOLATILE_KW, "volatile");
+  init_ident(WHILE_KW,    "while");
 }
 
 int accum_digit(int base) {
@@ -448,7 +467,7 @@ void get_tok() {
       if (ch == '\n') tok = ch;
       get_ch();
 
-      while (in_range(ch, 0, ' ')) {
+      while (in_range(ch, 2, ' ')) { /* TODO: should be in_range(ch, 0, ' ') but it seems EOF=1 when compiled with pnut.sh */
         if (ch == '\n') tok = ch;
         get_ch();
       }
@@ -885,10 +904,10 @@ int is_type_starter(int tok) {
 }
 
 ast parse_declaration() {
+
   ast type;
   int stars;
   int name;
-  ast this_type;
   ast result = 0;
 
   if (is_type_starter(tok)) {
@@ -896,8 +915,7 @@ ast parse_declaration() {
     type = parse_type();
     stars = parse_stars();
 
-    if (stars != 0)
-      this_type = new_ast0(get_op(type), stars);
+    set_val(type, stars);
 
     name = val;
 
@@ -905,19 +923,19 @@ ast parse_declaration() {
 
     if ((stars == 0) AND (get_op(type) == VOID_KW))
       syntax_error("variable with void type");
-
+    /*
     if (tok == '[')
       syntax_error("array declaration only allowed at global level");
+    */
 
-
-    result = new_ast3(VAR_DECL, name, this_type, 0);
+    result = new_ast3(VAR_DECL, name, type, 0);
   }
 
   return result;
 }
 
 int parse_declaration_list() {
-  ast decl = parse_declaration(true);
+  ast decl = parse_declaration();
   ast result = 0;
   ast tail;
   if (decl != 0) {
@@ -926,7 +944,7 @@ int parse_declaration_list() {
 
     while (tok == ',') {
       get_tok();
-      decl = parse_declaration(true);
+      decl = parse_declaration();
       if (decl == 0) { break; }
 
       decl = new_ast2(',', decl, 0);
@@ -996,10 +1014,11 @@ ast parse_definition(int local) {
         }
 
         if (tok == '[') {
+          /*
           if (local) {
             syntax_error("array declaration only allowed at global level");
           }
-
+          */
           get_tok();
           if (tok == INTEGER) {
             this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
@@ -1586,12 +1605,31 @@ ast parse_compound_statement() {
   return result;
 }
 
+/*---------------------------------------------------------------------------*/
+
+#ifndef X86_CODEGEN
+
+/* shell codegen */
+
+void print_string_char(int c) {
+  if (c == 7) printf("\\a");
+  else if (c == 8) printf("\\b");
+  else if (c == 12) printf("\\f");
+  else if (c == 10) printf("\\n");
+  else if (c == 13) printf("\\r");
+  else if (c == 9) printf("\\t");
+  else if (c == 11) printf("\\v");
+  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) printf("\\%c", c);
+  else if ((c < 32) OR (c > 126)) printf("\\%d%d%d", c>>6, (c>>3)&7, c&7);
+  else putchar(c);
+}
+
 /* codegen */
 
 #define text int
 #define TEXT_POOL_SIZE 1000000
 int text_pool[TEXT_POOL_SIZE];
-int text_alloc = 1; /* Start at 0 because 0 is the empty text */
+int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 
 #ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
@@ -1713,12 +1751,10 @@ void print_text(text t) {
   if (t < 0) { /* it's a character */
     putchar(-t);
   } else if (text_pool[t] == TEXT_TREE) {
-    for (i = 0; i < text_pool[t + 1]; i += 1) {
-      temp = text_pool[t + i + 2];
-      if (temp != 0) {
-        if (temp < 0) putchar(-temp);
-        else print_text(temp);
-      }
+    i = 0;
+    while (i < text_pool[t + 1]) {
+      print_text(text_pool[t + i + 2]);
+      i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
@@ -1753,10 +1789,11 @@ int characters_useds[16];       /* Characters used in string literals. Bitfield,
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
 
 void init_comp_context() {
-  int i;
+  int i = 0;
   /* Initialize characters_useds table */
-  for (i = 0; i < 16; i += 1) {
+  while (i < 16) {
     characters_useds[i] = 0;
+    i += 1;
   }
 }
 
@@ -1828,13 +1865,10 @@ text replay_glo_decls_inline(int start, int end) {
 }
 
 void print_glo_decls() {
-  int i;
+  int i = 0;
   int level;
-  for (i = 0; i < glo_decl_ix; i += 3) {
-    if (glo_decls[i + 1] == 1 && glo_decls[i + 2] != 0) { /* Skip inactive or empty declarations */
-      if (glo_decls[i + 2] == -1)
-        fatal_error("print_glo_decls: fixup left");
-
+  while (i < glo_decl_ix) {
+    if (glo_decls[i + 1] == 1) { /* Skip inactive declarations */
       level = glo_decls[i];
       while (level > 0) {
         putchar(' '); putchar(' ');
@@ -1843,6 +1877,7 @@ void print_glo_decls() {
       print_text(glo_decls[i + 2]);
       putchar('\n');
     }
+    i += 3;
   }
 }
 
@@ -2256,7 +2291,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 2) {
-    if ((op == '(')) { /* Function call */
+    if (op == '(') { /* Function call */
       sub1 = fresh_ident(); /* Unique identifier for the function call */
 
       start_gensym_ix = gensym_ix;
@@ -2923,74 +2958,7 @@ ast get_leading_var_declarations(ast node) {
   return new_ast2(',', result, node);
 }
 
-void mark_mutable_variables_statement(ast node) {
-  int op = get_op(node);
-  ast params;
-
-  if (op == IF_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
-    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
-  } else if (op == WHILE_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
-  } else if (op == FOR_KW) {
-    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
-    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
-    if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
-  } else if (op == BREAK_KW OR op == CONTINUE_KW) {
-    /* Do nothing */
-  } else if (op == RETURN_KW) {
-    if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
-  } else if (op == '(') {
-    params = get_child(node, 1);
-
-    if (params != 0) { /* Check if not an empty list */
-      if (get_op(params) == ',') {
-        while (get_op(params) == ',') {
-          mark_mutable_variables_statement(get_child(params, 0));
-          params = get_child(params, 1);
-        }
-      } else { /* params is the first argument, not wrapped in a cons cell */
-        mark_mutable_variables_statement(params);
-      }
-    }
-  } else if (op == '{') { /* six.compound */
-    mark_mutable_variables_body(node);
-  } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
-    /* Do nothing */
-  } else if (op == '=' OR op == PLUS_PLUS OR op == MINUS_MINUS OR op == PLUS_EQ
-         OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
-         OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
-    mark_variable_as_mutable(get_child(node, 0));
-    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if ((op == '~') OR (op == '!')
-      OR (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ)
-      OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') OR (op == AMP_AMP) OR (op == BAR_BAR)) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == '?') {
-    mark_mutable_variables_statement(get_child(node, 0));
-    mark_mutable_variables_statement(get_child(node, 1));
-    mark_mutable_variables_statement(get_child(node, 2));
-  } else {
-    printf("op=%d %c\n", op, op);
-    fatal_error("mark_mutable_variables_statement: unknown statement");
-  }
-}
-
-void mark_mutable_variables_body(ast node) {
-  if (node != 0) {
-    while (get_op(node) == '{') {
-      mark_mutable_variables_statement(get_child(node, 0));
-      node = get_child(node, 1);
-    }
-  }
-}
-
-void comp_glo_define_procedure(ast node) {
+void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
   /* ast fun_type = get_child(node, 1); */
   ast params = get_child(node, 2);
@@ -3105,7 +3073,8 @@ text comp_constant(ast node) {
   }
 }
 
-void comp_glo_variable_declaration(ast node) {
+void comp_glo_var_decl(ast node) {
+
   ast name = get_child(node, 0);
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
@@ -3141,7 +3110,7 @@ void comp_glo_variable_declaration(ast node) {
 This function compiles 1 top level declaration at the time.
 The 3 types of supported top level declarations are:
   - global variable declarations
-  - global variable assignations
+  - global variable assignments
   - function declarations
 Structures, enums, and unions are not supported.
 */
@@ -3149,12 +3118,12 @@ void comp_glo_decl(ast node) {
   int op = get_op(node);
   fun_gensym_ix = 0;
 
-  if (op == '=') { /* Assignations */
+  if (op == '=') { /* Assignments */
    comp_assignment(get_child(node, 0), get_child(node, 1));
   } else if (op == VAR_DECL) {
-    comp_glo_variable_declaration(node);
+    comp_glo_var_decl(node);
   } else if (op == FUN_DECL) {
-    comp_glo_define_procedure(node);
+    comp_glo_fun_decl(node);
   } else {
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
@@ -3260,58 +3229,1237 @@ void initialize_function_variables() {
   }
 }
 
+#endif
+
+/*---------------------------------------------------------------------------*/
+
+#ifdef X86_CODEGEN
+
+/* x86 codegen */
+
+int code[1000000];
+int code_alloc = 0;
+
+void emit_i8(int a) {
+  code[code_alloc] = (a & 0xff);
+  code_alloc += 1;
+}
+
+void emit_2_i8(int a, int b) {
+  emit_i8(a);
+  emit_i8(b);
+}
+
+void emit_4_i8(int a, int b, int c, int d) {
+  emit_2_i8(a, b);
+  emit_2_i8(c, d);
+}
+
+void emit_i32_le(int n) {
+  emit_4_i8(n, n >> 8, n >> 16, n >> 24);
+}
+
+void write_i8(int n) {
+  putchar(n & 0xff);
+}
+
+void write_2_i8(int a, int b) {
+  write_i8(a);
+  write_i8(b);
+}
+
+void write_4_i8(int a, int b, int c, int d) {
+  write_2_i8(a, b);
+  write_2_i8(c, d);
+}
+
+void write_i32_le(int n) {
+  write_4_i8(n, n >> 8, n >> 16, n >> 24);
+}
+
+void write_Elf32_Ehdr() {
+  write_4_i8(0x7f, 0x45, 0x4c, 0x46); /* e_ident */
+  write_4_i8(0x01, 0x01, 0x01, 0x00);
+  write_4_i8(0x00, 0x00, 0x00, 0x00);
+  write_4_i8(0x00, 0x00, 0x00, 0x00);
+  write_2_i8(0x02, 0x00);             /* e_type */
+  write_2_i8(0x03, 0x00);             /* e_machine */
+  write_4_i8(0x01, 0x00, 0x00, 0x00); /* e_version */
+  write_4_i8(0x54, 0x80, 0x04, 0x08); /* e_entry */
+  write_4_i8(0x34, 0x00, 0x00, 0x00); /* e_phoff */
+  write_4_i8(0x00, 0x00, 0x00, 0x00); /* e_shoff */
+  write_4_i8(0x00, 0x00, 0x00, 0x00); /* e_flags */
+  write_2_i8(0x34, 0x00);             /* e_ehsize */
+  write_2_i8(0x20, 0x00);             /* e_phentsize */
+  write_2_i8(0x01, 0x00);             /* e_phnum */
+  write_2_i8(0x00, 0x00);             /* e_shentsize */
+  write_2_i8(0x00, 0x00);             /* e_shnum */
+  write_2_i8(0x00, 0x00);             /* e_shstrndx */
+}
+
+void write_Elf32_Phdr() {
+  write_i32_le(1);                 /* p_type */
+  write_i32_le(0);                 /* p_offset */
+  write_i32_le(0x08048000);        /* p_vaddr */
+  write_i32_le(0x08048000);        /* p_paddr */
+  write_i32_le(0x54 + code_alloc); /* p_filesz */
+  write_i32_le(0x54 + code_alloc); /* p_memsz */
+  write_i32_le(5);                 /* p_flags */
+  write_i32_le(0x1000);            /* p_align */
+}
+
+void write_elf() {
+
+  int i = 0;
+
+  write_Elf32_Ehdr();
+  write_Elf32_Phdr();
+
+  while (i < code_alloc) {
+     write_i8(code[i]);
+     i += 1;
+  }
+}
+
+int alloc_label() {
+  int lbl = alloc_obj(1);
+  heap[lbl] = 0;
+  return lbl;
+}
+
+void use_label(int lbl) {
+
+  int addr = heap[lbl];
+
+  if (addr < 0) {
+    /* label address is currently known */
+    addr = -addr - code_alloc; /* compute relative address */
+    code_alloc -= 4;
+    emit_i32_le(addr);
+  } else {
+    /* label address is not yet known */
+    code[code_alloc-1] = addr; /* chain with previous patch address */
+    heap[lbl] = code_alloc;
+  }
+}
+
+void def_label(int lbl) {
+
+  int addr = heap[lbl];
+  int label_addr = code_alloc;
+  int next;
+
+  if (addr < 0) {
+    fatal_error("label multiply defined");
+  } else {
+    heap[lbl] = -label_addr; /* define label's address */
+    while (addr != 0) {
+      next = code[addr-1]; /* get pointer to next patch address */
+      code_alloc = addr;
+      addr = label_addr - addr; /* compute relative address */
+      code_alloc -= 4;
+      emit_i32_le(addr);
+      addr = next;
+    }
+    code_alloc = label_addr;
+  }
+}
+
+int AX = 0;
+int CX = 1;
+int DX = 2;
+int BX = 3;
+int SP = 4;
+int BP = 5;
+int SI = 6;
+int DI = 7;
+
+int x86_64 = 0;
+
+void rex_prefix() {
+  if (x86_64) emit_i8(0x48); /* REX.W */
+}
+
+void mod_rm(int reg1, int reg2) {
+  emit_i8(0xc0 + 8*reg1 + reg2); /* ModR/M */
+}
+
+void op_reg_reg(int opcode, int dst, int src) {
+  rex_prefix();
+  emit_i8(opcode);
+  mod_rm(src, dst);
+}
+
+/* probably not essential */
+void inc_reg(int dst) { rex_prefix(); emit_2_i8(0xff, 0xc0 + dst); }
+void dec_reg(int dst) { rex_prefix(); emit_2_i8(0xff, 0xc8 + dst); }
+void xchg_reg_reg(int dst, int src) { op_reg_reg(0x87, dst, src); }
+void test_reg_reg(int dst, int src) { op_reg_reg(0x85, dst, src); }
+void jcond_short(int cond, int n) { emit_2_i8(0x70 + cond, n); }
+
+void not_reg(int dst) { rex_prefix(); emit_2_i8(0xf7, 0xd0 + dst); }
+void neg_reg(int dst) { rex_prefix(); emit_2_i8(0xf7, 0xd8 + dst); }
+
+void shl_reg_cl(int dst) { rex_prefix(); emit_2_i8(0xd3, 0xe0 + dst); }
+void shr_reg_cl(int dst) { rex_prefix(); emit_2_i8(0xd3, 0xe8 + dst); }
+void sar_reg_cl(int dst) { rex_prefix(); emit_2_i8(0xd3, 0xf8 + dst); }
+
+void imul_reg_reg(int dst, int src) {
+  rex_prefix();
+  emit_2_i8(0x0f, 0xaf);
+  mod_rm(dst, src);
+}
+
+void idiv_reg(int src) {
+  rex_prefix();
+  emit_2_i8(0xf7, 0xf8 + src);
+}
+
+void mov_reg_reg(int dst, int src) { op_reg_reg(0x89, dst, src); }
+void add_reg_reg(int dst, int src) { op_reg_reg(0x01, dst, src); }
+void or_reg_reg (int dst, int src) { op_reg_reg(0x09, dst, src); }
+void and_reg_reg(int dst, int src) { op_reg_reg(0x21, dst, src); }
+void sub_reg_reg(int dst, int src) { op_reg_reg(0x29, dst, src); }
+void xor_reg_reg(int dst, int src) { op_reg_reg(0x31, dst, src); }
+void cmp_reg_reg(int dst, int src) { op_reg_reg(0x39, dst, src); }
+
+void add_reg_i32(int dst, int n) {
+  emit_i8(0x81);
+  mod_rm(0, dst);
+  emit_i32_le(n);
+}
+
+void mov_memory(int op, int reg, int base, int offset) {
+  rex_prefix();
+  emit_i8(op);
+  emit_i8(0x80 + reg * 8 + base);
+  if (base == SP) emit_i8(0x24);
+  emit_i32_le(offset);
+}
+
+void mov_mem_reg(int base, int offset, int src) {
+  mov_memory(0x89, src, base, offset);
+}
+
+void mov_reg_mem(int dst, int base, int offset) {
+  mov_memory(0x8b, dst, base, offset);
+}
+
+void mov_reg_i32(int dst, int n) { emit_i8(0xb8 + dst); emit_i32_le(n); }
+void push_reg(int src) { emit_i8(0x50 + src); }
+void pop_reg (int dst) { emit_i8(0x58 + dst); }
+
+void ret() { emit_i8(0xc3); }
+
+void cdq_cqo() { rex_prefix(); emit_i8(0x99); }
+
+int EQ = 0x4;
+int NE = 0x5;
+int LT = 0xc;
+int GE = 0xd;
+int LE = 0xe;
+int GT = 0xf;
+
+void call() { emit_i8(0xe8); emit_i32_le(0); } /* call <lbl> */
+void jmp()  { emit_i8(0xe9); emit_i32_le(0); } /* jmp <lbl> */
+
+void jcond(int cond) { emit_2_i8(0x0f, 0x80 + cond); emit_i32_le(0); }
+
+void int_i8(int n) { emit_2_i8(0xcd, n); } /* int <n> */
+
+void linux32_getchar() {
+  int lbl = alloc_label();
+  mov_reg_i32(AX, 0);    /* mov  eax, 0 */
+  push_reg(AX);          /* push eax      # buffer to read byte */
+  mov_reg_i32(BX, 0);    /* mov  ebx, 0   # ebx = 0 = STDIN */
+  mov_reg_i32(DX, 1);    /* mov  edx, 1   # edx = 1 = number of bytes to read */
+  mov_reg_reg(CX, SP);   /* mov  ecx, esp # to the stack */
+  mov_reg_i32(AX, 3);    /* mov  eax, 3   # SYS_READ */
+  int_i8(0x80);          /* int  0x80     # system call */
+  test_reg_reg(AX, AX);  /* test eax, eax */
+  pop_reg(AX);           /* pop  eax */
+  jcond(NE); use_label(lbl);   /* jne  lbl     # skip dec */
+  dec_reg(AX);           /* dec  eax      # -1 on EOF */
+  def_label(lbl);        /* lbl: */
+}
+
+void linux32_putchar() {
+  push_reg(AX);         /* push eax      # buffer to write byte */
+  mov_reg_i32(BX, 1);   /* mov  ebx, 1   # ebx = 1 = STDOUT */
+  mov_reg_i32(DX, 1);   /* mov  edx, 1   # edx = 1 = number of bytes to write */
+  mov_reg_reg(CX, SP);  /* mov  ecx, esp # from the stack */
+  mov_reg_i32(AX, 4);   /* mov  eax, 4   # SYS_WRITE */
+  int_i8(0x80);         /* int  0x80     # system call */
+  pop_reg(AX);          /* pop  eax */
+}
+
+void linux32_exit() {
+  mov_reg_reg(BX, AX);  /* mov  ebx, eax */
+  mov_reg_i32(AX, 1);   /* mov  eax, 1   # SYS_EXIT */
+  int_i8(0x80);         /* int  0x80     # system call */
+}
+
+void linux32_print_msg(char_ptr msg) {
+  char c;
+  char_ptr p = msg;
+  while ((c = *p) != 0) {
+    p += 1;
+    mov_reg_i32(AX, c);  /* mov  eax, c */
+    linux32_putchar();   /* putchar */
+  }
+}
+
+#define cgc int
+
+int setup_lbl;
+int init_start_lbl;
+int init_next_lbl;
+int main_lbl;
+int exit_lbl;
+int getchar_lbl;
+int putchar_lbl;
+
+int cgc_fs = 0;
+int cgc_locals = 0;
+int cgc_globals = 0;
+int cgc_global_alloc = 0;
+
+void cgc_add_local_param(int ident, int size, ast type) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = ident;
+  heap[binding+2] = size;
+  heap[binding+3] = cgc_fs;
+  heap[binding+4] = type;
+  cgc_fs -= size;
+  cgc_locals = binding;
+}
+
+void cgc_add_local(int ident, int size, ast type) {
+  int binding = alloc_obj(5);
+  cgc_fs += size;
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = ident;
+  heap[binding+2] = size;
+  heap[binding+3] = cgc_fs;
+  heap[binding+4] = type;
+  cgc_locals = binding;
+}
+
+void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = 0;
+  heap[binding+2] = loop_fs;
+  heap[binding+3] = break_lbl;
+  heap[binding+4] = continue_lbl;
+  cgc_locals = binding;
+}
+
+void cgc_add_global(int ident, int size, ast type) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_globals;
+  heap[binding+1] = ident;
+  heap[binding+2] = size;
+  heap[binding+3] = cgc_global_alloc;
+  heap[binding+4] = type;
+  cgc_global_alloc += size;
+  cgc_globals = binding;
+}
+
+void cgc_add_global_fun(int ident, int label) {
+  int binding = alloc_obj(4);
+  heap[binding+0] = cgc_globals;
+  heap[binding+1] = ident;
+  heap[binding+2] = 0;
+  heap[binding+3] = label;
+  cgc_globals = binding;
+}
+
+int cgc_lookup_var(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == ident && heap[binding+2] != 0) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_fun(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == ident && heap[binding+2] == 0) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_enclosing_loop(int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == 0) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+void codegen_binop(int op) {
+
+  int result_reg = AX;
+  int lbl;
+  int cond = -1;
+
+  pop_reg(CX); /* rhs operand */
+  pop_reg(AX); /* lhs operand */
+
+  if      (op == '<')     cond = LT;
+  else if (op == '>')     cond = GT;
+  else if (op == EQ_EQ)   cond = EQ;
+  else if (op == EXCL_EQ) cond = NE;
+  else if (op == LT_EQ)   cond = LE;
+  else if (op == GT_EQ)   cond = GE;
+
+  if (cond != -1) {
+
+    lbl = alloc_label();
+    cmp_reg_reg(AX, CX);
+    mov_reg_i32(AX, 1);
+    jcond(cond); use_label(lbl);
+    mov_reg_i32(AX, 0);
+    def_label(lbl);
+
+  } else {
+    if      (op == '+' OR op == PLUS_EQ) add_reg_reg(AX, CX);
+    else if (op == '-' OR op == MINUS_EQ) sub_reg_reg(AX, CX);
+    else if (op == '*' OR op == STAR_EQ) imul_reg_reg(AX, CX);
+    else if (op == '/' OR op == SLASH_EQ) { cdq_cqo(); idiv_reg(CX); }
+    else if (op == '%' OR op == PERCENT_EQ) { cdq_cqo(); idiv_reg(CX); result_reg = DX; }
+    else if (op == '&' OR op == AMP_EQ) and_reg_reg(AX, CX);
+    else if (op == '|' OR op == BAR_EQ) or_reg_reg(AX, CX);
+    else if (op == '^' OR op == CARET_EQ) xor_reg_reg(AX, CX);
+    else if (op == LSHIFT OR op == LSHIFT_EQ) shl_reg_cl(AX);
+    else if (op == RSHIFT OR op == RSHIFT_EQ) sar_reg_cl(AX);
+    else if (op == '[') { add_reg_reg(CX, CX); add_reg_reg(CX, CX); add_reg_reg(AX, CX); mov_reg_mem(AX, AX, 0); }
+    else {
+      printf("op=%d %c", op, op);
+      fatal_error("codegen_binop: unknown op");
+    }
+  }
+
+  push_reg(result_reg);
+}
+
+void grow_fs(int words) {
+  cgc_fs += words;
+}
+
+void grow_stack(int words) {
+  add_reg_i32(SP, -words * 4 * (1 + x86_64));
+}
+
+#ifndef PNUT_CC
+void codegen_rvalue(ast node);
+void codegen_statement(ast node);
+#endif
+
+int codegen_params(ast params) {
+
+  int nb_params = 0;
+
+  if (params != 0) {
+    if (get_op(params) == ',') {
+      nb_params = 1 + codegen_params(get_child(params, 1));
+      codegen_rvalue(get_child(params, 0));
+    } else {
+      nb_params = 1;
+      codegen_rvalue(params);
+    }
+  }
+
+  return nb_params;
+}
+
+void codegen_call(ast node) {
+
+  ast fun = get_child(node, 0);
+  ast name = get_val(fun);
+  ast params = get_child(node, 1);
+  ast nb_params = codegen_params(params);
+
+  int binding = cgc_lookup_fun(name, cgc_globals);
+  int lbl;
+
+  if (binding == 0) {
+    lbl = alloc_label();
+    cgc_add_global_fun(name, lbl);
+    binding = cgc_globals;
+  }
+
+  call();
+  use_label(heap[binding+3]);
+
+  grow_stack(-nb_params);
+  grow_fs(-nb_params);
+
+  push_reg(AX);
+}
+
+void codegen_lvalue(ast node) {
+
+  int op = get_op(node);
+  int nb_children = get_nb_children(node);
+  int binding;
+
+  if (nb_children == 0) {
+
+    if (op == IDENTIFIER) {
+      binding = cgc_lookup_var(get_val(node), cgc_locals);
+      if (binding != 0) {
+        mov_reg_i32(AX, (cgc_fs - heap[binding+3]) * 4 * (x86_64+1));
+        add_reg_reg(AX, SP);
+        push_reg(AX);
+      } else {
+        binding = cgc_lookup_var(get_val(node), cgc_globals);
+        if (binding != 0) {
+          mov_reg_i32(AX, heap[binding+3] * 4 * (x86_64+1));
+          add_reg_reg(AX, DI);
+          push_reg(AX);
+        } else {
+          fatal_error("codegen_lvalue: identifier not found");
+        }
+      }
+    } else {
+      printf("op=%d %c", op, op);
+      fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
+    }
+
+  } else if (nb_children == 1) {
+
+    if (op == '*') {
+      codegen_rvalue(get_child(node, 0));
+      grow_fs(-1);
+    } else {
+      printf("1: op=%d %c", op, op);
+      fatal_error("codegen_lvalue: unexpected operator");
+    }
+
+  } else if (nb_children == 2) {
+
+    if (op == '[') {
+      codegen_rvalue(get_child(node, 0));
+      codegen_rvalue(get_child(node, 1));
+      pop_reg(CX); add_reg_reg(CX, CX); add_reg_reg(CX, CX); push_reg(CX);
+      codegen_binop('+');
+      grow_fs(-2);
+    } else {
+      fatal_error("codegen_lvalue: unknown lvalue");
+    }
+
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("codegen_lvalue: unknown lvalue with >2 children");
+  }
+
+  grow_fs(1);
+}
+
+void codegen_string(char_ptr str) {
+
+  char_ptr p = str;
+  int lbl = alloc_label();
+
+  call(); use_label(lbl);
+
+  while (*p != 0) {
+    emit_i32_le(*p);
+    p += 1;
+  }
+
+  emit_i32_le(0);
+
+  def_label(lbl);
+}
+
+void codegen_rvalue(ast node) {
+
+  int op = get_op(node);
+  int nb_children = get_nb_children(node);
+  int binding;
+  int ident;
+  int lbl;
+
+  if (nb_children == 0) {
+
+    if (op == INTEGER) {
+      mov_reg_i32(AX, -get_val(node));
+      push_reg(AX);
+    } else if (op == CHARACTER) {
+      mov_reg_i32(AX, get_val(node));
+      push_reg(AX);
+    } else if (op == IDENTIFIER) {
+      ident = get_val(node);
+      binding = cgc_lookup_var(ident, cgc_locals);
+      if (binding != 0) {
+        mov_reg_i32(AX, (cgc_fs - heap[binding+3]) * 4 * (x86_64+1));
+        add_reg_reg(AX, SP);
+        if (get_op(heap[binding+4]) != '[') {
+          mov_reg_mem(AX, AX, 0);
+        }
+        push_reg(AX);
+      } else {
+        binding = cgc_lookup_var(ident, cgc_globals);
+        if (binding != 0) {
+          mov_reg_i32(AX, heap[binding+3] * 4 * (x86_64+1));
+          add_reg_reg(AX, DI);
+          if (get_op(heap[binding+4]) != '[') {
+            mov_reg_mem(AX, AX, 0);
+          }
+          push_reg(AX);
+        } else {
+          printf("ident = %s\n", string_pool+get_val(ident));
+          fatal_error("codegen_rvalue: identifier not found");
+        }
+      }
+    } else if (op == STRING) {
+      codegen_string(string_pool + get_val(node));
+    } else {
+      printf("op=%d %c", op, op);
+      fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
+    }
+
+  } else if (nb_children == 1) {
+
+    if (op == '*') {
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(CX);
+      grow_fs(-1);
+      mov_reg_mem(AX, CX, 0);
+      push_reg(AX);
+    } else if (op == '+') {
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(AX);
+      grow_fs(-1);
+      push_reg(AX);
+    } else if (op == '-') {
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(CX);
+      grow_fs(-1);
+      mov_reg_i32(AX, 0);
+      sub_reg_reg(AX, CX);
+      push_reg(AX);
+    } else if (op == '~') {
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(CX);
+      grow_fs(-1);
+      mov_reg_i32(AX, -1);
+      xor_reg_reg(AX, CX);
+      push_reg(AX);
+    } else if (op == '!') {
+      mov_reg_i32(AX, 0);
+      push_reg(AX);
+      grow_fs(1);
+      codegen_rvalue(get_child(node, 0));
+      codegen_binop(EQ_EQ);
+      grow_fs(-2);
+    } else if (op == MINUS_MINUS) {
+      /* TODO */
+    } else if (op == PLUS_PLUS) {
+      /* TODO */
+    } else if (op == '&') {
+      codegen_lvalue(get_child(node, 0));
+    } else {
+      printf("1: op=%d %c", op, op);
+      fatal_error("codegen_rvalue: unexpected operator");
+    }
+
+  } else if (nb_children == 2) {
+
+    if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT OR op == '<' OR op == '>' OR op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '[') {
+      codegen_rvalue(get_child(node, 0));
+      codegen_rvalue(get_child(node, 1));
+      codegen_binop(op);
+      grow_fs(-2);
+    } else if (op == '=') {
+      codegen_lvalue(get_child(node, 0));
+      codegen_rvalue(get_child(node, 1));
+      pop_reg(AX);
+      pop_reg(CX);
+      grow_fs(-2);
+      mov_mem_reg(CX, 0, AX);
+      push_reg(AX);
+    } else if (op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+      codegen_lvalue(get_child(node, 0));
+      pop_reg(CX);
+      push_reg(CX);
+      mov_reg_mem(AX, CX, 0);
+      push_reg(AX);
+      grow_fs(1);
+      codegen_rvalue(get_child(node, 1));
+      codegen_binop(op);
+      pop_reg(AX);
+      pop_reg(CX);
+      grow_fs(-3);
+      mov_mem_reg(CX, 0, AX);
+      push_reg(AX);
+    } else if (op == AMP_AMP OR op == BAR_BAR) {
+      lbl = alloc_label();
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(AX);
+      grow_fs(-1);
+      push_reg(AX);
+      test_reg_reg(AX, AX);
+      if (op == AMP_AMP) {
+        jcond(EQ);
+      } else {
+        jcond(NE);
+      }
+      use_label(lbl);
+      pop_reg(AX);
+      codegen_rvalue(get_child(node, 1));
+      def_label(lbl);
+    } else if (op == '(') {
+      codegen_call(node);
+    } else {
+      fatal_error("codegen_rvalue: unknown rvalue");
+    }
+
+  } else if (nb_children == 3) {
+
+    if (op == '?') {
+      fatal_error("codegen_rvalue: ternary operator not supported");
+    } else {
+      printf("op=%d %c\n", op, op);
+      fatal_error("codegen_rvalue: unknown rvalue with 3 children");
+    }
+
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("codegen_rvalue: unknown rvalue with >4 children");
+  }
+
+  grow_fs(1);
+}
+
+void codegen_assignment(ast lhs, ast rhs) {
+
+  int lhs_op = get_op(lhs);
+
+#if 0
+  if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
+    if (get_op(rhs) == '(') {
+      codegen_fun_call(rhs, lhs);
+    } else {
+      /*
+        Disabled because of arithmetic precision issues with some shells.
+        It looks like assignments in $((...)) are done with more bits with ksh.
+      */
+      /* If lhs is an identifier, we generate x=$(( ... )) instead of : $(( x = ... )) */
+      /* if (lhs_op == IDENTIFIER) {
+        append_glo_decl(string_concat3(codegen_lvalue(lhs), wrap_char('='), codegen_rvalue(rhs, RVALUE_CTX_BASE)));
+      } else {
+        append_glo_decl(string_concat5(wrap_str(": $(( "), codegen_lvalue(lhs), wrap_str(" = "), codegen_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
+      }
+      */
+     append_glo_decl(string_concat5(wrap_str(": $(( "), codegen_lvalue(lhs), wrap_str(" = "), codegen_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
+    }
+  } else {
+    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
+    fatal_error("unknown lhs");
+  }
+#endif
+}
+
+void codegen_start() {
+
+  setup_lbl = alloc_label();
+  init_start_lbl = alloc_label();
+  init_next_lbl = init_start_lbl;
+
+  main_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl);
+
+  exit_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl);
+
+  getchar_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl);
+
+  putchar_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl);
+
+  jmp(); use_label(setup_lbl);
+}
+
+void codegen_glo_var_decl(ast node) {
+
+  ast name = get_child(node, 0);
+  ast type = get_child(node, 1);
+  ast init = get_child(node, 2);
+  int size;
+  int pos = cgc_global_alloc;
+
+  if (init == 0) init = new_ast0(INTEGER, 0);
+
+  if (get_op(type) == '[') { /* Array declaration */
+    size = 200000; /* TODO */
+    cgc_add_global(name, size, type);
+  } else {
+    size = 1;
+    cgc_add_global(name, size, type);
+
+    def_label(init_next_lbl);
+    init_next_lbl = alloc_label();
+
+    linux32_print_msg("init\n");
+    if (init != 0) {
+      codegen_rvalue(init);
+    } else {
+      mov_reg_i32(AX, 0);
+      push_reg(AX);
+      grow_fs(1);
+    }
+
+    pop_reg(AX);
+    grow_fs(-1);
+
+    mov_mem_reg(DI, pos * 4 * (x86_64+1), AX);
+
+    jmp(); use_label(init_next_lbl);
+  }
+
+
+#if 0
+  text init_text;
+
+  if (get_op(type) == '[') { /* Array declaration */
+    append_glo_decl(
+      string_concat4(
+        wrap_str("defarr "),
+        env_var(new_ast0(IDENTIFIER, name)),
+        wrap_char(' '),
+        wrap_int(get_val(get_child(type, 0)))
+      )
+    );
+  } else {
+    /* TODO: Replace with ternary expression? */
+    if (init != 0) {
+      init_text = codegen_constant(init);
+    } else {
+      init_text = wrap_char('0');
+    }
+    append_glo_decl(
+      string_concat4(
+        wrap_str("defglo "),
+        env_var(new_ast0(IDENTIFIER, name)),
+        wrap_char(' '),
+        init_text
+      )
+    );
+  }
+#endif
+}
+
+void codegen_body(ast node) {
+
+  ast x;
+  int save_fs = cgc_fs;
+  int save_locals = cgc_locals;
+  ast name;
+  ast type;
+  ast init;
+  int size;
+
+  if (node != 0) {
+
+    while (get_op(node) == '{') {
+      x = get_child(node, 0);
+      if (get_op(x) == VAR_DECL) {
+
+        name = get_child(x, 0);
+        type = get_child(x, 1);
+        init = get_child(x, 2);
+
+        if (get_op(type) == '[') { /* Array declaration */
+          size = 10000; /* TODO */
+          cgc_add_local(name, size, type);
+          grow_stack(size);
+        } else {
+          size = 1;
+          cgc_add_local(name, size, type);
+          if (init != 0) {
+            codegen_rvalue(init);
+            grow_fs(-1);
+          } else {
+            mov_reg_i32(AX, 0);
+            push_reg(AX);
+          }
+        }
+
+      } else {
+        codegen_statement(x);
+      }
+      node = get_child(node, 1);
+    }
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
+  }
+}
+
+void codegen_statement(ast node) {
+
+  int op;
+  int lbl1;
+  int lbl2;
+  int save_fs;
+  int save_locals;
+  int binding;
+
+  if (node == 0) return;
+
+  op = get_op(node);
+
+  if (op == IF_KW) {
+
+    lbl1 = alloc_label(); /* else statement */
+    lbl2 = alloc_label(); /* join point after if */
+    codegen_rvalue(get_child(node, 0));
+    pop_reg(AX);
+    grow_fs(-1);
+    test_reg_reg(AX, AX);
+    jcond(EQ); use_label(lbl1);
+    codegen_statement(get_child(node, 1));
+    jmp(); use_label(lbl2);
+    def_label(lbl1);
+    codegen_statement(get_child(node, 2));
+    def_label(lbl2);
+
+  } else if (op == WHILE_KW) {
+
+    lbl1 = alloc_label(); /* while statement start */
+    lbl2 = alloc_label(); /* join point after while */
+
+    save_fs = cgc_fs;
+    save_locals = cgc_locals;
+
+    cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
+
+    def_label(lbl1);
+    codegen_rvalue(get_child(node, 0));
+    pop_reg(AX);
+    grow_fs(-1);
+    test_reg_reg(AX, AX);
+    jcond(EQ); use_label(lbl2);
+    codegen_statement(get_child(node, 1));
+    jmp(); use_label(lbl1);
+    def_label(lbl2);
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
+
+  } else if (op == FOR_KW) {
+
+    /* TODO */
+
+  } else if (op == BREAK_KW) {
+
+    binding = cgc_lookup_enclosing_loop(cgc_locals);
+    if (binding != 0) {
+      grow_stack(heap[binding+2] - cgc_fs);
+      jmp(); use_label(heap[binding+3]); /* jump to break label */
+    } else {
+      fatal_error("break is not in the body of a loop");
+    }
+
+  } else if (op == CONTINUE_KW) {
+
+    binding = cgc_lookup_enclosing_loop(cgc_locals);
+    if (binding != 0) {
+      grow_stack(heap[binding+2] - cgc_fs);
+      jmp(); use_label(heap[binding+4]); /* jump to continue label */
+    } else {
+      fatal_error("continue is not in the body of a loop");
+    }
+
+  } else if (op == RETURN_KW) {
+
+    if (get_child(node, 0) != 0) {
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(AX);
+      grow_fs(-1);
+    }
+
+    grow_stack(-cgc_fs);
+
+    ret();
+
+  } else if (op == '{') {
+
+    codegen_body(node);
+
+  } else {
+
+    codegen_rvalue(node);
+    pop_reg(AX);
+    grow_fs(-1);
+
+  }
+}
+
+void add_params(ast params) {
+
+  ast decl;
+  int ident;
+  ast type;
+
+  if (params != 0) {
+    decl = get_child(params, 0);
+    ident = get_child(decl, 0); /* TODO: ident is not really a child */
+    type = get_child(decl, 1);
+
+    if (cgc_lookup_var(ident, cgc_locals) != 0) {
+      fatal_error("add_params: duplicate parameter");
+    }
+
+    cgc_add_local_param(ident, 1, type);
+
+    add_params(get_child(params, 1));
+  }
+}
+
+void codegen_glo_fun_decl(ast node) {
+
+  ast name = get_child(node, 0);
+  ast params = get_child(node, 2);
+  ast body = get_child(node, 3);
+  int lbl;
+  int binding;
+
+  if (body != 0) {
+
+    binding = cgc_lookup_fun(name, cgc_globals);
+    if (binding == 0) {
+      lbl = alloc_label();
+      cgc_add_global_fun(name, lbl);
+      binding = cgc_globals;
+    }
+
+    lbl = heap[binding+3];
+
+    def_label(lbl);
+
+    cgc_fs = -1; /* space for return address */
+    cgc_locals = 0;
+    add_params(params);
+    cgc_fs = 0;
+
+    codegen_body(body);
+
+    grow_stack(-cgc_fs);
+    cgc_fs = 0;
+
+    ret();
+  }
+
+#if 0
+
+  /* ast fun_type = get_child(node, 1); */
+  ast params = get_child(node, 2);
+  ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
+  ast local_vars = get_child(local_vars_and_body, 0);
+  ast body = get_child(local_vars_and_body, 1);
+  text comment = 0;
+  int i;
+  int body_start_decl_ix;
+  int body_end_decl_ix;
+  ast var;
+
+  assert_idents_are_safe(params);
+  assert_idents_are_safe(local_vars);
+
+  add_vars_to_local_env(params, 2); /* Start position at 2 because 1 is taken by result_loc */
+  add_vars_to_local_env(local_vars, local_env_size + 2);
+
+  /* TODO: Analyze vars that are mutable */
+
+  /* Show the mapping between the function parameters and $1, $2, etc. */
+  i = 2; /* Start at 2 because $1 is assigned to result location */
+  while (params != 0) {
+    var = get_child(params, 0);
+    comment = concatenate_strings_with(comment, string_concat3(env_var(new_ast0(IDENTIFIER, get_child(var, 0))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    params = get_child(params, 1);
+    i += 1;
+  }
+  if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
+
+  append_glo_decl(string_concat3(
+    function_name(name),
+    wrap_str("() {"),
+    comment
+  ));
+
+  in_tail_position = true;
+  fun_gensym_ix = 0;
+  nest_level += 1;
+
+  /*
+    After setting the environment, we compile the body of the function and then
+    call save-local-variables so it can save the local variables and synthetic
+    variables that were used in the function.
+  */
+  body_start_decl_ix = glo_decl_ix;
+  codegen_body(body);
+  body_end_decl_ix = glo_decl_ix;
+  undo_glo_decls(body_start_decl_ix);
+
+  save_local_vars();
+
+  /* Initialize parameters */
+  params = get_child(node, 2); /* Reload params because params is now = 0 */
+  i = 2;
+  while (params != 0) {
+    var = get_child(params, 0);
+    codegen_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, i));
+    params = get_child(params, 1);
+    i += 1;
+  }
+
+  /* Initialize local vars */
+  while (local_vars != 0) {
+    var = get_child(local_vars, 0);
+    /* TODO: Replace with ternary expression? */
+    if (get_child(var, 2) == 0) { codegen_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0)); }
+    else { codegen_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2)); }
+    local_vars = get_child(local_vars, 1);
+  }
+
+  replay_glo_decls(body_start_decl_ix, body_end_decl_ix, false);
+
+  restore_local_vars();
+
+  nest_level -= 1;
+
+  append_glo_decl(wrap_str("}\n"));
+#endif
+}
+
+void codegen_glo_decl(ast node) {
+
+  int op = get_op(node);
+
+  if (op == VAR_DECL) {
+    codegen_glo_var_decl(node);
+  } else if (op == FUN_DECL) {
+    codegen_glo_fun_decl(node);
+  } else {
+    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    fatal_error("codegen_glo_decl: unexpected declaration");
+  }
+}
+
+void codegen_end() {
+
+  def_label(setup_lbl);
+
+  grow_stack(cgc_global_alloc);
+  mov_reg_reg(DI, SP);
+
+  jmp(); use_label(init_start_lbl);
+
+  def_label(init_next_lbl);
+  call(); use_label(main_lbl);
+  linux32_exit();
+
+  push_reg(AX); /* exit process with result of main */
+  call();
+
+  /* exit function */
+  def_label(exit_lbl);
+  mov_reg_mem(AX, SP, 4 * (x86_64+1));
+  linux32_exit();
+
+  /* getchar function */
+  def_label(getchar_lbl);
+  linux32_getchar();
+  ret();
+
+  /* putchar function */
+  def_label(putchar_lbl);
+  mov_reg_mem(AX, SP, 4 * (x86_64+1));
+  linux32_putchar();
+  ret();
+
+  write_elf();
+}
+
+#endif
+
+/*---------------------------------------------------------------------------*/
+
 int main() {
-  int max_text_alloc = 0;
-  int max_heap_alloc = 0;
-  int max_string_pool_alloc = 0;
-  int glo_decl_ix_max = 0;
-  int heap_start;
-  int string_pool_alloc_start;
+#ifdef DEBUG
+  putchar('!'); putchar(10);
+#endif
+
   init_ident_table();
+
+#ifdef X86_CODEGEN
+
+  codegen_start();
+
+#else
+
   init_comp_context();
-
-  ch = '\n';
-  get_tok();
-
-  #ifdef INLINE_SMALL_RUNTIME
-  runtime();
-  #endif
-
   prologue();
 
-  heap_start = heap_alloc;
-  string_pool_alloc_start = string_pool_alloc;
+#endif
+
+#ifdef DEBUG
+  putchar('%'); putchar(10);
+#endif
+  ch = '\n';
+  get_tok();
+#ifdef DEBUG
+  putchar('#'); putchar(10);
+#endif
 
   while (tok != EOF) {
+
+#ifdef X86_CODEGEN
+
+    codegen_glo_decl(parse_definition(0));
+
+#else
     comp_glo_decl(parse_definition(0));
     initialize_function_variables();
-    // printf("# string_pool_alloc: %d, heap_alloc: %d, text_alloc: %d, glo_decl_ix: %d\n", string_pool_alloc, heap_alloc, text_alloc, glo_decl_ix);
     print_glo_decls();
-
-
     /* Reset state */
-#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-    if (string_pool_alloc > max_string_pool_alloc) max_string_pool_alloc = string_pool_alloc;
-    if (heap_alloc > max_heap_alloc) max_heap_alloc = heap_alloc;
-    if (text_alloc > max_text_alloc) max_text_alloc = text_alloc;
-    if (glo_decl_ix > glo_decl_ix_max) glo_decl_ix_max = glo_decl_ix;
-
-    reset_table();
-    string_pool_alloc = string_pool_alloc_start;
-    heap_alloc = heap_start;
-    text_alloc = 1;
     glo_decl_ix = 0;
     local_env_size = 0;
     local_env = 0;
+    text_alloc = 1;
+
 #endif
+
+    /* TODO: Clear heap */
   }
 
-  epilogue();
+#ifdef X86_CODEGEN
 
-#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-  // printf("\n# max_string_pool_alloc=%d max_heap_alloc=%d max_text_alloc=%d glo_decl_ix_max=%d\n", max_string_pool_alloc, max_heap_alloc, max_text_alloc, glo_decl_ix_max);
+  codegen_end();
+
 #else
-  // printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d glo_decl_ix=%d\n", string_pool_alloc, heap_alloc, text_alloc, glo_decl_ix);
+
+  epilogue();
+  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
+
 #endif
+
   return 0;
 }
