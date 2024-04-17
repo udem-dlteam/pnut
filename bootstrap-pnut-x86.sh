@@ -7,89 +7,40 @@ fi
 
 bootstrap_with_shell() {
 
-  gcc -o pnut.exe pnut.c
+  echo "===================== Bootstrap with $1"
 
-  gcc -E -C -P -DPNUT_CC pnut.c > pnut-after-cpp.c
+  gcc -o pnut-sh.exe pnut.c
 
-  ./pnut.exe < pnut-after-cpp.c > pnut.sh
+  gcc -E -P -DPNUT_CC pnut.c > pnut-sh-after-cpp.c
 
-#  echo "Bootstrap with $1"
-#  time $1 pnut.sh --no-zero-globals < pnut-after-cpp.c > pnut-twice-bootstrapped.sh
-#  diff pnut.sh pnut-twice-bootstrapped.sh
-#  wc pnut.c pnut.sh pnut-twice-bootstrapped.sh
+  ./pnut-sh.exe < pnut-sh-after-cpp.c > pnut-sh.sh
 
-  gcc -E -C -P -DPNUT_CC -DX86_CODEGEN pnut.c > pnut-x86-after-cpp.c
+  gcc -E -P -DPNUT_CC -DX86_CODEGEN pnut.c > pnut-x86-after-cpp.c
 
-  if : ; then
+  time $1 pnut-sh.sh --no-zero-globals < pnut-sh-after-cpp.c > pnut-sh-compiled-by-pnut-sh.sh
 
-      gcc -o pnut-x86.exe -DX86_CODEGEN pnut.c
-      time ./pnut-x86.exe < pnut-x86-after-cpp.c > pnut-x86-bootstrapped-with-exe.exe
-      chmod +x pnut-x86-bootstrapped-with-exe.exe
-      ls -l pnut-x86-bootstrapped-with-exe.exe
+  time $1 pnut-sh-compiled-by-pnut-sh.sh --no-zero-globals < pnut-x86-after-cpp.c > pnut-x86-compiled-by-pnut-sh.sh
 
-  fi
+  time $1 pnut-x86-compiled-by-pnut-sh.sh --no-zero-globals < pnut-x86-after-cpp.c > pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe
 
-  if : ; then
+  chmod +x pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe
 
-      ./pnut.exe < pnut-x86-after-cpp.c > pnut-x86.sh
-      time $1 pnut-x86.sh --no-zero-globals < pnut-x86-after-cpp.c > pnut-x86-bootstrapped-with-sh.exe
-      chmod +x pnut-x86-bootstrapped-with-sh.exe
-      ls -l pnut-x86-bootstrapped-with-sh.exe
+  time ./pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe < pnut-x86-after-cpp.c > pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe
 
-  fi
+  chmod +x pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe
 
-  if : ; then
+  ls -l \
+  pnut-sh.exe \
+  pnut-sh.sh \
+  pnut-sh-compiled-by-pnut-sh.sh \
+  pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe \
+  pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe
 
-      gcc -E -C -P -DPNUT_CC winterpi.c > winterpi-after-cpp.c
-
-      time ./pnut-x86.exe < winterpi-after-cpp.c > winterpi-1.exe
-      chmod +x winterpi-1.exe
-      ls -l winterpi-1.exe
-#      ./winterpi-1.exe
-
-  fi
-
-  if : ; then
-
-      gcc -E -C -P -DPNUT_CC winterpi.c > winterpi-after-cpp.c
-
-      time $1 pnut-x86.sh --no-zero-globals < winterpi-after-cpp.c > winterpi-2.exe
-      chmod +x winterpi-2.exe
-      ls -l winterpi-2.exe
-#      ./winterpi-2.exe
-
-  fi
-
-  if : ; then
-
-      gcc -E -C -P -DPNUT_CC winterpi.c > winterpi-after-cpp.c
-
-      ./pnut-x86-bootstrapped-with-sh.exe < winterpi-after-cpp.c > winterpi-3.exe
-      chmod +x winterpi-3.exe
-      ls -l winterpi-3.exe
-#      ./winterpi-3.exe
-
-  fi
-
-
-  if false ; then
-
-      lldb ./pnut.exe <<EOF
-settings set target.input-path pnut-x86-after-cpp.c
-run
-EOF
-
-  fi
-
-#  time $1 pnut-x86.sh < pnut-x86-after-cpp.c > pnut-x86.exe
-
-#  gcc -o pnut-x86.exe -DX86_CODEGEN pnut.c
-#  gcc -E -C -P -DPNUT_CC params.c | ./pnut-x86.exe   # > params.exe
-
-#  gcc -E -C -P -DPNUT_CC winterpi.c | time $1 pnut-x86.sh > winterpi.exe
-#  chmod +x winterpi.exe
-#  ./winterpi.exe
-
+  sha1sum \
+  pnut-sh.sh \
+  pnut-sh-compiled-by-pnut-sh.sh \
+  pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe \
+  pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-x86-compiled-by-pnut-sh.exe
 }
 
 # Handle runtime options

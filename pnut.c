@@ -149,13 +149,33 @@ void fatal_error(char_ptr msg) {
   exit(1);
 }
 
+void print_dec(int n) {
+  if (n < 0) {
+    putchar('-');
+    print_dec(-n);
+  } else {
+    if (n > 9) print_dec(n / 10);
+    putchar('0' + n % 10);
+  }
+}
+
+void print_hex(int n) {
+  if (n < 0) {
+    putchar('-');
+    print_hex(-n);
+  } else {
+    if (n > 15) print_hex(n >> 4);
+    putchar("0123456789abcdef"[n & 0xf]);
+  }
+}
+
 /* tokenizer */
 
 int ch;
 int tok;
 int val;
 
-#define STRING_POOL_SIZE 200000
+#define STRING_POOL_SIZE 50000
 char string_pool[STRING_POOL_SIZE];
 int string_pool_alloc = 0;
 int string_start;
@@ -331,13 +351,6 @@ void init_ident_table() {
 
   int i = 0;
 
-  //  string_pool_alloc = 0;
-  //  heap_alloc = HASH_PRIME;
-
-#ifdef DEBUG
-  putchar('&'); putchar(10);
-#endif
-
   while (i < HASH_PRIME) {
     heap[i] = 0;
     i += 1;
@@ -496,7 +509,9 @@ void get_tok() {
 
       break;
 
-    } else if (in_range(ch, '0', '9')) {
+    }
+
+ else if (in_range(ch, '0', '9')) {
 
       val = '0' - ch;
 
@@ -3246,7 +3261,7 @@ void initialize_function_variables() {
 
 /* x86 codegen */
 
-int code[1000000];
+int code[100000];
 int code_alloc = 0;
 
 void emit_i8(int a) {
@@ -3509,12 +3524,11 @@ void linux32_exit() {
 }
 
 void linux32_print_msg(char_ptr msg) {
-  char c;
-  char_ptr p = msg;
-  while ((c = *p) != 0) {
-    p += 1;
-    mov_reg_i32(AX, c);  /* mov  eax, c */
-    linux32_putchar();   /* putchar */
+  int i = 0;
+  while (msg[i] != 0) {
+    mov_reg_i32(AX, msg[i]);  /* mov  eax, c */
+    linux32_putchar();        /* putchar */
+    i += 1;
   }
 }
 
@@ -3778,16 +3792,16 @@ void codegen_lvalue(ast node) {
   grow_fs(1);
 }
 
-void codegen_string(char_ptr str) {
+void codegen_string(int start) {
 
-  char_ptr p = str;
   int lbl = alloc_label();
+  int i = start;
 
   call(); use_label(lbl);
 
-  while (*p != 0) {
-    emit_i32_le(*p);
-    p += 1;
+  while (string_pool[i] != 0) {
+    emit_i32_le(string_pool[i]);
+    i += 1;
   }
 
   emit_i32_le(0);
@@ -3836,7 +3850,7 @@ void codegen_rvalue(ast node) {
         }
       }
     } else if (op == STRING) {
-      codegen_string(string_pool + get_val(node));
+      codegen_string(get_val(node));
     } else {
       printf("op=%d %c", op, op);
       fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
@@ -3882,6 +3896,7 @@ void codegen_rvalue(ast node) {
       /* TODO */
     } else if (op == '&') {
       codegen_lvalue(get_child(node, 0));
+      grow_fs(-1);
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("codegen_rvalue: unexpected operator");
@@ -3931,6 +3946,7 @@ void codegen_rvalue(ast node) {
       use_label(lbl);
       pop_reg(AX);
       codegen_rvalue(get_child(node, 1));
+      grow_fs(-1);
       def_label(lbl);
     } else if (op == '(') {
       codegen_call(node);
@@ -4014,7 +4030,7 @@ void codegen_glo_var_decl(ast node) {
   int pos = cgc_global_alloc;
 
   if (get_op(type) == '[') { /* Array declaration */
-    size = 200000; /* TODO */
+    size = get_val(get_child(type, 0));
     cgc_add_global(name, size, type);
   } else {
     size = 1;
@@ -4023,7 +4039,6 @@ void codegen_glo_var_decl(ast node) {
     def_label(init_next_lbl);
     init_next_lbl = alloc_label();
 
-    linux32_print_msg("init\n");
     if (init != 0) {
       codegen_rvalue(init);
     } else {
@@ -4039,37 +4054,6 @@ void codegen_glo_var_decl(ast node) {
 
     jmp(); use_label(init_next_lbl);
   }
-
-
-#if 0
-  text init_text;
-
-  if (get_op(type) == '[') { /* Array declaration */
-    append_glo_decl(
-      string_concat4(
-        wrap_str("defarr "),
-        env_var(new_ast0(IDENTIFIER, name)),
-        wrap_char(' '),
-        wrap_int(get_val(get_child(type, 0)))
-      )
-    );
-  } else {
-    /* TODO: Replace with ternary expression? */
-    if (init != 0) {
-      init_text = codegen_constant(init);
-    } else {
-      init_text = wrap_char('0');
-    }
-    append_glo_decl(
-      string_concat4(
-        wrap_str("defglo "),
-        env_var(new_ast0(IDENTIFIER, name)),
-        wrap_char(' '),
-        init_text
-      )
-    );
-  }
-#endif
 }
 
 void codegen_body(ast node) {
@@ -4093,12 +4077,10 @@ void codegen_body(ast node) {
         init = get_child(x, 2);
 
         if (get_op(type) == '[') { /* Array declaration */
-          size = 10000; /* TODO */
+          size = get_val(get_child(type, 0));
           cgc_add_local(name, size, type);
           grow_stack(size);
         } else {
-          size = 1;
-          cgc_add_local(name, size, type);
           if (init != 0) {
             codegen_rvalue(init);
             grow_fs(-1);
@@ -4106,6 +4088,8 @@ void codegen_body(ast node) {
             mov_reg_i32(AX, 0);
             push_reg(AX);
           }
+          size = 1;
+          cgc_add_local(name, size, type);
         }
 
       } else {
@@ -4113,6 +4097,8 @@ void codegen_body(ast node) {
       }
       node = get_child(node, 1);
     }
+
+    grow_stack(save_fs - cgc_fs);
 
     cgc_fs = save_fs;
     cgc_locals = save_locals;
@@ -4410,8 +4396,17 @@ void codegen_end() {
 /*---------------------------------------------------------------------------*/
 
 int main() {
-#ifdef DEBUG
-  putchar('!'); putchar(10);
+
+#ifdef DEBUG_not
+  int i;
+  i = 0;
+  while (i<25) {
+    print_dec(i);
+    putchar(' ');
+    print_hex(i);
+    putchar('\n');
+    i += 1;
+  }
 #endif
 
   init_ident_table();
@@ -4427,14 +4422,8 @@ int main() {
 
 #endif
 
-#ifdef DEBUG
-  putchar('%'); putchar(10);
-#endif
   ch = '\n';
   get_tok();
-#ifdef DEBUG
-  putchar('#'); putchar(10);
-#endif
 
   while (tok != EOF) {
 
@@ -4443,6 +4432,7 @@ int main() {
     codegen_glo_decl(parse_definition(0));
 
 #else
+
     comp_glo_decl(parse_definition(0));
     initialize_function_variables();
     print_glo_decls();
