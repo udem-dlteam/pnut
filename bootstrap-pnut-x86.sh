@@ -19,24 +19,58 @@ bootstrap_with_shell() {
 #  wc pnut.c pnut.sh pnut-twice-bootstrapped.sh
 
   gcc -E -C -P -DPNUT_CC -DX86_CODEGEN pnut.c > pnut-x86-after-cpp.c
-  gcc -E -C -P -DPNUT_CC -DX86_CODEGEN -DDEBUG pnut.c > pnut-x86-after-cpp-debug.c
 
   if : ; then
 
       gcc -o pnut-x86.exe -DX86_CODEGEN pnut.c
-      time ./pnut-x86.exe < pnut-x86-after-cpp-debug.c > pnut-x86-bootstrapped-with-exe.exe
+      time ./pnut-x86.exe < pnut-x86-after-cpp.c > pnut-x86-bootstrapped-with-exe.exe
       chmod +x pnut-x86-bootstrapped-with-exe.exe
       ls -l pnut-x86-bootstrapped-with-exe.exe
-      ./pnut-x86-bootstrapped-with-exe.exe < pnut-x86-after-cpp.c
+
   fi
 
-  if false ; then
+  if : ; then
 
       ./pnut.exe < pnut-x86-after-cpp.c > pnut-x86.sh
       time $1 pnut-x86.sh --no-zero-globals < pnut-x86-after-cpp.c > pnut-x86-bootstrapped-with-sh.exe
+      chmod +x pnut-x86-bootstrapped-with-sh.exe
       ls -l pnut-x86-bootstrapped-with-sh.exe
 
   fi
+
+  if : ; then
+
+      gcc -E -C -P -DPNUT_CC winterpi.c > winterpi-after-cpp.c
+
+      time ./pnut-x86.exe < winterpi-after-cpp.c > winterpi-1.exe
+      chmod +x winterpi-1.exe
+      ls -l winterpi-1.exe
+#      ./winterpi-1.exe
+
+  fi
+
+  if : ; then
+
+      gcc -E -C -P -DPNUT_CC winterpi.c > winterpi-after-cpp.c
+
+      time $1 pnut-x86.sh --no-zero-globals < winterpi-after-cpp.c > winterpi-2.exe
+      chmod +x winterpi-2.exe
+      ls -l winterpi-2.exe
+#      ./winterpi-2.exe
+
+  fi
+
+  if : ; then
+
+      gcc -E -C -P -DPNUT_CC winterpi.c > winterpi-after-cpp.c
+
+      ./pnut-x86-bootstrapped-with-sh.exe < winterpi-after-cpp.c > winterpi-3.exe
+      chmod +x winterpi-3.exe
+      ls -l winterpi-3.exe
+#      ./winterpi-3.exe
+
+  fi
+
 
   if false ; then
 

@@ -168,10 +168,19 @@ int hash;
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
-int alloc_obj(int size) {
-  if (heap_alloc > HEAP_SIZE) { fatal_error("heap overflow"); }
+int alloc_result;
 
-  return (heap_alloc += size) - size;
+int alloc_obj(int size) {
+
+  alloc_result = heap_alloc;
+
+  heap_alloc += size;
+
+  if (heap_alloc > HEAP_SIZE) {
+    fatal_error("heap overflow");
+  }
+
+  return alloc_result;
 }
 
 void begin_string() {
@@ -4003,8 +4012,6 @@ void codegen_glo_var_decl(ast node) {
   ast init = get_child(node, 2);
   int size;
   int pos = cgc_global_alloc;
-
-  if (init == 0) init = new_ast0(INTEGER, 0);
 
   if (get_op(type) == '[') { /* Array declaration */
     size = 200000; /* TODO */
