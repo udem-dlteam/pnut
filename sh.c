@@ -1359,6 +1359,8 @@ void comp_glo_fun_decl(ast node) {
   ast var;
   int save_loc_vars_fixup;
 
+  if (body == 0) return; // ignore forward declarations
+
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
 
