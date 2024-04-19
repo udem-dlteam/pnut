@@ -7,9 +7,9 @@ fi
 
 bootstrap_with_shell() {
 
-  gcc -o pnut.exe pnut.c
+  gcc -o pnut.exe -Dsh pnut.c
 
-  gcc -E -C -P -DPNUT_CC pnut.c > pnut-after-cpp.c
+  gcc -E -C -P -DPNUT_CC -Dsh pnut.c > pnut-after-cpp.c
 
   ./pnut.exe < pnut-after-cpp.c > pnut.sh
 
