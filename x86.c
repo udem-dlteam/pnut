@@ -174,6 +174,10 @@ void imul_reg_reg(int dst, int src) {
   mod_rm(dst, src);
 }
 
+void mul_reg_reg(int dst, int src) {
+  imul_reg_reg(dst, src);
+}
+
 void idiv_reg(int src) {
 
   // IDIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
@@ -318,6 +322,11 @@ void jump_cond(int cond, int lbl) {
 
   emit_2_i8(0x0f, 0x80 + cond);
   use_label(lbl);
+}
+
+void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2) {
+  cmp_reg_reg(reg1, reg2);
+  jump_cond(cond, lbl);
 }
 
 void int_i8(int n) {

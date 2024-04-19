@@ -91,29 +91,32 @@ void def_label(int lbl) {
 }
 
 const int word_size;
+
 const int reg_X;
 const int reg_Y;
 const int reg_SP;
 const int reg_glo;
 
+void mov_reg_imm(int dst, int imm);
+void mov_reg_reg(int dst, int src);
+void mov_mem_reg(int base, int offset, int src);
+void mov_reg_mem(int dst, int base, int offset);
+
+void add_reg_imm(int dst, int imm);
 void add_reg_reg(int dst, int src);
 void or_reg_reg (int dst, int src);
 void and_reg_reg(int dst, int src);
 void sub_reg_reg(int dst, int src);
 void xor_reg_reg(int dst, int src);
-void cmp_reg_reg(int dst, int src);
-void mov_reg_reg(int dst, int src);
-void mov_reg_imm(int dst, int imm);
-void add_reg_imm(int dst, int imm);
-void mov_mem_reg(int base, int offset, int src);
-void mov_reg_mem(int dst, int base, int offset);
-void imul_reg_reg(int dst, int src);
+void mul_reg_reg(int dst, int src);
 void div_reg_reg(int dst, int src);
 void rem_reg_reg(int dst, int src);
 void shl_reg_reg(int dst, int src);
 void sar_reg_reg(int dst, int src);
+
 void push_reg(int src);
 void pop_reg (int dst);
+
 void jump(int lbl);
 void call(int lbl);
 void ret();
@@ -125,43 +128,11 @@ const int GE; // x >= y
 const int LE; // x <= y
 const int GT; // x > y
 
-void jump_cond(int cond, int lbl);
-
-// For 32 bit linux.
+void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 
 void os_getchar();
 void os_putchar();
 void os_exit();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #define cgc int
 
@@ -265,7 +236,8 @@ int cgc_lookup_enclosing_loop(int env) {
 
 void codegen_binop(int op) {
 
-  int lbl;
+  int lbl1;
+  int lbl2;
   int cond = -1;
 
   pop_reg(reg_Y); // rhs operand
@@ -280,17 +252,19 @@ void codegen_binop(int op) {
 
   if (cond != -1) {
 
-    lbl = alloc_label();
-    cmp_reg_reg(reg_X, reg_Y);
+    lbl1 = alloc_label();
+    lbl2 = alloc_label();
+    jump_cond_reg_reg(cond, lbl1, reg_X, reg_Y);
+    xor_reg_reg(reg_X, reg_X);
+    jump(lbl2);
+    def_label(lbl1);
     mov_reg_imm(reg_X, 1);
-    jump_cond(cond, lbl);
-    mov_reg_imm(reg_X, 0);
-    def_label(lbl);
+    def_label(lbl2);
 
   } else {
     if      (op == '+' OR op == PLUS_EQ) add_reg_reg(reg_X, reg_Y);
     else if (op == '-' OR op == MINUS_EQ) sub_reg_reg(reg_X, reg_Y);
-    else if (op == '*' OR op == STAR_EQ) imul_reg_reg(reg_X, reg_Y);
+    else if (op == '*' OR op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
     else if (op == '/' OR op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);
     else if (op == '%' OR op == PERCENT_EQ) rem_reg_reg(reg_X, reg_Y);
     else if (op == '&' OR op == AMP_EQ) and_reg_reg(reg_X, reg_Y);
@@ -511,7 +485,7 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_Y);
       grow_fs(-1);
-      mov_reg_imm(reg_X, 0);
+      xor_reg_reg(reg_X, reg_X);
       sub_reg_reg(reg_X, reg_Y);
       push_reg(reg_X);
     } else if (op == '~') {
@@ -522,7 +496,7 @@ void codegen_rvalue(ast node) {
       xor_reg_reg(reg_X, reg_Y);
       push_reg(reg_X);
     } else if (op == '!') {
-      mov_reg_imm(reg_X, 0);
+      xor_reg_reg(reg_X, reg_X);
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(get_child(node, 0));
@@ -576,11 +550,10 @@ void codegen_rvalue(ast node) {
       grow_fs(-1);
       push_reg(reg_X);
       xor_reg_reg(reg_Y, reg_Y);
-      cmp_reg_reg(reg_X, reg_Y);
       if (op == AMP_AMP) {
-        jump_cond(EQ, lbl);
+        jump_cond_reg_reg(EQ, lbl, reg_X, reg_Y);
       } else {
-        jump_cond(NE, lbl);
+        jump_cond_reg_reg(NE, lbl, reg_X, reg_Y);
       }
       pop_reg(reg_X);
       codegen_rvalue(get_child(node, 1));
@@ -657,7 +630,7 @@ void codegen_glo_var_decl(ast node) {
     if (init != 0) {
       codegen_rvalue(init);
     } else {
-      mov_reg_imm(reg_X, 0);
+      xor_reg_reg(reg_X, reg_X);
       push_reg(reg_X);
       grow_fs(1);
     }
@@ -700,7 +673,7 @@ void codegen_body(ast node) {
             codegen_rvalue(init);
             grow_fs(-1);
           } else {
-            mov_reg_imm(reg_X, 0);
+	    xor_reg_reg(reg_X, reg_X);
             push_reg(reg_X);
           }
           size = 1;
@@ -741,8 +714,7 @@ void codegen_statement(ast node) {
     pop_reg(reg_X);
     grow_fs(-1);
     xor_reg_reg(reg_Y, reg_Y);
-    cmp_reg_reg(reg_X, reg_Y);
-    jump_cond(EQ, lbl1);
+    jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
     codegen_statement(get_child(node, 1));
     jump(lbl2);
     def_label(lbl1);
@@ -764,8 +736,7 @@ void codegen_statement(ast node) {
     pop_reg(reg_X);
     grow_fs(-1);
     xor_reg_reg(reg_Y, reg_Y);
-    cmp_reg_reg(reg_X, reg_Y);
-    jump_cond(EQ, lbl2);
+    jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
     codegen_statement(get_child(node, 1));
     jump(lbl1);
     def_label(lbl2);
