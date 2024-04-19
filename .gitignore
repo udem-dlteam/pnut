@@ -14,4 +14,4 @@ tokenizer.sh
 pnut.exe
 pnut.sh
 pnut-twice-bootstrapped.sh
-pnut-after-cpp.c
+bootstrap-results/*
