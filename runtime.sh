@@ -632,66 +632,183 @@ read_n_char() {
   done
 }
 
+__fopen_fd3=0
+__fopen_fd4=0
+__fopen_fd5=0
+__fopen_fd6=0
+__fopen_fd7=0
+__fopen_fd8=0
+__fopen_fd9=0
+
+next_fd() {
+  __i=3
+  while [ $__i -lt 10 ]; do
+    if [ $((__fopen_fd$__i)) -eq 0 ]; then
+      __fd=$__i
+      return
+    fi
+    : $((__i += 1))
+  done
+  # Some shells don't support fd > 9
+  echo "No more file descriptors available" ; exit 1
+}
+
+# exec $fd<"file" does not work as expected, and we don't want to use eval
+open_fd() { # $1: fd id, $2: file to open
+  : $((__fopen_fd$1 = 1)) # Mark the fd as opened
+  case $1 in
+    1) exec 1< $2 ;;
+    2) exec 2< $2 ;;
+    3) exec 3< $2 ;;
+    4) exec 4< $2 ;;
+    5) exec 5< $2 ;;
+    6) exec 6< $2 ;;
+    7) exec 7< $2 ;;
+    8) exec 8< $2 ;;
+    9) exec 9< $2 ;;
+    *) echo "Unknown fd: $1"; exit 1 ;;
+  esac
+}
+
+# exec $fd<&- does not work as expected, and we don't want to use eval
+close_fd() { # $1: fd id
+: $((__fopen_fd$1 = 0)) # Mark the fd as closed
+  case $1 in
+    1) exec 1<&- ;;
+    2) exec 2<&- ;;
+    3) exec 3<&- ;;
+    4) exec 4<&- ;;
+    5) exec 5<&- ;;
+    6) exec 6<&- ;;
+    7) exec 7<&- ;;
+    8) exec 8<&- ;;
+    9) exec 9<&- ;;
+    *) echo "Unknown fd: $1"; exit 1 ;;
+  esac
+}
+
 # Read the file, and return a file descriptor to the file.
-# The file descriptor is just a cursor and a string, so closing just frees up the object.
+# The file descriptor fields:
+# - 0: Buffer
+# - 1: Read cursor
+# - 2: Buffer size
+# - 3: File descriptor number
+# - 4: EOF?
+# Because the file must be read line-by-line, and string values can't be
+# assigned to dynamic variables, each line is read and then unpacked in the
+# buffer.
 _fopen() { # $2: File name, $3: Mode
   pack_string $2
-  new_object 0
-  __fd=$__addr                                  # Allocate new FD
-  : $((_$((__fd)) = 0))                         # Initialize cursor to 0
-  __buf=$((__fd + 1))                           # Buffer starts after cursor
-  read_all_char $__buf < "$__res"
-  : $((_$((__buf + __len))=-1))                 # Terminate buffer with EOF character
-  : $(($1 = __fd))
-  finalize_object $((__len + 2))                # 2 is for the cursor and EOF
+  next_fd                       # Get available fd
+  open_fd $__fd $__res
+  alloc 4                       # Allocate file descriptor object
+  : $(( $1 = __addr ))
+  alloc 1000                    # Allocate buffer
+  : $(( _$((__addr)) = 0 ))     # Initialize buf to ""
+  : $((_$(($1 + 0)) = __addr))  # Save buffer address
+  : $((_$(($1 + 1)) = 0))       # Initialize cursor to 0
+  : $((_$(($1 + 2)) = 200))     # Initial buffer size is 1000
+  : $((_$(($1 + 3)) = __fd))    # Save fd id
 }
 
 _fclose() { # $2: File descriptor
-  _free __ $2 # Release file descriptor buffer
+  __fd_id=$((_$(($2 + 3)) ))    # Fd id is at offset 3
+  __buf=$((_$(($2 + 0)) ))      # Buffer starts at offset 1
+  _free __ $__buf               # Release file descriptor buffer
+  _free __ $2                   # Release file descriptor object
+  close_fd $__fd_id
   : $(($1 = 0))
 }
 
-# Only supports item size = 1 for now
-_fread() { # $2: Buffer, $3: Item size, $4: Number of items to read, $5: File descriptor
+# Unpack a Shell string into an appropriately sized buffer
+unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+  __fgetc_buf=$1
   __buf=$2
-  # fread_item_size=$3
-  __count=$4
-  __fd=$5
-  __len=0
-  __fdbuf=$((__fd + 1)) # Buffer starts at fd + 1
-  # TODO: Support all item sizes. One difficulty is that we can't read partial items.
-  if [ $3 -ne 1 ]; then echo "fread: item size must be 1" ; exit 1 ; fi
-  # As long as there are items to read and we haven't reached EOF
-  while [ $__count -ne 0 ] && [ $((_$__fdbuf)) -ne -1 ] ; do
-    : $((_$__buf=_$__fdbuf))
-    : $((__buf += 1))
-    : $((__fdbuf += 1))
-    : $((__count -= 1))
-    : $((__len += 1))
+  __ends_with_eof=$3
+  while [ ! -z "$__fgetc_buf" ]; do
+    case "$__fgetc_buf" in
+      " "*) : $(( _$__buf = 32 ))  ;;
+      "e"*) : $(( _$__buf = 101 )) ;;
+      "="*) : $(( _$__buf = 61 ))  ;;
+      "t"*) : $(( _$__buf = 116 )) ;;
+      ";"*) : $(( _$__buf = 59 ))  ;;
+      "i"*) : $(( _$__buf = 105 )) ;;
+      ")"*) : $(( _$__buf = 41 ))  ;;
+      "("*) : $(( _$__buf = 40 ))  ;;
+      "n"*) : $(( _$__buf = 110 )) ;;
+      "s"*) : $(( _$__buf = 115 )) ;;
+      "l"*) : $(( _$__buf = 108 )) ;;
+      "+"*) : $(( _$__buf = 43 ))  ;;
+      "p"*) : $(( _$__buf = 112 )) ;;
+      "a"*) : $(( _$__buf = 97 ))  ;;
+      "r"*) : $(( _$__buf = 114 )) ;;
+      "f"*) : $(( _$__buf = 102 )) ;;
+      "d"*) : $(( _$__buf = 100 )) ;;
+      "*"*) : $(( _$__buf = 42 ))  ;;
+      *)
+        char_to_int "${__fgetc_buf%"${__fgetc_buf#?}"}" # get the first character
+         : $(( _$__buf = __c ))
+        ;;
+    esac
+
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buf += 1))                 # Move to the next buffer position
   done
-  # Update cursor
-  : $((_$__fd = $__len))
-  : $(($1 = __len))
+
+  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
+    : $(( _$__buf = 10))              # Line end with newline
+    : $((__buf += 1))
+  fi
+  : $(( _$__buf = 0))                 # Then \0
+}
+
+refill_buffer() { # $1: File descriptor
+  __fd=$1
+  __buf=$((_$((__fd + 0))))
+  __fd_id=$((_$((__fd + 3))))
+
+  IFS=
+  if read -r __fgetc_buf <&$__fd_id ; then  # read next line into $__fgetc_buf
+    __ends_with_eof=0
+  else
+    __ends_with_eof=1
+  fi
+
+  # Check that the buffer is large enough to unpack the line
+  __buf_size=$((_$((__fd + 2)) - 2)) # Minus 2 to account for newline and \0
+  __len=${#__fgetc_buf}
+  if [ $__len -gt $__buf_size ]; then
+    # Free buffer and reallocate a new one double the line size
+    __buf_size=$((__len * 2))
+    _free __ $__buf
+    alloc $__buf_size
+    : $((_$((__fd + 0)) = __addr))
+    : $((_$((__fd + 2)) = __buf_size))
+    __buf=$__addr
+  fi
+
+  unpack_line "$__fgetc_buf" $__buf $__ends_with_eof
 }
 
 _fgetc() { # $2: File descriptor
   __fd=$2
-  __cur=$((_$__fd))
-  __buf=$((__fd + 1)) # Buffer starts at fd + 1
-  : $((_$__fd += 1)) # Update cursor
-  : $(($1 = _$((__buf + __cur))))
-}
+  __buf=$((_$((__fd + 0))))
+  __cur=$((_$((__fd + 1))))
 
-read_all_char() {
-  __ptr=$1
-  __len=0
-  while : ; do
-    get_char
-    if [ $__c -eq -1 ]; then break; fi
-    : $((_$__ptr = __c))
-    : $((__ptr += 1))
-    : $((__len += 1))
-  done
+  # The cursor is at the end of the buffer, we need to read the next line
+  if [ $((_$((__buf + __cur)))) -eq 0 ]; then
+    # Buffer has been read completely, read next line
+    refill_buffer $__fd
+
+    __cur=0 # Reset cursor and reload fd fields
+    __buf=$((_$((__fd + 0)))) # Reload buffer in case it was reallocated
+    if [ $((_$((__buf + __cur)))) -eq 0 ]; then
+      : $(($1 = -1)) # EOF
+      return
+    fi
+  fi
+  : $(($1 = _$((__buf + __cur))))
+  : $((_$((__fd + 1)) = __cur + 1))      # Increment cursor
 }
 
 __io_buf=
