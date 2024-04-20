@@ -73,24 +73,10 @@ int categorize_char(char c) {
   return a;
 }
 
-char_ptr category_to_string(int category) {
-  switch (category) {
-    case LOWERCASE:
-      return "lowercase";
-    case UPPERCASE:
-      return "uppercase";
-    case NEWLINE:
-      return "newline";
-    case OTHER:
-      return "other";
-  }
-  return "unknown";
-}
-
 int main() {
   FILE_ptr f;
   char c;
-  f = fopen("six-cc-tests/fgetc.c", 0);
+  f = fopen("six-cc-tests/fgetc.c", "r");
   while ((c = fgetc(f)) != EOF) {
     printf("'%c' = %d: %d\n", c, c, categorize_char(c));
   }

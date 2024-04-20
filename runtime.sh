@@ -392,7 +392,8 @@ int_to_char() {
     124) __char="|" ;;
     125) __char="}" ;;
     126) __char="~" ;;
-    10)  __char="\n" ;;
+    10)  __char="
+" ;;
     *)
       echo "Invalid character code: $1" ; exit 1
       __char=$(printf "\\$(printf "%o" "$1")") ;;
@@ -507,9 +508,9 @@ _printf() { # $1 = printf format string, $2... = printf args
   __mod=0
   while [ "$((_$__fmt_ptr))" -ne 0 ] ; do
     __head=$((_$__fmt_ptr))
-    int_to_char $__head; __head_char=$__char
     __fmt_ptr=$((__fmt_ptr + 1))
     if [ $__mod -eq 1 ] ; then
+      int_to_char $__head; __head_char=$__char
       case $__head_char in
         'd') # 100 = 'd' Decimal integer
           printf "%d" $1
@@ -517,8 +518,7 @@ _printf() { # $1 = printf format string, $2... = printf args
           ;;
         'c') # 99 = 'c' Character
           # Don't need to handle non-printable characters the only use of %c is for printable characters
-          int_to_char $1
-          printf "%c" "$__char"
+          printf \\$(($1/64))$(($1/8%8))$(($1%8))
           shift
           ;;
         'x') # 120 = 'x' Hexadecimal integer
@@ -577,7 +577,7 @@ _printf() { # $1 = printf format string, $2... = printf args
       case $__head in
         10) printf "\n" ;;  # 10 == '\n'
         37) __mod=1 ;; # 37 == '%'
-        *) printf "$__head_char" ;; # Decode
+        *) printf \\$(($__head/64))$(($__head/8%8))$(($__head%8)) ;;
       esac
     fi
   done
