@@ -1,15 +1,19 @@
-iinntt  mmaaiinn(())  {{
-
-    FiInLtE__ppttrr  ff1;;
-
-    cihnatr_ pct;r
-  f 2f; 
-=   fcohpaern (c"1s;i
-x - ccch-atre sct2s;/
-f g eft1c .=c "f,o p0e)n;(
-" s iwxh-iclce- t(e(sct s=/ ffggeettcc.(cf"),)  0!)=; 
-E O Ff)2  {=
-  f o p epnu(t"cshiaxr-(ccc)-;t
-e s t}s
-/}w
-h
+0: int main() {
+0: int emit_line(int line, FILE_ptr f) {
+1:   FILE_ptr f;
+1:   char c;
+2:   char c;
+2:   printf("%d: ", line);
+3:   f = fopen("six-cc-tests/fgetc.c", 0);
+3:   while ((c = fgetc(f)) && c != EOF && c != '\n') {
+4:   while ((c = fgetc(f)) != EOF) {
+4:     putchar(c);
+5:     putchar(c);
+5:   }
+6:   }
+6:   if (c != EOF) {
+7:   fclose(f);
+7:     putchar('\n');
+8: }
+8:   }
+9: 9:   return c;

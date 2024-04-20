@@ -5,4 +5,5 @@ int main() {
   while ((c = fgetc(f)) != EOF) {
     putchar(c);
   }
+  fclose(f);
 }
