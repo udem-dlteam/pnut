@@ -419,9 +419,15 @@ _putchar() {
   printf \\$(($1/64))$(($1/8%8))$(($1%8))
 }
 
-__stdin_buf=
+__stdin_buf=""
+__stdin_line_ends_with_oef=0
 _getchar() {
   if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
+    if [ $__stdin_line_ends_with_oef -eq 1 ]; then  # EOF at end of line, return -1
+      : $(($1 = -1))
+      __stdin_line_ends_with_oef=0                  # Reset EOF flag for next getchar call
+      return
+    fi
     IFS=                                            # don't split input
     if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
       if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
@@ -429,8 +435,12 @@ _getchar() {
         return
       fi
     else
-      : $(($1 = -1))                                # EOF reached when read fails
-      return
+      if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
+        : $(($1 = -1))
+        return
+      else
+        __stdin_line_ends_with_oef=1
+      fi
     fi
   else
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
