@@ -419,7 +419,21 @@ _putchar() {
   printf \\$(($1/64))$(($1/8%8))$(($1%8))
 }
 
-__stdin_buf=""
+# Save the state of getchar so that it can read from a source that's not stdin.
+getchar_save_and_reset() {
+  __stdin_buf_saved="$__stdin_buf"
+  __stdin_line_ends_with_oef_saved="$__stdin_line_ends_with_oef"
+  __stdin_buf=""
+  __stdin_line_ends_with_oef=0
+}
+
+# Restore the state of getchar so it can read from stdin.
+getchar_restore() {
+  __stdin_buf="$__stdin_buf_saved"
+  __stdin_line_ends_with_oef="$__stdin_line_ends_with_oef_saved"
+}
+
+__stdin_buf=
 __stdin_line_ends_with_oef=0
 _getchar() {
   if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
@@ -622,14 +636,16 @@ read_n_char() {
   __count=$1
   __buf_ptr=$2
   __len=0
+  getchar_save_and_reset
   while [ $__count -ne 0 ] ; do
-    get_char
+    _getchar __c
     if [ $__c -eq -1 ]; then break; fi
     : $((_$__buf_ptr = __c))
     : $((__buf_ptr += 1))
     : $((__count -= 1))
     : $((__len += 1))
   done
+  getchar_restore
 }
 
 __fopen_fd3=0
@@ -809,31 +825,6 @@ _fgetc() { # $2: File descriptor
   fi
   : $(($1 = _$((__buf + __cur))))
   : $((_$((__fd + 1)) = __cur + 1))      # Increment cursor
-}
-
-__io_buf=
-get_char() {                          # get next char from source into $__c
-  if [ -z "$__io_buf" ] ; then        # need to get next line when buffer empty
-    IFS=                              # don't split input
-    if read -r __io_buf ; then        # read next line into $__io_buf
-      if [ -z "$__io_buf" ] ; then    # an empty line implies a newline character
-        __c=10                        # next get_char call will read next line
-        return
-      fi
-    else
-      __c=-1                          # EOF reached when read fails
-      return
-    fi
-  else
-    __io_buf="${__io_buf#?}"          # remove the current char from $__io_buf
-    if [ -z "$__io_buf" ] ; then      # end of line if the buffer is now empty
-      __c=10
-      return
-    fi
-  fi
-
-  # current character is at the head of $__io_buf. It will be removed in the next call to getchar.
-  char_to_int "${__io_buf%"${__io_buf#?}"}" # remove all but first char
 }
 
 _memset() { # $2: Pointer, $3: Value, $4: Length
