@@ -13,6 +13,7 @@ endif
 enum
 error
 extern
+FILE
 float
 for
 goto

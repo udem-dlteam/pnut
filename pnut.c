@@ -20,7 +20,8 @@
 
 #define AVOID_AMPAMP_BARBAR_not
 #define USE_IN_RANGE_FUNCTION_not
-#define INLINE_get_ch
+#define READ_INPUT_FROM_FILE
+#define INLINE_get_ch_not
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -74,32 +75,33 @@ int ENDIF_KW       = 311;
 int ENUM_KW        = 312;
 int ERROR_KW       = 313;
 int EXTERN_KW      = 314;
-int FLOAT_KW       = 315;
-int FOR_KW         = 316;
-int GOTO_KW        = 317;
-int IF_KW          = 318;
-int IFDEF_KW       = 319;
-int IFNDEF_KW      = 320;
-int INCLUDE_KW     = 321;
-int INT_KW         = 322;
-int LONG_KW        = 323;
-int REGISTER_KW    = 324;
-int RETURN_KW      = 325;
-int SHORT_KW       = 326;
-int SIGNED_KW      = 327;
-int SIZEOF_KW      = 328;
-int STATIC_KW      = 329;
-int STRUCT_KW      = 330;
-int SWITCH_KW      = 331;
-int TYPEDEF_KW     = 332;
-int UNDEF_KW       = 333;
-int UNION_KW       = 334;
-int UNSIGNED_KW    = 335;
-int VOID_KW        = 336;
-int VOLATILE_KW    = 337;
-int WHILE_KW       = 338;
-int VAR_DECL       = 339;
-int FUN_DECL       = 340;
+int FILE_KW        = 315;
+int FLOAT_KW       = 316;
+int FOR_KW         = 317;
+int GOTO_KW        = 318;
+int IF_KW          = 319;
+int IFDEF_KW       = 320;
+int IFNDEF_KW      = 321;
+int INCLUDE_KW     = 322;
+int INT_KW         = 323;
+int LONG_KW        = 324;
+int REGISTER_KW    = 325;
+int RETURN_KW      = 326;
+int SHORT_KW       = 327;
+int SIGNED_KW      = 328;
+int SIZEOF_KW      = 329;
+int STATIC_KW      = 330;
+int STRUCT_KW      = 331;
+int SWITCH_KW      = 332;
+int TYPEDEF_KW     = 333;
+int UNDEF_KW       = 334;
+int UNION_KW       = 335;
+int UNSIGNED_KW    = 336;
+int VOID_KW        = 337;
+int VOLATILE_KW    = 338;
+int WHILE_KW       = 339;
+int VAR_DECL       = 340;
+int FUN_DECL       = 341;
 
 int IDENTIFIER = 400;
 int INTEGER    = 401;
@@ -179,8 +181,8 @@ int string_start;
 int hash;
 
 /* These parameters give a perfect hashing of the C keywords */
-#define HASH_PARAM 12443
-#define HASH_PRIME 103
+#define HASH_PARAM 2764
+#define HASH_PRIME 107
 #define HEAP_SIZE 200000 /* MUST BE > HASH_PRIME */
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
@@ -286,13 +288,29 @@ void reset_table() {
 
 #ifdef INLINE_get_ch
 
+#ifdef READ_INPUT_FROM_FILE
+FILE_ptr fp = 0;
+#define get_ch() ch = fgetc(fp)
+#else
 #define get_ch() ch = getchar()
+#endif
 
 #else
 
+#ifdef READ_INPUT_FROM_FILE
+FILE_ptr fp = 0;
+void get_ch() {
+  if (fp == 0) {
+    ch = getchar();
+  } else {
+    ch = fgetc(fp);
+  }
+}
+#else
 void get_ch() {
   ch = getchar();
 }
+#endif
 
 #endif
 
@@ -367,6 +385,7 @@ void init_ident_table() {
   init_ident(ENUM_KW,     "enum");
   init_ident(ERROR_KW,    "error");
   init_ident(EXTERN_KW,   "extern");
+  init_ident(FILE_KW,     "FILE");
   init_ident(FLOAT_KW,    "float");
   init_ident(FOR_KW,      "for");
   init_ident(GOTO_KW,     "goto");
@@ -879,7 +898,7 @@ ast parse_type() {
   int type_kw = 0;
 
   while (1) {
-    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
+    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == FILE_KW)) {
       if ((type_kw != 0) AND (type_kw != INT_KW)) {
         syntax_error("inconsistent type");
       } else {
@@ -922,7 +941,9 @@ int parse_stars() {
 }
 
 int is_type_starter(int tok) {
-  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) OR (tok == CONST_KW);
+  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == FILE_KW) // Supported types
+      OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
+      OR (tok == CONST_KW); // Type attributes
 }
 
 ast parse_declaration() {
@@ -1649,7 +1670,21 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
-int main() {
+int main(int argc, char **args) {
+
+  #ifdef READ_INPUT_FROM_FILE
+  if (argc == 2) {
+    fp = fopen(args[1], "r");
+  }
+  #ifdef INLINE_get_ch
+  // When inlining INLINE_get_ch and READ_INPUT_FROM_FILE is defined, a file must be provided
+  // because we cam't read from stdin (unless we manage to make ternary expressions work with function calls)
+  else {
+    printf("Usage: %s <filename>\n", args[0]);
+    return 1;
+  }
+  #endif
+  #endif
 
   init_ident_table();
 
