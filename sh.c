@@ -558,8 +558,11 @@ text op_to_str(int op) {
   Similar to op_to_str, but returns the shell test operand instead of the C-style operands.
 */
 text test_op_to_str(int op) {
-  if      (op == EQ_EQ)      return wrap_str(" -eq ");
-  else if (op == EXCL_EQ)    return wrap_str(" -ne ");
+  // For == and !=, because integers are stored as strings in most shells, the
+  // conversion to int can be avoided by comparing the strings instead of using
+  // -eq and -ne.
+  if      (op == EQ_EQ)      return wrap_str(" = ");
+  else if (op == EXCL_EQ)    return wrap_str(" != ");
   else if (op == '<')        return wrap_str(" -lt ");
   else if (op == '>')        return wrap_str(" -gt ");
   else if (op == LT_EQ)      return wrap_str(" -le ");
