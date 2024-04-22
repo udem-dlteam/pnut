@@ -19,13 +19,13 @@ bootstrap_with_shell() {
 
   gcc -o $TEMP_DIR/pnut-sh-compiled-by-gcc.exe -Dsh pnut.c
   gcc -E -P -DPNUT_CC -Dsh pnut.c > "$TEMP_DIR/pnut-sh-after-cpp.c"
-  ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe < "$TEMP_DIR/pnut-sh-after-cpp.c" > $TEMP_DIR/pnut-sh.sh
+  ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe "$TEMP_DIR/pnut-sh-after-cpp.c" > $TEMP_DIR/pnut-sh.sh
 
   # create pnut-i386.sh, the C to i386 machine code compiler as a shell script
 
   gcc -E -P -DPNUT_CC -Di386 pnut.c > $TEMP_DIR/pnut-i386-after-cpp.c
   printf_timing "pnut-sh.sh compiling pnut.c -> pnut-sh-compiled-by-pnut-sh-sh.sh" \
-                "$1 $TEMP_DIR/pnut-sh.sh --no-zero-globals < $TEMP_DIR/pnut-sh-after-cpp.c > $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh"
+                "$1 $TEMP_DIR/pnut-sh.sh --no-zero-globals $TEMP_DIR/pnut-sh-after-cpp.c > $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh"
   if diff $TEMP_DIR/pnut-sh.sh $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh 2>&1 > /dev/null ; then
     printf "         SUCCESS... %s\n" "pnut-sh.sh == pnut-sh-compiled-by-pnut-sh-sh.sh"
   else
@@ -33,14 +33,14 @@ bootstrap_with_shell() {
     exit 1
   fi
   printf_timing "pnut-sh.sh compiling pnut.c -> pnut-i386-compiled-by-pnut-sh-sh.sh" \
-                "$1 $TEMP_DIR/pnut-sh.sh --no-zero-globals < $TEMP_DIR/pnut-i386-after-cpp.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh"
+                "$1 $TEMP_DIR/pnut-sh.sh --no-zero-globals $TEMP_DIR/pnut-i386-after-cpp.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh"
   printf_timing "pnut-i386-compiled-by-pnut-sh-sh.sh compiling pnut.c -> pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe" \
-                "$1 $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh --no-zero-globals < $TEMP_DIR/pnut-i386-after-cpp.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+                "$1 $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh --no-zero-globals $TEMP_DIR/pnut-i386-after-cpp.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
 
   chmod +x $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe
 
   printf_timing "pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe compiling pnut.c -> pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe" \
-                "./$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe < $TEMP_DIR/pnut-i386-after-cpp.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+                "./$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe $TEMP_DIR/pnut-i386-after-cpp.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
 
   chmod +x $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe
 

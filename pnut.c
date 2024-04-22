@@ -20,8 +20,6 @@
 
 #define AVOID_AMPAMP_BARBAR_not
 #define USE_IN_RANGE_FUNCTION_not
-#define READ_INPUT_FROM_FILE
-#define INLINE_get_ch_not
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -286,41 +284,53 @@ void reset_table() {
 }
 #endif
 
-#ifdef INLINE_get_ch
-
-#ifdef READ_INPUT_FROM_FILE
-FILE_ptr fp = 0;
-#define get_ch() ch = fgetc(fp)
-#else
-#define get_ch() ch = getchar()
+#ifndef PNUT_CC
+void get_tok();
 #endif
 
-#else
+#define INCLUDE_DEPTH_MAX 5
+FILE_ptr include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
+int include_stack_ptr = 0; // Points to the next available slot in the stack
+FILE_ptr fp; // Current file pointer that's being read
 
-#ifdef READ_INPUT_FROM_FILE
-FILE_ptr fp = 0;
 void get_ch() {
-  if (fp == 0) {
-    ch = getchar();
-  } else {
-    ch = fgetc(fp);
+  ch = fgetc(fp);
+  if (ch == EOF) {
+    // If it's not the last file on the stack, EOF means that we need to switch to the next file
+    if (include_stack_ptr > 1) {
+      fclose(include_stack[include_stack_ptr-1]);
+      include_stack_ptr -= 1;
+      fp = include_stack[include_stack_ptr-1];
+      get_ch();
+    }
   }
 }
-#else
-void get_ch() {
-  ch = getchar();
-}
-#endif
 
-#endif
+void include_file(char_ptr file_name) {
+  if (include_stack_ptr >= INCLUDE_DEPTH_MAX) {
+    fatal_error("Too many nested #include directives. Maximum supported is 5.");
+  }
+  fp = fopen(file_name, "r");
+  include_stack[include_stack_ptr] = fp;
+  include_stack_ptr += 1;
+}
 
 void handle_preprocessor_directive() {
-  /*TODO*/
-  while ((ch != '\n') AND (ch != EOF)) {
-    printf("%c", ch);
-    get_ch();
+  get_ch();
+  get_tok();
+  if (tok == INCLUDE_KW) {
+    get_tok();
+    if (tok == STRING) {
+      include_file(string_pool + val);
+    } else {
+      fatal_error("expected string to #include directive");
+    }
+  } else {
+    while ((ch != '\n') AND (ch != EOF)) {
+      printf("%c", ch);
+      get_ch();
+    }
   }
-  printf(" \n");
 }
 
 void get_ident() {
@@ -1672,19 +1682,12 @@ ast parse_compound_statement() {
 
 int main(int argc, char **args) {
 
-  #ifdef READ_INPUT_FROM_FILE
   if (argc == 2) {
-    fp = fopen(args[1], "r");
-  }
-  #ifdef INLINE_get_ch
-  // When inlining INLINE_get_ch and READ_INPUT_FROM_FILE is defined, a file must be provided
-  // because we cam't read from stdin (unless we manage to make ternary expressions work with function calls)
-  else {
+    include_file(args[1]);
+  } else {
     printf("Usage: %s <filename>\n", args[0]);
     return 1;
   }
-  #endif
-  #endif
 
   init_ident_table();
 
