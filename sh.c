@@ -741,7 +741,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
         The left side is always executed, unless the whole expression is executed conditionally.
         We could compile it as always executed, but it makes the Shell code less regular so we compile it conditionally.
       */
-      sub1 = handle_side_effects_go(get_child(node, 0), true);
+      sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       left_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
       sub2 = handle_side_effects_go(get_child(node, 1), true);
@@ -964,7 +964,9 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         }
         return string_concat3(sub1, op_to_str(op), sub2);
       } else {
-        if (test_side_effects != 0) { fatal_error("comp_rvalue_go: Arithmetic with function calls in && and || not supported"); }
+        if (test_side_effects != 0 OR get_child(node, 2) != 0 OR get_child(node, 3) != 0) {
+          fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
+        }
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
         return wrap_if_needed(false, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
