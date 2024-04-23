@@ -24,7 +24,6 @@
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
 #define HANDLE_SIMPLE_PRINTF_not // Have a special case for printf("...") calls
-#define RESET_MEMORY_BETWEEN_FUNCTIONS
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -246,43 +245,16 @@ int end_ident() {
 
   /* a new ident has been found */
 
-#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-  probe = alloc_obj(4);
-#else
   probe = alloc_obj(3);
-#endif
 
   heap[hash] = probe; /* add new ident at end of chain */
 
   heap[probe] = 0; /* no next ident */
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
-#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-  heap[probe+3] = false; /* is a C keyword? */
-#endif
 
   return probe;
 }
-
-#ifdef RESET_MEMORY_BETWEEN_FUNCTIONS
-void reset_table() {
-  // Traverse the hash table and reset all non-keyword entries
-  int i;
-  int prev;
-  for (i = 0; i < HASH_PRIME; i += 1) {
-    probe = heap[i];
-    prev = i;
-    while (probe != 0) {
-      if (heap[probe+3]) { /* keyword */
-        prev = probe;
-      } else { /* non-keyword */
-        heap[prev] = heap[probe]; /* Point previous node to next node */
-      }
-      probe = heap[probe];
-    }
-  }
-}
-#endif
 
 #ifndef PNUT_CC
 void get_tok();
