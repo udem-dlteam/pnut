@@ -8,7 +8,6 @@
 
 #endif
 
-#define FILE_ptr  FILE *
 #define int_ptr   int  *
 #define char_ptr  char *
 #define void_ptr  void *
@@ -45,6 +44,8 @@ int in_range(int x, int lo, int hi) {
 
 #ifdef PNUT_CC
 
+typedef int FILE;
+
 /* Redefining strcmp because it's not part of the Shell runtime */
 int strcmp(char_ptr str1, char_ptr str2) {
   int i = 0;
@@ -72,33 +73,32 @@ int ENDIF_KW       = 311;
 int ENUM_KW        = 312;
 int ERROR_KW       = 313;
 int EXTERN_KW      = 314;
-int FILE_KW        = 315;
-int FLOAT_KW       = 316;
-int FOR_KW         = 317;
-int GOTO_KW        = 318;
-int IF_KW          = 319;
-int IFDEF_KW       = 320;
-int IFNDEF_KW      = 321;
-int INCLUDE_KW     = 322;
-int INT_KW         = 323;
-int LONG_KW        = 324;
-int REGISTER_KW    = 325;
-int RETURN_KW      = 326;
-int SHORT_KW       = 327;
-int SIGNED_KW      = 328;
-int SIZEOF_KW      = 329;
-int STATIC_KW      = 330;
-int STRUCT_KW      = 331;
-int SWITCH_KW      = 332;
-int TYPEDEF_KW     = 333;
-int UNDEF_KW       = 334;
-int UNION_KW       = 335;
-int UNSIGNED_KW    = 336;
-int VOID_KW        = 337;
-int VOLATILE_KW    = 338;
-int WHILE_KW       = 339;
-int VAR_DECL       = 340;
-int FUN_DECL       = 341;
+int FLOAT_KW       = 315;
+int FOR_KW         = 316;
+int GOTO_KW        = 317;
+int IF_KW          = 318;
+int IFDEF_KW       = 319;
+int IFNDEF_KW      = 320;
+int INCLUDE_KW     = 321;
+int INT_KW         = 322;
+int LONG_KW        = 323;
+int REGISTER_KW    = 324;
+int RETURN_KW      = 325;
+int SHORT_KW       = 326;
+int SIGNED_KW      = 327;
+int SIZEOF_KW      = 328;
+int STATIC_KW      = 329;
+int STRUCT_KW      = 330;
+int SWITCH_KW      = 331;
+int TYPEDEF_KW     = 332;
+int UNDEF_KW       = 333;
+int UNION_KW       = 334;
+int UNSIGNED_KW    = 335;
+int VOID_KW        = 336;
+int VOLATILE_KW    = 337;
+int WHILE_KW       = 338;
+int VAR_DECL       = 339;
+int FUN_DECL       = 340;
 
 int IDENTIFIER = 400;
 int INTEGER    = 401;
@@ -139,6 +139,8 @@ int IDENTIFIER_EMPTY = 433;
 int LOCAL_VAR = 434;
 int KIND_LOCAL = 435;
 int KIND_PARAM = 436;
+
+int TYPE = 437;
 
 void fatal_error(char_ptr msg) {
   printf("%s\n", msg);
@@ -245,13 +247,14 @@ int end_ident() {
 
   /* a new ident has been found */
 
-  probe = alloc_obj(3);
+  probe = alloc_obj(4);
 
   heap[hash] = probe; /* add new ident at end of chain */
 
   heap[probe] = 0; /* no next ident */
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
+  heap[probe+3] = 0; /* Token tag */
 
   return probe;
 }
@@ -261,9 +264,9 @@ void get_tok();
 #endif
 
 #define INCLUDE_DEPTH_MAX 5
-FILE_ptr include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
+FILE * include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
 int include_stack_ptr = 0; // Points to the next available slot in the stack
-FILE_ptr fp; // Current file pointer that's being read
+FILE * fp; // Current file pointer that's being read
 
 void get_ch() {
   ch = fgetc(fp);
@@ -367,7 +370,6 @@ void init_ident_table() {
   init_ident(ENUM_KW,     "enum");
   init_ident(ERROR_KW,    "error");
   init_ident(EXTERN_KW,   "extern");
-  init_ident(FILE_KW,     "FILE");
   init_ident(FLOAT_KW,    "float");
   init_ident(FOR_KW,      "for");
   init_ident(GOTO_KW,     "goto");
@@ -880,7 +882,7 @@ ast parse_type() {
   int type_kw = 0;
 
   while (1) {
-    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == FILE_KW)) {
+    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
       if ((type_kw != 0) AND (type_kw != INT_KW)) {
         syntax_error("inconsistent type");
       } else {
@@ -898,6 +900,11 @@ ast parse_type() {
       }
     } else if (tok == CONST_KW) {
       get_tok(); // ignore const
+    } else if (tok == TYPE) {
+      /* Look in types table */
+      type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+      get_tok();
+      break;
     } else {
       break;
     }
@@ -923,8 +930,9 @@ int parse_stars() {
 }
 
 int is_type_starter(int tok) {
-  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) OR (tok == FILE_KW) // Supported types
+  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
       OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
+      OR (tok == TYPE) // User defined types
       OR (tok == CONST_KW); // Type attributes
 }
 
@@ -1075,8 +1083,23 @@ ast parse_definition(int local) {
         }
       }
     }
+    return result;
+  } else if (tok == TYPEDEF_KW) {
+    // When parsing a typedef, the type is added to the types table.
+    // Since the code generators don't do anything with typedefs, we then return
+    // the next definition.
+    get_tok();
+    type = parse_type();
+    if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
+
+    heap[val + 2] = TYPE;
+    heap[val + 3] = type;
+    get_tok();
+    expect_tok(';');
+    return parse_definition(local);
+  } else {
+    return result;
   }
-  return result;
 }
 
 ast parse_parenthesized_expression() {
