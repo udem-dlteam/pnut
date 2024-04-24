@@ -18,7 +18,6 @@
 #define EOF (-1)
 
 #define AVOID_AMPAMP_BARBAR_not
-#define USE_IN_RANGE_FUNCTION_not
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -30,16 +29,6 @@
 #else
 #define AND &&
 #define OR ||
-#endif
-
-#ifdef USE_IN_RANGE_FUNCTION
-int in_range(int x, int lo, int hi) {
-  if (x < lo) return 0;
-  if (x > hi) return 0;
-  return 1;
-}
-#else
-#define in_range(x, lo, hi) ((x >= lo) AND (x <= hi))
 #endif
 
 #ifdef PNUT_CC
@@ -312,9 +301,9 @@ void get_ident() {
 
   begin_string();
 
-  while (in_range(ch, 'A', 'Z') OR
-         in_range(ch, 'a', 'z') OR
-         in_range(ch, '0', '9') OR
+  while (('A' <= ch AND ch <= 'Z') OR
+         ('a' <= ch AND ch <= 'z') OR
+         ('0' <= ch AND ch <= '9') OR
          (ch == '_')) {
     accum_string();
     get_ch();
@@ -398,11 +387,11 @@ void init_ident_table() {
 
 int accum_digit(int base) {
   int digit = 99;
-  if (in_range(ch, '0', '9')) {
+  if ('0' <= ch AND ch <= '9') {
     digit = ch - '0';
-  } else if (in_range(ch, 'A', 'Z')) {
+  } else if ('A' <= ch AND ch <= 'Z') {
     digit = ch - 'A' + 10;
-  } else if (in_range(ch, 'a', 'z')) {
+  } else if ('a' <= ch AND ch <= 'z') {
     digit = ch - 'a' + 10;
   }
   if (digit >= base) {
@@ -426,7 +415,7 @@ void get_string_char() {
   get_ch();
 
   if (val == '\\') {
-    if (in_range(ch, '0', '7')) {
+    if ('0' <= ch AND ch <= '7') {
       /*
       Parse octal character, up to 3 digits.
       Note that \1111 is parsed as '\111' followed by '1'
@@ -488,7 +477,7 @@ void get_tok() {
       if (ch == '\n') tok = ch;
       get_ch();
 
-      while (in_range(ch, 0, ' ')) {
+      while (0 <= ch AND ch <= ' ') {
         if (ch == '\n') tok = ch;
         get_ch();
       }
@@ -500,17 +489,17 @@ void get_tok() {
 
       /* will continue while (1) loop */
 
-    } else if (in_range(ch, 'a', 'z') OR
-               in_range(ch, 'A', 'Z') OR
+    }
+
+    else if (('a' <= ch AND ch <= 'z') OR
+               ('A' <= ch AND ch <= 'Z') OR
                (ch == '_')) {
 
       get_ident();
 
       break;
 
-    }
-
- else if (in_range(ch, '0', '9')) {
+    } else if ('0' <= ch AND ch <= '9') {
 
       val = '0' - ch;
 

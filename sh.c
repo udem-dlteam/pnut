@@ -578,11 +578,11 @@ text character_ident(int c) {
   /* Mark character as used */
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
 
-  if (in_range(c, 'a', 'z')) {
+  if ('a' <= c AND c <= 'z') {
     return string_concat(wrap_str("__CH_"), wrap_char(c));
-  } else if (in_range(c, 'A', 'Z')) {
+  } else if ('A' <= c AND c <= 'Z') {
     return string_concat(wrap_str("__CH_"), wrap_char(c));
-  } else if (in_range(c, '0', '9')) {
+  } else if ('0' <= c AND c <= '9') {
     return string_concat(wrap_str("__CH_"), wrap_int(c - 48));
   } else {
     if      (c == '\0') return wrap_str("__CH_NULL");
