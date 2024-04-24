@@ -6,15 +6,15 @@ if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
 gcc -o "$TEMP_DIR/pnut.exe" -Dsh pnut.c
 
-gcc -E -C -P -DPNUT_CC -Dsh pnut.c > "$TEMP_DIR/pnut-after-cpp.c"
+# gcc -E -C -P -DPNUT_CC -Dsh pnut.c > "$TEMP_DIR/pnut-after-cpp.c"
 
-./$TEMP_DIR/pnut.exe "$TEMP_DIR/pnut-after-cpp.c" > "$TEMP_DIR/pnut.sh"
+./$TEMP_DIR/pnut.exe -Dsh "pnut.c" > "$TEMP_DIR/pnut.sh"
 
 bootstrap_with_shell() {
 
   echo "Bootstrap with $1"
 
-  time $1 "$TEMP_DIR/pnut.sh" --no-zero-globals "$TEMP_DIR/pnut-after-cpp.c" > "$TEMP_DIR/pnut-twice-bootstrapped.sh"
+  time $1 "$TEMP_DIR/pnut.sh" --no-zero-globals -Dsh "pnut.c" > "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 
   diff "$TEMP_DIR/pnut.sh" "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 
