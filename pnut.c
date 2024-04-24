@@ -316,6 +316,7 @@ void get_ident() {
 int init_ident(int tok, char *name) {
 
   int i = 0;
+  int prev_ch = ch; // The character may be important to the calling function, saving it
 
   begin_string();
 
@@ -328,6 +329,8 @@ int init_ident(int tok, char *name) {
   i = end_ident();
 
   heap[i+2] = tok;
+
+  ch = prev_ch;
 
   return i;
 }
