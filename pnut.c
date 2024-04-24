@@ -18,7 +18,7 @@
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
-#define HANDLE_SIMPLE_PRINTF_not // Have a special case for printf("...") calls
+#define HANDLE_SIMPLE_PRINTF_not
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -27,6 +27,8 @@
 #define AND &&
 #define OR ||
 #endif
+
+typedef int bool;
 
 #ifdef PNUT_CC
 
@@ -127,6 +129,7 @@ int KIND_LOCAL = 435;
 int KIND_PARAM = 436;
 
 int TYPE = 437;
+int MACRO = 438;
 
 void fatal_error(char *msg) {
   printf("%s\n", msg);
@@ -168,7 +171,7 @@ int hash;
 /* These parameters give a perfect hashing of the C keywords */
 #define HASH_PARAM 2764
 #define HASH_PRIME 107
-#define HEAP_SIZE 200000 /* MUST BE > HASH_PRIME */
+#define HEAP_SIZE 200000
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
@@ -185,6 +188,24 @@ int alloc_obj(int size) {
   }
 
   return alloc_result;
+}
+
+int cons(int child0, int child1) {
+
+  int result = alloc_obj(2);
+
+  heap[result] = child0;
+  heap[result+1] = child1;
+
+  return result;
+}
+
+int car(int pair) {
+  return heap[pair];
+}
+
+int cdr(int pair) {
+  return heap[pair+1];
 }
 
 void begin_string() {
@@ -250,9 +271,39 @@ void get_tok();
 #endif
 
 #define INCLUDE_DEPTH_MAX 5
-FILE * include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
+FILE *include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
 int include_stack_ptr = 0; // Points to the next available slot in the stack
-FILE * fp; // Current file pointer that's being read
+FILE *fp = 0; // Current file pointer that's being read
+
+
+#define IFDEF_DEPTH_MAX 20
+bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
+bool ifdef_stack_ix = 0;
+bool ifdef_mask = true;
+bool expand_macro = true;
+
+void flip_ifdef_mask() {
+  ifdef_mask = !ifdef_mask;
+}
+
+void push_ifdef_mask(bool new_mask) {
+  if (ifdef_stack_ix >= IFDEF_DEPTH_MAX) {
+    fatal_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
+  }
+  // Save current mask on the stack because it's about to be overwritten
+  ifdef_stack[ifdef_stack_ix] = ifdef_mask;
+  ifdef_stack_ix += 1;
+  // Then set the new mask value
+  ifdef_mask = new_mask;
+}
+
+void pop_ifdef_mask() {
+  if (ifdef_stack_ix == 0) {
+    fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
+  }
+  ifdef_stack_ix -= 1;
+  ifdef_mask = ifdef_stack[ifdef_stack_ix];
+}
 
 void get_ch() {
   ch = fgetc(fp);
@@ -276,21 +327,77 @@ void include_file(char *file_name) {
   include_stack_ptr += 1;
 }
 
-void handle_preprocessor_directive() {
-  get_ch();
-  get_tok();
-  if (tok == INCLUDE_KW) {
-    get_tok();
-    if (tok == STRING) {
-      include_file(string_pool + val);
+bool handle_preprocessor_directive() {
+  bool prev_ifdef_mask = ifdef_mask;
+  int macro;
+  int tail;
+  int res;
+  int temp;
+  get_ch(); // Skip the #
+  ifdef_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
+  get_tok(); // Get the directive
+  ifdef_mask = prev_ifdef_mask;
+
+  if (tok == ENDIF_KW) {
+    pop_ifdef_mask();
+  } else if (tok == ELSE_KW) {
+    flip_ifdef_mask();
+  } else if (ifdef_mask) {
+    if (tok == IFDEF_KW) {
+      expand_macro = false;
+      get_tok();
+      expand_macro = true;
+      push_ifdef_mask(tok == MACRO);
+    } else if (tok == IFNDEF_KW) {
+      expand_macro = false;
+      get_tok();
+      expand_macro = true;
+      push_ifdef_mask(tok != MACRO);
+    } else if (tok == INCLUDE_KW) {
+      get_tok();
+      if (tok == STRING) {
+        include_file(string_pool + val);
+      } else {
+        fatal_error("expected string to #include directive");
+      }
+    } else if (tok == DEFINE_KW) {
+      get_tok();
+      if (tok == IDENTIFIER) {
+        heap[val + 2] = MACRO; // Mark the identifier as a macro
+        macro = val;
+      } else {
+        printf("tok=%d\n", tok);
+        fatal_error("#define directive can only be followed by a identifier");
+      }
+      // Accumulate tokens so they can be replayed when the macro is used
+      if (ch != '\n' AND ch != EOF) {
+        get_tok();
+        // Append the token/value pair to the replay list
+        res = cons(cons(tok, val), 0);
+        tail = res;
+        while (ch != '\n' AND ch != EOF) {
+          get_tok();
+          temp = cons(cons(tok, val), 0);
+          heap[tail + 1] = temp; // Set tail
+          tail = temp;
+        }
+      }
+      heap[macro + 3] = res;
     } else {
-      fatal_error("expected string to #include directive");
+      printf("tok=%d\n", tok);
+      fatal_error("unsupported preprocessor directive");
     }
   } else {
-    while ((ch != '\n') AND (ch != EOF)) {
-      printf("%c", ch);
+    // Skip the directive
+    while (ch != '\n' AND ch != EOF) {
       get_ch();
     }
+  }
+  // Because handle_preprocessor_directive is called from get_tok, and it loops after
+  // the call to handle_preprocessor_directive, we don't need to call get_tok here
+  if (ch != '\n' AND ch != EOF) {
+    printf("ch=%d\n", ch);
+    fatal_error("expected end of line");
   }
 }
 
@@ -461,11 +568,29 @@ void get_string_char() {
   }
 }
 
+int macro_tok_lst = 0;
+
 void get_tok() {
 
+
+  bool first_time = true; // Used to simulate a do-while loop
+
+
+  // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
+  while ((first_time OR !ifdef_mask) AND ch != EOF) {
+  first_time = false;
   while (1) {
 
-    if (ch <= ' ') {
+
+    // Check if there are any tokens to replay. Macros are just identifiers that
+    // have been marked as macros. In terms of how we get into that state, a
+    // macro token is first returned by the get_ident call a few lines below.
+    if (macro_tok_lst != 0) {
+      tok = heap[car(macro_tok_lst) + 0];
+      val = heap[car(macro_tok_lst) + 1];
+      macro_tok_lst = cdr(macro_tok_lst);
+      break;
+    } else if (ch <= ' ') {
 
       if (ch == EOF) {
         tok = EOF;
@@ -497,7 +622,13 @@ void get_tok() {
 
       get_ident();
 
-      break;
+      // Check if the identifier is a macro and that we're in a ifdef true block
+      // If so, we replay the tokens of the macro.
+      if (tok == MACRO AND ifdef_mask AND expand_macro AND heap[val + 3] != 0) {
+        macro_tok_lst = heap[val + 3];
+      } else {
+        break;
+      }
 
     } else if ('0' <= ch AND ch <= '9') {
 
@@ -754,6 +885,7 @@ void get_tok() {
         fatal_error("invalid token");
       }
     }
+  }
   }
 }
 
