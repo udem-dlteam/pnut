@@ -1359,6 +1359,75 @@ ast get_leading_var_declarations(ast node) {
   return new_ast2(',', result, node);
 }
 
+#ifdef OPTIMIZE_CONSTANT_PARAM
+void mark_mutable_variables_statement(ast node) {
+  int op = get_op(node);
+  ast params;
+
+  if (op == IF_KW) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
+    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
+  } else if (op == WHILE_KW) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
+  } else if (op == FOR_KW) {
+    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
+    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
+    if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
+  } else if (op == BREAK_KW OR op == CONTINUE_KW) {
+    /* Do nothing */
+  } else if (op == RETURN_KW) {
+    if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
+  } else if (op == '(') {
+    params = get_child(node, 1);
+
+    if (params != 0) { /* Check if not an empty list */
+      if (get_op(params) == ',') {
+        while (get_op(params) == ',') {
+          mark_mutable_variables_statement(get_child(params, 0));
+          params = get_child(params, 1);
+        }
+      } else { /* params is the first argument, not wrapped in a cons cell */
+        mark_mutable_variables_statement(params);
+      }
+    }
+  } else if (op == '{') { /* six.compound */
+    mark_mutable_variables_body(node);
+  } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
+    /* Do nothing */
+  } else if (op == '=' OR op == PLUS_PLUS OR op == MINUS_MINUS OR op == PLUS_EQ
+         OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
+         OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+    mark_variable_as_mutable(get_child(node, 0));
+    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
+  } else if ((op == '~') OR (op == '!')
+      OR (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
+      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ)
+      OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') OR (op == AMP_AMP) OR (op == BAR_BAR)) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
+  } else if (op == '?') {
+    mark_mutable_variables_statement(get_child(node, 0));
+    mark_mutable_variables_statement(get_child(node, 1));
+    mark_mutable_variables_statement(get_child(node, 2));
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("mark_mutable_variables_statement: unknown statement");
+  }
+}
+
+void mark_mutable_variables_body(ast node) {
+  if (node != 0) {
+    while (get_op(node) == '{') {
+      mark_mutable_variables_statement(get_child(node, 0));
+      node = get_child(node, 1);
+    }
+  }
+}
+#endif
+
 void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
   /* ast fun_type = get_child(node, 1); */
