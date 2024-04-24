@@ -492,6 +492,10 @@ void init_ident_table() {
   init_ident(WHILE_KW,    "while");
 }
 
+void init_pnut_macros() {
+  init_ident(MACRO, "PNUT_CC");
+}
+
 int accum_digit(int base) {
   int digit = 99;
   if ('0' <= ch AND ch <= '9') {
@@ -1798,14 +1802,31 @@ ast parse_compound_statement() {
 
 int main(int argc, char **args) {
 
-  if (argc == 2) {
-    include_file(args[1]);
-  } else {
-    printf("Usage: %s <filename>\n", args[0]);
-    return 1;
-  }
+  int i;
 
   init_ident_table();
+
+  init_pnut_macros();
+
+  // Parse external macros
+  for (i = 1; i < argc; i += 1) {
+    if (args[i][0] == '-') {
+      if (args[i][1] == 'D') {
+        init_ident(MACRO, args[i] + 2);
+      } else {
+        printf("Option %s\n", args[i]);
+        fatal_error("unknown option");
+      }
+    } else {
+      // Options that don't start with '-' are file names
+      include_file(args[i]);
+    }
+  }
+
+  if (fp == 0) {
+    printf("Usage: %s <filename>\n", args[0]);
+    fatal_error("no input file");
+  }
 
   codegen_begin();
 
