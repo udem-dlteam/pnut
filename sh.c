@@ -1076,13 +1076,20 @@ text comp_rvalue(ast node, int context) {
 
 text comp_array_lvalue(ast node) {
   int op = get_op(node);
-  text rvalue;
+  text sub1;
+  text sub2;
+
   if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
     return env_var(node);
   } else if (op == '*') {
-    rvalue = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
-    return string_concat(wrap_char('_'), rvalue);
+    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
+    return string_concat(wrap_char('_'), sub1);
+  } else if (op == '[') {
+    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
+    return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
   } else {
+    printf("op=%d %c\n", op, op);
     fatal_error("comp_array_lvalue: unknown lvalue");
     return 0;
   }
