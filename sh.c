@@ -101,7 +101,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
-text wrap_str(char_ptr s) {
+text wrap_str(char *s) {
   int i = 0;
   int result = text_alloc;
 
@@ -445,7 +445,7 @@ int variable_is_constant_param(ast local_var) {
 */
 void assert_idents_are_safe(ast lst) {
   ast ident_tok;
-  char_ptr name;
+  char *name;
   while (lst != 0) {
     ident_tok = get_child(get_child(lst, 0), 0);
     name = string_pool + get_val(ident_tok);
@@ -1009,9 +1009,9 @@ text escaped_char(char c) {
 }
 
 #ifdef HANDLE_SIMPLE_PRINTF
-text escape_string(char_ptr str, int c_style) {
+text escape_string(char *str, int c_style) {
 #else
-text escape_string(char_ptr str) {
+text escape_string(char *str) {
 #endif
   text res = wrap_str("");
   text char_text;

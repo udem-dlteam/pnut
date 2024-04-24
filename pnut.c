@@ -8,9 +8,6 @@
 
 #endif
 
-#define int_ptr   int  *
-#define char_ptr  char *
-#define void_ptr  void *
 
 #define ast int
 #define true 1
@@ -36,7 +33,7 @@
 typedef int FILE;
 
 /* Redefining strcmp because it's not part of the Shell runtime */
-int strcmp(char_ptr str1, char_ptr str2) {
+int strcmp(char *str1, char *str2) {
   int i = 0;
   while (str1[i] == str2[i]) {
     if (str1[i] == '\0') return 0;
@@ -131,7 +128,7 @@ int KIND_PARAM = 436;
 
 int TYPE = 437;
 
-void fatal_error(char_ptr msg) {
+void fatal_error(char *msg) {
   printf("%s\n", msg);
   exit(1);
 }
@@ -270,7 +267,7 @@ void get_ch() {
   }
 }
 
-void include_file(char_ptr file_name) {
+void include_file(char *file_name) {
   if (include_stack_ptr >= INCLUDE_DEPTH_MAX) {
     fatal_error("Too many nested #include directives. Maximum supported is 5.");
   }
@@ -316,7 +313,7 @@ void get_ident() {
   */
 }
 
-int init_ident(int tok, char_ptr name) {
+int init_ident(int tok, char *name) {
 
   int i = 0;
 
@@ -841,12 +838,12 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
   return ast_result;
 }
 
-void syntax_error(char_ptr msg) {
+void syntax_error(char *msg) {
   printf("syntax error: %s\n", msg);
   fatal_error("syntax error");
 }
 
-void missing_feature_error(char_ptr msg) {
+void missing_feature_error(char *msg) {
   printf("not yet implemented: %s\n", msg);
   fatal_error("syntax error");
 }
