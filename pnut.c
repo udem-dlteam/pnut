@@ -507,15 +507,15 @@ void get_tok() {
           get_ch();
           val = 0;
           if (accum_digit(16)) {
-            while (accum_digit(16)) ch = ch; /* dummy op */
+            while (accum_digit(16));
           } else {
             fatal_error("invalid hex integer -- it must have at least one digit");
           }
         } else {
-          while (accum_digit(8)) ch = ch; /* dummy op */
+          while (accum_digit(8));
         }
       } else {
-        while (accum_digit(10)) ch = ch; /* dummy op */
+        while (accum_digit(10));
       }
 
       tok = INTEGER;
