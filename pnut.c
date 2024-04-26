@@ -8,7 +8,6 @@
 
 #endif
 
-
 #define ast int
 #define true 1
 #define false 0
@@ -53,40 +52,36 @@ int CHAR_KW        = 303;
 int CONST_KW       = 304;
 int CONTINUE_KW    = 305;
 int DEFAULT_KW     = 306;
-int DEFINE_KW      = 307;
-int DO_KW          = 308;
-int DOUBLE_KW      = 309;
-int ELSE_KW        = 310;
-int ENDIF_KW       = 311;
-int ENUM_KW        = 312;
-int ERROR_KW       = 313;
-int EXTERN_KW      = 314;
-int FLOAT_KW       = 315;
-int FOR_KW         = 316;
-int GOTO_KW        = 317;
-int IF_KW          = 318;
-int IFDEF_KW       = 319;
-int IFNDEF_KW      = 320;
-int INCLUDE_KW     = 321;
-int INT_KW         = 322;
-int LONG_KW        = 323;
-int REGISTER_KW    = 324;
-int RETURN_KW      = 325;
-int SHORT_KW       = 326;
-int SIGNED_KW      = 327;
-int SIZEOF_KW      = 328;
-int STATIC_KW      = 329;
-int STRUCT_KW      = 330;
-int SWITCH_KW      = 331;
-int TYPEDEF_KW     = 332;
-int UNDEF_KW       = 333;
-int UNION_KW       = 334;
-int UNSIGNED_KW    = 335;
-int VOID_KW        = 336;
-int VOLATILE_KW    = 337;
-int WHILE_KW       = 338;
-int VAR_DECL       = 339;
-int FUN_DECL       = 340;
+int DO_KW          = 307;
+int DOUBLE_KW      = 308;
+int ELSE_KW        = 309;
+int ENUM_KW        = 310;
+int ERROR_KW       = 311;
+int EXTERN_KW      = 312;
+int FLOAT_KW       = 313;
+int FOR_KW         = 314;
+int GOTO_KW        = 315;
+int IF_KW          = 316;
+int IFNDEF_KW      = 317;
+int INCLUDE_KW     = 318;
+int INT_KW         = 319;
+int LONG_KW        = 320;
+int REGISTER_KW    = 321;
+int RETURN_KW      = 322;
+int SHORT_KW       = 323;
+int SIGNED_KW      = 324;
+int SIZEOF_KW      = 325;
+int STATIC_KW      = 326;
+int STRUCT_KW      = 327;
+int SWITCH_KW      = 328;
+int TYPEDEF_KW     = 329;
+int UNION_KW       = 330;
+int UNSIGNED_KW    = 331;
+int VOID_KW        = 332;
+int VOLATILE_KW    = 333;
+int WHILE_KW       = 334;
+int VAR_DECL       = 335;
+int FUN_DECL       = 336;
 
 int IDENTIFIER = 400;
 int INTEGER    = 401;
@@ -327,7 +322,18 @@ void include_file(char *file_name) {
   include_stack_ptr += 1;
 }
 
-bool handle_preprocessor_directive() {
+// We add the preprocessor keywords to the ident table so they can be easily
+// recognized by the preprocessor. Because these are not C keywords, their kind
+// is still IDENTIFIER so the parser (which runs after the preprocessor) can
+// treat them as such.
+int IFDEF_ID;
+int IFNDEF_ID;
+int ENDIF_ID;
+int DEFINE_ID;
+int UNDEF_ID;
+int INCLUDE_ID;
+
+void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
   int macro;
   int tail;
@@ -338,29 +344,38 @@ bool handle_preprocessor_directive() {
   get_tok(); // Get the directive
   ifdef_mask = prev_ifdef_mask;
 
-  if (tok == ENDIF_KW) {
+  if (tok == IDENTIFIER AND val == ENDIF_ID) {
     pop_ifdef_mask();
   } else if (tok == ELSE_KW) {
     flip_ifdef_mask();
   } else if (ifdef_mask) {
-    if (tok == IFDEF_KW) {
+    if (tok == IDENTIFIER AND val == IFDEF_ID) {
       expand_macro = false;
       get_tok();
       expand_macro = true;
       push_ifdef_mask(tok == MACRO);
-    } else if (tok == IFNDEF_KW) {
+    } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
       expand_macro = false;
       get_tok();
       expand_macro = true;
       push_ifdef_mask(tok != MACRO);
-    } else if (tok == INCLUDE_KW) {
+    } else if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
       if (tok == STRING) {
         include_file(string_pool + val);
       } else {
         fatal_error("expected string to #include directive");
       }
-    } else if (tok == DEFINE_KW) {
+    } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
+      get_tok();
+      if (tok == MACRO) {
+        heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
+        macro = val;
+      } else {
+        printf("tok=%d\n", tok);
+        fatal_error("#undef directive can only be followed by a identifier");
+      }
+    } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
       get_tok();
       if (tok == IDENTIFIER) {
         heap[val + 2] = MACRO; // Mark the identifier as a macro
@@ -384,7 +399,7 @@ bool handle_preprocessor_directive() {
       }
       heap[macro + 3] = res;
     } else {
-      printf("tok=%d\n", tok);
+      printf("tok=%d: %s\n", tok, string_pool + heap[val + 1]);
       fatal_error("unsupported preprocessor directive");
     }
   } else {
@@ -458,11 +473,9 @@ void init_ident_table() {
   init_ident(CONST_KW,    "const");
   init_ident(CONTINUE_KW, "continue");
   init_ident(DEFAULT_KW,  "default");
-  init_ident(DEFINE_KW,   "define");
   init_ident(DO_KW,       "do");
   init_ident(DOUBLE_KW,   "double");
   init_ident(ELSE_KW,     "else");
-  init_ident(ENDIF_KW,    "endif");
   init_ident(ENUM_KW,     "enum");
   init_ident(ERROR_KW,    "error");
   init_ident(EXTERN_KW,   "extern");
@@ -470,9 +483,6 @@ void init_ident_table() {
   init_ident(FOR_KW,      "for");
   init_ident(GOTO_KW,     "goto");
   init_ident(IF_KW,       "if");
-  init_ident(IFDEF_KW,    "ifdef");
-  init_ident(IFNDEF_KW,   "ifndef");
-  init_ident(INCLUDE_KW,  "include");
   init_ident(INT_KW,      "int");
   init_ident(LONG_KW,     "long");
   init_ident(REGISTER_KW, "register");
@@ -484,12 +494,20 @@ void init_ident_table() {
   init_ident(STRUCT_KW,   "struct");
   init_ident(SWITCH_KW,   "switch");
   init_ident(TYPEDEF_KW,  "typedef");
-  init_ident(UNDEF_KW,    "undef");
   init_ident(UNION_KW,    "union");
   init_ident(UNSIGNED_KW, "unsigned");
   init_ident(VOID_KW,     "void");
   init_ident(VOLATILE_KW, "volatile");
   init_ident(WHILE_KW,    "while");
+
+  // Preprocessor keywords. These are not tagged as keyword since they can be
+  // used as identifiers after the preprocessor stage.
+  IFDEF_ID   = init_ident(IDENTIFIER, "ifdef");
+  IFNDEF_ID  = init_ident(IDENTIFIER, "ifndef");
+  ENDIF_ID   = init_ident(IDENTIFIER, "endif");
+  DEFINE_ID  = init_ident(IDENTIFIER, "define");
+  UNDEF_ID   = init_ident(IDENTIFIER, "undef");
+  INCLUDE_ID = init_ident(IDENTIFIER, "include");
 }
 
 void init_pnut_macros() {
