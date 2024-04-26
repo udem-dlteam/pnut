@@ -1800,6 +1800,7 @@ ast parse_compound_statement() {
 
 // Select code generator
 
+#ifndef DEBUG_CPP
 #ifdef sh
 #include "sh.c"
 #endif
@@ -1815,8 +1816,13 @@ ast parse_compound_statement() {
 #ifdef arm
 #include "arm.c"
 #endif
+#endif
 
 //-----------------------------------------------------------------------------
+
+#ifdef DEBUG_CPP
+#include "debug.c"
+#endif
 
 int main(int argc, char **args) {
 
@@ -1846,16 +1852,25 @@ int main(int argc, char **args) {
     fatal_error("no input file");
   }
 
+  #ifndef DEBUG_CPP
   codegen_begin();
+  #endif
 
   ch = '\n';
   get_tok();
 
   while (tok != EOF) {
+    #ifdef DEBUG_CPP
+    print_tok();
+    get_tok();
+    #else
     codegen_glo_decl(parse_definition(0));
+    #endif
   }
 
+  #ifndef DEBUG_CPP
   codegen_end();
+  #endif
 
   return 0;
 }
