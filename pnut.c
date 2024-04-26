@@ -601,313 +601,311 @@ void get_tok() {
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while ((first_time OR !ifdef_mask) AND ch != EOF) {
   first_time = false;
-  while (1) {
-
-
-    // Check if there are any tokens to replay. Macros are just identifiers that
-    // have been marked as macros. In terms of how we get into that state, a
-    // macro token is first returned by the get_ident call a few lines below.
-    if (macro_tok_lst != 0) {
-      tok = heap[car(macro_tok_lst) + 0];
-      val = heap[car(macro_tok_lst) + 1];
-      macro_tok_lst = cdr(macro_tok_lst);
-      break;
-    } else if (ch <= ' ') {
-
-      if (ch == EOF) {
-        tok = EOF;
+    while (1) {
+      // Check if there are any tokens to replay. Macros are just identifiers that
+      // have been marked as macros. In terms of how we get into that state, a
+      // macro token is first returned by the get_ident call a few lines below.
+      if (macro_tok_lst != 0) {
+        tok = heap[car(macro_tok_lst) + 0];
+        val = heap[car(macro_tok_lst) + 1];
+        macro_tok_lst = cdr(macro_tok_lst);
         break;
-      }
+      } else if (ch <= ' ') {
 
-      /* skip whitespace, detecting when it is at start of line */
-
-      if (ch == '\n') tok = ch;
-      get_ch();
-
-      while (0 <= ch AND ch <= ' ') {
-        if (ch == '\n') tok = ch;
-        get_ch();
-      }
-
-      /* detect '#' at start of line, possibly preceded by whitespace */
-
-      if ((tok == '\n') AND (ch == '#'))
-        handle_preprocessor_directive();
-
-      /* will continue while (1) loop */
-
-    }
-
-    else if (('a' <= ch AND ch <= 'z') OR
-               ('A' <= ch AND ch <= 'Z') OR
-               (ch == '_')) {
-
-      get_ident();
-
-      // Check if the identifier is a macro and that we're in a ifdef true block
-      // If so, we replay the tokens of the macro.
-      if (tok == MACRO AND ifdef_mask AND expand_macro AND heap[val + 3] != 0) {
-        macro_tok_lst = heap[val + 3];
-      } else {
-        break;
-      }
-
-    } else if ('0' <= ch AND ch <= '9') {
-
-      val = '0' - ch;
-
-      get_ch();
-
-      if (val == 0) { /* val == 0 <=> ch == '0' */
-        if ((ch == 'x') OR (ch == 'X')) {
-          get_ch();
-          val = 0;
-          if (accum_digit(16)) {
-            while (accum_digit(16));
-          } else {
-            fatal_error("invalid hex integer -- it must have at least one digit");
-          }
-        } else {
-          while (accum_digit(8));
-        }
-      } else {
-        while (accum_digit(10));
-      }
-
-      tok = INTEGER;
-
-      break;
-
-    } else if (ch == '\'') {
-
-      get_ch();
-      get_string_char();
-
-      if (ch != '\'') {
-        fatal_error("unterminated character literal");
-      }
-
-      get_ch();
-
-      tok = CHARACTER;
-
-      break;
-
-    } else if (ch == '\"') {
-
-      get_ch();
-
-      begin_string();
-
-      while ((ch != '\"') AND (ch != EOF)) {
-        get_string_char();
-        tok = ch;
-        ch = val;
-        accum_string();
-        ch = tok;
-      }
-
-      if (ch != '\"') {
-        fatal_error("unterminated string literal");
-      }
-
-      ch = 0;
-      accum_string();
-
-      get_ch();
-
-      val = string_start;
-      tok = STRING;
-
-      break;
-
-    } else {
-
-      tok = ch; /* fallback for single char tokens */
-
-      if (ch == '/') {
-
-        get_ch();
-        if (ch == '*') {
-          get_ch();
-          tok = ch; /* remember previous char, except first one */
-          while (((tok != '*') OR (ch != '/')) AND (ch != EOF)) {
-            tok = ch;
-            get_ch();
-          }
-          if (ch == EOF) {
-            fatal_error("unterminated comment");
-          }
-          get_ch();
-          /* will continue while (1) loop */
-        } else if (ch == '/') {
-          while ((ch != '\n') AND (ch != EOF)) {
-            get_ch();
-          }
-          /* will continue while (1) loop */
-        } else {
-          if (ch == '=') {
-            get_ch();
-            tok = SLASH_EQ;
-          }
+        if (ch == EOF) {
+          tok = EOF;
           break;
         }
 
-      } else if (ch == '&') {
+        /* skip whitespace, detecting when it is at start of line */
 
+        if (ch == '\n') tok = ch;
         get_ch();
-        if (ch == '&') {
+
+        while (0 <= ch AND ch <= ' ') {
+          if (ch == '\n') tok = ch;
           get_ch();
-          tok = AMP_AMP;
-        } else if (ch == '=') {
-          get_ch();
-          tok = AMP_EQ;
         }
 
-        break;
+        /* detect '#' at start of line, possibly preceded by whitespace */
 
-      } else if (ch == '|') {
+        if ((tok == '\n') AND (ch == '#'))
+          handle_preprocessor_directive();
 
-        get_ch();
-        if (ch == '|') {
-          get_ch();
-          tok = BAR_BAR;
-        } else if (ch == '=') {
-          get_ch();
-          tok = BAR_EQ;
+        /* will continue while (1) loop */
+
+      }
+
+      else if (('a' <= ch AND ch <= 'z') OR
+                ('A' <= ch AND ch <= 'Z') OR
+                (ch == '_')) {
+
+        get_ident();
+
+        // Check if the identifier is a macro and that we're in a ifdef true block
+        // If so, we replay the tokens of the macro.
+        if (tok == MACRO AND ifdef_mask AND expand_macro AND heap[val + 3] != 0) {
+          macro_tok_lst = heap[val + 3];
+        } else {
+          break;
         }
 
-        break;
+      } else if ('0' <= ch AND ch <= '9') {
 
-      } else if (ch == '<') {
+        val = '0' - ch;
 
         get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = LT_EQ;
-        } else if (ch == '<') {
-          get_ch();
-          if (ch == '=') {
+
+        if (val == 0) { /* val == 0 <=> ch == '0' */
+          if ((ch == 'x') OR (ch == 'X')) {
             get_ch();
-            tok = LSHIFT_EQ;
+            val = 0;
+            if (accum_digit(16)) {
+              while (accum_digit(16));
+            } else {
+              fatal_error("invalid hex integer -- it must have at least one digit");
+            }
           } else {
-            tok = LSHIFT;
+            while (accum_digit(8));
           }
+        } else {
+          while (accum_digit(10));
         }
+
+        tok = INTEGER;
 
         break;
 
-      } else if (ch == '>') {
+      } else if (ch == '\'') {
 
         get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = GT_EQ;
-        } else if (ch == '>') {
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = RSHIFT_EQ;
-          } else {
-            tok = RSHIFT;
-          }
+        get_string_char();
+
+        if (ch != '\'') {
+          fatal_error("unterminated character literal");
         }
+
+        get_ch();
+
+        tok = CHARACTER;
 
         break;
 
-      } else if (ch == '=') {
+      } else if (ch == '\"') {
 
         get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = EQ_EQ;
+
+        begin_string();
+
+        while ((ch != '\"') AND (ch != EOF)) {
+          get_string_char();
+          tok = ch;
+          ch = val;
+          accum_string();
+          ch = tok;
         }
 
-        break;
-
-      } else if (ch == '!') {
-
-        get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = EXCL_EQ;
+        if (ch != '\"') {
+          fatal_error("unterminated string literal");
         }
 
-        break;
-
-      } else if (ch == '+') {
-
-        get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = PLUS_EQ;
-        } else if (ch == '+') {
-          get_ch();
-          tok = PLUS_PLUS;
-        }
-
-        break;
-
-      } else if (ch == '-') {
+        ch = 0;
+        accum_string();
 
         get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = MINUS_EQ;
-        } else if (ch == '>') {
-          get_ch();
-          tok = ARROW;
-        } else if (ch == '-') {
-          get_ch();
-          tok = MINUS_MINUS;
-        }
 
-        break;
-
-      } else if (ch == '*') {
-
-        get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = STAR_EQ;
-        }
-
-        break;
-
-      } else if (ch == '%') {
-
-        get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = PERCENT_EQ;
-        }
-
-        break;
-
-      } else if (ch == '^') {
-
-        get_ch();
-        if (ch == '=') {
-          get_ch();
-          tok = CARET_EQ;
-        }
-
-        break;
-
-      } else if ((ch == '~') OR (ch == '.') OR (ch == '?') OR (ch == ',') OR (ch == ':') OR (ch == ';') OR (ch == '(') OR (ch == ')') OR (ch == '[') OR (ch == ']') OR (ch == '{') OR (ch == '}')) {
-
-        tok = ch;
-
-        get_ch();
+        val = string_start;
+        tok = STRING;
 
         break;
 
       } else {
-        printf("ch=%c\n", ch);
-        fatal_error("invalid token");
+
+        tok = ch; /* fallback for single char tokens */
+
+        if (ch == '/') {
+
+          get_ch();
+          if (ch == '*') {
+            get_ch();
+            tok = ch; /* remember previous char, except first one */
+            while (((tok != '*') OR (ch != '/')) AND (ch != EOF)) {
+              tok = ch;
+              get_ch();
+            }
+            if (ch == EOF) {
+              fatal_error("unterminated comment");
+            }
+            get_ch();
+            /* will continue while (1) loop */
+          } else if (ch == '/') {
+            while ((ch != '\n') AND (ch != EOF)) {
+              get_ch();
+            }
+            /* will continue while (1) loop */
+          } else {
+            if (ch == '=') {
+              get_ch();
+              tok = SLASH_EQ;
+            }
+            break;
+          }
+
+        } else if (ch == '&') {
+
+          get_ch();
+          if (ch == '&') {
+            get_ch();
+            tok = AMP_AMP;
+          } else if (ch == '=') {
+            get_ch();
+            tok = AMP_EQ;
+          }
+
+          break;
+
+        } else if (ch == '|') {
+
+          get_ch();
+          if (ch == '|') {
+            get_ch();
+            tok = BAR_BAR;
+          } else if (ch == '=') {
+            get_ch();
+            tok = BAR_EQ;
+          }
+
+          break;
+
+        } else if (ch == '<') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = LT_EQ;
+          } else if (ch == '<') {
+            get_ch();
+            if (ch == '=') {
+              get_ch();
+              tok = LSHIFT_EQ;
+            } else {
+              tok = LSHIFT;
+            }
+          }
+
+          break;
+
+        } else if (ch == '>') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = GT_EQ;
+          } else if (ch == '>') {
+            get_ch();
+            if (ch == '=') {
+              get_ch();
+              tok = RSHIFT_EQ;
+            } else {
+              tok = RSHIFT;
+            }
+          }
+
+          break;
+
+        } else if (ch == '=') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = EQ_EQ;
+          }
+
+          break;
+
+        } else if (ch == '!') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = EXCL_EQ;
+          }
+
+          break;
+
+        } else if (ch == '+') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = PLUS_EQ;
+          } else if (ch == '+') {
+            get_ch();
+            tok = PLUS_PLUS;
+          }
+
+          break;
+
+        } else if (ch == '-') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = MINUS_EQ;
+          } else if (ch == '>') {
+            get_ch();
+            tok = ARROW;
+          } else if (ch == '-') {
+            get_ch();
+            tok = MINUS_MINUS;
+          }
+
+          break;
+
+        } else if (ch == '*') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = STAR_EQ;
+          }
+
+          break;
+
+        } else if (ch == '%') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = PERCENT_EQ;
+          }
+
+          break;
+
+        } else if (ch == '^') {
+
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = CARET_EQ;
+          }
+
+          break;
+
+        } else if ((ch == '~') OR (ch == '.') OR (ch == '?') OR (ch == ',') OR (ch == ':') OR (ch == ';') OR (ch == '(') OR (ch == ')') OR (ch == '[') OR (ch == ']') OR (ch == '{') OR (ch == '}')) {
+
+          tok = ch;
+
+          get_ch();
+
+          break;
+
+        } else {
+          printf("ch=%c\n", ch);
+          fatal_error("invalid token");
+        }
       }
     }
-  }
   }
 }
 
