@@ -20,6 +20,11 @@ void print_string_char(int c) {
 int text_pool[TEXT_POOL_SIZE];
 int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 
+// Text pool nodes
+int TEXT_TREE = 0;
+int TEXT_INTEGER = 1;
+int TEXT_FROM_POOL = 2;
+
 #ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
 
@@ -48,15 +53,10 @@ text wrap_int(int i) {
   return (text_alloc += 2) - 2;
 }
 
+// TODO: Inline this once we have macro with arguments
 text wrap_char(char c) {
   /* Characters are represent using negative numbers */
   return -c;
-  /*
-  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_CHAR;
-  text_pool[text_alloc + 1] = - c;
-  return (text_alloc += 2) - 2;
-  */
 }
 
 text string_concat(text t1, text t2) {
@@ -131,7 +131,6 @@ text concatenate_strings_with(text t1, text t2, text sep) {
   return string_concat3(t1, sep, t2);
 }
 
-int temp;
 void print_text(text t) {
   int i;
 
@@ -149,8 +148,6 @@ void print_text(text t) {
     printf("%d", text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_FROM_POOL) {
     printf("%s", string_pool + text_pool[t + 1]);
-  } else if (text_pool[t] == TEXT_CHAR) {
-    fatal_error("unexpected character");
   } else {
     printf("\nt=%d %d\n", t, text_pool[t]);
     fatal_error("unexpected string tree node");
@@ -176,6 +173,19 @@ int string_counter = 0;         /* Counter for string literals */
 #define CHARACTERS_BITFIELD_SIZE 16
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
+
+// Internal identifier node types. These
+int IDENTIFIER_INTERNAL = 600;
+int IDENTIFIER_STRING = 601;
+int IDENTIFIER_DOLLAR = 602;
+int IDENTIFIER_EMPTY = 603;
+
+// Node type for local variable nodes
+int LOCAL_VAR = 0;
+
+// Kind of variable (local or function parameter)
+int KIND_LOCAL = 0;
+int KIND_PARAM = 1;
 
 void init_comp_context() {
   int i = 0;

@@ -83,7 +83,6 @@ int WHILE_KW       = 334;
 int VAR_DECL       = 335;
 int FUN_DECL       = 336;
 
-int IDENTIFIER = 400;
 int INTEGER    = 401;
 int CHARACTER  = 402;
 int STRING     = 403;
@@ -110,21 +109,9 @@ int RSHIFT     = 422;
 int SLASH_EQ   = 423;
 int STAR_EQ    = 424;
 
-int TEXT_TREE = 425;
-int TEXT_INTEGER = 426;
-int TEXT_CHAR = 427;
-int TEXT_FROM_POOL = 428;
-
-int IDENTIFIER_INTERNAL = 430;
-int IDENTIFIER_STRING = 431;
-int IDENTIFIER_DOLLAR = 432;
-int IDENTIFIER_EMPTY = 433;
-int LOCAL_VAR = 434;
-int KIND_LOCAL = 435;
-int KIND_PARAM = 436;
-
-int TYPE = 437;
-int MACRO = 438;
+int IDENTIFIER = 500;
+int TYPE = 501;
+int MACRO = 502;
 
 void fatal_error(char *msg) {
   printf("%s\n", msg);
