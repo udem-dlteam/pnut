@@ -780,6 +780,7 @@ ast handle_side_effects(ast node) {
 int RVALUE_CTX_BASE = 0;
 int RVALUE_CTX_ARITH_EXPANSION = 1; /* Like base context, except that we're already in $(( ... )) */
 int RVALUE_CTX_TEST = 2;
+int RVALUE_CTX_TEST_ELSEIF = 3;
 
 text with_prefixed_side_effects(ast test_side_effects, text code) {
 
@@ -1037,6 +1038,9 @@ text comp_rvalue(ast node, int context) {
   int fun_call_decl_start;
   text result;
 
+  // Capture the start of the side effects to be able to undo them if needed
+  fun_call_decl_start = glo_decl_ix;
+
   while (literals_inits != 0) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
@@ -1050,8 +1054,15 @@ text comp_rvalue(ast node, int context) {
     literals_inits = get_child(literals_inits, 1);
   }
 
-  /* We don't want to call defstr on every iteration, so only capturing fun calls */
-  fun_call_decl_start = glo_decl_ix;
+  /*
+    We don't want to call defstr on every iteration, so we only capture fun
+    calls, not literal initialization. That's unless it's for a elif statement,
+    because the previous block is not executed so the def_str calls must be
+    placed inline with the rest of the condition.
+  */
+
+  if (context != RVALUE_CTX_TEST_ELSEIF)
+    fun_call_decl_start = glo_decl_ix;
 
   while (replaced_fun_calls2 != 0) {
     comp_fun_call(get_child(get_child(replaced_fun_calls2, 0), 1), get_child(get_child(replaced_fun_calls2, 0), 0));
@@ -1063,10 +1074,10 @@ text comp_rvalue(ast node, int context) {
     That way, any side effect performed in the condition of a while loop is repeated on each iteration.
     For if statements, it makes things shorter, but not always more readable.
   */
-  if (context == RVALUE_CTX_TEST) {
+  if (context == RVALUE_CTX_TEST OR context == RVALUE_CTX_TEST_ELSEIF) {
     undo_glo_decls(fun_call_decl_start);
     result = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
-    result = string_concat(result, comp_rvalue_go(simple_ast, context, 0));
+    result = string_concat(result, comp_rvalue_go(simple_ast, RVALUE_CTX_TEST, 0));
   } else {
     result = comp_rvalue_go(simple_ast, context, 0);
   }
@@ -1206,7 +1217,7 @@ void comp_statement(ast node, int else_if) {
     if (else_if) {
       append_glo_decl(string_concat3(
             wrap_str("elif "),
-            comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
+            comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST_ELSEIF),
             wrap_str(" ; then")
           ));
     } else {
