@@ -913,6 +913,15 @@ void get_tok() {
 
           break;
 
+        } else if (ch == '\\') {
+          get_ch();
+
+          if (ch == '\n') { /* Continues with next token */
+            get_ch();
+          } else {
+            printf("ch=%c\n", ch);
+            fatal_error("unexpected character after backslash");
+          }
         } else {
           printf("ch=%c\n", ch);
           fatal_error("invalid token");
