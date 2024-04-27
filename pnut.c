@@ -257,12 +257,15 @@ FILE *include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch re
 int include_stack_ptr = 0; // Points to the next available slot in the stack
 FILE *fp = 0; // Current file pointer that's being read
 
-
 #define IFDEF_DEPTH_MAX 20
 bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
 bool ifdef_stack_ix = 0;
 bool ifdef_mask = true;
 bool expand_macro = true;
+
+#define MACRO_RECURSION_MAX 20
+int macro_stack[MACRO_RECURSION_MAX];
+int macro_stack_ix = 0;
 
 void flip_ifdef_mask() {
   ifdef_mask = !ifdef_mask;
@@ -320,6 +323,12 @@ int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
 
+void get_tok_macro() {
+  expand_macro = false;
+  get_tok();
+  expand_macro = true;
+}
+
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
   int macro;
@@ -337,14 +346,10 @@ void handle_preprocessor_directive() {
     flip_ifdef_mask();
   } else if (ifdef_mask) {
     if (tok == IDENTIFIER AND val == IFDEF_ID) {
-      expand_macro = false;
-      get_tok();
-      expand_macro = true;
+      get_tok_macro();
       push_ifdef_mask(tok == MACRO);
     } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
-      expand_macro = false;
-      get_tok();
-      expand_macro = true;
+      get_tok_macro();
       push_ifdef_mask(tok != MACRO);
     } else if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
@@ -354,7 +359,7 @@ void handle_preprocessor_directive() {
         fatal_error("expected string to #include directive");
       }
     } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
-      get_tok();
+      get_tok_macro();
       if (tok == MACRO) {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
         macro = val;
@@ -363,8 +368,8 @@ void handle_preprocessor_directive() {
         fatal_error("#undef directive can only be followed by a identifier");
       }
     } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
-      get_tok();
-      if (tok == IDENTIFIER) {
+      get_tok_macro();
+      if (tok == IDENTIFIER OR tok == MACRO) {
         heap[val + 2] = MACRO; // Mark the identifier as a macro
         macro = val;
       } else {
@@ -373,12 +378,12 @@ void handle_preprocessor_directive() {
       }
       // Accumulate tokens so they can be replayed when the macro is used
       if (ch != '\n' AND ch != EOF) {
-        get_tok();
+        get_tok_macro();
         // Append the token/value pair to the replay list
         res = cons(cons(tok, val), 0);
         tail = res;
         while (ch != '\n' AND ch != EOF) {
-          get_tok();
+          get_tok_macro();
           temp = cons(cons(tok, val), 0);
           heap[tail + 1] = temp; // Set tail
           tail = temp;
@@ -581,9 +586,7 @@ int macro_tok_lst = 0;
 
 void get_tok() {
 
-
   bool first_time = true; // Used to simulate a do-while loop
-
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while ((first_time OR !ifdef_mask) AND ch != EOF) {
@@ -593,10 +596,29 @@ void get_tok() {
       // have been marked as macros. In terms of how we get into that state, a
       // macro token is first returned by the get_ident call a few lines below.
       if (macro_tok_lst != 0) {
-        tok = heap[car(macro_tok_lst) + 0];
-        val = heap[car(macro_tok_lst) + 1];
+        tok = car(car(macro_tok_lst));
+        val = cdr(car(macro_tok_lst));
         macro_tok_lst = cdr(macro_tok_lst);
+        // Tokens that are identifiers and up are tokens whose kind can change
+        // between the moment the macro is defined and where it is used.
+        // So we reload the kind from the ident table.
+        if (tok >= IDENTIFIER) tok = heap[val + 2];
+
+        if (tok == MACRO) { // Nested macro expansion!
+          if (macro_stack_ix >= MACRO_RECURSION_MAX) {
+            fatal_error("Too many nested macro expansions. Maximum supported is 20.");
+          }
+          macro_stack[macro_stack_ix] = macro_tok_lst;
+          macro_stack_ix += 1;
+          macro_tok_lst = heap[val + 3]; // The macro's token list
+          continue;
+        }
         break;
+      } else if (macro_stack_ix != 0) {
+        // Return from the macro, continue with the parent macro if there is one
+        macro_stack_ix -= 1;
+        macro_tok_lst = macro_stack[macro_stack_ix];
+        continue;
       } else if (ch <= ' ') {
 
         if (ch == EOF) {
@@ -629,9 +651,13 @@ void get_tok() {
 
         get_ident();
 
-        // Check if the identifier is a macro and that we're in a ifdef true block
-        // If so, we replay the tokens of the macro.
-        if (tok == MACRO AND ifdef_mask AND expand_macro AND heap[val + 3] != 0) {
+        // The identifier may be a macro, in which case we need to replay its
+        // token. So we check that it's kind is MACRO, and as an optimization
+        // that we're in a ifdef true block (otherwise the tokens are simply ignored).
+        // This optimization is acceptable, because macros can't produce
+        // preprocessor tokens (TODO: Verify this claim).
+        // The macro expansion can also be disabled using the expand_macro flag.
+        if (tok == MACRO AND ifdef_mask AND expand_macro) {
           macro_tok_lst = heap[val + 3];
         } else {
           break;
