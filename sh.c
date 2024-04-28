@@ -1121,7 +1121,7 @@ text comp_lvalue(ast node) {
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
+  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_EMPTY OR op == IDENTIFIER_DOLLAR) {
     return env_var(node);
   } else if (op == '[') {
     sub1 = comp_array_lvalue(get_child(node, 0));
@@ -1131,6 +1131,7 @@ text comp_lvalue(ast node) {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
   } else {
+    printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue: unknown lvalue");
     return 0;
   }
@@ -1168,7 +1169,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   return string_concat5(
     function_name(get_val(name)),
     wrap_char(' '),
-    env_var(assign_to),
+    comp_lvalue(assign_to),
     wrap_char(' '),
     code_params
   );
