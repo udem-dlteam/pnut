@@ -12,7 +12,7 @@ void print_string_char(int c) {
   else putchar(c);
 }
 
-void print_tok() {
+void print_tok(int tok, int val) {
 
   int i;
 
@@ -71,7 +71,9 @@ void print_tok() {
 
   else if (tok == IDENTIFIER) {
     printf("%s", string_pool + heap[val+1]);
-  } else if (tok == INTEGER) {
+  } else if (tok == MACRO) {
+    printf("[%s]", string_pool + heap[val+1]);
+  }  else if (tok == INTEGER) {
     printf("%d", -val);
   } else if (tok == CHARACTER) {
     printf("'%d''", val);
@@ -85,9 +87,12 @@ void print_tok() {
       i += 1;
     }
     printf("\"");
+  } else if (tok == MACRO_ARG) {
+    printf("ARG[%d]", val);
   } else {
     printf("%c", tok);
   }
+
   if (tok == ';') { // Simple heuristic to print newlines. This makes the output more readable.
     printf(" \n");
   } else {
