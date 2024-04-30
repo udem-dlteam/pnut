@@ -118,6 +118,16 @@ void fatal_error(char *msg) {
   exit(1);
 }
 
+void syntax_error(char *msg) {
+  printf("syntax error: %s\n", msg);
+  fatal_error("syntax error");
+}
+
+void missing_feature_error(char *msg) {
+  printf("not yet implemented: %s\n", msg);
+  fatal_error("syntax error");
+}
+
 void print_dec(int n) {
   if (n < 0) {
     putchar('-');
@@ -1013,16 +1023,6 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
   set_child(ast_result, 3, child3);
 
   return ast_result;
-}
-
-void syntax_error(char *msg) {
-  printf("syntax error: %s\n", msg);
-  fatal_error("syntax error");
-}
-
-void missing_feature_error(char *msg) {
-  printf("not yet implemented: %s\n", msg);
-  fatal_error("syntax error");
 }
 
 void expect_tok(int expected_tok) {
