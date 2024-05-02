@@ -39,7 +39,7 @@ void op_reg_reg(int opcode, int dst, int src) {
   mod_rm(src, dst);
 }
 
-#if 0
+#ifdef SKIP
 
 // deprecated... kept here in case it might be useful in the future
 
@@ -337,8 +337,6 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
-#if 1
-
 // For 32 bit linux.
 
 void os_getchar() {
@@ -374,7 +372,7 @@ void os_exit() {
   int_i8(0x80);          // int  0x80     # system call
 }
 
-#if 0
+#ifdef SKIP
 void os_print_msg(char_ptr msg) {
   int i = 0;
   while (msg[i] != 0) {
@@ -383,6 +381,5 @@ void os_print_msg(char_ptr msg) {
     i += 1;
   }
 }
-#endif
 
 #endif
