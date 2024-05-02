@@ -366,7 +366,6 @@ int lookup_macro_token(int args, int val) {
 
 int read_macro_tokens(int args) {
   int toks = 0; // List of token to replay
-  int ix;
   int tail;
 
   // Accumulate tokens so they can be replayed when the macro is used
@@ -408,12 +407,8 @@ void print_macro_raw_tokens(int tokens) {
 // - No support for variadic macros. Tcc only uses them in tests so it should be ok.
 void handle_define() {
   int macro;    // The identifier that is being defined as a macro
-  int subs;     // List of token to replay
   int args = 0; // List of arguments for a function-like macro
   int args_count = 0; // Number of arguments for a function-like macro.
-  int ix;
-  int tail;
-  int temp;
 
   get_tok_macro();
   if (tok == IDENTIFIER OR tok == MACRO) {
