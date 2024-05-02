@@ -1515,7 +1515,7 @@
     "if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then " init-globals-var "=0; shift; fi")
     ""
     "# Load runtime library and primitives"
-    ". ./runtime.sh"
+    ". ../../runtime.sh"
     ""
     "# Local variables"
     ""

@@ -1,0 +1,900 @@
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
+int main() {
+  FILE_ptr f;
+  char c;
+  f = fopen("six-cc-tests/fgetc.c", 0);
+  while ((c = fgetc(f)) != EOF) {
+    putchar(c);
+  }
+  fclose(f);
+}
