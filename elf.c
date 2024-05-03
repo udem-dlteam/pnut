@@ -6,7 +6,7 @@
 
 // For a minimal ELF 64 bit header
 // see: https://web.archive.org/web/20231127152001/https://nathanotterness.com/2021/10/tiny_elf_modernized.html
-
+#ifdef i386
 void write_elf_e_header() {
   write_4_i8(0x7f, 0x45, 0x4c, 0x46); // e_ident
   write_4_i8(0x01, 0x01, 0x01, 0x00);
@@ -50,3 +50,72 @@ void generate_exe() {
      i += 1;
   }
 }
+
+#endif
+
+
+
+#ifdef x86_64
+// 64_bit versions
+/*
+ * 64-bit virtual offsets always start at 0x400000
+ * https://stackoverflow.com/questions/38549972/why-elf-executables-have-a-fixed-load-address
+ * Convention set in the x86_64 system-v abi: https://refspecs.linuxfoundation.org/elf/x86_64-SysV-psABI.pdf (Page 26)
+ */
+
+void write_elf_e_header() { // 64 bit
+    write_4_i8(0x7f, 0x45, 0x4c, 0x46); // Header signature |
+    write_4_i8(0x02, 0x01, 0x01, 0x00); // Header flags (class = 2 = 64 bit, little endian = 1, elf version = 1, OS ABI unused = 0) |
+    write_4_i8(0x00, 0x00, 0x00, 0x00); // Extended ABI byte + 7 bytes padding. Leave as 0, it's ignored | dq
+    write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
+    write_2_i8(0x02, 0x00); // ELF file type : executable = 2 | dw
+    write_2_i8(0x3e, 0x00); // Target architecture. 0x3e = x86_64 | dw
+    write_4_i8(0x01, 0x00, 0x00, 0x00); // ELF version  is 1, corresponds with header flags | dd
+    write_4_i8(0x78, 0x80, 0x02, 0x00);
+    //write_4_i8(0x40, 0x00, 0xb0, 0x00); // entry + file load virtual address| dq | ((0x400000 + (0xB0 is text offset of (0x40 + (2 * 0x38))))
+    write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
+    write_4_i8(0x40, 0x00, 0x00, 0x00); // Program header offset | dq | 0x400000 64 bit convention
+    write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
+    write_4_i8(0x00, 0x00, 0x00, 0x00); // Additional flags | dd
+    write_4_i8(0x00, 0x00, 0x00, 0x00); // Additional flags | dd
+    write_4_i8(0x00, 0x00, 0x00, 0x00);
+    write_2_i8(0x40, 0x00); // Size of header (64 bytes)
+    write_2_i8(0x38, 0x00); // Size of Program header  | dw
+    write_2_i8(0x01, 0x00); // Num program header entries | dw
+    write_2_i8(0x40, 0x00); // Size of section header entry
+    write_4_i8(0x00, 0x00, 0x00, 0x00);
+}
+
+void write_elf_p_header() { // 64 bit
+    write_i32_le(1);                 // p_type (1=PT_LOAD = a loadable segment) | dd
+    write_i32_le(5);                 // Program header flags. 5 = Not writable. (bits 0, 1, and 2 = executable, writable, readable) | dd
+    write_i32_le(0);                 // p_offset of the loadable segment in the file | dq
+    write_i32_le(0);                 // Cont.. | dq cont..
+    write_i32_le(0x40000000);        // p_vaddr The Virtual Address to place the segment at | dq
+    //write_i32_le(0x08048000);      (test)
+    write_i32_le(0x00000000);        // Cont.. | dq cont..
+    write_i32_le(0x40000000);        // p_paddr The "phyiscal address" set to same as virtual address | dq
+    //write_i32_le(0x08048000);      (test)
+    write_i32_le(0x00000000);        // Cont.. | dq cont..
+    write_i32_le(0xb0 + code_alloc); // p_filesz File load virtual address : The size of the segment in the file. It ends at the string table | dq
+    write_i32_le(0x00000000);        // Cont.. | dq cont..
+    write_i32_le(0xb0 + code_alloc); // p_memsz  String table : The size of the segment in memory | dq
+    write_i32_le(0x00000000);        // Cont.. | dq cont..
+    //write_i32_le(5);                 // Program header flags. 5 = Not writable. (bits 0, 1, and 2 = executable, writable, readable) | dd
+    write_i32_le(0x00200000);                  // p_align  | dq
+    write_i32_le(0x00000000);        // Cont.. | dq cont..
+}
+
+void generate_exe() { // 64 bit
+    int i = 0;
+
+    write_elf_e_header();
+    write_elf_p_header();
+
+    while (i < code_alloc) {
+        write_i8(code[i]);
+        i += 1;
+    }
+}
+
+#endif
