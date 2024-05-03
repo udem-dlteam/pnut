@@ -201,6 +201,16 @@ int cdr(int pair) {
   return heap[pair+1];
 }
 
+int set_car(int pair, int value) {
+  heap[pair] = value;
+  return value;
+}
+
+int set_cdr(int pair, int value) {
+  heap[pair+1] = value;
+  return value;
+}
+
 void begin_string() {
   string_start = string_pool_alloc;
   hash = 0;
@@ -212,6 +222,25 @@ void accum_string() {
   string_pool_alloc += 1;
   if (string_pool_alloc >= STRING_POOL_SIZE) {
     fatal_error("string pool overflow");
+  }
+}
+
+// Like accum_string, but takes the character as input instead of reading it from ch
+void accum_string_char(char c) {
+  hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
+  string_pool[string_pool_alloc] = c;
+  string_pool_alloc += 1;
+  if (string_pool_alloc >= STRING_POOL_SIZE) {
+    fatal_error("string pool overflow");
+  }
+}
+
+// Like accum_string, but takes a string as input instead of reading it from ch
+void accum_string_string(int s) {
+  int i = 0;
+  while (string_pool[s + i] != 0) {
+    accum_string_char(string_pool[s + i]);
+    i += 1;
   }
 }
 
@@ -1502,6 +1531,7 @@ ast parse_parenthesized_expression() {
 ast parse_primary_expression() {
 
   ast result;
+  ast tail;
 
   if (tok == IDENTIFIER) {
 
@@ -1519,10 +1549,30 @@ ast parse_primary_expression() {
     get_tok();
 
   } else if (tok == STRING) {
-
     result = new_ast0(STRING, val);
     get_tok();
-    /*TODO: contiguous strings*/
+
+    if (tok == STRING) { // Contiguous strings
+      result = cons(result, 0);
+      tail = result;
+      while (tok == STRING) {
+        set_cdr(tail, cons(new_ast0(STRING, val), 0));
+        tail = cdr(tail);
+        get_tok();
+      }
+
+      // Unpack the list of strings into a single string
+      begin_string();
+
+      while (result != 0) {
+        accum_string_string(get_val(car(result)));
+        result = cdr(result);
+      }
+
+      accum_string_char(0); // Null terminate the string
+
+      result = new_ast0(STRING, string_start);
+    }
 
   } else if (tok == '(') {
 
