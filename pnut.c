@@ -408,7 +408,7 @@ void print_macro_raw_tokens(int tokens) {
 void handle_define() {
   int macro;    // The identifier that is being defined as a macro
   int args = 0; // List of arguments for a function-like macro
-  int args_count = 0; // Number of arguments for a function-like macro.
+  int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
   get_tok_macro();
   if (tok == IDENTIFIER OR tok == MACRO) {
@@ -419,6 +419,7 @@ void handle_define() {
     fatal_error("#define directive can only be followed by a identifier");
   }
   if (ch == '(') { // Function-like macro
+    args_count = 0;
     get_ch();
     while (ch != '\n' AND ch != EOF) {
       if (ch == ',') {
@@ -449,7 +450,11 @@ void handle_define() {
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
     #ifdef DEBUG_CPP
-    printf("# %s(", string_pool + heap[macro + 1]);
+    if (args_count == -1) {
+      printf("# %s ", string_pool + heap[macro + 1]);
+    } else {
+      printf("# %s(", string_pool + heap[macro + 1]);
+    }
     while (args_count > 0) {
       printf("%s", string_pool + heap[car(args) + 1]);
       args = cdr(args);
@@ -457,7 +462,7 @@ void handle_define() {
       if (args_count > 0) printf(", ");
     }
 
-    printf(") ");
+    if (args_count != -1) printf(") ");
     print_macro_raw_tokens(car(heap[macro + 3]));
     printf("\n");
     #endif
@@ -515,7 +520,7 @@ void handle_preprocessor_directive() {
   // the call to handle_preprocessor_directive, we don't need to call get_tok here
   if (ch != '\n' AND ch != EOF) {
     printf("ch=%d\n", ch);
-    fatal_error("expected end of line");
+    fatal_error("preprocessor expected end of line");
   }
 }
 
@@ -733,9 +738,10 @@ int get_macro_args_toks(int expected_argc) {
   int args = 0;
   int macro_args_count = 0;
   get_tok_macro(); // Skip the macro identifier
-  if (tok != '(' OR expected_argc == 0) {
+
+  if (tok != '(') { // Function-like macro with 0 arguments
     check_macro_arity(macro_args_count, expected_argc);
-    return 0; // No arguments
+    return -1; // No arguments
   }
 
   get_tok_macro(); // Skip '('
@@ -783,11 +789,35 @@ void push_macro(int tokens, int args) {
   }
 }
 
+// Try to expand a macro.
+// If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
+// If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
+// For object like macros, the macro tokens are played back without any other parsing.
+// Returns 1 if the macro was expanded, 0 otherwise.
+bool attempt_macro_expansion(int macro) {
+  macro = val;
+  if (cdr(heap[macro + 3]) == -1) { // Object-like macro
+    push_macro(car(heap[macro + 3]), 0);
+    return true;
+  } else {
+    macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
+    // get_macro_args_toks fetched the next token, we save it so it's not lost
+    push_macro(cons(cons(tok, val), 0), macro_args);
+    if (macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
+      // Function-like macro without (), so we don't expand it.
+      tok = IDENTIFIER;
+      val = macro;
+      return false;
+    } else {
+      push_macro(car(heap[macro + 3]), macro_args);
+      return true;
+    }
+  }
+}
+
 void get_tok() {
 
   bool first_time = true; // Used to simulate a do-while loop
-  int macro;
-  int temp;
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while (first_time OR !ifdef_mask) {
@@ -806,12 +836,10 @@ void get_tok() {
         if (tok >= IDENTIFIER) tok = heap[val + 2];
 
         if (tok == MACRO) { // Nested macro expansion!
-          // Save the macro identifier so it's not overwritten when parsing macro args
-          macro = val;
-          temp = get_macro_args_toks(cdr(heap[macro + 3]));
-          push_macro(cons(cons(tok, val), 0), 0); // Save current token so it's not lost
-          push_macro(car(heap[macro + 3]), temp); // Push the rest of the macro tokens so they can be replayed when we come back
-          continue;
+          if (attempt_macro_expansion(val)) {
+            continue;
+          }
+          break;
         } else if (tok == MACRO_ARG) {
           push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
@@ -859,11 +887,10 @@ void get_tok() {
           // Since this is the "base case" of the macro expansion, we don't need
           // to disable the other places where macro expansion is done.
           if (ifdef_mask AND expand_macro) {
-            macro = val; // get_macro_args_toks overwrites tok and val
-            macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
-            push_macro(cons(cons(tok, val), 0), macro_args); // Save current token so it's not lost
-            push_macro(car(heap[macro + 3]), macro_args);
-            continue;
+            if (attempt_macro_expansion(val)) {
+              continue;
+            }
+            break;
           }
         }
         break;
