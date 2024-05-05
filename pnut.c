@@ -108,6 +108,7 @@ int RSHIFT_EQ  = 421;
 int RSHIFT     = 422;
 int SLASH_EQ   = 423;
 int STAR_EQ    = 424;
+int HASH_HASH  = 425;
 
 int MACRO_ARG = 499;
 int IDENTIFIER = 500;
@@ -306,6 +307,8 @@ bool ifdef_mask = true;
 // Whether to expand macros or not. Useful to parse macro definitions containing
 // other macros without expanding them.
 bool expand_macro = true;
+// Don't expand macro arguments. Used for stringification and token pasting.
+bool expand_macro_arg = true;
 
 #define MACRO_RECURSION_MAX 100
 int macro_stack[MACRO_RECURSION_MAX];
@@ -370,6 +373,8 @@ int ENDIF_ID;
 int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
+
+int NOT_SUPPORTED_ID;
 
 void get_tok_macro() {
   expand_macro = false;
@@ -643,6 +648,10 @@ void init_ident_table() {
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+
+  // Stringizing is recognized by the macro expander, but it returns a hardcoded
+  // string instead of the actual value. This may be enough to compile TCC.
+  NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 }
 
 void init_pnut_macros() {
@@ -843,6 +852,27 @@ bool attempt_macro_expansion(int macro) {
   }
 }
 
+// https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
+void stringify() {
+  int arg;
+  expand_macro_arg = false;
+  get_tok_macro();
+  expand_macro_arg = true;
+  if (tok != MACRO_ARG) {
+    printf("tok=%d\n", tok);
+    fatal_error("expected macro argument after #");
+  }
+  arg = get_macro_arg(val);
+  tok = STRING;
+  // Support the case where the argument is a single identifier token
+  if (car(car(arg)) == IDENTIFIER AND cdr(arg) == 0) {
+    val = heap[cdr(car(arg)) + 1]; // Use the identifier value
+  } else {
+    val = heap[NOT_SUPPORTED_ID + 1]; // Return string "NOT_SUPPORTED"
+  }
+}
+
+
 void get_tok() {
 
   bool first_time = true; // Used to simulate a do-while loop
@@ -868,9 +898,12 @@ void get_tok() {
             continue;
           }
           break;
-        } else if (tok == MACRO_ARG) {
+        } else if (tok == MACRO_ARG AND expand_macro_arg) {
           push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
+        } else if (tok == '#') { // Stringizing!
+          stringify(tok, val);
+          break;
         }
         break;
       } else if (macro_stack_ix != 0) {
@@ -1160,6 +1193,16 @@ void get_tok() {
           if (ch == '=') {
             get_ch();
             tok = CARET_EQ;
+          }
+
+          break;
+
+        } else if (ch == '#') {
+
+          get_ch();
+          if (ch == '#') {
+            get_ch();
+            tok = HASH_HASH;
           }
 
           break;
