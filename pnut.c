@@ -377,8 +377,10 @@ void get_tok_macro() {
   expand_macro = true; // TODO: Restore to previous value?
 }
 
-int lookup_macro_token(int args, int val) {
+int lookup_macro_token(int args, int tok, int val) {
   int ix = 0;
+
+  if (tok < IDENTIFIER) return cons(tok, val); // Not an identifier
 
   while (args != 0) {
     if (car(args) == val) break; // Found!
@@ -401,15 +403,11 @@ int read_macro_tokens(int args) {
   if (ch != '\n' AND ch != EOF) {
     get_tok_macro();
     // Append the token/value pair to the replay list
-    toks = cons(lookup_macro_token(args, val), 0);
+    toks = cons(lookup_macro_token(args, tok, val), 0);
     tail = toks;
     while (ch != '\n' AND ch != EOF) {
       get_tok_macro();
-      if (tok >= IDENTIFIER) {
-        heap[tail + 1] = cons(lookup_macro_token(args, val), 0);
-      } else {
-        heap[tail + 1] = cons(cons(tok, val), 0);
-      }
+      heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
       tail = cdr(tail); // Advance tail
     }
   }
