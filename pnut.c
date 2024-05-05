@@ -318,9 +318,10 @@ FILE *fp = 0; // Current file pointer that's being read
 #endif
 
 #define IFDEF_DEPTH_MAX 20
-bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
-bool ifdef_stack_ix = 0;
-bool ifdef_mask = true;
+bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
+bool if_macro_stack_ix = 0;
+bool if_macro_mask = true;
+bool if_macro_executed = false;
 // Whether to expand macros or not. Useful to parse macro definitions containing
 // other macros without expanding them.
 bool expand_macro = true;
@@ -336,27 +337,31 @@ int macro_args = 0;     // Current list of arguments for the macro being expande
 int macro_args_count;   // Number of arguments for the current macro being expanded
 bool paste_last_token = false; // Whether the last token was a ## or not
 
-void flip_ifdef_mask() {
-  ifdef_mask = !ifdef_mask;
+void flip_if_macro_mask() {
+  if_macro_mask = !if_macro_mask;
 }
 
-void push_ifdef_mask(bool new_mask) {
-  if (ifdef_stack_ix >= IFDEF_DEPTH_MAX) {
+void push_if_macro_mask(bool new_mask) {
+  if (if_macro_stack_ix >= IFDEF_DEPTH_MAX) {
     fatal_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
   }
   // Save current mask on the stack because it's about to be overwritten
-  ifdef_stack[ifdef_stack_ix] = ifdef_mask;
-  ifdef_stack_ix += 1;
+  if_macro_stack[if_macro_stack_ix] = if_macro_mask;
+  if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
+  if_macro_stack_ix += 2;
   // Then set the new mask value
-  ifdef_mask = new_mask;
+  if_macro_mask = new_mask;
+  // If the condition is true, we don't want to execute the next #elif that's true
+  if_macro_executed = if_macro_mask;
 }
 
-void pop_ifdef_mask() {
-  if (ifdef_stack_ix == 0) {
+void pop_if_macro_mask() {
+  if (if_macro_stack_ix == 0) {
     fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
   }
-  ifdef_stack_ix -= 1;
-  ifdef_mask = ifdef_stack[ifdef_stack_ix];
+  if_macro_stack_ix -= 2;
+  if_macro_mask = if_macro_stack[if_macro_stack_ix];
+  if_macro_executed = if_macro_stack[if_macro_stack_ix + 1];
 }
 
 void get_ch() {
@@ -531,23 +536,23 @@ void handle_define() {
 }
 
 void handle_preprocessor_directive() {
-  bool prev_ifdef_mask = ifdef_mask;
+  bool prev_if_mask = if_macro_mask;
   get_ch(); // Skip the #
-  ifdef_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
+  if_macro_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
   get_tok(); // Get the directive
-  ifdef_mask = prev_ifdef_mask;
+  if_macro_mask = prev_if_mask;
 
   if (tok == IDENTIFIER AND val == ENDIF_ID) {
-    pop_ifdef_mask();
+    pop_if_macro_mask();
   } else if (tok == ELSE_KW) {
-    flip_ifdef_mask();
-  } else if (ifdef_mask) {
+    flip_if_macro_mask();
+  } else if (if_macro_mask) {
     if (tok == IDENTIFIER AND val == IFDEF_ID) {
       get_tok_macro();
-      push_ifdef_mask(tok == MACRO);
+      push_if_macro_mask(tok == MACRO);
     } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
       get_tok_macro();
-      push_ifdef_mask(tok != MACRO);
+      push_if_macro_mask(tok != MACRO);
     } else if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
       if (tok == STRING) {
@@ -956,7 +961,7 @@ void get_tok() {
   bool first_time = true; // Used to simulate a do-while loop
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  while (first_time OR !ifdef_mask) {
+  while (first_time OR !if_macro_mask) {
     first_time = false;
     while (1) {
       // Check if there are any tokens to replay. Macros are just identifiers that
@@ -1051,7 +1056,7 @@ void get_tok() {
           // We only expand in ifdef true blocks and if the expander is enabled.
           // Since this is the "base case" of the macro expansion, we don't need
           // to disable the other places where macro expansion is done.
-          if (ifdef_mask AND expand_macro) {
+          if (if_macro_mask AND expand_macro) {
             if (attempt_macro_expansion(val)) {
               continue;
             }
