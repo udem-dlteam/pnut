@@ -824,21 +824,22 @@ void push_macro(int tokens, int args) {
 // For object like macros, the macro tokens are played back without any other parsing.
 // Returns 1 if the macro was expanded, 0 otherwise.
 bool attempt_macro_expansion(int macro) {
+  int new_macro_args;
   macro = val;
   if (cdr(heap[macro + 3]) == -1) { // Object-like macro
     push_macro(car(heap[macro + 3]), 0);
     return true;
   } else {
-    macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
+    new_macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
     // get_macro_args_toks fetched the next token, we save it so it's not lost
-    push_macro(cons(cons(tok, val), 0), macro_args);
-    if (macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
+    push_macro(cons(cons(tok, val), 0), new_macro_args);
+    if (new_macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
       // Function-like macro without (), so we don't expand it.
       tok = IDENTIFIER;
       val = macro;
       return false;
     } else {
-      push_macro(car(heap[macro + 3]), macro_args);
+      push_macro(car(heap[macro + 3]), new_macro_args);
       return true;
     }
   }
