@@ -236,12 +236,23 @@ void accum_string_char(char c) {
   }
 }
 
-// Like accum_string, but takes a string as input instead of reading it from ch
+// Like accum_string, but takes a string from the string_pool as input instead of reading it from ch
 void accum_string_string(int s) {
   int i = 0;
   while (string_pool[s + i] != 0) {
     accum_string_char(string_pool[s + i]);
     i += 1;
+  }
+}
+
+// Similar to accum_string_string, but writes an integer to the string pool
+void accum_string_integer(int n) {
+  if (n < 0) {
+    accum_string_char('-');
+    accum_string_integer(-n);
+  } else {
+    if (n > 9) accum_string_integer(n / 10);
+    accum_string_char('0' + n % 10);
   }
 }
 
@@ -317,6 +328,7 @@ int macro_stack_ix = 0;
 int macro_tok_lst = 0;  // Current list of tokens to replay for the macro being expanded
 int macro_args = 0;     // Current list of arguments for the macro being expanded
 int macro_args_count;   // Number of arguments for the current macro being expanded
+bool paste_last_token = false; // Whether the last token was a ## or not
 
 void flip_ifdef_mask() {
   ifdef_mask = !ifdef_mask;
@@ -414,6 +426,11 @@ int read_macro_tokens(int args) {
       get_tok_macro();
       heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
       tail = cdr(tail); // Advance tail
+    }
+
+    // Check that there are no leading or trailing ##
+    if (car(car(toks)) == HASH_HASH OR car(car(tail)) == HASH_HASH) {
+      fatal_error("'##' cannot appear at either end of a macro expansion");
     }
   }
 
@@ -872,6 +889,51 @@ void stringify() {
   }
 }
 
+int paste_integers(int left_val, int right_val) {
+  int result = left_val;
+  int right_digits = right_val;
+  while (right_digits > 0) {
+    result *= 10;
+    right_digits /= 10;
+  }
+  return result + right_val;
+}
+
+// Support token pasting between identifiers and non-negative integers
+void paste_tokens(int left_tok, int left_val) {
+  int right_tok;
+  int right_val;
+  get_tok_macro();
+  right_tok = tok;
+  right_val = val;
+  if (left_tok == IDENTIFIER OR left_tok == MACRO) {
+    // Something that starts with an identifier can only be an identifier
+    begin_string();
+    accum_string_string(heap[left_val + 1]);
+
+    if (right_tok == IDENTIFIER OR right_tok == MACRO) {
+      accum_string_string(heap[right_val + 1]);
+    } else if (right_tok == INTEGER) {
+      accum_string_integer(-right_val);
+    } else {
+      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      fatal_error("cannot paste an identifier with a non-identifier or non-negative integer");
+    }
+
+    val = end_ident();
+    tok = heap[val+2]; // The kind of the identifier
+  } else if (left_tok == INTEGER) {
+    if (right_tok == INTEGER) {
+      val = -paste_integers(-left_val, -right_val);
+    } else {
+      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      fatal_error("cannot paste an integer with a non-integer");
+    }
+  } else {
+    printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+    fatal_error("cannot paste a non-identifier or non-integer");
+  }
+}
 
 void get_tok() {
 
@@ -892,6 +954,32 @@ void get_tok() {
         // between the moment the macro is defined and where it is used.
         // So we reload the kind from the ident table.
         if (tok >= IDENTIFIER) tok = heap[val + 2];
+
+        // Check if the next token is ## for token pasting
+        if (macro_tok_lst != 0 AND car(car(macro_tok_lst)) == HASH_HASH) {
+          if (tok == MACRO OR tok == MACRO_ARG) {
+            // If the token is a macro or macro arg, it must be expanded before pasting
+            macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
+            paste_last_token = true;
+          } else {
+            // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
+            macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
+            paste_tokens(tok, val);
+            break;
+          }
+        } else if (macro_tok_lst == 0 AND paste_last_token) {
+          if (macro_stack_ix == 0) {
+            // If we are not in a macro expansion, we can't paste the last token
+            // This should not happen if the macro is well-formed, which is
+            // checked by read_macro_tokens.
+            fatal_error("## cannot appear at the end of a macro expansion");
+          }
+          macro_stack_ix -= 2;
+          macro_tok_lst = macro_stack[macro_stack_ix];
+          macro_args = macro_stack[macro_stack_ix + 1];
+          paste_last_token = false; // We are done pasting
+          paste_tokens(tok, val);
+        }
 
         if (tok == MACRO) { // Nested macro expansion!
           if (attempt_macro_expansion(val)) {
