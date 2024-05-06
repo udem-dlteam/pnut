@@ -515,7 +515,7 @@ void handle_define() {
     // Accumulate tokens so they can be replayed when the macro is used
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
-    #ifdef DEBUG_CPP
+    #ifdef DEBUG_CPP_NOT
     if (args_count == -1) {
       printf("# %s ", string_pool + heap[macro + 1]);
     } else {
