@@ -1,5 +1,4 @@
 // common part of machine code generators
-
 void generate_exe();
 
 int code[100000];
@@ -22,6 +21,12 @@ void emit_4_i8(int a, int b, int c, int d) {
 
 void emit_i32_le(int n) {
   emit_4_i8(n, n >> 8, n >> 16, n >> 24);
+}
+
+void emit_i64_le(int n) {
+    emit_i32_le(n);
+    emit_i32_le(0); //TODO: Emit the next 32 bits w/out overflow no longs atm and linux 64 bit int = 4 bytes
+
 }
 
 void write_i8(int n) {

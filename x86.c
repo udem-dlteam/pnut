@@ -121,16 +121,21 @@ void mov_reg_imm(int dst, int imm) {
 
   // MOV dst_reg, imm  ;; Move 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
-
+  rex_prefix();
   emit_i8(0xb8 + dst);
-  emit_i32_le(imm);
+  if(word_size == 8){ // if x86_64
+      emit_i64_le(imm);
+  }else {
+      emit_i32_le(imm);
+  }
+
 }
 
 void add_reg_imm(int dst, int imm) {
 
   // ADD dst_reg, imm  ;; Add 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
-
+  rex_prefix();
   emit_i8(0x81);
   mod_rm(0, dst);
   emit_i32_le(imm);
@@ -337,8 +342,8 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
+#ifdef i386
 // For 32 bit linux.
-
 void os_getchar() {
   int lbl = alloc_label();
   mov_reg_imm(AX, 0);    // mov  eax, 0
@@ -357,13 +362,13 @@ void os_getchar() {
 }
 
 void os_putchar() {
-  push_reg(AX);          // push eax      # buffer to write byte
-  mov_reg_imm(BX, 1);    // mov  ebx, 1   # ebx = 1 = STDOUT
-  mov_reg_imm(DX, 1);    // mov  edx, 1   # edx = 1 = number of bytes to write
-  mov_reg_reg(CX, SP);   // mov  ecx, esp # from the stack
-  mov_reg_imm(AX, 4);    // mov  eax, 4   # SYS_WRITE
-  int_i8(0x80);          // int  0x80     # system call
-  pop_reg(AX);           // pop  eax
+    push_reg(AX);          // push eax      # buffer to write byte
+    mov_reg_imm(BX, 1);    // mov  ebx, 1   # ebx = 1 = STDOUT
+    mov_reg_imm(DX, 1);    // mov  edx, 1   # edx = 1 = number of bytes to write
+    mov_reg_reg(CX, SP);   // mov  ecx, esp # from the stack
+    mov_reg_imm(AX, 4);    // mov  eax, 4   # SYS_WRITE
+    int_i8(0x80);          // int  0x80     # system call
+    pop_reg(AX);           // pop  eax
 }
 
 void os_exit() {
@@ -372,12 +377,52 @@ void os_exit() {
   int_i8(0x80);          // int  0x80     # system call
 }
 
+#endif
+
+#ifdef x86_64
+// For 64 bit linux.
+void os_getchar() {
+  int lbl = alloc_label();
+  mov_reg_imm(AX, 0);    // mov  eax, 0
+  push_reg(AX);          // push eax      # buffer to read byte
+  mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
+  mov_reg_imm(DX, 1);    // mov  rdx, 1   # rdx = 1 = number of bytes to read
+  mov_reg_reg(SI, SP);   // mov  rsi, rsp # to the stack
+  mov_reg_imm(AX, 0);    // mov  rax, 1   # SYS_READ
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  xor_reg_reg(BX, BX);   // xor  ebx, ebx
+  cmp_reg_reg(AX, BX);   // cmp  eax, ebx
+  pop_reg(AX);           // pop  eax
+  jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
+  def_label(lbl);        // lbl:
+}
+
+void os_putchar(){
+  push_reg(AX); // push rax
+  mov_reg_imm(AX, 1); // mov eax, 1 == SYS_WRITE
+  mov_reg_imm(DI, 1); // mov edi, 1 == STDOUT
+  mov_reg_imm(DX, 1); // mov edx, 1 | length of string
+  mov_reg_reg(SI, SP); // mov esi, [esp] | get the value from stack
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  pop_reg(AX); // pop rax
+
+}
+
+void os_exit(){
+  mov_reg_reg(DI, AX); // mov edi, eax
+  mov_reg_imm(AX, 60); // mov eax, 60 == SYS_EXIT
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+}
+
+#endif
+
 #ifdef SKIP
 void os_print_msg(char_ptr msg) {
   int i = 0;
   while (msg[i] != 0) {
     mov_reg_imm(AX, msg[i]);  // mov  eax, c
-    os_putchar();             // putchar
+    os_putchar();           // putchar
     i += 1;
   }
 }
