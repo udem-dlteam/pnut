@@ -417,11 +417,11 @@ void codegen_string(int start) {
   call(lbl);
 
   while (string_pool[i] != 0) {
-    emit_i32_le(string_pool[i]);
+    emit_i64_le(string_pool[i]);
     i += 1;
   }
 
-  emit_i32_le(0);
+  emit_i64_le(0);
 
   def_label(lbl);
 }

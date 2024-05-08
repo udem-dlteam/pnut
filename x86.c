@@ -415,6 +415,47 @@ void os_exit(){
   emit_2_i8(0x0F, 0x05); // system call 64 bit
 }
 
+// os_fopen to open a file using the file name pointed to and the flags
+void os_fopen(){
+  pop_reg(DI); // pop rax
+  pop_reg(SI); // pop rsi
+  push_reg(AX); // push eax
+  mov_reg_reg(DI, AX);
+  mov_reg_imm(AX, 2); // mov eax, 2 == SYS_OPEN
+//  mov_reg_reg(DI, SP); // mov edi, [esp] | get the file name from stack
+  //mov_reg_reg(SI, SP); // mov esi, [esp] | get the flags from stack
+//  mov_reg_reg(DX, SP); // mov edx, [esp] | get the mode from stack
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  pop_reg(AX); // pop rax
+//  pop_reg(DI); // pop rdi
+//  pop_reg(SI); // pop rsi
+//  pop_reg(DX); // pop rdx
+
+}
+
+void os_fclose(){
+  pop_reg(DI); // pop rdi
+  push_reg(AX); // push rax
+  mov_reg_imm(AX, 3); // mov eax, 3 == SYS_CLOSE
+  //mov_reg_mem(DI, SP); // mov edi, [esp] | get the file from stack
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  pop_reg(AX); // pop rax
+}
+
+void os_fgetc(){
+  int lbl = alloc_label();
+  push_reg(AX); // push rax
+  mov_reg_imm(AX, 0); // mov eax, 0 == SYS_READ
+  mov_reg_reg(DI, SP); // mov edi, [esp] | get the file from stack
+  mov_reg_reg(SI, SP); // mov esi, [esp] | get the buffer from stack
+  mov_reg_imm(DX, 1); // mov edx, 1 | length of string
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  pop_reg(AX); // pop rax
+  jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
+  def_label(lbl);        // lbl:
+}
+
 #endif
 
 #ifdef SKIP
