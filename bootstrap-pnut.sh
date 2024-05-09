@@ -1,20 +1,21 @@
 #! /bin/sh
 
 TEMP_DIR="bootstrap-results"
+PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -Dsh"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
-gcc -o "$TEMP_DIR/pnut.exe" -Dsh pnut.c
+gcc -o "$TEMP_DIR/pnut.exe" $PNUT_SH_OPTIONS pnut.c
 
 # gcc -E -C -P -DPNUT_CC -Dsh pnut.c > "$TEMP_DIR/pnut-after-cpp.c"
 
-./$TEMP_DIR/pnut.exe -Dsh "pnut.c" > "$TEMP_DIR/pnut.sh"
+./$TEMP_DIR/pnut.exe $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut.sh"
 
 bootstrap_with_shell() {
 
   echo "Bootstrap with $1"
 
-  time $1 "$TEMP_DIR/pnut.sh" --no-zero-globals -Dsh "pnut.c" > "$TEMP_DIR/pnut-twice-bootstrapped.sh"
+  time $1 "$TEMP_DIR/pnut.sh" --no-zero-globals $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 
   diff "$TEMP_DIR/pnut.sh" "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 
