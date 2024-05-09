@@ -13,6 +13,10 @@
 #define false 0
 #define EOF (-1)
 
+// At the moment of adding this compile option, the x86 runtime library doesn't
+// support fopen and fgetc, meaning that #include directives can't be used.
+#define SUPPORT_INCLUDE_not
+
 #define AVOID_AMPAMP_BARBAR_not
 
 #define OPTIMIZE_CONSTANT_PARAM_not
@@ -265,10 +269,12 @@ void get_ident();
 void expect_tok(int expected);
 #endif
 
+#ifdef SUPPORT_INCLUDE
 #define INCLUDE_DEPTH_MAX 5
 FILE *include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
 int include_stack_ptr = 0; // Points to the next available slot in the stack
 FILE *fp = 0; // Current file pointer that's being read
+#endif
 
 #define IFDEF_DEPTH_MAX 20
 bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
@@ -310,6 +316,7 @@ void pop_ifdef_mask() {
 }
 
 void get_ch() {
+#ifdef SUPPORT_INCLUDE
   ch = fgetc(fp);
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
@@ -320,8 +327,12 @@ void get_ch() {
       get_ch();
     }
   }
+#else
+  ch = getchar();
+#endif
 }
 
+#ifdef SUPPORT_INCLUDE
 void include_file(char *file_name) {
   if (include_stack_ptr >= INCLUDE_DEPTH_MAX) {
     fatal_error("Too many nested #include directives. Maximum supported is 5.");
@@ -330,6 +341,7 @@ void include_file(char *file_name) {
   include_stack[include_stack_ptr] = fp;
   include_stack_ptr += 1;
 }
+#endif
 
 // We add the preprocessor keywords to the ident table so they can be easily
 // recognized by the preprocessor. Because these are not C keywords, their kind
@@ -485,7 +497,11 @@ void handle_preprocessor_directive() {
     } else if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
       if (tok == STRING) {
+        #ifdef SUPPORT_INCLUDE
         include_file(string_pool + val);
+        #else
+        fatal_error("The #include directive is not supported in this version of the compiler.");
+        #endif
       } else {
         printf("tok=%d\n", tok);
         fatal_error("expected string to #include directive");
@@ -2057,14 +2073,20 @@ int main(int argc, char **args) {
       }
     } else {
       // Options that don't start with '-' are file names
+      #ifdef SUPPORT_INCLUDE
       include_file(args[i]);
+      #else
+      fatal_error("input file not supported. Pnut expects the input from stdin.");
+      #endif
     }
   }
 
+  #ifdef SUPPORT_INCLUDE
   if (fp == 0) {
     printf("Usage: %s <filename>\n", args[0]);
     fatal_error("no input file");
   }
+  #endif
 
   #ifndef DEBUG_CPP
   codegen_begin();
