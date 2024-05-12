@@ -123,12 +123,7 @@ void mov_reg_imm(int dst, int imm) {
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
   rex_prefix();
   emit_i8(0xb8 + dst);
-  if(word_size == 8){ // if x86_64
-      emit_i64_le(imm);
-  }else {
-      emit_i32_le(imm);
-  }
-
+  emit_word_le(imm);
 }
 
 void add_reg_imm(int dst, int imm) {
