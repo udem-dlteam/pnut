@@ -3,10 +3,14 @@ const int word_size;
 
 void generate_exe();
 
-int code[100000];
+#define MAX_CODE_SIZE 500000
+int code[MAX_CODE_SIZE];
 int code_alloc = 0;
 
 void emit_i8(int a) {
+  if (code_alloc >= MAX_CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
   code[code_alloc] = (a & 0xff);
   code_alloc += 1;
 }
