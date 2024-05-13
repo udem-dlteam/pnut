@@ -388,8 +388,8 @@ void os_exit() {
 
 #ifdef x86_64 // For 64 bit linux.
 void os_getchar() {
-  push_reg(DI);          // save address of global variables table
   int lbl = alloc_label();
+  push_reg(DI);          // save address of global variables table
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte
   mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
