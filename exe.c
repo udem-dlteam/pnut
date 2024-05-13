@@ -31,12 +31,8 @@ void emit_i32_le(int n) {
 
 void emit_i64_le(int n) {
   emit_i32_le(n);
-  // Sign extend to 64 bits
-  if (n < 0) {
-    emit_i32_le(-1);
-  } else {
-    emit_i32_le(0);
-  }
+  // Sign extend to 64 bits. Arithmetic shift by 31 gives -1 for negative numbers and 0 for positive numbers.
+  emit_i32_le(n >> 31);
 }
 
 void emit_word_le(int n) {
