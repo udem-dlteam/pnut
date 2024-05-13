@@ -401,9 +401,7 @@ void os_getchar() {
   cmp_reg_reg(AX, BX);   // cmp  eax, ebx
   pop_reg(AX);           // pop  eax
   jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
-  xor_reg_reg(AX, AX);   // xor  eax, eax
-  add_reg_imm(AX, -1);   // add  eax, -1  # -1 on EOF
-  // mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
+  mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
   def_label(lbl);        // lbl:
   pop_reg(DI);           // restore address of global variables table
 }

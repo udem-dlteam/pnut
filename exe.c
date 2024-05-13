@@ -30,8 +30,13 @@ void emit_i32_le(int n) {
 }
 
 void emit_i64_le(int n) {
-    emit_i32_le(n);
-    emit_i32_le(0); //TODO: Emit the next 32 bits w/out overflow no longs atm and linux 64 bit int = 4 bytes
+  emit_i32_le(n);
+  // Sign extend to 64 bits
+  if (n < 0) {
+    emit_i32_le(-1);
+  } else {
+    emit_i32_le(0);
+  }
 }
 
 void emit_word_le(int n) {
