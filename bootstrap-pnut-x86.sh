@@ -2,7 +2,7 @@
 
 TEMP_DIR="bootstrap-results"
 
-PNUT_x86_OPTIONS="-Di386"
+PNUT_x86_OPTIONS="-Dx86_64"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 

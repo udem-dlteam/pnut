@@ -123,12 +123,7 @@ void mov_reg_imm(int dst, int imm) {
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
   rex_prefix();
   emit_i8(0xb8 + dst);
-  if(word_size == 8){ // if x86_64
-      emit_i64_le(imm);
-  }else {
-      emit_i32_le(imm);
-  }
-
+  emit_word_le(imm);
 }
 
 void add_reg_imm(int dst, int imm) {
@@ -374,13 +369,13 @@ void os_getchar() {
 }
 
 void os_putchar() {
-    push_reg(AX);          // push eax      # buffer to write byte
-    mov_reg_imm(BX, 1);    // mov  ebx, 1   # ebx = 1 = STDOUT
-    mov_reg_imm(DX, 1);    // mov  edx, 1   # edx = 1 = number of bytes to write
-    mov_reg_reg(CX, SP);   // mov  ecx, esp # from the stack
-    mov_reg_imm(AX, 4);    // mov  eax, 4   # SYS_WRITE
-    int_i8(0x80);          // int  0x80     # system call
-    pop_reg(AX);           // pop  eax
+  push_reg(AX);          // push eax      # buffer to write byte
+  mov_reg_imm(BX, 1);    // mov  ebx, 1   # ebx = 1 = STDOUT
+  mov_reg_imm(DX, 1);    // mov  edx, 1   # edx = 1 = number of bytes to write
+  mov_reg_reg(CX, SP);   // mov  ecx, esp # from the stack
+  mov_reg_imm(AX, 4);    // mov  eax, 4   # SYS_WRITE
+  int_i8(0x80);          // int  0x80     # system call
+  pop_reg(AX);           // pop  eax
 }
 
 void os_exit() {
@@ -391,9 +386,9 @@ void os_exit() {
 
 #endif
 
-#ifdef x86_64
-// For 64 bit linux.
+#ifdef x86_64 // For 64 bit linux.
 void os_getchar() {
+  push_reg(DI);          // save address of global variables table
   int lbl = alloc_label();
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte
@@ -406,25 +401,31 @@ void os_getchar() {
   cmp_reg_reg(AX, BX);   // cmp  eax, ebx
   pop_reg(AX);           // pop  eax
   jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
-  mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
+  xor_reg_reg(AX, AX);   // xor  eax, eax
+  add_reg_imm(AX, -1);   // add  eax, -1  # -1 on EOF
+  // mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
   def_label(lbl);        // lbl:
+  pop_reg(DI);           // restore address of global variables table
 }
 
-void os_putchar(){
-  push_reg(AX); // push rax
-  mov_reg_imm(AX, 1); // mov eax, 1 == SYS_WRITE
-  mov_reg_imm(DI, 1); // mov edi, 1 == STDOUT
-  mov_reg_imm(DX, 1); // mov edx, 1 | length of string
-  mov_reg_reg(SI, SP); // mov esi, [esp] | get the value from stack
+void os_putchar() {
+  push_reg(DI);          // save address of global variables table
+  push_reg(AX);          // push rax
+  mov_reg_imm(AX, 1);    // mov eax, 1 == SYS_WRITE
+  mov_reg_imm(DI, 1);    // mov edi, 1 == STDOUT
+  mov_reg_imm(DX, 1);    // mov edx, 1 | length of string
+  mov_reg_reg(SI, SP);   // mov esi, [esp] | get the value from stack
   emit_2_i8(0x0F, 0x05); // system call 64 bit
-  pop_reg(AX); // pop rax
-
+  pop_reg(AX);           // pop rax
+  pop_reg(DI);           // restore address of global variables table
 }
 
-void os_exit(){
-  mov_reg_reg(DI, AX); // mov edi, eax
-  mov_reg_imm(AX, 60); // mov eax, 60 == SYS_EXIT
+void os_exit() {
+  push_reg(DI);          // save address of global variables table
+  mov_reg_reg(DI, AX);   // mov edi, eax
+  mov_reg_imm(AX, 60);   // mov eax, 60 == SYS_EXIT
   emit_2_i8(0x0F, 0x05); // system call 64 bit
+  pop_reg(DI);           // restore address of global variables table
 }
 
 // os_fopen to open a file using the file name pointed to and the flags

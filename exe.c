@@ -1,10 +1,16 @@
 // common part of machine code generators
+const int word_size;
+
 void generate_exe();
 
-int code[100000];
+#define MAX_CODE_SIZE 500000
+int code[MAX_CODE_SIZE];
 int code_alloc = 0;
 
 void emit_i8(int a) {
+  if (code_alloc >= MAX_CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
   code[code_alloc] = (a & 0xff);
   code_alloc += 1;
 }
@@ -26,7 +32,16 @@ void emit_i32_le(int n) {
 void emit_i64_le(int n) {
     emit_i32_le(n);
     emit_i32_le(0); //TODO: Emit the next 32 bits w/out overflow no longs atm and linux 64 bit int = 4 bytes
+}
 
+void emit_word_le(int n) {
+  if (word_size == 4) {
+    emit_i32_le(n);
+  } else if (word_size == 8) {
+    emit_i64_le(n);
+  } else {
+    fatal_error("emit_word_le: unknown word size");
+  }
 }
 
 void write_i8(int n) {
@@ -94,8 +109,6 @@ void def_label(int lbl) {
     code_alloc = label_addr;
   }
 }
-
-const int word_size;
 
 const int reg_X;
 const int reg_Y;
@@ -423,11 +436,11 @@ void codegen_string(int start) {// TODO render generic to word_le
   call(lbl);
 
   while (string_pool[i] != 0) {
-    emit_i64_le(string_pool[i]);
+    emit_word_le(string_pool[i]);
     i += 1;
   }
 
-  emit_i64_le(0);
+  emit_word_le(0);
 
   def_label(lbl);
 }
