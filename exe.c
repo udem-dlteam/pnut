@@ -138,6 +138,9 @@ void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 void os_getchar();
 void os_putchar();
 void os_exit();
+void os_fopen();
+void os_fclose();
+void os_fgetc();
 
 #define cgc int
 
@@ -148,6 +151,9 @@ int main_lbl;
 int exit_lbl;
 int getchar_lbl;
 int putchar_lbl;
+int fopen_lbl;
+int fclose_lbl;
+int fgetc_lbl;
 
 int cgc_fs = 0;
 int cgc_locals = 0;
@@ -409,7 +415,7 @@ void codegen_lvalue(ast node) {
   grow_fs(1);
 }
 
-void codegen_string(int start) {
+void codegen_string(int start) {// TODO render generic to word_le
 
   int lbl = alloc_label();
   int i = start;
@@ -425,6 +431,24 @@ void codegen_string(int start) {
 
   def_label(lbl);
 }
+
+void codegen_c_string(char* start) {
+
+  int lbl = alloc_label();
+  int i = 0;
+
+  call(lbl);
+
+  while (start[i] != 0) {
+    emit_i8(start[i]);
+    i += 1;
+  }
+
+  emit_i8(0);
+
+  def_label(lbl);
+}
+
 
 void codegen_rvalue(ast node) {
 
@@ -604,6 +628,15 @@ void codegen_begin() {
 
   putchar_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl);
+
+  fopen_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl);
+
+  fclose_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl);
+
+  fgetc_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl);
 
   jump(setup_lbl);
 }
@@ -898,6 +931,24 @@ void codegen_end() {
   def_label(putchar_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_putchar();
+  ret();
+
+  //fopen function
+  def_label(fopen_lbl);
+  mov_reg_mem(reg_X, reg_SP, 2*word_size);
+  os_fopen();
+  ret();
+
+  //fclose function
+  def_label(fclose_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fclose();
+  ret();
+
+  //fgetc function
+  def_label(fgetc_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fgetc();
   ret();
 
   generate_exe();

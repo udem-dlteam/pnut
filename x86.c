@@ -276,6 +276,18 @@ void push_reg(int src) {
   emit_i8(0x50 + src);
 }
 
+void push_imm32_le(int imm) {
+
+    // PUSH imm32  ;; Push 32 bit immediate value to stack
+    // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
+
+    emit_i8(0x68);
+    emit_i32_le(imm);
+
+}
+
+
+
 void pop_reg (int dst) {
 
   // POP dst_reg  ;; Pop word from stack to register
@@ -416,45 +428,53 @@ void os_exit(){
 }
 
 // os_fopen to open a file using the file name pointed to and the flags
-void os_fopen(){
-  pop_reg(DI); // pop rax
-  pop_reg(SI); // pop rsi
-  push_reg(AX); // push eax
-  mov_reg_reg(DI, AX);
+void os_fopen(){ // why does this no-op? not even called????
+  //push "fib.c" in hex
+  //push to the stack the file descriptor "fib.c" so that DI can then later point to it
+//  push_imm32_le(0x00000063,0x2e626966);
+//  mov_reg_reg(DI, SP);
+//  mov_reg_imm(SI, 4);// offset sp and file name
+//  add_reg_reg(DI, SI);
+  codegen_c_string("fib.c");
+  pop_reg(DI); // pop rdi
+  mov_reg_imm(SI, 0);
+  mov_reg_imm(DX, 0); // mov edx, 0 | mode
   mov_reg_imm(AX, 2); // mov eax, 2 == SYS_OPEN
-//  mov_reg_reg(DI, SP); // mov edi, [esp] | get the file name from stack
-  //mov_reg_reg(SI, SP); // mov esi, [esp] | get the flags from stack
-//  mov_reg_reg(DX, SP); // mov edx, [esp] | get the mode from stack
-  emit_2_i8(0x0F, 0x05); // system call 64 bit
-  pop_reg(AX); // pop rax
-//  pop_reg(DI); // pop rdi
-//  pop_reg(SI); // pop rsi
-//  pop_reg(DX); // pop rdx
-
+  emit_2_i8(0x0F, 0x05); // system call 64 bit (file descriptor is in rax)
+  //pop_reg(AX); // pop rax
+  //push_reg(AX); // save file descriptor
 }
 
 void os_fclose(){
-  pop_reg(DI); // pop rdi
-  push_reg(AX); // push rax
+  mov_reg_reg(DI, reg_X);
   mov_reg_imm(AX, 3); // mov eax, 3 == SYS_CLOSE
-  //mov_reg_mem(DI, SP); // mov edi, [esp] | get the file from stack
+  //mov_reg_imm(DI, 3); // mov edi, eax
+  //pop_reg(DI); // pop rdi
+  //push_reg(AX); // push rax
+  //mov_reg_reg(DI, SP); // mov edi, [esp] | get the file from stack
   emit_2_i8(0x0F, 0x05); // system call 64 bit
-  pop_reg(AX); // pop rax
+  //pop_reg(AX); // pop rax
 }
 
 void os_fgetc(){
   int lbl = alloc_label();
-  push_reg(AX); // push rax
-  mov_reg_imm(AX, 0); // mov eax, 0 == SYS_READ
-  mov_reg_reg(DI, SP); // mov edi, [esp] | get the file from stack
-  mov_reg_reg(SI, SP); // mov esi, [esp] | get the buffer from stack
-  mov_reg_imm(DX, 1); // mov edx, 1 | length of string
+  mov_reg_reg(DI, reg_X);    // mov  edi, file descriptor
+  mov_reg_imm(AX, 0);    // mov  eax, 0
+  push_reg(AX);          // push eax      # buffer to read byte
+  mov_reg_imm(DX, 1);    // mov  rdx, 1   # rdx = 1 = number of bytes to read
+  mov_reg_reg(SI, SP);   // mov  rsi, rsp # to the stack
+  mov_reg_imm(AX, 0);    // mov  rax, 1   # SYS_READ
   emit_2_i8(0x0F, 0x05); // system call 64 bit
-  pop_reg(AX); // pop rax
+  xor_reg_reg(BX, BX);   // xor  ebx, ebx
+  cmp_reg_reg(AX, BX);   // cmp  eax, ebx
+  pop_reg(AX);           // pop  eax
   jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
   mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
   def_label(lbl);        // lbl:
 }
+
+
+
 
 #endif
 
