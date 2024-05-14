@@ -426,6 +426,48 @@ void os_exit() {
   pop_reg(DI);           // restore address of global variables table
 }
 
+// There's no push imm8 instruction in x86, but we can simulate one by pushing
+// overlapping 64-bit values. This function pushes a 64-bit value, then adjust
+// the stack pointer to make it look like we pushed an 8-bit value.
+// Careful: After pushing a byte, the stack is misaligned.
+void push_byte_reg(int reg) {
+  mov_reg_imm(BX, 8*(word_size - 1));
+  shl_reg_reg(reg, BX);
+  push_reg(reg);
+  add_reg_imm(SP, word_size - 1);
+}
+
+// Pnut strings are not encoded like C strings, where each character stored as a
+// byte. Instead, each character gets its own word, which is fine as long as we
+// don't need to pass the string to the OS.
+// This function takes a string (on AX) and pushes a character-as-byte string
+// on the stack.
+void push_c_string() {
+  int find_end_lbl = alloc_label();
+  int push_char_lbl = alloc_label();
+  mov_reg_reg(SI, AX);            // SI points to the current character
+
+  // Because the characters are pushed on a stack, they must be pushed in
+  // reverse order. To do this, we first find the end of the string, then loop
+  // back and push each character.
+
+  // Find end of string
+  mov_reg_imm(BX, 0);             // DX = '\0'
+  def_label(find_end_lbl);
+  mov_reg_mem(DX, SI, 0);         // Load current character
+  add_reg_imm(SI, word_size);     // Move to the next character
+  cmp_reg_reg(BX, DX);
+  jump_cond(NE, find_end_lbl);    // As long as the character is not null, keep going
+
+  // Push string characters
+  def_label(push_char_lbl);
+  mov_reg_mem(DX, SI, 0);         // Load current character
+  push_byte_reg(DX);              // Push character
+  add_reg_imm(SI, -word_size);    // Move to the next character
+  cmp_reg_reg(AX, SI);            // do { } while SI >= AX
+  jump_cond(LE, push_char_lbl);
+}
+
 // os_fopen to open a file using the file name pointed to and the flags
 void os_fopen(){ // why does this no-op? not even called????
   //push "fib.c" in hex
