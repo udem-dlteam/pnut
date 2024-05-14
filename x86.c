@@ -469,32 +469,19 @@ void push_c_string() {
 }
 
 // os_fopen to open a file using the file name pointed to and the flags
-void os_fopen(){ // why does this no-op? not even called????
-  //push "fib.c" in hex
-  //push to the stack the file descriptor "fib.c" so that DI can then later point to it
-//  push_imm32_le(0x00000063,0x2e626966);
-//  mov_reg_reg(DI, SP);
-//  mov_reg_imm(SI, 4);// offset sp and file name
-//  add_reg_reg(DI, SI);
-  codegen_c_string("fib.c");
+void os_fopen(){
+  codegen_c_string("fib.c"); // needs to be replaced weith actually getting the file name passed in argument
   pop_reg(DI); // pop rdi
-  mov_reg_imm(SI, 0);
-  mov_reg_imm(DX, 0); // mov edx, 0 | mode
-  mov_reg_imm(AX, 2); // mov eax, 2 == SYS_OPEN
+  mov_reg_imm(SI, 0); // mov rsi, 0 | flags
+  mov_reg_imm(DX, 0); // mov rdx, 0 | mode
+  mov_reg_imm(AX, 2); // mov rax, 2 == SYS_OPEN
   emit_2_i8(0x0F, 0x05); // system call 64 bit (file descriptor is in rax)
-  //pop_reg(AX); // pop rax
-  //push_reg(AX); // save file descriptor
 }
 
 void os_fclose(){
-  mov_reg_reg(DI, reg_X);
-  mov_reg_imm(AX, 3); // mov eax, 3 == SYS_CLOSE
-  //mov_reg_imm(DI, 3); // mov edi, eax
-  //pop_reg(DI); // pop rdi
-  //push_reg(AX); // push rax
-  //mov_reg_reg(DI, SP); // mov edi, [esp] | get the file from stack
+  mov_reg_reg(DI, reg_X); // mov  rdi, file descriptor
+  mov_reg_imm(AX, 3); // mov rax, 3 == SYS_CLOSE
   emit_2_i8(0x0F, 0x05); // system call 64 bit
-  //pop_reg(AX); // pop rax
 }
 
 void os_fgetc(){
