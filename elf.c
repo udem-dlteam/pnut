@@ -71,7 +71,7 @@ void write_elf_e_header() { // 64 bit
     write_2_i8(0x02, 0x00); // ELF file type : executable = 2 | dw
     write_2_i8(0x3e, 0x00); // Target architecture. 0x3e = x86_64 | dw
     write_4_i8(0x01, 0x00, 0x00, 0x00); // ELF version  is 1, corresponds with header flags | dd
-    write_4_i8(0x78, 0x00, 0x00, 0x40); // Entry point (common) (0x400078)
+    write_4_i8(0x78, 0x00, 0x00, 0x40); // Entry point (common) (0x40000078)
     write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
     write_4_i8(0x40, 0x00, 0x00, 0x00); // Program header offset | dq | 0x400000 64 bit convention
     write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
