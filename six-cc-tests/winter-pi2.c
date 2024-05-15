@@ -2,9 +2,17 @@
 
 /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
 
+void putstring(char *s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+
 int r[2801];
 int i;
-int k;
+int k = 280;
 int b;
 int d;
 int c = 0;
@@ -14,23 +22,30 @@ int main() {
   int newline2;
   newline = identity(10, 2, 3);
 
-  for (; i < 2800; i++) {
+  int i = 0;
+  while (i < 2800) {
     r[i] = 2000;
+    i = i + 1;
   }
   r[i] = 0;
 
-  for (k = 280; k > 0; k = k - 14) {
+
+  while (k > 0) {
 
     d = 0;
     i = k;
-    for (;;) {
+
+    while (1) {
       d = d + r[i] * 10000;
       b = 2 * i - 1;
 
       r[i] = d % b;
       d = d / b;
-      i--;
-      if (i == 0) break;
+      i = i - 1;
+      if (i == 0){
+        putstring(""); //circumvent break bug
+        break;
+      }
       d = d * i;
     }
     putchar(48 + (c + d / 10000) / 1000 % 10);
@@ -38,6 +53,7 @@ int main() {
     putchar(48 + (c + d / 10000) / 10 % 10);
     putchar(48 + (c + d / 10000) % 10);
     c = d % 10000;
+    k = k - 14;
   }
 
   putchar(newline);
