@@ -442,7 +442,7 @@ void push_byte_reg(int reg) {
 // don't need to pass the string to the OS.
 // This function takes a string (on AX) and pushes a character-as-byte string
 // on the stack.
-void push_c_string() {
+void push_byte_string() {
   int find_end_lbl = alloc_label();
   int push_char_lbl = alloc_label();
   mov_reg_reg(SI, AX);            // SI points to the current character
@@ -458,7 +458,6 @@ void push_c_string() {
   add_reg_imm(SI, word_size);     // Move to the next character
   cmp_reg_reg(BX, DX);
   jump_cond(NE, find_end_lbl);    // As long as the character is not null, keep going
-
   // Push string characters
   def_label(push_char_lbl);
   mov_reg_mem(DX, SI, 0);         // Load current character
@@ -466,16 +465,21 @@ void push_c_string() {
   add_reg_imm(SI, -word_size);    // Move to the next character
   cmp_reg_reg(AX, SI);            // do { } while SI >= AX
   jump_cond(LE, push_char_lbl);
+
 }
 
 // os_fopen to open a file using the file name pointed to and the flags
 void os_fopen(){
-  codegen_c_string("fib.c"); // needs to be replaced weith actually getting the file name passed in argument
-  pop_reg(DI); // pop rdi
+  push_reg(DI); // save address of global variables table
+  mov_reg_reg(BP, SP); // save stack pointer
+  push_byte_string(); // push the file name to the stack
+  mov_reg_reg(DI, SP); // mov rdi, rsp | file name
   mov_reg_imm(SI, 0); // mov rsi, 0 | flags
   mov_reg_imm(DX, 0); // mov rdx, 0 | mode
   mov_reg_imm(AX, 2); // mov rax, 2 == SYS_OPEN
   emit_2_i8(0x0F, 0x05); // system call 64 bit (file descriptor is in rax)
+  mov_reg_reg(SP, BP); // restore stack pointer
+  pop_reg(DI); // restore address of global variables table
 }
 
 void os_fclose(){
@@ -485,7 +489,7 @@ void os_fclose(){
 }
 
 void os_fgetc(){
-  int lbl = alloc_label();
+  int lbl = alloc_label(); // label for EOF
   mov_reg_reg(DI, reg_X);    // mov  edi, file descriptor
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte

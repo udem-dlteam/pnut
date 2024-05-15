@@ -152,6 +152,7 @@ void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 void os_getchar();
 void os_putchar();
 void os_exit();
+void os_git();
 void os_fopen();
 void os_fclose();
 void os_fgetc();
@@ -949,7 +950,7 @@ void codegen_end() {
 
   //fopen function
   def_label(fopen_lbl);
-  mov_reg_mem(reg_X, reg_SP, 2*word_size);
+  mov_reg_mem(reg_X, reg_SP, word_size);
   os_fopen();
   ret();
 
