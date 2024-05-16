@@ -1255,11 +1255,18 @@ ast parse_type() {
   int type_kw = 0;
 
   while (1) {
-    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
+    if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
       if ((type_kw != 0) AND (type_kw != INT_KW)) {
         syntax_error("inconsistent type");
       } else {
         type_kw = INT_KW;
+        get_tok();
+      }
+    } else if (tok == CHAR_KW) {
+      if (type_kw != 0) {
+        syntax_error("inconsistent type");
+      } else {
+        type_kw = CHAR_KW;
         get_tok();
       }
     } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
