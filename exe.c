@@ -160,14 +160,15 @@ void cgc_add_local_param(int ident, int size, ast type) {
   cgc_locals = binding;
 }
 
-void cgc_add_local(int ident, int size, ast type) {
-  int binding = alloc_obj(5);
+void cgc_add_local(int ident, int size, int width, ast type) {
+  int binding = alloc_obj(6);
   cgc_fs += size;
   heap[binding+0] = cgc_locals;
   heap[binding+1] = ident;
   heap[binding+2] = size;
   heap[binding+3] = cgc_fs;
   heap[binding+4] = type;
+  heap[binding+5] = width;
   cgc_locals = binding;
 }
 
@@ -181,14 +182,15 @@ void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
   cgc_locals = binding;
 }
 
-void cgc_add_global(int ident, int size, ast type) {
-  int binding = alloc_obj(5);
+void cgc_add_global(int ident, int size, int width, ast type) {
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_globals;
   heap[binding+1] = ident;
   heap[binding+2] = size;
   heap[binding+3] = cgc_global_alloc;
   heap[binding+4] = type;
-  cgc_global_alloc += size;
+  heap[binding+5] = width;
+  cgc_global_alloc += size * width;
   cgc_globals = binding;
 }
 
@@ -291,8 +293,17 @@ void grow_fs(int words) {
   cgc_fs += words;
 }
 
+int round_up_to_word_size(int n) {
+  return (n + word_size - 1) & ~(word_size - 1);
+}
+
 void grow_stack(int words) {
   add_reg_imm(reg_SP, -words * word_size);
+}
+
+void grow_stack_bytes(int bytes) {
+  bytes = (bytes + word_size - 1) & ~(word_size - 1); // round up to word_size
+  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
 }
 
 #ifndef PNUT_CC
@@ -358,7 +369,7 @@ void codegen_lvalue(ast node) {
       } else {
         binding = cgc_lookup_var(get_val(node), cgc_globals);
         if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+3] * word_size);
+          mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
           push_reg(reg_X);
         } else {
@@ -450,7 +461,7 @@ void codegen_rvalue(ast node) {
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+3] * word_size);
+          mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
           if (get_op(heap[binding+4]) != '[') {
             mov_reg_mem(reg_X, reg_X, 0);
@@ -609,6 +620,7 @@ void codegen_glo_var_decl(ast node) {
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
   int size;
+  int width = word_size;
   int binding = cgc_lookup_var(name, cgc_globals);
 
   if (get_op(type) == '[') { // Array declaration
@@ -618,7 +630,7 @@ void codegen_glo_var_decl(ast node) {
   }
 
   if (binding == 0) {
-    cgc_add_global(name, size, type);
+    cgc_add_global(name, size, width, type);
     binding = cgc_globals;
   }
 
@@ -638,7 +650,7 @@ void codegen_glo_var_decl(ast node) {
     pop_reg(reg_X);
     grow_fs(-1);
 
-    mov_mem_reg(reg_glo, heap[binding+3] * word_size, reg_X);
+    mov_mem_reg(reg_glo, heap[binding+3], reg_X);
 
     jump(init_next_lbl);
   }
@@ -666,18 +678,18 @@ void codegen_body(ast node) {
 
         if (get_op(type) == '[') { // Array declaration
           size = get_val(get_child(type, 0));
-          cgc_add_local(name, size, type);
-          grow_stack(size);
+          cgc_add_local(name, size, word_size, type);
+          grow_stack_bytes(size * word_size);
         } else {
           if (init != 0) {
             codegen_rvalue(init);
             grow_fs(-1);
           } else {
-	    xor_reg_reg(reg_X, reg_X);
+	          xor_reg_reg(reg_X, reg_X);
             push_reg(reg_X);
           }
           size = 1;
-          cgc_add_local(name, size, type);
+          cgc_add_local(name, size, word_size, type);
         }
 
       } else {
@@ -867,7 +879,7 @@ void codegen_end() {
 
   def_label(setup_lbl);
 
-  grow_stack(cgc_global_alloc);
+  grow_stack_bytes(cgc_global_alloc);
   mov_reg_reg(reg_glo, reg_SP);
 
   jump(init_start_lbl);
