@@ -118,7 +118,7 @@ void generate_exe() { // 64 bit
 #endif
 
 // header file for aarch64 (pretty much the same as x86_64)
-#ifdef aarch64
+#ifdef arm
 void write_elf_e_header() { //64
     write_4_i8(0x7f, 0x45, 0x4c, 0x46); // Header signature |
     write_4_i8(0x02, 0x01, 0x01, 0x00); // Header flags (class = 2 = 64 bit, little endian = 1, elf version = 1, OS ABI unused = 0) |

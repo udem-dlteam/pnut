@@ -9,6 +9,8 @@ const int word_size = 8; // generating for x86-64
 const int word_size = 4; // generating for i386
 #endif
 
+// if x86 or x86_64
+#if i386 || x86_64
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
 
 const int AX = 0;
@@ -349,6 +351,8 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
+#endif
+
 #ifdef i386
 // For 32 bit linux.
 void os_getchar() {
@@ -580,9 +584,6 @@ void os_fgetc(){
   mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
   def_label(lbl);        // lbl:
 }
-
-
-
 
 #endif
 
