@@ -100,7 +100,9 @@ const int reg_glo;
 void mov_reg_imm(int dst, int imm);
 void mov_reg_reg(int dst, int src);
 void mov_mem_reg(int base, int offset, int src);
+void mov_m8_reg(int base, int offset, int src);
 void mov_reg_mem(int dst, int base, int offset);
+void mov_reg_m8(int dst, int base, int offset);
 
 void add_reg_imm(int dst, int imm);
 void add_reg_reg(int dst, int src);

@@ -156,12 +156,30 @@ void mov_mem_reg(int base, int offset, int src) {
   mov_memory(0x89, src, base, offset);
 }
 
+void mov_m8_reg(int base, int offset, int src) {
+
+  // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x88, src, base, offset);
+}
+
 void mov_reg_mem(int dst, int base, int offset) {
 
   // MOV dst_reg, [base_reg + offset]  ;; Move word from memory to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
   mov_memory(0x8b, dst, base, offset);
+}
+
+void mov_reg_m8(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x8a, dst, base, offset);
+  mov_reg_imm(BX, 0xff); // mask off the upper bits
+  and_reg_reg(dst, BX);
 }
 
 void imul_reg_reg(int dst, int src) {
