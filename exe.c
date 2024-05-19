@@ -196,12 +196,13 @@ void cgc_add_global(int ident, int size, int width, ast type) {
   cgc_globals = binding;
 }
 
-void cgc_add_global_fun(int ident, int label) {
-  int binding = alloc_obj(4);
+void cgc_add_global_fun(int ident, int label, ast type) {
+  int binding = alloc_obj(5);
   heap[binding+0] = cgc_globals;
   heap[binding+1] = ident;
   heap[binding+2] = 0;
   heap[binding+3] = label;
+  heap[binding+4] = type;
   cgc_globals = binding;
 }
 
@@ -342,7 +343,7 @@ void codegen_call(ast node) {
 
   if (binding == 0) {
     lbl = alloc_label();
-    cgc_add_global_fun(name, lbl);
+    cgc_add_global_fun(name, lbl, 0);
     binding = cgc_globals;
   }
 
@@ -602,16 +603,16 @@ void codegen_begin() {
   init_next_lbl = init_start_lbl;
 
   main_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, new_ast0(VOID_KW, 0));
 
   exit_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, new_ast0(VOID_KW, 0));
 
   getchar_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, new_ast0(CHAR_KW, 0));
 
   putchar_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, new_ast0(VOID_KW, 0));
 
   jump(setup_lbl);
 }
@@ -831,6 +832,7 @@ void add_params(ast params) {
 void codegen_glo_fun_decl(ast node) {
 
   ast name = get_child(node, 0);
+  ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
   ast body = get_child(node, 3);
   int lbl;
@@ -841,7 +843,7 @@ void codegen_glo_fun_decl(ast node) {
     binding = cgc_lookup_fun(name, cgc_globals);
     if (binding == 0) {
       lbl = alloc_label();
-      cgc_add_global_fun(name, lbl);
+      cgc_add_global_fun(name, lbl, fun_type);
       binding = cgc_globals;
     }
 
