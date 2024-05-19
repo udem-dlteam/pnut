@@ -91,6 +91,7 @@ void def_label(int lbl) {
 }
 
 const int word_size;
+const int char_width = 4;
 
 const int reg_X;
 const int reg_Y;
@@ -262,6 +263,150 @@ int cgc_lookup_enclosing_loop(int env) {
     binding = heap[binding];
   }
   return binding;
+}
+
+// A pointer type is either an array type or a type with at least one star
+#define IS_POINTER_TYPE(type) (get_op(type) == '[' OR get_val(type) != 0)
+
+// Width of an object pointed to by a reference type.
+int ref_type_width(ast type) {
+  ast inner_type;
+
+  if (get_op(type) == '[') {
+    inner_type = get_child(type, 1);
+    // For array of char (and not a pointer), width is 1.
+    if (get_op(inner_type) == CHAR_KW AND get_val(inner_type) == 0) return char_width; // char[]
+    else return word_size;
+  } else if (get_op(type) == CHAR_KW AND get_val(type) == 1) { // char*
+    return char_width;
+  } else {
+    return word_size;
+  }
+}
+
+ast int_type;
+ast char_type;
+ast string_type;
+ast void_type;
+
+// Compute the type of an expression
+ast value_type(ast node) {
+  int op = get_op(node);
+  int nb_children = get_nb_children(node);
+  int binding;
+  int ident;
+
+  ast left_type;
+  ast right_type;
+
+  if (nb_children == 0) {
+    if (op == INTEGER) {
+      return int_type;
+    } else if (op == CHARACTER) {
+      return char_type;
+    } else if (op == STRING) {
+      return string_type;
+    } else if (op == IDENTIFIER) {
+      ident = get_val(node);
+      binding = cgc_lookup_var(ident, cgc_locals);
+      if (binding != 0) {
+          return heap[binding+4];
+      } else {
+        binding = cgc_lookup_var(ident, cgc_globals);
+        if (binding != 0) {
+          return heap[binding+4];
+        } else {
+          printf("ident = %s\n", string_pool+get_val(ident));
+          fatal_error("value_type: identifier not found");
+        }
+      }
+    } else {
+      printf("op=%d %c", op, op);
+      fatal_error("value_type: unknown expression with nb_children == 0");
+    }
+
+  } else if (nb_children == 1) {
+
+    if (op == '*') {
+      left_type = value_type(get_child(node, 0));
+      if (get_op(left_type) == '[') { // Array type
+        return get_child(left_type, 1);
+      } else if (get_val(left_type) != 0) { // Pointer type
+        return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
+      } else {
+        printf("left_type=%d %c", left_type, left_type);
+        fatal_error("pointer_width: non pointer is being dereferenced with *");
+      }
+    } else if (op == '&') {
+      // TODO: Check that it's a pointable object?
+      return word_size; // always return an address
+    } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS) {
+      // Unary operation don't change the type
+      return value_type(get_child(node, 0));
+    } else {
+      printf("1: op=%d %c", op, op);
+      fatal_error("value_type: unexpected operator");
+    }
+
+  } else if (nb_children == 2) {
+
+    if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^'
+     OR op == LSHIFT OR op == RSHIFT OR op == '<' OR op == '>' OR op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ) {
+      left_type = value_type(get_child(node, 0));
+      right_type = value_type(get_child(node, 1));
+      if (IS_POINTER_TYPE(left_type)) {
+        // if left is an array or a pointer, the type is also a pointer
+        return left_type;
+      } else {
+        // if left is not a pointer, the type is the type of the right operand
+        return right_type;
+      }
+    } else if (op == '[') {
+      left_type = value_type(get_child(node, 0));
+      right_type = value_type(get_child(node, 0));
+
+      if (get_op(left_type) == '[') { // Array
+        return get_child(left_type, 1); // array inner type
+      } else if (get_val(left_type) != 0) { // Pointer
+        return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
+      } else if (get_op(right_type) == '[') { // Array, but with the operands flipped (i.e. 0[arr] instead of arr[0])
+        return get_child(right_type, 1); // array inner type
+      } else if (get_val(right_type) != 0) {
+        return new_ast0(get_op(right_type), get_val(right_type) - 1); // one less indirection
+      } else {
+        printf("left_type=%d %c", left_type, left_type);
+        fatal_error("value_type: non pointer is being dereferenced with *");
+      }
+    } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+      return value_type(get_child(node, 0)); // Only the left side is relevant here
+    } else if (op == AMP_AMP OR op == BAR_BAR) {
+      // TODO: Check that the operands have compatible types?
+      return value_type(get_child(node, 0));
+    } else if (op == '(') {
+      binding = cgc_lookup_fun(get_val(get_child(node, 0)), cgc_globals);
+      if (binding != 0) {
+        return heap[binding+4];
+      } else {
+        printf("ident = %s\n", string_pool + get_val(get_val(get_child(node, 0))));
+        fatal_error("value_type: function not found");
+      }
+    } else {
+      fatal_error("value_type: unknown expression");
+    }
+
+  } else if (nb_children == 3) {
+
+    if (op == '?') {
+      fatal_error("value_type: ternary operator not supported");
+    } else {
+      printf("op=%d %c\n", op, op);
+      fatal_error("value_type: unknown expression with 3 children");
+    }
+
+  } else {
+    printf("op=%d %c\n", op, op);
+    fatal_error("value_type: unknown expression with >4 children");
+  }
 }
 
 void codegen_binop(int op) {
@@ -627,17 +772,23 @@ void codegen_begin() {
   init_start_lbl = alloc_label();
   init_next_lbl = init_start_lbl;
 
+
+  int_type = new_ast0(INT_KW, 0);
+  char_type = new_ast0(CHAR_KW, 0);
+  string_type = new_ast0(CHAR_KW, 1);
+  void_type = new_ast0(VOID_KW, 0);
+
   main_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, new_ast0(VOID_KW, 0));
+  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, void_type);
 
   exit_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, new_ast0(VOID_KW, 0));
+  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, void_type);
 
   getchar_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, new_ast0(CHAR_KW, 0));
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, char_type);
 
   putchar_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, new_ast0(VOID_KW, 0));
+  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, void_type);
 
   jump(setup_lbl);
 }
@@ -648,12 +799,13 @@ void codegen_glo_var_decl(ast node) {
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
   int size;
-  int width = word_size;
+  int width = ref_type_width(type);
   int binding = cgc_lookup_var(name, cgc_globals);
 
   if (get_op(type) == '[') { // Array declaration
     size = get_val(get_child(type, 0));
   } else {
+    // All non-array types are represented as a word, even if they are smaller
     size = 1;
   }
 
@@ -706,9 +858,10 @@ void codegen_body(ast node) {
 
         if (get_op(type) == '[') { // Array declaration
           size = get_val(get_child(type, 0));
-          cgc_add_local(name, size, word_size, type);
-          grow_stack_bytes(size * word_size);
+          cgc_add_local(name, size, ref_type_width(type), type);
+          grow_stack_bytes(size * ref_type_width(type));
         } else {
+          // All non-array types are represented as a word, even if they are smaller
           if (init != 0) {
             codegen_rvalue(init);
             grow_fs(-1);
