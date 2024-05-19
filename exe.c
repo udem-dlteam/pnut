@@ -91,7 +91,7 @@ void def_label(int lbl) {
 }
 
 const int word_size;
-const int char_width = 4;
+const int char_width = 1;
 
 const int reg_X;
 const int reg_Y;
@@ -637,11 +637,20 @@ void codegen_string(int start) {
   call(lbl);
 
   while (string_pool[i] != 0) {
-    emit_i32_le(string_pool[i]);
+    if (char_width == 1) {
+      emit_i8(string_pool[i]);
+    } else {
+      emit_i32_le(string_pool[i]);
+    }
     i += 1;
   }
 
-  emit_i32_le(0);
+
+  if (char_width == 1) {
+    emit_i8(0);
+  } else {
+    emit_i32_le(0);
+  }
 
   def_label(lbl);
 }
