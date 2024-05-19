@@ -123,6 +123,31 @@ void jump(int lbl);
 void call(int lbl);
 void ret();
 
+void load_mem_operand(int dst, int base, int offset, int width) {
+  if (width == 1) {
+    mov_reg_m8(dst, base, offset);
+  } else {
+    mov_reg_mem(dst, base, offset);
+  }
+}
+
+void write_mem_operand(int base, int offset, int src, int width) {
+  if (width == 1) {
+    mov_m8_reg(base, offset, src);
+  } else {
+    mov_mem_reg(base, offset, src);
+  }
+}
+
+void shift_for_pointer_arith(int reg, int type_width) {
+  int i = 0;
+  while (type_width > 1) {
+    i += 1;
+    type_width /= 2;
+    add_reg_reg(reg, reg);
+  }
+}
+
 const int EQ; // x == y
 const int NE; // x != y
 const int LT; // x < y
