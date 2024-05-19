@@ -409,11 +409,14 @@ ast value_type(ast node) {
   }
 }
 
-void codegen_binop(int op) {
+void codegen_binop(int op, ast lhs, ast rhs) {
 
   int lbl1;
   int lbl2;
   int cond = -1;
+  ast left_type = value_type(lhs);
+  ast right_type = value_type(rhs);
+  int width;
 
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
@@ -437,8 +440,37 @@ void codegen_binop(int op) {
     def_label(lbl2);
 
   } else {
-    if      (op == '+' OR op == PLUS_EQ) add_reg_reg(reg_X, reg_Y);
-    else if (op == '-' OR op == MINUS_EQ) sub_reg_reg(reg_X, reg_Y);
+    if      (op == '+' OR op == PLUS_EQ) {
+      // Check if one of the operands is a pointer
+      // If so, multiply the other operand by the width of the pointer target object.
+
+      if (IS_POINTER_TYPE(left_type) AND !IS_POINTER_TYPE(right_type)) {
+        shift_for_pointer_arith(reg_Y, ref_type_width(left_type));
+      }
+
+      if (IS_POINTER_TYPE(right_type) AND !IS_POINTER_TYPE(left_type)) {
+        shift_for_pointer_arith(reg_X, ref_type_width(right_type));
+      }
+
+      add_reg_reg(reg_X, reg_Y);
+    }
+    else if (op == '-' OR op == MINUS_EQ) {
+      // Pointer subtraction is only valid if one of the operands is a pointer
+      // When both operands are pointers, the result is the difference between the two pointers divided by the width of the target object.
+      // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
+
+      if (1) {
+        if (IS_POINTER_TYPE(left_type) AND IS_POINTER_TYPE(right_type)) {
+          fatal_error("codegen_binop: subtraction between pointers not implemented");
+        } else if (IS_POINTER_TYPE(left_type)) {
+          shift_for_pointer_arith(reg_Y, ref_type_width(left_type));
+        } else if (IS_POINTER_TYPE(right_type)) {
+          shift_for_pointer_arith(reg_X, ref_type_width(right_type));
+        }
+      }
+
+      sub_reg_reg(reg_X, reg_Y);
+    }
     else if (op == '*' OR op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
     else if (op == '/' OR op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);
     else if (op == '%' OR op == PERCENT_EQ) rem_reg_reg(reg_X, reg_Y);
@@ -448,11 +480,19 @@ void codegen_binop(int op) {
     else if (op == LSHIFT OR op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
     else if (op == RSHIFT OR op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
     else if (op == '[') {
-      add_reg_reg(reg_Y, reg_Y);
-      add_reg_reg(reg_Y, reg_Y);
-      if (word_size == 8) add_reg_reg(reg_Y, reg_Y);
+      // Same as pointer addition for address calculation
+      if (IS_POINTER_TYPE(left_type) AND !IS_POINTER_TYPE(right_type)) {
+        shift_for_pointer_arith(reg_Y, ref_type_width(left_type));
+        width = ref_type_width(left_type);
+      } else if (IS_POINTER_TYPE(right_type) AND !IS_POINTER_TYPE(left_type)) {
+        shift_for_pointer_arith(reg_X, ref_type_width(right_type));
+        width = ref_type_width(right_type);
+      } else {
+        fatal_error("codegen_binop: invalid array access operands");
+      }
+
       add_reg_reg(reg_X, reg_Y);
-      mov_reg_mem(reg_X, reg_X, 0);
+      load_mem_operand(reg_X, reg_X, 0, width);
     } else {
       printf("op=%d %c", op, op);
       fatal_error("codegen_binop: unknown op");
@@ -474,6 +514,9 @@ void grow_stack(int words) {
   add_reg_imm(reg_SP, -words * word_size);
 }
 
+// Like grow_stack, but takes bytes instead of words.
+// To maintain alignment, the stack is grown by a multiple of word_size (rounded
+// up from the number of bytes).
 void grow_stack_bytes(int bytes) {
   bytes = (bytes + word_size - 1) & ~(word_size - 1); // round up to word_size
   add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
@@ -525,11 +568,13 @@ void codegen_call(ast node) {
   push_reg(reg_X);
 }
 
-void codegen_lvalue(ast node) {
+// Return the width of the lvalue
+int codegen_lvalue(ast node) {
 
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int binding;
+  int lvalue_width = word_size;
 
   if (nb_children == 0) {
 
@@ -569,12 +614,7 @@ void codegen_lvalue(ast node) {
     if (op == '[') {
       codegen_rvalue(get_child(node, 0));
       codegen_rvalue(get_child(node, 1));
-      pop_reg(reg_Y);
-      add_reg_reg(reg_Y, reg_Y);
-      add_reg_reg(reg_Y, reg_Y);
-      if (word_size == 8) add_reg_reg(reg_Y, reg_Y);
-      push_reg(reg_Y);
-      codegen_binop('+');
+      codegen_binop('+', get_child(node, 0), get_child(node, 1));
       grow_fs(-2);
     } else {
       fatal_error("codegen_lvalue: unknown lvalue");
@@ -586,6 +626,7 @@ void codegen_lvalue(ast node) {
   }
 
   grow_fs(1);
+  return lvalue_width;
 }
 
 void codegen_string(int start) {
@@ -612,6 +653,7 @@ void codegen_rvalue(ast node) {
   int binding;
   int ident;
   int lbl;
+  int left_width;
 
   if (nb_children == 0) {
 
@@ -627,6 +669,10 @@ void codegen_rvalue(ast node) {
       if (binding != 0) {
         mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
         add_reg_reg(reg_X, reg_SP);
+        // There are 3 different cases for the type of the lvalue:
+        // 1. Array type: the value is stored on the stack, and reg_X already points to it
+        // 2. Pointer type: the pointer (to the heap) is stored on the stack, and it needs to be dereferenced
+        // 3. Non-pointer type: the value is stored directly in the stack, and it needs to be loaded
         if (get_op(heap[binding+4]) != '[') {
           mov_reg_mem(reg_X, reg_X, 0);
         }
@@ -658,7 +704,7 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_Y);
       grow_fs(-1);
-      mov_reg_mem(reg_X, reg_Y, 0);
+      load_mem_operand(reg_X, reg_Y, 0, ref_type_width(value_type(get_child(node, 0))));
       push_reg(reg_X);
     } else if (op == '+') {
       codegen_rvalue(get_child(node, 0));
@@ -684,7 +730,7 @@ void codegen_rvalue(ast node) {
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(get_child(node, 0));
-      codegen_binop(EQ_EQ);
+      codegen_binop(EQ_EQ, new_ast0(INTEGER, 0), get_child(node, 0));
       grow_fs(-2);
     } else if (op == MINUS_MINUS) {
       // TODO
@@ -703,29 +749,29 @@ void codegen_rvalue(ast node) {
     if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT OR op == '<' OR op == '>' OR op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '[') {
       codegen_rvalue(get_child(node, 0));
       codegen_rvalue(get_child(node, 1));
-      codegen_binop(op);
+      codegen_binop(op, get_child(node, 0), get_child(node, 1));
       grow_fs(-2);
     } else if (op == '=') {
-      codegen_lvalue(get_child(node, 0));
+      left_width = codegen_lvalue(get_child(node, 0));
       codegen_rvalue(get_child(node, 1));
       pop_reg(reg_X);
       pop_reg(reg_Y);
       grow_fs(-2);
-      mov_mem_reg(reg_Y, 0, reg_X);
+      write_mem_operand(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
     } else if (op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
-      codegen_lvalue(get_child(node, 0));
+      left_width = codegen_lvalue(get_child(node, 0));
       pop_reg(reg_Y);
       push_reg(reg_Y);
-      mov_reg_mem(reg_X, reg_Y, 0);
+      load_mem_operand(reg_X, reg_Y, 0, left_width);
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(get_child(node, 1));
-      codegen_binop(op);
+      codegen_binop(op, get_child(node, 0), get_child(node, 1));
       pop_reg(reg_X);
       pop_reg(reg_Y);
       grow_fs(-3);
-      mov_mem_reg(reg_Y, 0, reg_X);
+      write_mem_operand(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       lbl = alloc_label();
