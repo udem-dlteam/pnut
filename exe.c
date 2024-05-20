@@ -101,9 +101,9 @@ const int reg_glo;
 void mov_reg_imm(int dst, int imm);
 void mov_reg_reg(int dst, int src);
 void mov_mem_reg(int base, int offset, int src);
-void mov_m8_reg(int base, int offset, int src);
+void mov_mem8_reg(int base, int offset, int src);
 void mov_reg_mem(int dst, int base, int offset);
-void mov_reg_m8(int dst, int base, int offset);
+void mov_reg_mem8(int dst, int base, int offset);
 
 void add_reg_imm(int dst, int imm);
 void add_reg_reg(int dst, int src);
@@ -126,7 +126,7 @@ void ret();
 
 void load_mem_operand(int dst, int base, int offset, int width) {
   if (width == 1) {
-    mov_reg_m8(dst, base, offset);
+    mov_reg_mem8(dst, base, offset);
   } else {
     mov_reg_mem(dst, base, offset);
   }
@@ -134,7 +134,7 @@ void load_mem_operand(int dst, int base, int offset, int width) {
 
 void write_mem_operand(int base, int offset, int src, int width) {
   if (width == 1) {
-    mov_m8_reg(base, offset, src);
+    mov_mem8_reg(base, offset, src);
   } else {
     mov_mem_reg(base, offset, src);
   }
