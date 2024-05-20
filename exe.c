@@ -507,7 +507,7 @@ void grow_fs(int words) {
 }
 
 int round_up_to_word_size(int n) {
-  return (n + word_size - 1) & ~(word_size - 1);
+  return (n + word_size - 1) / word_size * word_size;
 }
 
 void grow_stack(int words) {
@@ -518,7 +518,6 @@ void grow_stack(int words) {
 // To maintain alignment, the stack is grown by a multiple of word_size (rounded
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
-  bytes = (bytes + word_size - 1) & ~(word_size - 1); // round up to word_size
   add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
 }
 
