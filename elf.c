@@ -125,7 +125,7 @@ void write_elf_e_header() { //64
     write_4_i8(0x00, 0x00, 0x00, 0x00); // Extended ABI byte + 7 bytes padding. Leave as 0, it's ignored | dq
     write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
     write_2_i8(0x02, 0x00); // ELF file type : executable = 2 | dw
-    write_2_i8(0x3e, 0x00); // Target architecture. 0x3e = x86_64 | dw
+    write_2_i8(0xB7, 0x00); // Target architecture. ARMv8 aarch64
     write_4_i8(0x01, 0x00, 0x00, 0x00); // ELF version  is 1, corresponds with header flags | dd
     write_4_i8(0x78, 0x00, 0x00, 0x40); // Entry point (common) (0x40000078)
     write_4_i8(0x00, 0x00, 0x00, 0x00); // Cont.. | dq cont..
