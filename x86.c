@@ -390,6 +390,27 @@ void os_exit() {
   int_i8(0x80);          // int  0x80     # system call
 }
 
+void setup_proc_args() {
+  // On x86-32 bit, argc is at 0(%esp) and the content of argv directly follows.
+  // The stack looks like this:
+  // 0(%esp) -> argc
+  // 4(%esp) -> argv[0]
+  // 8(%esp) -> argv[1]
+  // ...
+  // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
+  // The stack will then look like this:
+  // 0(%esp)  -> argc
+  // 4(%esp)  -> argv
+  // 8(%esp)  -> arg[0]
+  // 12(%esp) -> arg[1]
+  // ...
+
+  pop_reg(reg_X);  // remove argc so it can be moved to the top of stack
+  mov_reg_reg(reg_Y, reg_SP); // address of argv
+  push_reg(reg_Y); // argv
+  push_reg(reg_X); // argc
+}
+
 #ifdef SKIP
 void os_print_msg(char_ptr msg) {
   int i = 0;

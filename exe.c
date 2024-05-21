@@ -162,6 +162,8 @@ void os_getchar();
 void os_putchar();
 void os_exit();
 
+void setup_proc_args();
+
 #define cgc int
 
 int setup_lbl;
@@ -1121,6 +1123,7 @@ void codegen_end() {
   jump(init_start_lbl);
 
   def_label(init_next_lbl);
+  setup_proc_args();
   call(main_lbl);
   os_exit();
 
