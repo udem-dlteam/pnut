@@ -190,15 +190,14 @@ void cgc_add_local_param(int ident, int size, ast type) {
   cgc_locals = binding;
 }
 
-void cgc_add_local(int ident, int size, int width, ast type) {
-  int binding = alloc_obj(6);
+void cgc_add_local(int ident, int size, ast type) {
+  int binding = alloc_obj(5);
   cgc_fs += size;
   heap[binding+0] = cgc_locals;
   heap[binding+1] = ident;
   heap[binding+2] = size;
   heap[binding+3] = cgc_fs;
   heap[binding+4] = type;
-  heap[binding+5] = width;
   cgc_locals = binding;
 }
 
@@ -920,7 +919,7 @@ void codegen_body(ast node) {
 
         if (get_op(type) == '[') { // Array declaration
           size = get_val(get_child(type, 0));
-          cgc_add_local(name, size, ref_type_width(type), type);
+          cgc_add_local(name, size, type);
           grow_stack_bytes(size * ref_type_width(type));
         } else {
           // All non-array types are represented as a word, even if they are smaller
@@ -932,7 +931,7 @@ void codegen_body(ast node) {
             push_reg(reg_X);
           }
           size = 1;
-          cgc_add_local(name, size, word_size, type);
+          cgc_add_local(name, size, type);
         }
 
       } else {
