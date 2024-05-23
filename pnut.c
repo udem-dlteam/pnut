@@ -112,6 +112,15 @@ int RSHIFT_EQ  = 421;
 int RSHIFT     = 422;
 int SLASH_EQ   = 423;
 int STAR_EQ    = 424;
+int HASH_HASH  = 425;
+
+//pre and post increment and decrement
+int PLUS_PLUS_PRE = 425;
+int MINUS_MINUS_PRE = 426;
+int PLUS_PLUS_POST = 427;
+int MINUS_MINUS_POST = 428;
+
+
 
 int MACRO_ARG = 499;
 int IDENTIFIER = 500;
@@ -205,6 +214,16 @@ int cdr(int pair) {
   return heap[pair+1];
 }
 
+int set_car(int pair, int value) {
+  heap[pair] = value;
+  return value;
+}
+
+int set_cdr(int pair, int value) {
+  heap[pair+1] = value;
+  return value;
+}
+
 void begin_string() {
   string_start = string_pool_alloc;
   hash = 0;
@@ -216,6 +235,36 @@ void accum_string() {
   string_pool_alloc += 1;
   if (string_pool_alloc >= STRING_POOL_SIZE) {
     fatal_error("string pool overflow");
+  }
+}
+
+// Like accum_string, but takes the character as input instead of reading it from ch
+void accum_string_char(char c) {
+  hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
+  string_pool[string_pool_alloc] = c;
+  string_pool_alloc += 1;
+  if (string_pool_alloc >= STRING_POOL_SIZE) {
+    fatal_error("string pool overflow");
+  }
+}
+
+// Like accum_string, but takes a string from the string_pool as input instead of reading it from ch
+void accum_string_string(int s) {
+  int i = 0;
+  while (string_pool[s + i] != 0) {
+    accum_string_char(string_pool[s + i]);
+    i += 1;
+  }
+}
+
+// Similar to accum_string_string, but writes an integer to the string pool
+void accum_string_integer(int n) {
+  if (n < 0) {
+    accum_string_char('-');
+    accum_string_integer(-n);
+  } else {
+    if (n > 9) accum_string_integer(n / 10);
+    accum_string_char('0' + n % 10);
   }
 }
 
@@ -283,6 +332,8 @@ bool ifdef_mask = true;
 // Whether to expand macros or not. Useful to parse macro definitions containing
 // other macros without expanding them.
 bool expand_macro = true;
+// Don't expand macro arguments. Used for stringification and token pasting.
+bool expand_macro_arg = true;
 
 #define MACRO_RECURSION_MAX 100
 int macro_stack[MACRO_RECURSION_MAX];
@@ -291,6 +342,7 @@ int macro_stack_ix = 0;
 int macro_tok_lst = 0;  // Current list of tokens to replay for the macro being expanded
 int macro_args = 0;     // Current list of arguments for the macro being expanded
 int macro_args_count;   // Number of arguments for the current macro being expanded
+bool paste_last_token = false; // Whether the last token was a ## or not
 
 void flip_ifdef_mask() {
   ifdef_mask = !ifdef_mask;
@@ -354,14 +406,18 @@ int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
 
+int NOT_SUPPORTED_ID;
+
 void get_tok_macro() {
   expand_macro = false;
   get_tok();
   expand_macro = true; // TODO: Restore to previous value?
 }
 
-int lookup_macro_token(int args, int val) {
+int lookup_macro_token(int args, int tok, int val) {
   int ix = 0;
+
+  if (tok < IDENTIFIER) return cons(tok, val); // Not an identifier
 
   while (args != 0) {
     if (car(args) == val) break; // Found!
@@ -384,16 +440,17 @@ int read_macro_tokens(int args) {
   if (ch != '\n' AND ch != EOF) {
     get_tok_macro();
     // Append the token/value pair to the replay list
-    toks = cons(lookup_macro_token(args, val), 0);
+    toks = cons(lookup_macro_token(args, tok, val), 0);
     tail = toks;
     while (ch != '\n' AND ch != EOF) {
       get_tok_macro();
-      if (tok >= IDENTIFIER) {
-        heap[tail + 1] = cons(lookup_macro_token(args, val), 0);
-      } else {
-        heap[tail + 1] = cons(cons(tok, val), 0);
-      }
+      heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
       tail = cdr(tail); // Advance tail
+    }
+
+    // Check that there are no leading or trailing ##
+    if (car(car(toks)) == HASH_HASH OR car(car(tail)) == HASH_HASH) {
+      fatal_error("'##' cannot appear at either end of a macro expansion");
     }
   }
 
@@ -420,7 +477,7 @@ void print_macro_raw_tokens(int tokens) {
 void handle_define() {
   int macro;    // The identifier that is being defined as a macro
   int args = 0; // List of arguments for a function-like macro
-  int args_count = 0; // Number of arguments for a function-like macro.
+  int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
   get_tok_macro();
   if (tok == IDENTIFIER OR tok == MACRO) {
@@ -431,6 +488,7 @@ void handle_define() {
     fatal_error("#define directive can only be followed by a identifier");
   }
   if (ch == '(') { // Function-like macro
+    args_count = 0;
     get_ch();
     while (ch != '\n' AND ch != EOF) {
       if (ch == ',') {
@@ -461,7 +519,11 @@ void handle_define() {
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
     #ifdef DEBUG_CPP
-    printf("# %s(", string_pool + heap[macro + 1]);
+    if (args_count == -1) {
+      printf("# %s ", string_pool + heap[macro + 1]);
+    } else {
+      printf("# %s(", string_pool + heap[macro + 1]);
+    }
     while (args_count > 0) {
       printf("%s", string_pool + heap[car(args) + 1]);
       args = cdr(args);
@@ -469,7 +531,7 @@ void handle_define() {
       if (args_count > 0) printf(", ");
     }
 
-    printf(") ");
+    if (args_count != -1) printf(") ");
     print_macro_raw_tokens(car(heap[macro + 3]));
     printf("\n");
     #endif
@@ -531,7 +593,7 @@ void handle_preprocessor_directive() {
   // the call to handle_preprocessor_directive, we don't need to call get_tok here
   if (ch != '\n' AND ch != EOF) {
     printf("ch=%d\n", ch);
-    fatal_error("expected end of line");
+    fatal_error("preprocessor expected end of line");
   }
 }
 
@@ -627,6 +689,10 @@ void init_ident_table() {
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+
+  // Stringizing is recognized by the macro expander, but it returns a hardcoded
+  // string instead of the actual value. This may be enough to compile TCC.
+  NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 }
 
 void init_pnut_macros() {
@@ -749,9 +815,10 @@ int get_macro_args_toks(int expected_argc) {
   int args = 0;
   int macro_args_count = 0;
   get_tok_macro(); // Skip the macro identifier
-  if (tok != '(' OR expected_argc == 0) {
+
+  if (tok != '(') { // Function-like macro with 0 arguments
     check_macro_arity(macro_args_count, expected_argc);
-    return 0; // No arguments
+    return -1; // No arguments
   }
 
   get_tok_macro(); // Skip '('
@@ -799,11 +866,102 @@ void push_macro(int tokens, int args) {
   }
 }
 
+// Try to expand a macro.
+// If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
+// If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
+// For object like macros, the macro tokens are played back without any other parsing.
+// Returns 1 if the macro was expanded, 0 otherwise.
+bool attempt_macro_expansion(int macro) {
+  int new_macro_args;
+  macro = val;
+  if (cdr(heap[macro + 3]) == -1) { // Object-like macro
+    push_macro(car(heap[macro + 3]), 0);
+    return true;
+  } else {
+    new_macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
+    // get_macro_args_toks fetched the next token, we save it so it's not lost
+    push_macro(cons(cons(tok, val), 0), new_macro_args);
+    if (new_macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
+      // Function-like macro without (), so we don't expand it.
+      tok = IDENTIFIER;
+      val = macro;
+      return false;
+    } else {
+      push_macro(car(heap[macro + 3]), new_macro_args);
+      return true;
+    }
+  }
+}
+
+// https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
+void stringify() {
+  int arg;
+  expand_macro_arg = false;
+  get_tok_macro();
+  expand_macro_arg = true;
+  if (tok != MACRO_ARG) {
+    printf("tok=%d\n", tok);
+    fatal_error("expected macro argument after #");
+  }
+  arg = get_macro_arg(val);
+  tok = STRING;
+  // Support the case where the argument is a single identifier token
+  if (car(car(arg)) == IDENTIFIER AND cdr(arg) == 0) {
+    val = heap[cdr(car(arg)) + 1]; // Use the identifier value
+  } else {
+    val = heap[NOT_SUPPORTED_ID + 1]; // Return string "NOT_SUPPORTED"
+  }
+}
+
+int paste_integers(int left_val, int right_val) {
+  int result = left_val;
+  int right_digits = right_val;
+  while (right_digits > 0) {
+    result *= 10;
+    right_digits /= 10;
+  }
+  return result + right_val;
+}
+
+// Support token pasting between identifiers and non-negative integers
+void paste_tokens(int left_tok, int left_val) {
+  int right_tok;
+  int right_val;
+  get_tok_macro();
+  right_tok = tok;
+  right_val = val;
+  if (left_tok == IDENTIFIER OR left_tok == MACRO) {
+    // Something that starts with an identifier can only be an identifier
+    begin_string();
+    accum_string_string(heap[left_val + 1]);
+
+    if (right_tok == IDENTIFIER OR right_tok == MACRO) {
+      accum_string_string(heap[right_val + 1]);
+    } else if (right_tok == INTEGER) {
+      accum_string_integer(-right_val);
+    } else {
+      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      fatal_error("cannot paste an identifier with a non-identifier or non-negative integer");
+    }
+
+    val = end_ident();
+    tok = heap[val+2]; // The kind of the identifier
+  } else if (left_tok == INTEGER) {
+    if (right_tok == INTEGER) {
+      val = -paste_integers(-left_val, -right_val);
+    } else {
+      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      fatal_error("cannot paste an integer with a non-integer");
+    }
+  } else {
+    printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+    fatal_error("cannot paste a non-identifier or non-integer");
+  }
+}
+
 void get_tok() {
 
   bool first_time = true; // Used to simulate a do-while loop
-  int macro;
-  int temp;
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while (first_time OR !ifdef_mask) {
@@ -821,16 +979,43 @@ void get_tok() {
         // So we reload the kind from the ident table.
         if (tok >= IDENTIFIER) tok = heap[val + 2];
 
+        // Check if the next token is ## for token pasting
+        if (macro_tok_lst != 0 AND car(car(macro_tok_lst)) == HASH_HASH) {
+          if (tok == MACRO OR tok == MACRO_ARG) {
+            // If the token is a macro or macro arg, it must be expanded before pasting
+            macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
+            paste_last_token = true;
+          } else {
+            // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
+            macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
+            paste_tokens(tok, val);
+            break;
+          }
+        } else if (macro_tok_lst == 0 AND paste_last_token) {
+          if (macro_stack_ix == 0) {
+            // If we are not in a macro expansion, we can't paste the last token
+            // This should not happen if the macro is well-formed, which is
+            // checked by read_macro_tokens.
+            fatal_error("## cannot appear at the end of a macro expansion");
+          }
+          macro_stack_ix -= 2;
+          macro_tok_lst = macro_stack[macro_stack_ix];
+          macro_args = macro_stack[macro_stack_ix + 1];
+          paste_last_token = false; // We are done pasting
+          paste_tokens(tok, val);
+        }
+
         if (tok == MACRO) { // Nested macro expansion!
-          // Save the macro identifier so it's not overwritten when parsing macro args
-          macro = val;
-          temp = get_macro_args_toks(cdr(heap[macro + 3]));
-          push_macro(cons(cons(tok, val), 0), 0); // Save current token so it's not lost
-          push_macro(car(heap[macro + 3]), temp); // Push the rest of the macro tokens so they can be replayed when we come back
-          continue;
-        } else if (tok == MACRO_ARG) {
+          if (attempt_macro_expansion(val)) {
+            continue;
+          }
+          break;
+        } else if (tok == MACRO_ARG AND expand_macro_arg) {
           push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
+        } else if (tok == '#') { // Stringizing!
+          stringify(tok, val);
+          break;
         }
         break;
       } else if (macro_stack_ix != 0) {
@@ -875,11 +1060,10 @@ void get_tok() {
           // Since this is the "base case" of the macro expansion, we don't need
           // to disable the other places where macro expansion is done.
           if (ifdef_mask AND expand_macro) {
-            macro = val; // get_macro_args_toks overwrites tok and val
-            macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
-            push_macro(cons(cons(tok, val), 0), macro_args); // Save current token so it's not lost
-            push_macro(car(heap[macro + 3]), macro_args);
-            continue;
+            if (attempt_macro_expansion(val)) {
+              continue;
+            }
+            break;
           }
         }
         break;
@@ -1121,6 +1305,16 @@ void get_tok() {
           if (ch == '=') {
             get_ch();
             tok = CARET_EQ;
+          }
+
+          break;
+
+        } else if (ch == '#') {
+
+          get_ch();
+          if (ch == '#') {
+            get_ch();
+            tok = HASH_HASH;
           }
 
           break;
@@ -1498,6 +1692,7 @@ ast parse_parenthesized_expression() {
 ast parse_primary_expression() {
 
   ast result;
+  ast tail;
 
   if (tok == IDENTIFIER) {
 
@@ -1515,10 +1710,30 @@ ast parse_primary_expression() {
     get_tok();
 
   } else if (tok == STRING) {
-
     result = new_ast0(STRING, val);
     get_tok();
-    /*TODO: contiguous strings*/
+
+    if (tok == STRING) { // Contiguous strings
+      result = cons(result, 0);
+      tail = result;
+      while (tok == STRING) {
+        set_cdr(tail, cons(new_ast0(STRING, val), 0));
+        tail = cdr(tail);
+        get_tok();
+      }
+
+      // Unpack the list of strings into a single string
+      begin_string();
+
+      while (result != 0) {
+        accum_string_string(get_val(car(result)));
+        result = cdr(result);
+      }
+
+      accum_string_char(0); // Null terminate the string
+
+      result = new_ast0(STRING, string_start);
+    }
 
   } else if (tok == '(') {
 
@@ -1565,9 +1780,15 @@ ast parse_postfix_expression() {
 
       syntax_error("Struct/Union not supported");
 
-    } else if ((tok == PLUS_PLUS) OR (tok == MINUS_MINUS)) {
+    } else if (tok == PLUS_PLUS) {
 
-      syntax_error("++/-- not supported");
+      get_tok();
+      result = new_ast1(PLUS_PLUS_POST, result);
+
+    } else if (tok == MINUS_MINUS) {
+
+      get_tok();
+      result = new_ast1(MINUS_MINUS_POST, result);
 
     } else {
       break;
@@ -1582,12 +1803,17 @@ ast parse_unary_expression() {
   ast result;
   int op;
 
-  if ((tok == PLUS_PLUS) OR (tok == MINUS_MINUS)) {
+  if (tok == PLUS_PLUS){
 
-    op = tok;
     get_tok();
     result = parse_unary_expression();
-    result = new_ast1(op, result);
+    result = new_ast1(PLUS_PLUS_PRE, result);
+
+  } else if (tok == MINUS_MINUS) {
+
+    get_tok();
+    result = parse_unary_expression();
+    result = new_ast1(MINUS_MINUS_PRE, result);
 
   } else if ((tok == '&') OR (tok == '*') OR (tok == '+') OR (tok == '-') OR (tok == '~') OR (tok == '!')) {
 

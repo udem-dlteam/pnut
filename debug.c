@@ -68,6 +68,7 @@ void print_tok(int tok, int val) {
   else if (tok == RSHIFT) printf(">>");
   else if (tok == SLASH_EQ) printf("/=");
   else if (tok == STAR_EQ) printf("*=");
+  else if (tok == HASH_HASH) printf("##");
 
   else if (tok == IDENTIFIER) {
     printf("%s", string_pool + heap[val+1]);
