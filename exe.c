@@ -1203,7 +1203,7 @@ void codegen_end() {
   jump(init_start_lbl);
 
   def_label(init_next_lbl);
-  setup_proc_args();
+  setup_proc_args(cgc_global_alloc);
   call(main_lbl);
   os_exit();
   push_reg(reg_X); // exit process with result of main

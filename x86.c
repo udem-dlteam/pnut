@@ -367,6 +367,35 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
+void setup_proc_args(int global_vars_size) {
+  // See page 54 of Intel386 System V ABI document:
+  // https://web.archive.org/web/20240107061436/https://www.sco.com/developers/devspecs/abi386-4.pdf
+  // See page 29 of AMD64 System V ABI document:
+  // https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf
+  //
+  // On x86-32, argc is at 0(%esp) and the content of argv directly follows.
+  // At this point, the stack looks like this:
+  // global table [global_vars_size bytes]
+  // global_vars_size(%esp) -> argc
+  // global_vars_size+4(%esp) -> argv[0]
+  // global_vars_size+8(%esp) -> argv[1]
+  // ...
+  // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
+  // The stack will then look like this:
+  // 0(%esp)  -> argc
+  // 4(%esp)  -> argv
+  // global table [global_vars_size bytes]
+  // ...
+  // For x86-64, it works similarly with 0(%rsp) for argc and 8(%rsp) for argv.
+
+  mov_reg_reg(reg_X, SP);
+  add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
+  push_reg(reg_X); // push argv address
+
+  mov_reg_mem(reg_Y, reg_X, -word_size); // load argc
+  push_reg(reg_Y); // push argc
+}
+
 #ifdef i386
 // For 32 bit linux.
 void os_getchar() {
@@ -476,27 +505,6 @@ void os_fgetc(){
   jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
   mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
   def_label(lbl);        // lbl:
-}
-
-void setup_proc_args() {
-  // On x86-32 bit, argc is at 0(%esp) and the content of argv directly follows.
-  // The stack looks like this:
-  // 0(%esp) -> argc
-  // 4(%esp) -> argv[0]
-  // 8(%esp) -> argv[1]
-  // ...
-  // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
-  // The stack will then look like this:
-  // 0(%esp)  -> argc
-  // 4(%esp)  -> argv
-  // 8(%esp)  -> arg[0]
-  // 12(%esp) -> arg[1]
-  // ...
-
-  pop_reg(reg_X);  // remove argc so it can be moved to the top of stack
-  mov_reg_reg(reg_Y, reg_SP); // address of argv
-  push_reg(reg_Y); // argv
-  push_reg(reg_X); // argc
 }
 
 #endif
