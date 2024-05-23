@@ -288,8 +288,8 @@ void codegen_binop(int op) {
     def_label(lbl2);
 
   } else {
-    if      (op == '+' OR op == PLUS_EQ OR op == PLUS_PLUS_PRE) add_reg_reg(reg_X, reg_Y);
-    else if (op == '-' OR op == MINUS_EQ OR op == MINUS_MINUS_PRE) sub_reg_reg(reg_X, reg_Y);
+    if      (op == '+' OR op == PLUS_EQ OR op == PLUS_PLUS_PRE OR  op == PLUS_PLUS_POST) add_reg_reg(reg_X, reg_Y);
+    else if (op == '-' OR op == MINUS_EQ OR op == MINUS_MINUS_PRE OR op == MINUS_MINUS_POST) sub_reg_reg(reg_X, reg_Y);
     else if (op == '*' OR op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
     else if (op == '/' OR op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);
     else if (op == '%' OR op == PERCENT_EQ) rem_reg_reg(reg_X, reg_Y);
@@ -543,16 +543,31 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       codegen_binop(EQ_EQ);
       grow_fs(-2);
-    } else if (op == MINUS_MINUS_POST) {
-      //TODO
-    } else if (op == PLUS_PLUS_POST) {
-      //TODO
+    } else if ((op == MINUS_MINUS_POST) OR (op == PLUS_PLUS_POST)){
+
+      codegen_lvalue(get_child(node, 0));
+      pop_reg(reg_Y);
+      mov_reg_mem(reg_X, reg_Y, 0);
+      push_reg(reg_X);
+      push_reg(reg_Y);
+      push_reg(reg_X); // Save the original value of lvalue on the stack
+      mov_reg_imm(reg_X, 1); // Equivalent to calling codegen rvalue with INTEGER 1 (subtraction or addition handled in codegen_binop)
+      push_reg(reg_X);
+      codegen_binop(op); // Pops two values off the stack and pushes the result: value of lvalue, address of lvalue, result of binop
+      pop_reg(reg_X); //result
+      pop_reg(reg_Y); //address
+      grow_fs(-1);
+      mov_mem_reg(reg_Y, 0, reg_X); // Store the result in the address
+      pop_reg(reg_X); // Retrieve the original value (before increment/decrement) from the stack
+      push_reg(reg_X); // Push the original value back onto the stack to match postfix semantics
+
     } else if ((op == MINUS_MINUS_PRE) OR (op == PLUS_PLUS_PRE)) {
+
       codegen_lvalue(get_child(node, 0));
       pop_reg(reg_Y);
       push_reg(reg_Y);
       mov_reg_mem(reg_X, reg_Y, 0);
-      push_reg(reg_X); // stack : address of lvalue, value of lvalue
+      push_reg(reg_X);
       grow_fs(1);
       mov_reg_imm(reg_X, 1); // equivalent to calling codegen rvalue with INTEGER 1 (subtraction or addition handled in codegen_binop)
       push_reg(reg_X);
@@ -563,6 +578,7 @@ void codegen_rvalue(ast node) {
       grow_fs(-3);
       mov_mem_reg(reg_Y, 0, reg_X); //store the result in the address
       push_reg(reg_X);
+
     } else if (op == '&') {
       codegen_lvalue(get_child(node, 0));
       grow_fs(-1);
