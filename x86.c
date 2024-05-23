@@ -156,12 +156,30 @@ void mov_mem_reg(int base, int offset, int src) {
   mov_memory(0x89, src, base, offset);
 }
 
+void mov_mem8_reg(int base, int offset, int src) {
+
+  // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x88, src, base, offset);
+}
+
 void mov_reg_mem(int dst, int base, int offset) {
 
   // MOV dst_reg, [base_reg + offset]  ;; Move word from memory to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
   mov_memory(0x8b, dst, base, offset);
+}
+
+void mov_reg_mem8(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x8a, dst, base, offset);
+  mov_reg_imm(BX, 0xff); // mask off the upper bits
+  and_reg_reg(dst, BX);
 }
 
 void imul_reg_reg(int dst, int src) {
@@ -370,6 +388,27 @@ void os_exit() {
   mov_reg_reg(BX, AX);   // mov  ebx, eax
   mov_reg_imm(AX, 1);    // mov  eax, 1   # SYS_EXIT
   int_i8(0x80);          // int  0x80     # system call
+}
+
+void setup_proc_args() {
+  // On x86-32 bit, argc is at 0(%esp) and the content of argv directly follows.
+  // The stack looks like this:
+  // 0(%esp) -> argc
+  // 4(%esp) -> argv[0]
+  // 8(%esp) -> argv[1]
+  // ...
+  // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
+  // The stack will then look like this:
+  // 0(%esp)  -> argc
+  // 4(%esp)  -> argv
+  // 8(%esp)  -> arg[0]
+  // 12(%esp) -> arg[1]
+  // ...
+
+  pop_reg(reg_X);  // remove argc so it can be moved to the top of stack
+  mov_reg_reg(reg_Y, reg_SP); // address of argv
+  push_reg(reg_Y); // argv
+  push_reg(reg_X); // argc
 }
 
 #ifdef SKIP
