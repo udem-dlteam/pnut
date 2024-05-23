@@ -444,14 +444,14 @@ void codegen_rvalue(ast node) {
         if (get_op(heap[binding+4]) != '[') {
           mov_reg_mem(reg_X, reg_X, 0);
         }
-        push_reg(reg_X); //reaches here
+        push_reg(reg_X);
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
           mov_reg_imm(reg_X, heap[binding+3] * word_size);
           add_reg_reg(reg_X, reg_glo);
           if (get_op(heap[binding+4]) != '[') {
-            mov_reg_mem(reg_X, reg_X, 0); //seems to be the mem access
+            mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
         } else {
@@ -514,8 +514,6 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_Y); //address
       grow_fs(-1);
       mov_mem_reg(reg_Y, 0, reg_X); // Store the result in the address
-      pop_reg(reg_X); // Retrieve the original value (before increment/decrement) from the stack
-      push_reg(reg_X); // Push the original value back onto the stack to match postfix semantics
 
     } else if ((op == MINUS_MINUS_PRE) OR (op == PLUS_PLUS_PRE)) {
 
