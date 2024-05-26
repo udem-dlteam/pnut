@@ -549,7 +549,8 @@ int round_up_to_word_size(int n) {
 }
 
 void grow_stack(int words) {
-  add_reg_imm(reg_SP, -words * word_size);
+  if (words != 0)
+    add_reg_imm(reg_SP, -words * word_size);
 }
 
 // Like grow_stack, but takes bytes instead of words.
