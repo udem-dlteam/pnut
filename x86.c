@@ -396,8 +396,9 @@ void setup_proc_args(int global_vars_size) {
   push_reg(reg_Y); // push argc
 }
 
-#ifdef i386
 // For 32 bit linux.
+#ifdef i386
+
 void os_getchar() {
   int lbl = alloc_label();
   mov_reg_imm(AX, 0);    // mov  eax, 0
@@ -431,67 +432,21 @@ void os_exit() {
   int_i8(0x80);          // int  0x80     # system call
 }
 
-// There's no push imm8 instruction in x86, but we can simulate one by pushing
-// overlapping 64-bit values. This function pushes a 64-bit value, then adjust
-// the stack pointer to make it look like we pushed an 8-bit value.
-// Careful: After pushing a byte, the stack is misaligned.
-void push_byte_reg(int reg) {
-  mov_reg_imm(BX, 8*(word_size - 1));
-  shl_reg_reg(reg, BX);
-  push_reg(reg);
-  add_reg_imm(SP, word_size - 1);
-}
-
-// Pnut strings are not encoded like C strings, where each character stored as a
-// byte. Instead, each character gets its own word, which is fine as long as we
-// don't need to pass the string to the OS.
-// This function takes a string (on AX) and pushes a character-as-byte string
-// on the stack.
-void push_byte_string() {
-  int find_end_lbl = alloc_label();
-  int push_char_lbl = alloc_label();
-  mov_reg_reg(SI, AX);            // SI points to the current character
-
-  // Because the characters are pushed on a stack, they must be pushed in
-  // reverse order. To do this, we first find the end of the string, then loop
-  // back and push each character.
-
-  // Find end of string
-  mov_reg_imm(BX, 0);             // BX = '\0'
-  def_label(find_end_lbl);
-  mov_reg_mem(DX, SI, 0);         // Load current character
-  add_reg_imm(SI, word_size);     // Move to the next character
-  cmp_reg_reg(BX, DX);
-  jump_cond(NE, find_end_lbl);    // As long as the character is not null, keep going
-  // Push string characters
-  def_label(push_char_lbl);
-  mov_reg_mem(DX, SI, 0);         // Load current character
-  push_byte_reg(DX);              // Push character
-  add_reg_imm(SI, -word_size);    // Move to the next character
-  cmp_reg_reg(AX, SI);            // do { } while SI >= AX
-  jump_cond(LE, push_char_lbl);
-
-}
-
-//32bit version of os_fopen uses eax, ebx (arg0), exc(arg1), edx(arg2)
-void os_fopen(){
-  mov_reg_reg(BP, SP); // save stack pointer
-  push_byte_string(); // push the file name to the stack
-  mov_reg_reg(BX, SP); // mov ebx, esp | file name
+void os_fopen() {
+  mov_reg_reg(BX, AX); // mov ebx, ax | file name
   mov_reg_imm(AX, 5); // mov eax, 5 == SYS_OPEN
   mov_reg_imm(CX, 0); // mov ecx, 0 | flags
   mov_reg_imm(DX, 0); // mov edx, 0 | mode
   int_i8(0x80); // system call
-  mov_reg_reg(SP, BP); // restore stack pointer
 }
 
-void os_fclose(){
+void os_fclose() {
   mov_reg_reg(BX, reg_X); // mov  ebx, file descriptor
   mov_reg_imm(AX, 6); // mov  eax, 6 == SYS_CLOSE
   int_i8(0x80); // system call
 }
 
-void os_fgetc(){
+void os_fgetc() {
   int lbl = alloc_label(); // label for EOF
   mov_reg_reg(BX, reg_X);    // mov  ebx, file descriptor
   mov_reg_imm(AX, 3);    // mov  eax, 3 == SYS_READ
@@ -509,7 +464,9 @@ void os_fgetc(){
 
 #endif
 
-#ifdef x86_64 // For 64 bit linux.
+// For 64 bit linux.
+#ifdef x86_64
+
 void os_getchar() {
   int lbl = alloc_label();
   push_reg(DI);          // save address of global variables table
@@ -549,59 +506,13 @@ void os_exit() {
   pop_reg(DI);           // restore address of global variables table
 }
 
-// There's no push imm8 instruction in x86, but we can simulate one by pushing
-// overlapping 64-bit values. This function pushes a 64-bit value, then adjust
-// the stack pointer to make it look like we pushed an 8-bit value.
-// Careful: After pushing a byte, the stack is misaligned.
-void push_byte_reg(int reg) {
-  mov_reg_imm(BX, 8*(word_size - 1));
-  shl_reg_reg(reg, BX);
-  push_reg(reg);
-  add_reg_imm(SP, word_size - 1);
-}
-
-// Pnut strings are not encoded like C strings, where each character stored as a
-// byte. Instead, each character gets its own word, which is fine as long as we
-// don't need to pass the string to the OS.
-// This function takes a string (on AX) and pushes a character-as-byte string
-// on the stack.
-void push_byte_string() {
-  int find_end_lbl = alloc_label();
-  int push_char_lbl = alloc_label();
-  mov_reg_reg(SI, AX);            // SI points to the current character
-
-  // Because the characters are pushed on a stack, they must be pushed in
-  // reverse order. To do this, we first find the end of the string, then loop
-  // back and push each character.
-
-  // Find end of string
-  mov_reg_imm(BX, 0);             // BX = '\0'
-  def_label(find_end_lbl);
-  mov_reg_mem(DX, SI, 0);         // Load current character
-  add_reg_imm(SI, word_size);     // Move to the next character
-  cmp_reg_reg(BX, DX);
-  jump_cond(NE, find_end_lbl);    // As long as the character is not null, keep going
-  // Push string characters
-  def_label(push_char_lbl);
-  mov_reg_mem(DX, SI, 0);         // Load current character
-  push_byte_reg(DX);              // Push character
-  add_reg_imm(SI, -word_size);    // Move to the next character
-  cmp_reg_reg(AX, SI);            // do { } while SI >= AX
-  jump_cond(LE, push_char_lbl);
-
-}
-
-// os_fopen to open a file using the file name pointed to and the flags
 void os_fopen(){
   push_reg(DI); // save address of global variables table
-  mov_reg_reg(BP, SP); // save stack pointer
-  push_byte_string(); // push the file name to the stack
-  mov_reg_reg(DI, SP); // mov rdi, rsp | file name
+  mov_reg_reg(DI, AX); // mov rdi, rax | file name
   mov_reg_imm(SI, 0); // mov rsi, 0 | flags
   mov_reg_imm(DX, 0); // mov rdx, 0 | mode
   mov_reg_imm(AX, 2); // mov rax, 2 == SYS_OPEN
   emit_2_i8(0x0F, 0x05); // system call 64 bit (file descriptor is in rax)
-  mov_reg_reg(SP, BP); // restore stack pointer
   pop_reg(DI); // restore address of global variables table
 }
 
@@ -613,6 +524,7 @@ void os_fclose(){
 
 void os_fgetc(){
   int lbl = alloc_label(); // label for EOF
+  push_reg(DI); // save address of global variables table
   mov_reg_reg(DI, reg_X);    // mov  edi, file descriptor
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte
@@ -626,6 +538,7 @@ void os_fgetc(){
   jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
   mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
   def_label(lbl);        // lbl:
+  pop_reg(DI);           // restore address of global variables table
 }
 
 #endif
