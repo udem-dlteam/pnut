@@ -73,23 +73,11 @@ int categorize_char(char c) {
   return a;
 }
 
-void putstring(char *s) {
-  while (*s) {
-    putchar(*s);
-    s = s + 1;
-  }
-}
-
 int main() {
-  int f;
+  FILE_ptr f;
   char c;
-  f = fopen("six-cc-tests/fgetc.c", 0);
-  while ((c = fgetc(f)) != -1) {
-    //printf("'%c' = %d: %d\n", c, c, categorize_char(c));
-    putstring("'");
-    putchar(c);
-    putstring("' = ");
-    putchar(c);
-    putstring(": ");
+  f = fopen("six-cc-tests/fgetc.c", "r");
+  while ((c = fgetc(f)) != EOF) {
+    printf("'%c' = %d: %d\n", c, c, categorize_char(c));
   }
 }

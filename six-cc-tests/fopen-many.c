@@ -1,13 +1,12 @@
 int main() {
-  int f;
+  FILE_ptr f;
   char c;
   int i = 0;
-  while (i < 100) {
-    f = fopen("six-cc-tests/fgetc.c", 0);
-    while ((c = fgetc(f)) != -1) {
+  for (i = 0; i < 100; i++) {
+    f = fopen("six-cc-tests/fgetc.c", "r");
+    while ((c = fgetc(f)) != EOF) {
       putchar(c);
     }
     fclose(f);
-    i = i + 1;
   }
 }

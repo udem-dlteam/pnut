@@ -1,5 +1,4 @@
 /* Test that enum variables can be shadowed by local bindings */
-
 enum ChildEnum() { VAL; NEXT; LL_SIZE; }
 
 enum ParentEnum() { VAL; NEXT; LL_SIZE; VAL2; NEXT2; LL_SIZE2; }

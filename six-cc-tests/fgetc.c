@@ -1,9 +1,8 @@
 int main() {
-  int f;
+  FILE_ptr f;
   char c;
   f = fopen("six-cc-tests/fgetc.c", 0);
-//  putchar(f+48);
-  while ((c = fgetc(f)) != -1) {
+  while ((c = fgetc(f)) != EOF) {
     putchar(c);
   }
   fclose(f);

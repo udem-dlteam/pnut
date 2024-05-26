@@ -1,10 +1,3 @@
-void putstring(char *s) {
-  while (*s) {
-    putchar(*s);
-    s = s + 1;
-  }
-}
-
 int main() {
   int x;
   int y;
@@ -13,31 +6,22 @@ int main() {
   y = 128;
 
   if (x < y) {
-    //printf("if (x < y)\n");
-    putstring("if (x < y)\n");
+    printf("if (x < y)\n");
   } else {
-    //printf("else (x >= y)\n");
-    putstring("else (x >= y)\n");
+    printf("else (x >= y)\n");
   }
 
   if (x > y) {
-    //printf("x > y\n");
-    putstring("x > y\n");
+    printf("x > y\n");
   } else if (x == y) {
-    //printf("else if (x == y)\n");
-    putstring("else if (x == y)\n");
+    printf("else if (x == y)\n");
   }
 
   if (x > y) {
-    //printf("if (x > y)\n");
-    putstring("if (x > y)\n");
+    printf("if (x > y)\n");
   } else if (x == y) {
-    //printf("else if (x == y)\n");
-    putstring("else if (x == y)\n");
+    printf("else if (x == y)\n");
   } else {
-    //printf("else (x < y)\n");
-    putstring("else (x < y)\n");
+    printf("else (x < y)\n");
   }
-
-  return 0;
 }

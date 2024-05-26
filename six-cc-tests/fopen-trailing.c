@@ -1,8 +1,8 @@
 int main() {
-  int f;
+  FILE_ptr f;
   char c;
-  f = fopen("six-cc-tests/no-trailing.txt", 0);
-  while ((c = fgetc(f)) != -1) {
+  f = fopen("six-cc-tests/no-trailing.txt", "r");
+  while ((c = fgetc(f)) != EOF) {
     putchar(c);
   }
 }

@@ -1,42 +1,27 @@
-void putstring(char *s) {
-  while (*s) {
-    putchar(*s);
-    s = s + 1;
-  }
-}
-
-int emit_line(int line, int f) {
+int emit_line(int line, FILE_ptr f) {
   char c;
-  putstring("Line: ");
-  putchar(line+ 48);
-  while ((c = fgetc(f)) && c != -1 && c != '\n') {
+  printf("%d: ", line);
+  while ((c = fgetc(f)) && c != EOF && c != '\n') {
     putchar(c);
   }
-  if (c != -1) {
+  if (c != EOF) {
     putchar('\n');
   }
   return c;
 }
 
 int main() {
-  int f1;
-  int f2;
+  FILE_ptr f1;
+  FILE_ptr f2;
   char c1;
   char c2;
   int i = 0;
-  f1 = fopen("six-cc-tests/fgetc.c", 0);
-  f2 = fopen("six-cc-tests/while-fun-call.c", 0);
+  f1 = fopen("six-cc-tests/fgetc.c", "r");
+  f2 = fopen("six-cc-tests/while-fun-call.c", "r");
   while (1) {
     c1 = emit_line(i, f1);
     c2 = emit_line(i, f2);
-    if (c1 == -1 || c2 == -1){
-      putstring("");
-      break// NOTE: BUG HERE!! This line is not executed without the line above
-      // Instead of breaking the loop unexpected behavior occurs ie: exit code 1; elf header dump
-      // When putchar is used before break the exit code gets a strange value (not 0) this changes based on character and characters put before break
-      // If putstring is used then putchar, the same behavior occurs
-      // If putchar is used then putstring, the exit code is 0
-    }
+    if (c1 == EOF || c2 == EOF) break;
     i += 1;
   }
 }
