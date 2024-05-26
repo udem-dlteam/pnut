@@ -1080,7 +1080,7 @@ void codegen_statement(ast node) {
 
   } else if (op == FOR_KW) {
 
-    // TODO
+    fatal_error("codegen_statement: for statement not implemented");
 
   } else if (op == BREAK_KW) {
 

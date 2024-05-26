@@ -2309,14 +2309,13 @@ ast parse_compound_statement() {
 
 int main(int argc, char **args) {
 
-  int i;
+  int i = 1;
 
   init_ident_table();
 
   init_pnut_macros();
 
-  // Parse external macros
-  for (i = 1; i < argc; i += 1) {
+  while (i < argc) {
     if (args[i][0] == '-') {
       if (args[i][1] == 'D') {
         init_ident(MACRO, args[i] + 2);
@@ -2334,6 +2333,7 @@ int main(int argc, char **args) {
       fatal_error("input file not supported. Pnut expects the input from stdin.");
       #endif
     }
+    i += 1;
   }
 
   #ifdef SUPPORT_INCLUDE
