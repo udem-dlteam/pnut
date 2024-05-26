@@ -350,12 +350,14 @@ ast value_type(ast node) {
         if (binding != 0) {
           return heap[binding+4];
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
+          putstr("ident = ");
+          putstr(string_pool+get_val(ident));
+          putchar('\n');
           fatal_error("value_type: identifier not found");
         }
       }
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with nb_children == 0");
     }
 
@@ -368,7 +370,7 @@ ast value_type(ast node) {
       } else if (get_val(left_type) != 0) { // Pointer type
         return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
       } else {
-        printf("left_type=%d %c", left_type, left_type);
+        putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("pointer_width: non pointer is being dereferenced with *");
       }
     } else if (op == '&') {
@@ -378,7 +380,7 @@ ast value_type(ast node) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unexpected operator");
     }
 
@@ -408,7 +410,7 @@ ast value_type(ast node) {
       } else if (get_val(right_type) != 0) {
         return new_ast0(get_op(right_type), get_val(right_type) - 1); // one less indirection
       } else {
-        printf("left_type=%d %c", left_type, left_type);
+        putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("value_type: non pointer is being dereferenced with *");
       }
     } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
@@ -421,7 +423,9 @@ ast value_type(ast node) {
       if (binding != 0) {
         return heap[binding+4];
       } else {
-        printf("ident = %s\n", string_pool + get_val(get_val(get_child(node, 0))));
+        putstr("ident = ");
+        putstr(string_pool + get_val(get_val(get_child(node, 0))));
+        putchar('\n');
         fatal_error("value_type: function not found");
       }
     } else {
@@ -433,12 +437,12 @@ ast value_type(ast node) {
     if (op == '?') {
       fatal_error("value_type: ternary operator not supported");
     } else {
-      printf("op=%d %c\n", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with 3 children");
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("value_type: unknown expression with >4 children");
   }
 }
@@ -528,7 +532,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       add_reg_reg(reg_X, reg_Y);
       load_mem_operand(reg_X, reg_X, 0, width);
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_binop: unknown op");
     }
   }
@@ -628,7 +632,7 @@ int codegen_lvalue(ast node) {
         }
       }
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
     }
 
@@ -638,7 +642,7 @@ int codegen_lvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       grow_fs(-1);
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unexpected operator");
     }
 
@@ -654,7 +658,7 @@ int codegen_lvalue(ast node) {
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_lvalue: unknown lvalue with >2 children");
   }
 
@@ -745,14 +749,14 @@ void codegen_rvalue(ast node) {
           }
           push_reg(reg_X);
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
+          putstr("ident = "); putstr(string_pool+get_val(ident)); putchar('\n');
           fatal_error("codegen_rvalue: identifier not found");
         }
       }
     } else if (op == STRING) {
       codegen_string(get_val(node));
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
     }
 
@@ -823,7 +827,7 @@ void codegen_rvalue(ast node) {
       codegen_lvalue(get_child(node, 0));
       grow_fs(-1);
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unexpected operator");
     }
 
@@ -882,12 +886,12 @@ void codegen_rvalue(ast node) {
     if (op == '?') {
       fatal_error("codegen_rvalue: ternary operator not supported");
     } else {
-      printf("op=%d %c\n", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with 3 children");
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_rvalue: unknown rvalue with >4 children");
   }
 
@@ -1189,7 +1193,8 @@ void codegen_glo_decl(ast node) {
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    putstr("op="); putint(op);
+    putstr(" with "); putint(get_nb_children(node)); putstr(" children\n");
     fatal_error("codegen_glo_decl: unexpected declaration");
   }
 }

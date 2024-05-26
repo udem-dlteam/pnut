@@ -120,25 +120,40 @@ int MINUS_MINUS_PRE = 426;
 int PLUS_PLUS_POST = 427;
 int MINUS_MINUS_POST = 428;
 
-
-
 int MACRO_ARG = 499;
 int IDENTIFIER = 500;
 int TYPE = 501;
 int MACRO = 502;
 
+void putstr(char *str) {
+  while (*str) {
+    putchar(*str);
+    str += 1;
+  }
+}
+
+void putint(int n) {
+  if (n < 0) {
+    putchar('-');
+    putint(-n);
+  } else {
+    if (n > 9) putint(n / 10);
+    putchar('0' + n % 10);
+  }
+}
+
 void fatal_error(char *msg) {
-  printf("%s\n", msg);
+  putstr(msg); putchar('\n');
   exit(1);
 }
 
 void syntax_error(char *msg) {
-  printf("syntax error: %s\n", msg);
+  putstr("syntax error: "); putstr(msg);
   fatal_error("syntax error");
 }
 
 void missing_feature_error(char *msg) {
-  printf("not yet implemented: %s\n", msg);
+  putstr("not yet implemented: "); putstr(msg);
   fatal_error("syntax error");
 }
 
@@ -462,11 +477,11 @@ void print_macro_raw_tokens(int tokens) {
   int i = 0;
   while (tokens != 0) {
     // print_tok(car(car(tokens)), cdr(car(tokens)));
-    printf("%c(%d)", car(car(tokens)), car(car(tokens)));
+    putchar(car(car(tokens))); putchar('('); putint(car(car(tokens))); putchar(')');
     tokens = cdr(tokens);
     i += 1;
   }
-  printf("(%d tokens)", i);
+  putstr("("); putint(i); putstr(" tokens)");
 }
 #endif
 
@@ -484,7 +499,7 @@ void handle_define() {
     heap[val + 2] = MACRO; // Mark the identifier as a macro
     macro = val;
   } else {
-    printf("tok=%d\n", tok);
+    putstr("tok="); putint(tok); putchar('\n');
     fatal_error("#define directive can only be followed by a identifier");
   }
   if (ch == '(') { // Function-like macro
@@ -519,21 +534,20 @@ void handle_define() {
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
     #ifdef DEBUG_CPP
-    if (args_count == -1) {
-      printf("# %s ", string_pool + heap[macro + 1]);
-    } else {
-      printf("# %s(", string_pool + heap[macro + 1]);
-    }
+    putstr("# ");
+    putstr(string_pool + heap[macro + 1]);
+    if (args_count != -1) putchar('('); // Function-like macro
+
     while (args_count > 0) {
-      printf("%s", string_pool + heap[car(args) + 1]);
+      putstr(string_pool + heap[car(args) + 1]);
       args = cdr(args);
       args_count -= 1;
-      if (args_count > 0) printf(", ");
+      if (args_count > 0) putstr(", ");
     }
 
-    if (args_count != -1) printf(") ");
+    if (args_count != -1) putstr(") ");
     print_macro_raw_tokens(car(heap[macro + 3]));
-    printf("\n");
+    putchar('\n');
     #endif
   }
 }
@@ -565,7 +579,7 @@ void handle_preprocessor_directive() {
         fatal_error("The #include directive is not supported in this version of the compiler.");
         #endif
       } else {
-        printf("tok=%d\n", tok);
+        putstr("tok="); putint(tok); putchar('\n');
         fatal_error("expected string to #include directive");
       }
     } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
@@ -574,13 +588,13 @@ void handle_preprocessor_directive() {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
         // TODO: Doesn't play nice with typedefs, because they are not marked as macros
       } else {
-        printf("tok=%d\n", tok);
+        putstr("tok="); putint(tok); putchar('\n');
         fatal_error("#undef directive can only be followed by a identifier");
       }
     } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
       handle_define();
     } else {
-      printf("tok=%d: %s\n", tok, string_pool + heap[val + 1]);
+      putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
       fatal_error("unsupported preprocessor directive");
     }
   } else {
@@ -592,7 +606,7 @@ void handle_preprocessor_directive() {
   // Because handle_preprocessor_directive is called from get_tok, and it loops after
   // the call to handle_preprocessor_directive, we don't need to call get_tok here
   if (ch != '\n' AND ch != EOF) {
-    printf("ch=%d\n", ch);
+    putstr("ch="); putint(ch); putchar('\n');
     fatal_error("preprocessor expected end of line");
   }
 }
@@ -612,7 +626,10 @@ void get_ident() {
   val = end_ident();
   tok = heap[val+2];
   /*
-  printf("tok=%d val=%d %s\n", tok, val, string_pool + heap[val+1]);
+  putstr("tok="); putint(tok);
+  putstr(" val="); putint(val);
+  putstr(" "); putstr(string_pool + heap[val+1]);
+  putchar('\n');
   */
 }
 
@@ -803,7 +820,9 @@ int macro_parse_argument() {
 
 void check_macro_arity(int macro_args_count, int expected_argc) {
   if (macro_args_count != expected_argc) {
-    printf("expected_argc=%d != macro_args_count=%d\n", expected_argc, macro_args_count);
+    putstr("expected_argc="); putint(expected_argc);
+    putstr(" != macro_args_count="); putint(macro_args_count);
+    putchar('\n');
     fatal_error("macro argument count mismatch");
   }
 }
@@ -900,7 +919,7 @@ void stringify() {
   get_tok_macro();
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
-    printf("tok=%d\n", tok);
+    putstr("tok="); putint(tok); putchar('\n');
     fatal_error("expected macro argument after #");
   }
   arg = get_macro_arg(val);
@@ -940,7 +959,7 @@ void paste_tokens(int left_tok, int left_val) {
     } else if (right_tok == INTEGER) {
       accum_string_integer(-right_val);
     } else {
-      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       fatal_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -950,11 +969,11 @@ void paste_tokens(int left_tok, int left_val) {
     if (right_tok == INTEGER) {
       val = -paste_integers(-left_val, -right_val);
     } else {
-      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       fatal_error("cannot paste an integer with a non-integer");
     }
   } else {
-    printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+    putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
     fatal_error("cannot paste a non-identifier or non-integer");
   }
 }
@@ -1333,11 +1352,11 @@ void get_tok() {
           if (ch == '\n') { /* Continues with next token */
             get_ch();
           } else {
-            printf("ch=%c\n", ch);
+            putstr("ch="); putint(ch); putchar('\n');
             fatal_error("unexpected character after backslash");
           }
         } else {
-          printf("ch=%c\n", ch);
+          putstr("ch="); putint(ch); putchar('\n');
           fatal_error("invalid token");
         }
       }
@@ -1431,7 +1450,8 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
 
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
-    printf("expected_tok=%d tok=%d\n", expected_tok, tok);
+    putstr("expected_tok="); putint(expected_tok);
+    putstr(" tok="); putint(tok); putchar('\n');
     syntax_error("unexpected token");
   }
   get_tok();
@@ -2301,7 +2321,9 @@ int main(int argc, char **args) {
       if (args[i][1] == 'D') {
         init_ident(MACRO, args[i] + 2);
       } else {
-        printf("Option %s\n", args[i]);
+        putstr("Option ");
+        putstr(args[i]);
+        putchar('\n');
         fatal_error("unknown option");
       }
     } else {
@@ -2316,7 +2338,7 @@ int main(int argc, char **args) {
 
   #ifdef SUPPORT_INCLUDE
   if (fp == 0) {
-    printf("Usage: %s <filename>\n", args[0]);
+    putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
   #endif
