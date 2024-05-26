@@ -372,20 +372,21 @@ void setup_proc_args(int global_vars_size) {
   // See page 29 of AMD64 System V ABI document:
   // https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf
   //
-  // On x86-32, argc is at 0(%esp) and the content of argv directly follows.
-  // At this point, the stack looks like this:
-  // global table [global_vars_size bytes]
-  // global_vars_size(%esp) -> argc
-  // global_vars_size+4(%esp) -> argv[0]
-  // global_vars_size+8(%esp) -> argv[1]
+  // On x86-32, argc is at [esp+0] and the content of argv directly follows at program start.
+  // At this point, we've initialized the globals table so the stack looks like this:
+  // [esp + 0]: global table start (global_vars_size bytes long)
+  // ...
+  // [esp + global_vars_size]     : argc
+  // [esp + global_vars_size + 4] : argv[0]
+  // [esp + global_vars_size + 8] : argv[1]
   // ...
   // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
   // The stack will then look like this:
-  // 0(%esp)  -> argc
-  // 4(%esp)  -> argv
-  // global table [global_vars_size bytes]
+  // [esp + 0] : argc
+  // [esp + 4] : argv
+  // [esp + 8] : global table start (global_vars_size bytes long)
   // ...
-  // For x86-64, it works similarly with 0(%rsp) for argc and 8(%rsp) for argv.
+  // For x86-64, it works similarly with [rsp + 0] for argc and [rsp + 8] for argv.
 
   mov_reg_reg(reg_X, SP);
   add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
