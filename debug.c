@@ -83,7 +83,7 @@ void print_tok(int tok, int val) {
     putstr(string_pool + heap[val+1]);
     putchar(']');
   }  else if (tok == INTEGER) {
-    putint(-val);
+    putintneg(val)
   } else if (tok == CHARACTER) {
     putchar('\'');
     print_string_char(val);
@@ -103,7 +103,6 @@ void print_tok(int tok, int val) {
   }
 
   if (tok == ';') { // Simple heuristic to print newlines. This makes the output more readable.
-    putchar(' ');
     putchar('\n');
   } else {
     putchar(' ');
