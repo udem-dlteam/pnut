@@ -328,9 +328,12 @@ FILE *fp = 0; // Current file pointer that's being read
 #define IFDEF_DEPTH_MAX 20
 bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
 bool ifdef_stack_ix = 0;
-bool ifdef_mask = true;
-// Whether to expand macros or not. Useful to parse macro definitions containing
-// other macros without expanding them.
+bool ifdef_mask = true;         // Indicates if the current if/elif block is being executed
+int  ifdef_nest_level = 0;      // Current number of unmatched #if/#ifdef/#ifndef directives that were masked out
+
+// get_tok parameters:
+// Whether to expand macros or not.
+// Useful to parse macro definitions containing other macros without expanding them.
 bool expand_macro = true;
 // Don't expand macro arguments. Used for stringification and token pasting.
 bool expand_macro_arg = true;
@@ -545,18 +548,34 @@ void handle_preprocessor_directive() {
   get_tok(); // Get the directive
   ifdef_mask = prev_ifdef_mask;
 
-  if (tok == IDENTIFIER AND val == ENDIF_ID) {
-    pop_ifdef_mask();
-  } else if (tok == ELSE_KW) {
-    flip_ifdef_mask();
-  } else if (ifdef_mask) {
-    if (tok == IDENTIFIER AND val == IFDEF_ID) {
-      get_tok_macro();
+  if (tok == IDENTIFIER AND val == IFDEF_ID) {
+    ifdef_mask = true; get_tok_macro(); ifdef_mask = prev_ifdef_mask;
+    if (ifdef_mask) {
       push_ifdef_mask(tok == MACRO);
-    } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
-      get_tok_macro();
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      ifdef_nest_level += 1;
+    }
+  } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
+    ifdef_mask = true; get_tok_macro(); ifdef_mask = prev_ifdef_mask;
+    if (ifdef_mask) {
       push_ifdef_mask(tok != MACRO);
-    } else if (tok == IDENTIFIER AND val == INCLUDE_ID) {
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      ifdef_nest_level += 1;
+    }
+  } else if (tok == ELSE_KW) {
+    if (ifdef_mask OR ifdef_nest_level == 0) {
+      flip_ifdef_mask();
+    }
+  } else if (tok == IDENTIFIER AND val == ENDIF_ID) {
+    if (ifdef_mask OR ifdef_nest_level == 0) {
+      pop_ifdef_mask();
+    } else {
+      ifdef_nest_level -= 1;
+    }
+  } else if (ifdef_mask) {
+    if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
       if (tok == STRING) {
         #ifdef SUPPORT_INCLUDE
