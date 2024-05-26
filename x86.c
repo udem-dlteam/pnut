@@ -121,6 +121,7 @@ void mov_reg_imm(int dst, int imm) {
 
   // MOV dst_reg, imm  ;; Move 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
   rex_prefix();
   emit_i8(0xb8 + dst);
   emit_word_le(imm);
@@ -291,14 +292,12 @@ void push_reg(int src) {
 
 void push_imm32_le(int imm) {
 
-    // PUSH imm32  ;; Push 32 bit immediate value to stack
-    // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
+  // PUSH imm32  ;; Push 32 bit immediate value to stack
+  // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
 
-    emit_i8(0x68);
-    emit_i32_le(imm);
-
+  emit_i8(0x68);
+  emit_i32_le(imm);
 }
-
 
 
 void pop_reg (int dst) {
@@ -548,7 +547,7 @@ void os_print_msg(char_ptr msg) {
   int i = 0;
   while (msg[i] != 0) {
     mov_reg_imm(AX, msg[i]);  // mov  eax, c
-    os_putchar();           // putchar
+    os_putchar();             // putchar
     i += 1;
   }
 }

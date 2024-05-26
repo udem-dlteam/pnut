@@ -181,7 +181,6 @@ void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 void os_getchar();
 void os_putchar();
 void os_exit();
-void os_git();
 void os_fopen();
 void os_fclose();
 void os_fgetc();
@@ -692,24 +691,6 @@ void codegen_string(int start) {// TODO render generic to word_le
 
   def_label(lbl);
 }
-
-void codegen_c_string(char* start) {
-
-  int lbl = alloc_label();
-  int i = 0;
-
-  call(lbl);
-
-  while (start[i] != 0) {
-    emit_i8(start[i]);
-    i += 1;
-  }
-
-  emit_i8(0);
-
-  def_label(lbl);
-}
-
 
 void codegen_rvalue(ast node) {
   int op = get_op(node);
