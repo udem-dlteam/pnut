@@ -1559,9 +1559,10 @@ ast parse_definition(int local) {
   ast body;
   ast this_type;
   ast result = 0;
+  ast tail = 0;
+  ast current_declaration;
 
   if (is_type_starter(tok)) {
-
     type = parse_type();
 
     while (1) {
@@ -1629,14 +1630,21 @@ ast parse_definition(int local) {
           init = parse_conditional_expression();
         }
 
-        result = new_ast3(VAR_DECL, name, this_type, init);
+        current_declaration = new_ast3(VAR_DECL, name, this_type, init);
+        if(result == 0) {
+          result = current_declaration;
+          tail = result;
+        } else {
+          set_child(tail, 1, current_declaration);
+          tail = current_declaration;
+        }
 
         if (tok == ';') {
           get_tok();
           break;
         } else if (tok == ',') {
           get_tok();
-          break;
+          continue; // Continue to the next declaration
         } else {
           syntax_error("';' or ',' expected");
         }

@@ -658,28 +658,30 @@ void codegen_body(ast node) {
 
     while (get_op(node) == '{') {
       x = get_child(node, 0);
-      if (get_op(x) == VAR_DECL) {
+      if (get_op(x) == VAR_DECL) { // Variable declaration
+        while( x != 0 && get_op(x) == VAR_DECL) { // Multiple variable declarations
 
-        name = get_child(x, 0);
-        type = get_child(x, 1);
-        init = get_child(x, 2);
+          name = get_child(x, 0);
+          type = get_child(x, 1);
+          init = get_child(x, 2);
 
-        if (get_op(type) == '[') { // Array declaration
-          size = get_val(get_child(type, 0));
-          cgc_add_local(name, size, type);
-          grow_stack(size);
-        } else {
-          if (init != 0) {
-            codegen_rvalue(init);
-            grow_fs(-1);
+          if (get_op(type) == '[') { // Array declaration
+            size = get_val(get_child(type, 0));
+            cgc_add_local(name, size, type);
+            grow_stack(size);
           } else {
-	    xor_reg_reg(reg_X, reg_X);
-            push_reg(reg_X);
+            if (init != 0) {
+              codegen_rvalue(init);
+              grow_fs(-1);
+            } else {
+              xor_reg_reg(reg_X, reg_X);
+              push_reg(reg_X);
+            }
+            size = 1;
+            cgc_add_local(name, size, type);
           }
-          size = 1;
-          cgc_add_local(name, size, type);
+          x = get_child(x, 1); // Move to the next variable declaration
         }
-
       } else {
         codegen_statement(x);
       }
@@ -854,7 +856,10 @@ void codegen_glo_decl(ast node) {
   int op = get_op(node);
 
   if (op == VAR_DECL) {
-    codegen_glo_var_decl(node);
+    while (node != 0 && get_op(node) == VAR_DECL) { // Multiple variable declarations
+      codegen_glo_var_decl(node); // Process each variable declaration
+      node = get_child(node, 1); // Move to the next variable declaration
+    }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else {
