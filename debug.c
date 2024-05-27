@@ -83,7 +83,7 @@ void print_tok(int tok, int val) {
     putstr(string_pool + heap[val+1]);
     putchar(']');
   }  else if (tok == INTEGER) {
-    putintneg(val)
+    putintneg(val);
   } else if (tok == CHARACTER) {
     putchar('\'');
     print_string_char(val);

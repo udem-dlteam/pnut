@@ -1,6 +1,6 @@
 // ELF file output
 
-// Minimal x86-32 bit ELF header.
+// Minimal i386 bit ELF header.
 // https://web.archive.org/web/20240409140025/http://www.muppetlabs.com/~breadbox/software/tiny/teensy.html
 // https://web.archive.org/web/20240414151854/https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
 #ifdef i386
@@ -39,11 +39,11 @@ void write_elf_p_header() {
 #endif
 
 
-// Minimal x86-64 bit ELF header.
+// Minimal x86-64 ELF header.
 // see: https://web.archive.org/web/20231127152001/https://nathanotterness.com/2021/10/tiny_elf_modernized.html
 // Notes:
 //  64-bit virtual offsets always start at 0x400000
-//  https://stackoverflow.com/questions/38549972/why-elf-executables-have-a-fixed-load-address
+//  https://web.archive.org/web/20210918175202/https://stackoverflow.com/questions/38549972/why-elf-executables-have-a-fixed-load-address
 //  Convention set in the x86_64 system-v abi: https://refspecs.linuxfoundation.org/elf/x86_64-SysV-psABI.pdf (Page 26)
 #ifdef x86_64
 

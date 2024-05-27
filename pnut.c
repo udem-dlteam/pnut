@@ -132,29 +132,26 @@ void putstr(char *str) {
   }
 }
 
+void putint_aux(int n) {
+  if (n <= -10) putint_aux(n / 10);
+  putchar('0' - (n % 10));
+}
+
 void putint(int n) {
   if (n < 0) {
     putchar('-');
-    if (n == INT_MIN) { // Avoid overflow when n is INT_MIN
-      putint(-(n / 10));
-      putchar('0' + -(n % 10));
-    } else {
-      putint(-n);
-    }
+    putint_aux(n);
   } else {
-    if (n > 9) putint(n / 10);
-    putchar('0' + n % 10);
+    putint_aux(-n);
   }
 }
 
-// Like putint but takes the negative value of the number to output.
-// This is useful to avoid overflow when n is INT_MIN.
 void putintneg(int n) {
-  if (n == INT_MIN) {
-    putintneg(-(n / 10));
-    putchar('0' + -(n % 10));
+  if (n > 0) {
+    putchar('-');
+    putint_aux(-n);
   } else {
-    putint(n);
+    putint_aux(n);
   }
 }
 
