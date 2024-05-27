@@ -49,83 +49,83 @@ int strcmp(char *str1, char *str2) {
 
 #endif
 
-int AUTO_KW        = 300;
-int BREAK_KW       = 301;
-int CASE_KW        = 302;
-int CHAR_KW        = 303;
-int CONST_KW       = 304;
-int CONTINUE_KW    = 305;
-int DEFAULT_KW     = 306;
-int DO_KW          = 307;
-int DOUBLE_KW      = 308;
-int ELSE_KW        = 309;
-int ENUM_KW        = 310;
-int ERROR_KW       = 311;
-int EXTERN_KW      = 312;
-int FLOAT_KW       = 313;
-int FOR_KW         = 314;
-int GOTO_KW        = 315;
-int IF_KW          = 316;
-int IFNDEF_KW      = 317;
-int INCLUDE_KW     = 318;
-int INT_KW         = 319;
-int LONG_KW        = 320;
-int REGISTER_KW    = 321;
-int RETURN_KW      = 322;
-int SHORT_KW       = 323;
-int SIGNED_KW      = 324;
-int SIZEOF_KW      = 325;
-int STATIC_KW      = 326;
-int STRUCT_KW      = 327;
-int SWITCH_KW      = 328;
-int TYPEDEF_KW     = 329;
-int UNION_KW       = 330;
-int UNSIGNED_KW    = 331;
-int VOID_KW        = 332;
-int VOLATILE_KW    = 333;
-int WHILE_KW       = 334;
-int VAR_DECL       = 335;
-int FUN_DECL       = 336;
+enum {
+  // Tokens and AST nodes
+  AUTO_KW = 300,
+  BREAK_KW,
+  CASE_KW,
+  CHAR_KW,
+  CONST_KW,
+  CONTINUE_KW,
+  DEFAULT_KW,
+  DO_KW,
+  DOUBLE_KW,
+  ELSE_KW,
+  ENUM_KW,
+  ERROR_KW,
+  EXTERN_KW,
+  FLOAT_KW,
+  FOR_KW,
+  GOTO_KW,
+  IF_KW,
+  IFNDEF_KW,
+  INCLUDE_KW,
+  INT_KW,
+  LONG_KW,
+  REGISTER_KW,
+  RETURN_KW,
+  SHORT_KW,
+  SIGNED_KW,
+  SIZEOF_KW,
+  STATIC_KW,
+  STRUCT_KW,
+  SWITCH_KW,
+  TYPEDEF_KW,
+  UNION_KW,
+  UNSIGNED_KW,
+  VOID_KW,
+  VOLATILE_KW,
+  WHILE_KW,
+  VAR_DECL,
+  FUN_DECL,
 
-int INTEGER    = 401;
-int CHARACTER  = 402;
-int STRING     = 403;
+  // Non-character operands
+  INTEGER    = 401,
+  CHARACTER,
+  STRING,
+  AMP_AMP,
+  AMP_EQ,
+  ARROW,
+  BAR_BAR,
+  BAR_EQ,
+  CARET_EQ,
+  EQ_EQ,
+  GT_EQ,
+  LSHIFT_EQ,
+  LSHIFT,
+  LT_EQ,
+  MINUS_EQ,
+  MINUS_MINUS,
+  EXCL_EQ,
+  PERCENT_EQ,
+  PLUS_EQ,
+  PLUS_PLUS,
+  RSHIFT_EQ,
+  RSHIFT,
+  SLASH_EQ,
+  STAR_EQ,
+  HASH_HASH,
+  PLUS_PLUS_PRE,
+  MINUS_MINUS_PRE,
+  PLUS_PLUS_POST,
+  MINUS_MINUS_POST,
 
-int AMP_AMP    = 404;
-int AMP_EQ     = 405;
-int ARROW      = 406;
-int BAR_BAR    = 407;
-int BAR_EQ     = 408;
-int CARET_EQ   = 409;
-int EQ_EQ      = 410;
-int GT_EQ      = 411;
-int LSHIFT_EQ  = 412;
-int LSHIFT     = 413;
-int LT_EQ      = 414;
-int MINUS_EQ   = 415;
-int MINUS_MINUS= 416;
-int EXCL_EQ    = 417;
-int PERCENT_EQ = 418;
-int PLUS_EQ    = 419;
-int PLUS_PLUS  = 420;
-int RSHIFT_EQ  = 421;
-int RSHIFT     = 422;
-int SLASH_EQ   = 423;
-int STAR_EQ    = 424;
-int HASH_HASH  = 425;
-
-//pre and post increment and decrement
-int PLUS_PLUS_PRE = 425;
-int MINUS_MINUS_PRE = 426;
-int PLUS_PLUS_POST = 427;
-int MINUS_MINUS_POST = 428;
-
-
-
-int MACRO_ARG = 499;
-int IDENTIFIER = 500;
-int TYPE = 501;
-int MACRO = 502;
+  // Other tokens
+  MACRO_ARG = 499,
+  IDENTIFIER = 500,
+  TYPE = 501,
+  MACRO = 502,
+};
 
 void fatal_error(char *msg) {
   printf("%s\n", msg);

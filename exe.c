@@ -179,12 +179,14 @@ int cgc_locals = 0;
 int cgc_globals = 0;
 int cgc_global_alloc = 0;
 
-int BINDING_PARAM_LOCAL=0;
-int BINDING_VAR_LOCAL=1;
-int BINDING_VAR_GLOBAL=2;
-int BINDING_ENUM=3;
-int BINDING_LOOP=4;
-int BINDING_FUN=5;
+enum {
+  BINDING_PARAM_LOCAL,
+  BINDING_VAR_LOCAL,
+  BINDING_VAR_GLOBAL,
+  BINDING_ENUM,
+  BINDING_LOOP,
+  BINDING_FUN,
+};
 
 void cgc_add_local_param(int ident, int size, ast type) {
   int binding = alloc_obj(6);
