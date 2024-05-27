@@ -1563,6 +1563,68 @@ int parse_declaration_list() {
   return result;
 }
 
+ast parse_enum() {
+  ast name;
+  ast ident;
+  ast result = 0;
+  ast tail;
+  ast value = 0;
+  int next_value = 0;
+
+  expect_tok(ENUM_KW);
+
+  if (tok == IDENTIFIER) {
+    name = new_ast0(IDENTIFIER, val);
+    get_tok();
+  } else {
+    name = 0;
+  }
+
+  expect_tok('{');
+
+  while (tok != '}') {
+    if (tok != IDENTIFIER) {
+      syntax_error("identifier expected");
+    }
+    ident = new_ast0(IDENTIFIER, val);
+    get_tok();
+
+    if (tok == '=') {
+      get_tok();
+
+      if (tok != INTEGER) {
+        syntax_error("integer expected");
+      }
+      value = new_ast0(INTEGER, val);
+      next_value = val - 1; // Next value is the current value + 1, but val is negative
+      get_tok(); // skip
+    } else {
+      value = new_ast0(INTEGER, next_value);
+      next_value -= 1;
+    }
+
+    // printf("name=%s value=%d\n", string_pool + heap[name + 1], value);
+    if (result == 0) {
+      result = new_ast3(',', ident, value, 0);
+      tail = result;
+    } else {
+      set_child(tail, 2, new_ast3(',', ident, value, 0));
+      tail = get_child(tail, 2);
+    }
+
+    if (tok == ',') {
+      get_tok();
+    } else {
+      break;
+    }
+  }
+
+  expect_tok('}');
+  expect_tok(';');
+
+  return new_ast2(ENUM_KW, name, result);
+}
+
 /* Note: Uses a simplified syntax for definitions */
 ast parse_definition(int local) {
 
@@ -1671,6 +1733,8 @@ ast parse_definition(int local) {
     get_tok();
     expect_tok(';');
     return parse_definition(local);
+  } else if (tok == ENUM_KW) {
+    return parse_enum();
   } else {
     return result;
   }
