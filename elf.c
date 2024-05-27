@@ -44,7 +44,8 @@ void write_elf_p_header() {
 // Notes:
 //  64-bit virtual offsets always start at 0x400000
 //  https://web.archive.org/web/20210918175202/https://stackoverflow.com/questions/38549972/why-elf-executables-have-a-fixed-load-address
-//  Convention set in the x86_64 system-v abi: https://refspecs.linuxfoundation.org/elf/x86_64-SysV-psABI.pdf (Page 26)
+//  Convention set in the x86_64 system-v abi:
+//  https://web.archive.org/web/20230322152842/https://refspecs.linuxfoundation.org/elf/x86_64-SysV-psABI.pdf (Page 26)
 #ifdef x86_64
 
 void write_elf_e_header() {
