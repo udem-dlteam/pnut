@@ -179,32 +179,40 @@ int cgc_locals = 0;
 int cgc_globals = 0;
 int cgc_global_alloc = 0;
 
+int BINDING_PARAM_LOCAL=0;
+int BINDING_VAR_LOCAL=1;
+int BINDING_VAR_GLOBAL=2;
+int BINDING_LOOP=3;
+int BINDING_FUN=4;
+
 void cgc_add_local_param(int ident, int size, ast type) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = ident;
-  heap[binding+2] = size;
-  heap[binding+3] = cgc_fs;
-  heap[binding+4] = type;
+  heap[binding+1] = BINDING_PARAM_LOCAL;
+  heap[binding+2] = ident;
+  heap[binding+3] = size;
+  heap[binding+4] = cgc_fs;
+  heap[binding+5] = type;
   cgc_fs -= size;
   cgc_locals = binding;
 }
 
 void cgc_add_local(int ident, int size, ast type) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   cgc_fs += size;
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = ident;
-  heap[binding+2] = size;
-  heap[binding+3] = cgc_fs;
-  heap[binding+4] = type;
+  heap[binding+1] = BINDING_VAR_LOCAL;
+  heap[binding+2] = ident;
+  heap[binding+3] = size;
+  heap[binding+4] = cgc_fs;
+  heap[binding+5] = type;
   cgc_locals = binding;
 }
 
 void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
   int binding = alloc_obj(5);
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = 0;
+  heap[binding+1] = BINDING_LOOP;
   heap[binding+2] = loop_fs;
   heap[binding+3] = break_lbl;
   heap[binding+4] = continue_lbl;
@@ -212,31 +220,33 @@ void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
 }
 
 void cgc_add_global(int ident, int size, int width, ast type) {
-  int binding = alloc_obj(6);
+  int binding = alloc_obj(7);
   heap[binding+0] = cgc_globals;
-  heap[binding+1] = ident;
-  heap[binding+2] = size;
-  heap[binding+3] = cgc_global_alloc;
-  heap[binding+4] = type;
-  heap[binding+5] = width;
+  heap[binding+1] = BINDING_VAR_GLOBAL;
+  heap[binding+2] = ident;
+  heap[binding+3] = size;
+  heap[binding+4] = cgc_global_alloc;
+  heap[binding+5] = type;
+  heap[binding+6] = width;
   cgc_global_alloc += size * width;
   cgc_globals = binding;
 }
 
 void cgc_add_global_fun(int ident, int label, ast type) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_globals;
-  heap[binding+1] = ident;
-  heap[binding+2] = 0;
-  heap[binding+3] = label;
-  heap[binding+4] = type;
+  heap[binding+1] = BINDING_FUN;
+  heap[binding+2] = ident;
+  heap[binding+3] = 0;
+  heap[binding+4] = label;
+  heap[binding+5] = type;
   cgc_globals = binding;
 }
 
 int cgc_lookup_var(int ident, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == ident && heap[binding+2] != 0) {
+    if (heap[binding+1] <= BINDING_VAR_GLOBAL && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -247,7 +257,7 @@ int cgc_lookup_var(int ident, int env) {
 int cgc_lookup_fun(int ident, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == ident && heap[binding+2] == 0) {
+    if (heap[binding+1] == BINDING_FUN && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -258,7 +268,7 @@ int cgc_lookup_fun(int ident, int env) {
 int cgc_lookup_enclosing_loop(int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == 0) {
+    if (heap[binding+1] == BINDING_LOOP) {
       break;
     }
     binding = heap[binding];
@@ -317,11 +327,11 @@ ast value_type(ast node) {
       ident = get_val(node);
       binding = cgc_lookup_var(ident, cgc_locals);
       if (binding != 0) {
-          return heap[binding+4];
+          return heap[binding+5];
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
-          return heap[binding+4];
+          return heap[binding+5];
         } else {
           printf("ident = %s\n", string_pool+get_val(ident));
           fatal_error("value_type: identifier not found");
@@ -392,7 +402,7 @@ ast value_type(ast node) {
     } else if (op == '(') {
       binding = cgc_lookup_fun(get_val(get_child(node, 0)), cgc_globals);
       if (binding != 0) {
-        return heap[binding+4];
+        return heap[binding+5];
       } else {
         printf("ident = %s\n", string_pool + get_val(get_val(get_child(node, 0))));
         fatal_error("value_type: function not found");
@@ -566,7 +576,7 @@ void codegen_call(ast node) {
     binding = cgc_globals;
   }
 
-  call(heap[binding+3]);
+  call(heap[binding+4]);
 
   grow_stack(-nb_params);
   grow_fs(-nb_params);
@@ -587,13 +597,13 @@ int codegen_lvalue(ast node) {
     if (op == IDENTIFIER) {
       binding = cgc_lookup_var(get_val(node), cgc_locals);
       if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
         add_reg_reg(reg_X, reg_SP);
         push_reg(reg_X);
       } else {
         binding = cgc_lookup_var(get_val(node), cgc_globals);
         if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+3]);
+          mov_reg_imm(reg_X, heap[binding+4]);
           add_reg_reg(reg_X, reg_glo);
           push_reg(reg_X);
         } else {
@@ -680,22 +690,22 @@ void codegen_rvalue(ast node) {
       ident = get_val(node);
       binding = cgc_lookup_var(ident, cgc_locals);
       if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
         add_reg_reg(reg_X, reg_SP);
         // There are 3 different cases for the type of the lvalue:
         // 1. Array type: the value is stored on the stack, and reg_X already points to it
         // 2. Pointer type: the pointer (to the heap) is stored on the stack, and it needs to be dereferenced
         // 3. Non-pointer type: the value is stored directly in the stack, and it needs to be loaded
-        if (get_op(heap[binding+4]) != '[') {
+        if (get_op(heap[binding+5]) != '[') {
           mov_reg_mem(reg_X, reg_X, 0);
         }
         push_reg(reg_X);
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+3]);
+          mov_reg_imm(reg_X, heap[binding+4]);
           add_reg_reg(reg_X, reg_glo);
-          if (get_op(heap[binding+4]) != '[') {
+          if (get_op(heap[binding+5]) != '[') {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
@@ -913,7 +923,7 @@ void codegen_glo_var_decl(ast node) {
     pop_reg(reg_X);
     grow_fs(-1);
 
-    mov_mem_reg(reg_glo, heap[binding+3], reg_X);
+    mov_mem_reg(reg_glo, heap[binding+4], reg_X);
 
     jump(init_next_lbl);
   }
@@ -1108,7 +1118,7 @@ void codegen_glo_fun_decl(ast node) {
       binding = cgc_globals;
     }
 
-    lbl = heap[binding+3];
+    lbl = heap[binding+4];
 
     def_label(lbl);
 
