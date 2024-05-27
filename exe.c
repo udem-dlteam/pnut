@@ -182,8 +182,9 @@ int cgc_global_alloc = 0;
 int BINDING_PARAM_LOCAL=0;
 int BINDING_VAR_LOCAL=1;
 int BINDING_VAR_GLOBAL=2;
-int BINDING_LOOP=3;
-int BINDING_FUN=4;
+int BINDING_ENUM=3;
+int BINDING_LOOP=4;
+int BINDING_FUN=5;
 
 void cgc_add_local_param(int ident, int size, ast type) {
   int binding = alloc_obj(6);
@@ -243,6 +244,15 @@ void cgc_add_global_fun(int ident, int label, ast type) {
   cgc_globals = binding;
 }
 
+void cgc_add_enum(int ident, int value) {
+  int binding = alloc_obj(4);
+  heap[binding+0] = cgc_globals;
+  heap[binding+1] = BINDING_ENUM;
+  heap[binding+2] = ident;
+  heap[binding+3] = value;
+  cgc_globals = binding;
+}
+
 int cgc_lookup_var(int ident, int env) {
   int binding = env;
   while (binding != 0) {
@@ -269,6 +279,17 @@ int cgc_lookup_enclosing_loop(int env) {
   int binding = env;
   while (binding != 0) {
     if (heap[binding+1] == BINDING_LOOP) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_enum(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_ENUM && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -333,8 +354,13 @@ ast value_type(ast node) {
         if (binding != 0) {
           return heap[binding+5];
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
-          fatal_error("value_type: identifier not found");
+          binding = cgc_lookup_enum(ident, cgc_globals);
+          if (binding != 0) {
+            return int_type; // Enums are always integers
+          } else {
+            printf("ident = %s\n", string_pool+get_val(ident));
+            fatal_error("value_type: identifier not found");
+          }
         }
       }
     } else {
@@ -710,8 +736,14 @@ void codegen_rvalue(ast node) {
           }
           push_reg(reg_X);
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
-          fatal_error("codegen_rvalue: identifier not found");
+          binding = cgc_lookup_enum(ident, cgc_globals);
+          if (binding != 0) {
+            mov_reg_imm(reg_X, -get_val(heap[binding+3]));
+            push_reg(reg_X);
+          } else {
+            printf("ident = %s\n", string_pool+get_val(ident));
+            fatal_error("codegen_rvalue: identifier not found");
+          }
         }
       }
     } else if (op == STRING) {
@@ -1136,6 +1168,15 @@ void codegen_glo_fun_decl(ast node) {
   }
 }
 
+void codegen_enum(ast node) {
+  ast cases = get_child(node, 1);
+
+  while (get_op(cases) == ',') {
+    cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));
+    cases = get_child(cases, 2);
+  }
+}
+
 void codegen_glo_decl(ast node) {
 
   int op = get_op(node);
@@ -1144,6 +1185,8 @@ void codegen_glo_decl(ast node) {
     codegen_glo_var_decl(node);
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
+  } else if (op == ENUM_KW) {
+    codegen_enum(node);
   } else {
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("codegen_glo_decl: unexpected declaration");
