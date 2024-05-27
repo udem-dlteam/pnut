@@ -114,6 +114,14 @@ int SLASH_EQ   = 423;
 int STAR_EQ    = 424;
 int HASH_HASH  = 425;
 
+//pre and post increment and decrement
+int PLUS_PLUS_PRE = 425;
+int MINUS_MINUS_PRE = 426;
+int PLUS_PLUS_POST = 427;
+int MINUS_MINUS_POST = 428;
+
+
+
 int MACRO_ARG = 499;
 int IDENTIFIER = 500;
 int TYPE = 501;
@@ -1441,11 +1449,18 @@ ast parse_type() {
   int type_kw = 0;
 
   while (1) {
-    if ((tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
+    if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
       if ((type_kw != 0) AND (type_kw != INT_KW)) {
         syntax_error("inconsistent type");
       } else {
         type_kw = INT_KW;
+        get_tok();
+      }
+    } else if (tok == CHAR_KW) {
+      if (type_kw != 0) {
+        syntax_error("inconsistent type");
+      } else {
+        type_kw = CHAR_KW;
         get_tok();
       }
     } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
@@ -1773,9 +1788,15 @@ ast parse_postfix_expression() {
 
       syntax_error("Struct/Union not supported");
 
-    } else if ((tok == PLUS_PLUS) OR (tok == MINUS_MINUS)) {
+    } else if (tok == PLUS_PLUS) {
 
-      syntax_error("++/-- not supported");
+      get_tok();
+      result = new_ast1(PLUS_PLUS_POST, result);
+
+    } else if (tok == MINUS_MINUS) {
+
+      get_tok();
+      result = new_ast1(MINUS_MINUS_POST, result);
 
     } else {
       break;
@@ -1790,12 +1811,17 @@ ast parse_unary_expression() {
   ast result;
   int op;
 
-  if ((tok == PLUS_PLUS) OR (tok == MINUS_MINUS)) {
+  if (tok == PLUS_PLUS){
 
-    op = tok;
     get_tok();
     result = parse_unary_expression();
-    result = new_ast1(op, result);
+    result = new_ast1(PLUS_PLUS_PRE, result);
+
+  } else if (tok == MINUS_MINUS) {
+
+    get_tok();
+    result = parse_unary_expression();
+    result = new_ast1(MINUS_MINUS_PRE, result);
 
   } else if ((tok == '&') OR (tok == '*') OR (tok == '+') OR (tok == '-') OR (tok == '~') OR (tok == '!')) {
 
