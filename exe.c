@@ -666,7 +666,7 @@ int codegen_lvalue(ast node) {
   return lvalue_width;
 }
 
-void codegen_string(int start) {// TODO render generic to word_le
+void codegen_string(int start) {
 
   int lbl = alloc_label();
   int i = start;
@@ -1236,19 +1236,19 @@ void codegen_end() {
   os_putchar();
   ret();
 
-  //fopen function
+  // fopen function
   def_label(fopen_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_fopen();
   ret();
 
-  //fclose function
+  // fclose function
   def_label(fclose_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_fclose();
   ret();
 
-  //fgetc function
+  // fgetc function
   def_label(fgetc_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_fgetc();
