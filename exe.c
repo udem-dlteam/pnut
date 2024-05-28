@@ -974,6 +974,7 @@ void codegen_statement(ast node) {
   int op;
   int lbl1;
   int lbl2;
+  int lbl3;
   int save_fs;
   int save_locals;
   int binding;
@@ -1022,7 +1023,31 @@ void codegen_statement(ast node) {
 
   } else if (op == FOR_KW) {
 
-    // TODO
+    lbl1 = alloc_label(); // while statement start
+    lbl2 = alloc_label(); // join point after while
+    lbl3 = alloc_label(); // initial loop starting point
+
+    save_fs = cgc_fs;
+    save_locals = cgc_locals;
+
+    cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
+
+    codegen_statement(get_child(node, 0)); // init
+    jump(lbl3); // skip post loop action
+    def_label(lbl1);
+    codegen_statement(get_child(node, 2)); // post loop action
+    def_label(lbl3);
+    codegen_rvalue(get_child(node, 1)); // test
+    pop_reg(reg_X);
+    grow_fs(-1);
+    xor_reg_reg(reg_Y, reg_Y);
+    jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    codegen_statement(get_child(node, 3));
+    jump(lbl1);
+    def_label(lbl2);
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
 
   } else if (op == BREAK_KW) {
 
