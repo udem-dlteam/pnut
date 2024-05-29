@@ -683,7 +683,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
       /* TODO: Reuse ast node? */
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
-    } else if ((op == PLUS_PLUS) OR (op == MINUS_MINUS)) {
+    } else if ((op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE)) {
       /* The parser fails on postfix ++/--, so this is only preincrement/predecrement */
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
@@ -894,10 +894,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == '!') {
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('!'), sub1));
-    } else if (op == MINUS_MINUS) {
+    } else if (op == MINUS_MINUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" -= 1")));
-    } else if (op == PLUS_PLUS) {
+    } else if (op == PLUS_PLUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
     } else if (op == '&') {
@@ -1419,7 +1419,7 @@ void mark_mutable_variables_statement(ast node) {
     mark_mutable_variables_body(node);
   } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
     /* Do nothing */
-  } else if (op == '=' OR op == PLUS_PLUS OR op == MINUS_MINUS OR op == PLUS_EQ
+  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_EQ
          OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
          OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
     mark_variable_as_mutable(get_child(node, 0));
