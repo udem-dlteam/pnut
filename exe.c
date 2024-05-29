@@ -1,11 +1,16 @@
 // common part of machine code generators
+const int word_size;
 
 void generate_exe();
 
-int code[100000];
+#define MAX_CODE_SIZE 500000
+int code[MAX_CODE_SIZE];
 int code_alloc = 0;
 
 void emit_i8(int a) {
+  if (code_alloc >= MAX_CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
   code[code_alloc] = (a & 0xff);
   code_alloc += 1;
 }
@@ -22,6 +27,22 @@ void emit_4_i8(int a, int b, int c, int d) {
 
 void emit_i32_le(int n) {
   emit_4_i8(n, n >> 8, n >> 16, n >> 24);
+}
+
+void emit_i64_le(int n) {
+  emit_i32_le(n);
+  // Sign extend to 64 bits. Arithmetic shift by 31 gives -1 for negative numbers and 0 for positive numbers.
+  emit_i32_le(n >> 31);
+}
+
+void emit_word_le(int n) {
+  if (word_size == 4) {
+    emit_i32_le(n);
+  } else if (word_size == 8) {
+    emit_i64_le(n);
+  } else {
+    fatal_error("emit_word_le: unknown word size");
+  }
 }
 
 void write_i8(int n) {
@@ -90,7 +111,6 @@ void def_label(int lbl) {
   }
 }
 
-const int word_size;
 const int char_width = 1;
 
 const int reg_X;
@@ -161,6 +181,9 @@ void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 void os_getchar();
 void os_putchar();
 void os_exit();
+void os_fopen();
+void os_fclose();
+void os_fgetc();
 
 void setup_proc_args();
 
@@ -173,6 +196,9 @@ int main_lbl;
 int exit_lbl;
 int getchar_lbl;
 int putchar_lbl;
+int fopen_lbl;
+int fclose_lbl;
+int fgetc_lbl;
 
 int cgc_fs = 0;
 int cgc_locals = 0;
@@ -323,12 +349,14 @@ ast value_type(ast node) {
         if (binding != 0) {
           return heap[binding+4];
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
+          putstr("ident = ");
+          putstr(string_pool+get_val(ident));
+          putchar('\n');
           fatal_error("value_type: identifier not found");
         }
       }
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with nb_children == 0");
     }
 
@@ -341,7 +369,7 @@ ast value_type(ast node) {
       } else if (get_val(left_type) != 0) { // Pointer type
         return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
       } else {
-        printf("left_type=%d %c", left_type, left_type);
+        putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("pointer_width: non pointer is being dereferenced with *");
       }
     } else if (op == '&') {
@@ -351,7 +379,7 @@ ast value_type(ast node) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unexpected operator");
     }
 
@@ -381,7 +409,7 @@ ast value_type(ast node) {
       } else if (get_val(right_type) != 0) {
         return new_ast0(get_op(right_type), get_val(right_type) - 1); // one less indirection
       } else {
-        printf("left_type=%d %c", left_type, left_type);
+        putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("value_type: non pointer is being dereferenced with *");
       }
     } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
@@ -394,7 +422,9 @@ ast value_type(ast node) {
       if (binding != 0) {
         return heap[binding+4];
       } else {
-        printf("ident = %s\n", string_pool + get_val(get_val(get_child(node, 0))));
+        putstr("ident = ");
+        putstr(string_pool + get_val(get_val(get_child(node, 0))));
+        putchar('\n');
         fatal_error("value_type: function not found");
       }
     } else {
@@ -406,12 +436,12 @@ ast value_type(ast node) {
     if (op == '?') {
       fatal_error("value_type: ternary operator not supported");
     } else {
-      printf("op=%d %c\n", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with 3 children");
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("value_type: unknown expression with >4 children");
   }
 }
@@ -501,7 +531,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       add_reg_reg(reg_X, reg_Y);
       load_mem_operand(reg_X, reg_X, 0, width);
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_binop: unknown op");
     }
   }
@@ -518,7 +548,8 @@ int round_up_to_word_size(int n) {
 }
 
 void grow_stack(int words) {
-  add_reg_imm(reg_SP, -words * word_size);
+  if (words != 0)
+    add_reg_imm(reg_SP, -words * word_size);
 }
 
 // Like grow_stack, but takes bytes instead of words.
@@ -601,7 +632,7 @@ int codegen_lvalue(ast node) {
         }
       }
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
     }
 
@@ -611,7 +642,7 @@ int codegen_lvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       grow_fs(-1);
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unexpected operator");
     }
 
@@ -627,7 +658,7 @@ int codegen_lvalue(ast node) {
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_lvalue: unknown lvalue with >2 children");
   }
 
@@ -646,7 +677,7 @@ void codegen_string(int start) {
     if (char_width == 1) {
       emit_i8(string_pool[i]);
     } else {
-      emit_i32_le(string_pool[i]);
+      emit_word_le(string_pool[i]);
     }
     i += 1;
   }
@@ -655,7 +686,7 @@ void codegen_string(int start) {
   if (char_width == 1) {
     emit_i8(0);
   } else {
-    emit_i32_le(0);
+    emit_word_le(0);
   }
 
   def_label(lbl);
@@ -700,14 +731,14 @@ void codegen_rvalue(ast node) {
           }
           push_reg(reg_X);
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
+          putstr("ident = "); putstr(string_pool+get_val(ident)); putchar('\n');
           fatal_error("codegen_rvalue: identifier not found");
         }
       }
     } else if (op == STRING) {
       codegen_string(get_val(node));
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
     }
 
@@ -778,7 +809,7 @@ void codegen_rvalue(ast node) {
       codegen_lvalue(get_child(node, 0));
       grow_fs(-1);
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unexpected operator");
     }
 
@@ -837,12 +868,12 @@ void codegen_rvalue(ast node) {
     if (op == '?') {
       fatal_error("codegen_rvalue: ternary operator not supported");
     } else {
-      printf("op=%d %c\n", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with 3 children");
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_rvalue: unknown rvalue with >4 children");
   }
 
@@ -872,6 +903,15 @@ void codegen_begin() {
 
   putchar_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, void_type);
+
+  fopen_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, int_type);
+
+  fclose_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, void_type);
+
+  fgetc_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, char_type);
 
   jump(setup_lbl);
 }
@@ -1160,7 +1200,8 @@ void codegen_glo_decl(ast node) {
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    putstr("op="); putint(op);
+    putstr(" with "); putint(get_nb_children(node)); putstr(" children\n");
     fatal_error("codegen_glo_decl: unexpected declaration");
   }
 }
@@ -1174,7 +1215,7 @@ void codegen_end() {
   jump(init_start_lbl);
 
   def_label(init_next_lbl);
-  setup_proc_args();
+  setup_proc_args(cgc_global_alloc);
   call(main_lbl);
   os_exit();
   push_reg(reg_X); // exit process with result of main
@@ -1193,6 +1234,24 @@ void codegen_end() {
   def_label(putchar_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_putchar();
+  ret();
+
+  // fopen function
+  def_label(fopen_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fopen();
+  ret();
+
+  // fclose function
+  def_label(fclose_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fclose();
+  ret();
+
+  // fgetc function
+  def_label(fgetc_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fgetc();
   ret();
 
   generate_exe();
