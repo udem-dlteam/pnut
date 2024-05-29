@@ -1617,14 +1617,8 @@ void comp_glo_decl(ast node) {
   } else if (op == VAR_DECL) { /* Variable declarations */
 
     while (node != 0 && get_op(node) == VAR_DECL) { /* Multiple variable declarations */
-      ast name = get_child(node, 0); /* Identifier */
-      ast init = get_child(node, 2); /* Initializer */
 
-      comp_glo_var_decl(name); /* Compile variable declaration */
-
-      if (init != 0) {  /* Initialize variable */
-        comp_assignment(name, init);
-      }
+      comp_glo_var_decl(node); /* Compile variable declaration */
 
       node = get_child(node, 1); /* Next variable declaration */
     }
