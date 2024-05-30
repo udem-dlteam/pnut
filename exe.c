@@ -67,15 +67,22 @@ void write_i32_le(int n) {
 
 // TODO: generalize (this is currently specialized for x86 32 bit relative addressing)
 
+enum {
+  GENERIC_LABEL,
+};
+
 int alloc_label() {
-  int lbl = alloc_obj(1);
-  heap[lbl] = 0;
+  int lbl = alloc_obj(2);
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
   return lbl;
 }
 
 void use_label(int lbl) {
 
-  int addr = heap[lbl];
+  int addr = heap[lbl + 1];
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
 
   if (addr < 0) {
     // label address is currently known
@@ -85,20 +92,22 @@ void use_label(int lbl) {
     // label address is not yet known
     emit_i32_le(0); // 32 bit placeholder for distance
     code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl] = code_alloc;
+    heap[lbl + 1] = code_alloc;
   }
 }
 
 void def_label(int lbl) {
 
-  int addr = heap[lbl];
+  int addr = heap[lbl + 1];
   int label_addr = code_alloc;
   int next;
 
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+
   if (addr < 0) {
-    fatal_error("label multiply defined");
+    fatal_error("label defined more than once");
   } else {
-    heap[lbl] = -label_addr; // define label's address
+    heap[lbl + 1] = -label_addr; // define label's address
     while (addr != 0) {
       next = code[addr-1]; // get pointer to next patch address
       code_alloc = addr;
