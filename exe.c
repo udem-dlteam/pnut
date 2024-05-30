@@ -150,6 +150,7 @@ void push_reg(int src);
 void pop_reg (int dst);
 
 void jump(int lbl);
+void jump_rel(int offset);
 void call(int lbl);
 void ret();
 
