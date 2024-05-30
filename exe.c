@@ -63,63 +63,6 @@ void write_i32_le(int n) {
   write_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
-// Label definition
-
-// TODO: generalize (this is currently specialized for x86 32 bit relative addressing)
-
-enum {
-  GENERIC_LABEL,
-};
-
-int alloc_label() {
-  int lbl = alloc_obj(2);
-  heap[lbl] = GENERIC_LABEL;
-  heap[lbl + 1] = 0; // Address of label
-  return lbl;
-}
-
-void use_label(int lbl) {
-
-  int addr = heap[lbl + 1];
-
-  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
-
-  if (addr < 0) {
-    // label address is currently known
-    addr = -addr - (code_alloc + 4); // compute relative address
-    emit_i32_le(addr);
-  } else {
-    // label address is not yet known
-    emit_i32_le(0); // 32 bit placeholder for distance
-    code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl + 1] = code_alloc;
-  }
-}
-
-void def_label(int lbl) {
-
-  int addr = heap[lbl + 1];
-  int label_addr = code_alloc;
-  int next;
-
-  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
-
-  if (addr < 0) {
-    fatal_error("label defined more than once");
-  } else {
-    heap[lbl + 1] = -label_addr; // define label's address
-    while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
-      code_alloc = addr;
-      addr = label_addr - addr; // compute relative address
-      code_alloc -= 4;
-      emit_i32_le(addr);
-      addr = next;
-    }
-    code_alloc = label_addr;
-  }
-}
-
 const int char_width = 1;
 
 const int reg_X;
@@ -214,6 +157,79 @@ int cgc_fs = 0;
 int cgc_locals = 0;
 int cgc_globals = 0;
 int cgc_global_alloc = 0;
+
+void grow_fs(int words) {
+  cgc_fs += words;
+}
+
+int round_up_to_word_size(int n) {
+  return (n + word_size - 1) / word_size * word_size;
+}
+
+void grow_stack(int words) {
+  if (words != 0)
+    add_reg_imm(reg_SP, -words * word_size);
+}
+
+// Like grow_stack, but takes bytes instead of words.
+// To maintain alignment, the stack is grown by a multiple of word_size (rounded
+// up from the number of bytes).
+void grow_stack_bytes(int bytes) {
+  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
+}
+
+enum {
+  GENERIC_LABEL,
+};
+
+int alloc_label() {
+  int lbl = alloc_obj(2);
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  return lbl;
+}
+
+void use_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
+
+  if (addr < 0) {
+    // label address is currently known
+    addr = -addr - (code_alloc + 4); // compute relative address
+    emit_i32_le(addr);
+  } else {
+    // label address is not yet known
+    emit_i32_le(0); // 32 bit placeholder for distance
+    code[code_alloc-1] = addr; // chain with previous patch address
+    heap[lbl + 1] = code_alloc;
+  }
+}
+
+void def_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int label_addr = code_alloc;
+  int next;
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+
+  if (addr < 0) {
+    fatal_error("label defined more than once");
+  } else {
+    heap[lbl + 1] = -label_addr; // define label's address
+    while (addr != 0) {
+      next = code[addr-1]; // get pointer to next patch address
+      code_alloc = addr;
+      addr = label_addr - addr; // compute relative address
+      code_alloc -= 4;
+      emit_i32_le(addr);
+      addr = next;
+    }
+    code_alloc = label_addr;
+  }
+}
 
 enum {
   BINDING_PARAM_LOCAL,
@@ -585,26 +601,6 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   }
 
   push_reg(reg_X);
-}
-
-void grow_fs(int words) {
-  cgc_fs += words;
-}
-
-int round_up_to_word_size(int n) {
-  return (n + word_size - 1) / word_size * word_size;
-}
-
-void grow_stack(int words) {
-  if (words != 0)
-    add_reg_imm(reg_SP, -words * word_size);
-}
-
-// Like grow_stack, but takes bytes instead of words.
-// To maintain alignment, the stack is grown by a multiple of word_size (rounded
-// up from the number of bytes).
-void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
 }
 
 #ifndef PNUT_CC
