@@ -1347,8 +1347,15 @@ void comp_statement(ast node, int else_if) {
     comp_body(node);
   } else if (op == '=') { /* six.x=y */
     comp_assignment(get_child(node, 0), get_child(node, 1));
+  } else if (op == ':') {
+    // Labelled statement are not very useful as gotos are not supported in the
+    // Shell backend, but we still emit a label comment for readability.
+    append_glo_decl(string_concat3(wrap_str("# "), wrap_str_pool(get_val(get_val(get_child(node, 0)))), wrap_char(':')));
+    comp_statement(get_child(node, 1), false);
+  } else if (op == GOTO_KW) {
+    fatal_error("goto statements not supported");
   } else if (op == VAR_DECL) {
-    fatal_error("Variable declaration must be at the beginning of a function");
+    fatal_error("variable declaration must be at the beginning of a function");
   } else {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
