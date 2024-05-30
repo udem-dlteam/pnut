@@ -752,6 +752,22 @@ void codegen_call(ast node) {
   push_reg(reg_X);
 }
 
+void codegen_goto(ast node) {
+
+  ast label_ident = get_val(node);
+
+  int binding = cgc_lookup_goto_label(label_ident, cgc_locals_fun);
+  int goto_lbl;
+
+  if (binding == 0) {
+    goto_lbl = alloc_goto_label();
+    cgc_add_goto_label(label_ident, goto_lbl);
+    binding = cgc_locals_fun;
+  }
+
+  jump_to_goto_label(heap[binding + 3]); // Label
+}
+
 // Return the width of the lvalue
 int codegen_lvalue(ast node) {
 
@@ -1279,6 +1295,22 @@ void codegen_statement(ast node) {
 
     codegen_body(node);
 
+  } else if (op == ':') {
+
+    binding = cgc_lookup_goto_label(get_val(get_child(node, 0)), cgc_locals_fun);
+
+    if (binding == 0) {
+      cgc_add_goto_label(get_val(get_child(node, 0)), alloc_goto_label());
+      binding = cgc_locals_fun;
+    }
+
+    def_goto_label(heap[binding + 3]);
+    codegen_statement(get_child(node, 1)); // labelled statement
+
+  } else if (op == GOTO_KW) {
+
+    codegen_goto(node);
+
   } else {
 
     codegen_rvalue(node);
@@ -1317,6 +1349,7 @@ void codegen_glo_fun_decl(ast node) {
   ast body = get_child(node, 3);
   int lbl;
   int binding;
+  int save_locals_fun = cgc_locals_fun;
 
   if (body != 0) {
 
@@ -1343,6 +1376,8 @@ void codegen_glo_fun_decl(ast node) {
 
     ret();
   }
+
+  cgc_locals_fun = save_locals_fun;
 }
 
 void codegen_enum(ast node) {
