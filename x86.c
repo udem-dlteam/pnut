@@ -23,7 +23,7 @@ const int DI = 7;
 const int reg_X = AX;
 const int reg_Y = CX;
 const int reg_SP = SP;
-const int reg_glo = DI;
+const int reg_glo = BX;
 
 void rex_prefix() {
   if (word_size == 8) emit_i8(0x48); // REX.W
@@ -122,15 +122,16 @@ void mov_reg_imm(int dst, int imm) {
   // MOV dst_reg, imm  ;; Move 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
+  rex_prefix();
   emit_i8(0xb8 + dst);
-  emit_i32_le(imm);
+  emit_word_le(imm);
 }
 
 void add_reg_imm(int dst, int imm) {
 
   // ADD dst_reg, imm  ;; Add 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
-
+  rex_prefix();
   emit_i8(0x81);
   mod_rm(0, dst);
   emit_i32_le(imm);
@@ -178,8 +179,8 @@ void mov_reg_mem8(int dst, int base, int offset) {
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
   mov_memory(0x8a, dst, base, offset);
-  mov_reg_imm(BX, 0xff); // mask off the upper bits
-  and_reg_reg(dst, BX);
+  mov_reg_imm(DI, 0xff); // mask off the upper bits
+  and_reg_reg(dst, DI);
 }
 
 void imul_reg_reg(int dst, int src) {
@@ -289,6 +290,16 @@ void push_reg(int src) {
   emit_i8(0x50 + src);
 }
 
+void push_imm32_le(int imm) {
+
+  // PUSH imm32  ;; Push 32 bit immediate value to stack
+  // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
+
+  emit_i8(0x68);
+  emit_i32_le(imm);
+}
+
+
 void pop_reg (int dst) {
 
   // POP dst_reg  ;; Pop word from stack to register
@@ -355,61 +366,184 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
+void setup_proc_args(int global_vars_size) {
+  // See page 54 of Intel386 System V ABI document:
+  // https://web.archive.org/web/20240107061436/https://www.sco.com/developers/devspecs/abi386-4.pdf
+  // See page 29 of AMD64 System V ABI document:
+  // https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf
+  //
+  // On x86-32, argc is at [esp+0] and the content of argv directly follows at program start.
+  // At this point, we've initialized the globals table so the stack looks like this:
+  // [esp + 0]: global table start (global_vars_size bytes long)
+  // ...
+  // [esp + global_vars_size]     : argc
+  // [esp + global_vars_size + 4] : argv[0]
+  // [esp + global_vars_size + 8] : argv[1]
+  // ...
+  // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
+  // The stack will then look like this:
+  // [esp + 0] : argc
+  // [esp + 4] : argv
+  // [esp + 8] : global table start (global_vars_size bytes long)
+  // ...
+  // For x86-64, it works similarly with [rsp + 0] for argc and [rsp + 8] for argv.
+
+  mov_reg_reg(reg_X, SP);
+  add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
+  push_reg(reg_X); // push argv address
+
+  mov_reg_mem(reg_Y, reg_X, -word_size); // load argc
+  push_reg(reg_Y); // push argc
+}
+
 // For 32 bit linux.
+#ifdef i386
+
+void os_getchar() {
+  int lbl = alloc_label();
+  push_reg(BX);           // save address of global variables table
+  mov_reg_imm(AX, 0);     // mov  eax, 0
+  push_reg(AX);           // push eax      # buffer to read byte
+  mov_reg_imm(BX, 0);     // mov  ebx, 0   # ebx = 0 = STDIN
+  mov_reg_imm(DX, 1);     // mov  edx, 1   # edx = 1 = number of bytes to read
+  mov_reg_reg(CX, SP);    // mov  ecx, esp # to the stack
+  mov_reg_imm(AX, 3);     // mov  eax, 3   # SYS_READ
+  int_i8(0x80);           // int  0x80     # system call
+  xor_reg_reg(DX, DX);    // edx = 0
+  cmp_reg_reg(AX, DX);    // cmp  eax, edx
+  pop_reg(AX);            // pop  eax
+  jump_cond(NE, lbl);     // jne  lbl      # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);    // mov  eax, -1  # -1 on EOF
+  def_label(lbl);         // end label
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_putchar() {
+  push_reg(BX);           // save address of global variables table
+  push_reg(AX);           // push eax      # buffer to write byte
+  mov_reg_imm(BX, 1);     // mov  ebx, 1   # ebx = 1 = STDOUT
+  mov_reg_imm(DX, 1);     // mov  edx, 1   # edx = 1 = number of bytes to write
+  mov_reg_reg(CX, SP);    // mov  ecx, esp # from the stack
+  mov_reg_imm(AX, 4);     // mov  eax, 4   # SYS_WRITE
+  int_i8(0x80);           // int  0x80     # system call
+  pop_reg(AX);            // pop  eax
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_exit() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, AX);    // mov  ebx, eax
+  mov_reg_imm(AX, 1);     // mov  eax, 1   # SYS_EXIT
+  int_i8(0x80);           // int  0x80     # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_fopen() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, AX);    // mov ebx, ax | file name
+  mov_reg_imm(AX, 5);     // mov eax, 5 == SYS_OPEN
+  mov_reg_imm(CX, 0);     // mov ecx, 0 | flags
+  mov_reg_imm(DX, 0);     // mov edx, 0 | mode
+  int_i8(0x80);           // system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_fclose() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov  ebx, file descriptor
+  mov_reg_imm(AX, 6);     // mov  eax, 6 == SYS_CLOSE
+  int_i8(0x80);           // system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_fgetc() {
+  int lbl = alloc_label();  // label for EOF
+  push_reg(BX);             // save address of global variables table
+  mov_reg_reg(BX, reg_X);   // mov  ebx, file descriptor
+  mov_reg_imm(AX, 3);       // mov  eax, 3 == SYS_READ
+  push_reg(AX);             // push eax      # buffer to read byte
+  mov_reg_imm(DX, 1);       // mov  edx, 1   # edx = 1 = number of bytes to read
+  mov_reg_reg(CX, SP);      // mov  ecx, esp # to the stack
+  int_i8(0x80);             // int  0x80     # system call
+  xor_reg_reg(BX, BX);      // xor  ebx, ebx
+  cmp_reg_reg(AX, BX);      // cmp  eax, ebx
+  pop_reg(AX);              // pop  eax
+  jump_cond(NE, lbl);       // jne  lbl      # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);      // mov  eax, -1  # -1 on EOF
+  def_label(lbl);           // end label
+  pop_reg(BX);              // restore address of global variables table
+}
+
+#endif
+
+// For 64 bit linux.
+#ifdef x86_64
 
 void os_getchar() {
   int lbl = alloc_label();
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte
-  mov_reg_imm(BX, 0);    // mov  ebx, 0   # ebx = 0 = STDIN
-  mov_reg_imm(DX, 1);    // mov  edx, 1   # edx = 1 = number of bytes to read
-  mov_reg_reg(CX, SP);   // mov  ecx, esp # to the stack
-  mov_reg_imm(AX, 3);    // mov  eax, 3   # SYS_READ
-  int_i8(0x80);          // int  0x80     # system call
-  xor_reg_reg(BX, BX);   // xor  ebx, ebx
-  cmp_reg_reg(AX, BX);   // cmp  eax, ebx
+  mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
+  mov_reg_imm(DX, 1);    // mov  rdx, 1   # rdx = 1 = number of bytes to read
+  mov_reg_reg(SI, SP);   // mov  rsi, rsp # to the stack
+  mov_reg_imm(AX, 0);    // mov  rax, 1   # SYS_READ
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  xor_reg_reg(DX, DX);   // rdx = 0
+  cmp_reg_reg(AX, DX);   // cmp  eax, ebx
   pop_reg(AX);           // pop  eax
   jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
   mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
-  def_label(lbl);        // lbl:
+  def_label(lbl);        // end label
 }
 
 void os_putchar() {
-  push_reg(AX);          // push eax      # buffer to write byte
-  mov_reg_imm(BX, 1);    // mov  ebx, 1   # ebx = 1 = STDOUT
-  mov_reg_imm(DX, 1);    // mov  edx, 1   # edx = 1 = number of bytes to write
-  mov_reg_reg(CX, SP);   // mov  ecx, esp # from the stack
-  mov_reg_imm(AX, 4);    // mov  eax, 4   # SYS_WRITE
-  int_i8(0x80);          // int  0x80     # system call
-  pop_reg(AX);           // pop  eax
+  push_reg(AX);          // push rax      # buffer to write byte
+  mov_reg_imm(AX, 1);    // mov eax, 1 == SYS_WRITE
+  mov_reg_imm(DI, 1);    // mov edi, 1 == STDOUT
+  mov_reg_imm(DX, 1);    // mov edx, 1 | length of string
+  mov_reg_reg(SI, SP);   // mov esi, [esp] | get the value from stack
+  emit_2_i8(0x0F, 0x05); // system call 64 bit
+  pop_reg(AX);           // pop rax
 }
 
 void os_exit() {
-  mov_reg_reg(BX, AX);   // mov  ebx, eax
-  mov_reg_imm(AX, 1);    // mov  eax, 1   # SYS_EXIT
-  int_i8(0x80);          // int  0x80     # system call
+  mov_reg_reg(DI, AX);    // mov edi, eax
+  mov_reg_imm(AX, 60);    // mov eax, 60 == SYS_EXIT
+  emit_2_i8(0x0F, 0x05);  // system call 64 bit
 }
 
-void setup_proc_args() {
-  // On x86-32 bit, argc is at 0(%esp) and the content of argv directly follows.
-  // The stack looks like this:
-  // 0(%esp) -> argc
-  // 4(%esp) -> argv[0]
-  // 8(%esp) -> argv[1]
-  // ...
-  // The main function expects argv to be a char**, so it's missing an indirection, which is added here.
-  // The stack will then look like this:
-  // 0(%esp)  -> argc
-  // 4(%esp)  -> argv
-  // 8(%esp)  -> arg[0]
-  // 12(%esp) -> arg[1]
-  // ...
-
-  pop_reg(reg_X);  // remove argc so it can be moved to the top of stack
-  mov_reg_reg(reg_Y, reg_SP); // address of argv
-  push_reg(reg_Y); // argv
-  push_reg(reg_X); // argc
+void os_fopen(){
+  mov_reg_reg(DI, AX);    // mov rdi, rax | file name
+  mov_reg_imm(SI, 0);     // mov rsi, 0 | flags
+  mov_reg_imm(DX, 0);     // mov rdx, 0 | mode
+  mov_reg_imm(AX, 2);     // mov rax, 2 == SYS_OPEN
+  emit_2_i8(0x0F, 0x05);  // system call 64 bit (file descriptor is in rax)
 }
+
+void os_fclose(){
+  mov_reg_reg(DI, reg_X); // mov  rdi, file descriptor
+  mov_reg_imm(AX, 3);     // mov rax, 3 == SYS_CLOSE
+  emit_2_i8(0x0F, 0x05);  // system call 64 bit
+}
+
+void os_fgetc(){
+  int lbl = alloc_label(); // label for EOF
+  mov_reg_reg(DI, reg_X);  // mov  edi, file descriptor
+  mov_reg_imm(AX, 0);      // mov  eax, 0
+  push_reg(AX);            // push eax      # buffer to read byte
+  mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
+  mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
+  mov_reg_imm(AX, 0);      // mov  rax, 1   # SYS_READ
+  emit_2_i8(0x0F, 0x05);   // system call 64 bit
+  xor_reg_reg(DX, DX);     // rdx = 0
+  cmp_reg_reg(AX, DX);     // cmp  eax, rdx
+  pop_reg(AX);             // pop  eax
+  jump_cond(NE, lbl);      // jne  lbl      # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);     // mov  eax, -1  # -1 on EOF
+  def_label(lbl);          // end label
+}
+
+#endif
 
 #ifdef SKIP
 void os_print_msg(char_ptr msg) {

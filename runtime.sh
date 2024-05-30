@@ -299,8 +299,7 @@ char_to_int() {
     '}') __c=125 ;;
     '~') __c=126 ;;
     *)
-      echo "Invalid character: $1" ; exit 1
-      __c=$(LC_CTYPE=C printf "%d" "'$1") ;;
+      __c=$(LC_CTYPE=C printf "%d" "'$1")
   esac
 }
 
