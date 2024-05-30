@@ -2329,6 +2329,8 @@ ast parse_statement() {
 
     if ((tok == ':') AND (start_tok != '(') AND (get_op(result) == IDENTIFIER)) {
 
+      get_tok(); // Skip :
+
       child1 = parse_statement();
 
       result = new_ast2(':', result, child1);
