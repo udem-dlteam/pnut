@@ -259,7 +259,6 @@ void jump_to_goto_label(int lbl) {
 
   if (addr < 0) {
     // label address is currently known
-    // printf("Adjusting stack of %d\n", cgc_fs - lbl_fs);
     grow_stack(lbl_fs - cgc_fs);
     start_code_alloc = code_alloc;
     jump_rel(0); // Generate dummy jump instruction to get instruction length
@@ -267,7 +266,6 @@ void jump_to_goto_label(int lbl) {
     code_alloc = start_code_alloc;
     jump_rel(addr);
   } else {
-    // printf("Goto to unknown address: %d\n", code_alloc);
     // label address is not yet known
     // placeholders for when we know the destination address and frame size
     grow_stack(0);
@@ -287,8 +285,6 @@ void def_goto_label(int lbl) {
   int goto_fs;
   int start_code_alloc;
 
-  // printf("def_goto_label: %d\n", lbl);
-
   if (heap[lbl] != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
 
   if (addr < 0) {
@@ -300,7 +296,6 @@ void def_goto_label(int lbl) {
       next = code[addr-1]; // get pointer to next patch address
       goto_fs = code[addr-2]; // get frame size at goto instruction
       code_alloc = code[addr-3]; // reset code pointer to start of jump_to_goto_label instruction
-      // printf("Adjusting stack (patch) of %d\n", cgc_fs - goto_fs);
       grow_stack(cgc_fs - goto_fs); // adjust stack
       start_code_alloc = code_alloc;
       jump_rel(0); // Generate dummy jump instruction to get instruction length
@@ -899,7 +894,6 @@ void codegen_rvalue(ast node) {
             mov_reg_imm(reg_X, -get_val(heap[binding+3]));
             push_reg(reg_X);
           } else {
-            printf("ident = %s\n", string_pool+get_val(ident));
             putstr("ident = "); putstr(string_pool+get_val(ident)); putchar('\n');
             fatal_error("codegen_rvalue: identifier not found");
           }
