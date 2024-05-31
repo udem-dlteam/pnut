@@ -211,6 +211,7 @@ enum {
   BINDING_VAR_GLOBAL,
   BINDING_ENUM,
   BINDING_LOOP,
+  BINDING_SWITCH,
   BINDING_FUN,
 };
 
@@ -245,6 +246,16 @@ void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
   heap[binding+2] = loop_fs;
   heap[binding+3] = break_lbl;
   heap[binding+4] = continue_lbl;
+  cgc_locals = binding;
+}
+
+void cgc_add_enclosing_switch(int loop_fs, int break_lbl) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = BINDING_SWITCH;
+  heap[binding+2] = loop_fs;
+  heap[binding+3] = break_lbl;
+  heap[binding+4] = 0;
   cgc_locals = binding;
 }
 
@@ -307,6 +318,17 @@ int cgc_lookup_enclosing_loop(int env) {
   int binding = env;
   while (binding != 0) {
     if (heap[binding+1] == BINDING_LOOP) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_enclosing_loop_or_switch(int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_LOOP OR heap[binding+1] == BINDING_SWITCH) {
       break;
     }
     binding = heap[binding];
@@ -1136,7 +1158,7 @@ void codegen_statement(ast node) {
 
   } else if (op == BREAK_KW) {
 
-    binding = cgc_lookup_enclosing_loop(cgc_locals);
+    binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
       grow_stack(heap[binding+2] - cgc_fs);
       jump(heap[binding+3]); // jump to break label
