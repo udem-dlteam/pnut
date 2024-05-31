@@ -802,24 +802,21 @@ void get_string_char() {
       }
       val = -(val % 256); /* keep low 8 bits, without overflowing */
     } else {
-      if (ch == 'a') {
-        val = 7;
-      } else if (ch == 'b') {
-        val = 8;
-      } else if (ch == 'f') {
-        val = 12;
-      } else if (ch == 'n') {
-        val = 10;
-      } else if (ch == 'r') {
-        val = 13;
-      } else if (ch == 't') {
-        val = 9;
-      } else if (ch == 'v') {
-        val = 11;
-      } else if ((ch == '\\') OR (ch == '\'') OR (ch == '\"')) {
-        val = ch;
-      } else {
-        fatal_error("unimplemented string character escape");
+      switch (ch) {
+        case 'a': val = 7;  break;
+        case 'b': val = 8;  break;
+        case 'f': val = 12; break;
+        case 'n': val = 10; break;
+        case 'r': val = 13; break;
+        case 't': val = 9;  break;
+        case 'v': val = 11; break;
+        case '\\':
+        case '\'':
+        case '\"':
+          val = ch;
+          break;
+        default:
+          fatal_error("unimplemented string character escape");
       }
       get_ch();
     }
@@ -2216,131 +2213,120 @@ ast parse_statement() {
   ast child3;
   int start_tok;
 
-  if (tok == IF_KW) {
-
-    get_tok();
-    result = parse_parenthesized_expression();
-    child1 = parse_statement();
-
-    if (tok == ELSE_KW) {
+  switch (tok) {
+    case IF_KW:
       get_tok();
-      child2 = parse_statement();
-    } else {
-      child2 = 0;
-    }
-
-    result = new_ast3(IF_KW, result, child1, child2);
-
-  } else if (tok == SWITCH_KW) {
-
-    get_tok();
-    result = parse_parenthesized_expression();
-    child1 = parse_statement();
-
-    result = new_ast2(SWITCH_KW, result, child1);
-
-  } else if (tok == CASE_KW) {
-
-    get_tok();
-    result = parse_constant_expression();
-    expect_tok(':');
-    child1 = parse_statement();
-
-    result = new_ast2(CASE_KW, result, child1);
-
-  } else if (tok == DEFAULT_KW) {
-
-    get_tok();
-    expect_tok(':');
-    result = parse_statement();
-
-    result = new_ast1(DEFAULT_KW, result);
-
-  } else if (tok == WHILE_KW) {
-
-    get_tok();
-    result = parse_parenthesized_expression();
-    child1 = parse_statement();
-
-    result = new_ast2(WHILE_KW, result, child1);
-
-  } else if (tok == DO_KW) {
-
-    get_tok();
-    result = parse_statement();
-    expect_tok(WHILE_KW);
-    child1 = parse_parenthesized_expression();
-    expect_tok(';');
-
-    result = new_ast2(DO_KW, result, child1);
-
-  } else if (tok == FOR_KW) {
-
-    get_tok();
-    expect_tok('(');
-    result = parse_comma_expression_opt();
-    expect_tok(';');
-    child1 = parse_comma_expression_opt();
-    expect_tok(';');
-    child2 = parse_comma_expression_opt();
-    expect_tok(')');
-    child3 = parse_statement();
-
-    result = new_ast4(FOR_KW, result, child1, child2, child3);
-
-  } else if (tok == GOTO_KW) {
-
-    get_tok();
-    expect_tok(IDENTIFIER);
-    result = new_ast0(GOTO_KW, val);
-    expect_tok(';');
-
-  } else if (tok == CONTINUE_KW) {
-
-    get_tok();
-    expect_tok(';');
-
-    result = new_ast0(CONTINUE_KW, 0);
-
-  } else if (tok == BREAK_KW) {
-
-    get_tok();
-    expect_tok(';');
-
-    result = new_ast0(BREAK_KW, 0);
-
-  } else if (tok == RETURN_KW) {
-
-    get_tok();
-    result = parse_comma_expression_opt();
-    expect_tok(';');
-
-    result = new_ast1(RETURN_KW, result);
-
-  } else if (tok == '{') {
-
-    result = parse_compound_statement();
-
-  } else {
-
-    start_tok = tok;
-
-    result = parse_comma_expression_opt();
-
-    if ((tok == ':') AND (start_tok != '(') AND (get_op(result) == IDENTIFIER)) {
-
+      result = parse_parenthesized_expression();
       child1 = parse_statement();
 
-      result = new_ast2(':', result, child1);
+      if (tok == ELSE_KW) {
+        get_tok();
+        child2 = parse_statement();
+      } else {
+        child2 = 0;
+      }
 
-    } else {
+      return new_ast3(IF_KW, result, child1, child2);
 
+    case SWITCH_KW:
+      get_tok();
+      result = parse_parenthesized_expression();
+      child1 = parse_statement();
+
+      return new_ast2(SWITCH_KW, result, child1);
+
+    case CASE_KW:
+      get_tok();
+      result = parse_constant_expression();
+      expect_tok(':');
+      child1 = parse_statement();
+
+      return new_ast2(CASE_KW, result, child1);
+
+    case DEFAULT_KW:
+      get_tok();
+      expect_tok(':');
+      result = parse_statement();
+
+      return new_ast1(DEFAULT_KW, result);
+
+    case WHILE_KW:
+      get_tok();
+      result = parse_parenthesized_expression();
+      child1 = parse_statement();
+
+      return new_ast2(WHILE_KW, result, child1);
+
+    case DO_KW:
+      get_tok();
+      result = parse_statement();
+      expect_tok(WHILE_KW);
+      child1 = parse_parenthesized_expression();
       expect_tok(';');
 
-    }
-  }
+      return new_ast2(DO_KW, result, child1);
 
-  return result;
+    case FOR_KW:
+      get_tok();
+      expect_tok('(');
+      result = parse_comma_expression_opt();
+      expect_tok(';');
+      child1 = parse_comma_expression_opt();
+      expect_tok(';');
+      child2 = parse_comma_expression_opt();
+      expect_tok(')');
+      child3 = parse_statement();
+
+      return new_ast4(FOR_KW, result, child1, child2, child3);
+
+    case GOTO_KW:
+      get_tok();
+      expect_tok(IDENTIFIER);
+      result = new_ast0(GOTO_KW, val);
+      expect_tok(';');
+      return result;
+
+    case CONTINUE_KW:
+      get_tok();
+      expect_tok(';');
+
+      return new_ast0(CONTINUE_KW, 0);
+
+    case BREAK_KW:
+      get_tok();
+      expect_tok(';');
+
+      return new_ast0(BREAK_KW, 0);
+
+    case RETURN_KW:
+      get_tok();
+      result = parse_comma_expression_opt();
+      expect_tok(';');
+
+      return new_ast1(RETURN_KW, result);
+
+    case '{':
+      return parse_compound_statement();
+
+    default:
+      start_tok = tok;
+
+      result = parse_comma_expression_opt();
+
+      if ((tok == ':') AND (start_tok != '(') AND (get_op(result) == IDENTIFIER)) {
+
+        child1 = parse_statement();
+
+        result = new_ast2(':', result, child1);
+
+      } else {
+
+        expect_tok(';');
+
+      }
+
+      return result;
+  }
 }
 
 ast parse_compound_statement() {

@@ -36,12 +36,10 @@ void emit_i64_le(int n) {
 }
 
 void emit_word_le(int n) {
-  if (word_size == 4) {
-    emit_i32_le(n);
-  } else if (word_size == 8) {
-    emit_i64_le(n);
-  } else {
-    fatal_error("emit_word_le: unknown word size");
+  switch (word_size) {
+    case 4: emit_i32_le(n); break;
+    case 8: emit_i64_le(n); break;
+    default: fatal_error("emit_word_le: unknown word size");
   }
 }
 
