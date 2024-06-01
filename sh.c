@@ -764,10 +764,24 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 3) {
-    /* TODO: Ternary expression */
-    printf("3: op=%d %c\n", op, op);
-    fatal_error("unexpected operator");
-    return 0;
+    if (op == '?') {
+      previous_conditional_fun_calls = conditional_fun_calls;
+      conditional_fun_calls = 0;
+      sub1 = handle_side_effects_go(get_child(node, 1), true);
+      left_conditional_fun_calls = conditional_fun_calls;
+      conditional_fun_calls = 0;
+      sub2 = handle_side_effects_go(get_child(node, 2), true);
+      right_conditional_fun_calls = conditional_fun_calls;
+      if (left_conditional_fun_calls != 0 OR right_conditional_fun_calls != 0) {
+        fatal_error("Conditional function calls in ternary operator not allowed");
+      }
+
+      return new_ast3('?', handle_side_effects_go(get_child(node, 0), executes_conditionally), sub1, sub2);
+    } else {
+      printf("3: op=%d %c\n", op, op);
+      fatal_error("unexpected operator");
+      return 0;
+    }
   } else if (nb_children == 4) {
     printf("4: op=%d %c\n", op, op);
     fatal_error("unexpected operator");
@@ -844,6 +858,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   int nb_children = get_nb_children(node);
   text sub1;
   text sub2;
+  text sub3;
 
   if (nb_children == 0) {
     if (op == INTEGER) {
@@ -940,7 +955,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     }
   } else if (nb_children == 3) {
     if (op == '?') {
-      fatal_error("comp_rvalue_go: ternary operator not supported");
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub3 = comp_rvalue_go(get_child(node, 2), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str(": "), sub3));
       return 0;
     } else {
       printf("op=%d %c\n", op, op);
