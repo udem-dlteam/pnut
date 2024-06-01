@@ -683,7 +683,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
       /* TODO: Reuse ast node? */
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
-    } else if ((op == PLUS_PLUS) OR (op == MINUS_MINUS)) {
+    } else if ((op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE)) {
       /* The parser fails on postfix ++/--, so this is only preincrement/predecrement */
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
@@ -894,10 +894,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == '!') {
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('!'), sub1));
-    } else if (op == MINUS_MINUS) {
+    } else if (op == MINUS_MINUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" -= 1")));
-    } else if (op == PLUS_PLUS) {
+    } else if (op == PLUS_PLUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
     } else if (op == '&') {
@@ -1419,7 +1419,7 @@ void mark_mutable_variables_statement(ast node) {
     mark_mutable_variables_body(node);
   } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
     /* Do nothing */
-  } else if (op == '=' OR op == PLUS_PLUS OR op == MINUS_MINUS OR op == PLUS_EQ
+  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_EQ
          OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
          OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
     mark_variable_as_mutable(get_child(node, 0));
@@ -1600,12 +1600,39 @@ void comp_glo_var_decl(ast node) {
   }
 }
 
+void comp_assignment_constant(ast lhs, ast rhs) {
+  int lhs_op = get_op(lhs);
+  if (lhs_op == IDENTIFIER) {
+    append_glo_decl(string_concat4(wrap_str("readonly "), comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
+  } else {
+    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
+    fatal_error("comp_assignment_constant: unknown lhs");
+  }
+}
+
+// Enums are just like global variables, but they are readonly.
+// Since anything that's not a local variable is considered global, this makes
+// it easy to implement enums.
+void comp_enum_cases(ast ident, ast cases) {
+  if (ident != 0) {
+    append_glo_decl(string_concat3(wrap_str("# "), wrap_str_pool(get_val(get_val(ident))), wrap_str(" enum declaration")));
+  } else {
+    append_glo_decl(wrap_str("# Enum declaration"));
+  }
+  while (get_op(cases) == ',') {
+    comp_assignment_constant(get_child(cases, 0), get_child(cases, 1));
+    cases = get_child(cases, 2);
+  }
+}
+
 /*
 This function compiles 1 top level declaration at the time.
 The 3 types of supported top level declarations are:
   - global variable declarations
   - global variable assignments
   - function declarations
+  - enum declarations
+  - struct declarations (TODO)
 Structures, enums, and unions are not supported.
 */
 void comp_glo_decl(ast node) {
@@ -1618,6 +1645,8 @@ void comp_glo_decl(ast node) {
     comp_glo_var_decl(node);
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
+  } else if (op == ENUM_KW) {
+    comp_enum_cases(get_child(node, 0), get_child(node, 1));
   } else {
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
