@@ -1942,7 +1942,15 @@ ast parse_unary_expression() {
 
   } else if (tok == SIZEOF_KW) {
 
-    syntax_error("sizeof not supported");
+    get_tok();
+    if (tok == '(') {
+      get_tok();
+      result = parse_type();
+      expect_tok(')');
+    } else {
+      result = parse_unary_expression();
+    }
+    result = new_ast1(SIZEOF_KW, result);
 
   } else {
     result = parse_postfix_expression();
