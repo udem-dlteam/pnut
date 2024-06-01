@@ -1242,20 +1242,11 @@ void comp_statement(ast node, int else_if) {
   gensym_ix = 0;
 
   if (op == IF_KW) {
-    /* TODO: Replace this with ternary expression? */
-    if (else_if) {
-      append_glo_decl(string_concat3(
-            wrap_str("elif "),
-            comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST_ELSEIF),
-            wrap_str(" ; then")
-          ));
-    } else {
-      append_glo_decl(string_concat3(
-            wrap_str("if "),
-            comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
-            wrap_str(" ; then")
-          ));
-    }
+    append_glo_decl(string_concat3(
+          wrap_str(else_if ? "elif " : "if "),
+          comp_rvalue(get_child(node, 0), else_if ? RVALUE_CTX_TEST_ELSEIF : RVALUE_CTX_TEST),
+          wrap_str(" ; then")
+        ));
 
     nest_level += 1;
     if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
