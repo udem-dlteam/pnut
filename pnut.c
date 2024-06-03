@@ -1792,17 +1792,24 @@ ast parse_definition(int local) {
     return result;
   } else if (tok == TYPEDEF_KW) {
     // When parsing a typedef, the type is added to the types table.
-    // Since the code generators don't do anything with typedefs, we then return
-    // the next definition.
+    // This is so the parser can determine if an identifier is a type or not.
+    // This implementation is not completely correct, as an identifier that was
+    // typedef'ed can also be used as a variable name, but TCC doesn't do that so
+    // it should be fine for now.
+    //
+    // When we want to implement typedef correctly, we'll want to tag
+    // identifiers as typedef'ed and have the typedef be scoped to the block
+    // it was defined in (global or in function).
     get_tok();
     type = parse_type();
     if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
 
     heap[val + 2] = TYPE;
     heap[val + 3] = type;
+    result = new_ast2(TYPEDEF_KW, val, type);
     get_tok();
     expect_tok(';');
-    return parse_definition(local);
+    return result;
   } else {
     return result;
   }

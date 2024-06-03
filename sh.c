@@ -1736,6 +1736,8 @@ void comp_glo_decl(ast node) {
     comp_glo_var_decl(node);
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
+  } else if (op == TYPEDEF_KW) {
+    handle_enum_struct_union_type_decl(get_child(node, 1));
   } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {

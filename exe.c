@@ -326,6 +326,7 @@ enum {
   BINDING_SWITCH,
   BINDING_FUN,
   BINDING_GOTO_LABEL,
+  BINDING_TYPEDEF,
 };
 
 void cgc_add_local_param(int ident, int size, ast type) {
@@ -414,6 +415,15 @@ void cgc_add_goto_label(int ident, int lbl) {
   cgc_locals_fun = binding;
 }
 
+void cgc_add_typedef(int ident, ast type) {
+  int binding = alloc_obj(4);
+  heap[binding+0] = cgc_globals;
+  heap[binding+1] = BINDING_TYPEDEF;
+  heap[binding+2] = ident;
+  heap[binding+3] = type;
+  cgc_globals = binding;
+}
+
 int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
   int binding = env;
   while (binding != 0) {
@@ -472,6 +482,10 @@ int cgc_lookup_enum(int ident, int env) {
 
 int cgc_lookup_goto_label(int ident, int env) {
   return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
+}
+
+int cgc_lookup_typedef(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPEDEF, ident, env);
 }
 
 // A pointer type is either an array type or a type with at least one star
@@ -1532,6 +1546,20 @@ void codegen_glo_fun_decl(ast node) {
   cgc_locals_fun = save_locals_fun;
 }
 
+void handle_typedef_decl(ast node) {
+  ast name = get_child(node, 0);
+  ast type = get_child(node, 1);
+  int binding = cgc_lookup_typedef(name, cgc_globals);
+
+  handle_enum_struct_union_type_decl(type);
+
+  if (binding == 0) {
+    cgc_add_typedef(name, type);
+  } else {
+    fatal_error("handle_typedef_decl: duplicate typedef");
+  }
+}
+
 void codegen_glo_decl(ast node) {
 
   int op = get_op(node);
@@ -1540,6 +1568,8 @@ void codegen_glo_decl(ast node) {
     codegen_glo_var_decl(node);
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
+  } else if (op == TYPEDEF_KW) {
+    handle_typedef_decl(node);
   } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
