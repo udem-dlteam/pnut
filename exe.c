@@ -1142,6 +1142,27 @@ void codegen_begin() {
   jump(setup_lbl);
 }
 
+void codegen_enum(ast node) {
+  ast cases = get_child(node, 1);
+
+  while (get_op(cases) == ',') {
+    cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));
+    cases = get_child(cases, 2);
+  }
+}
+
+void handle_enum_struct_union_type_decl(ast type) {
+  if (get_op(type) == ENUM_KW) {
+    codegen_enum(type);
+  } else if (get_op(type) == STRUCT_KW) {
+    fatal_error("handle_enum_struct_union_type_decl: struct not supported");
+  } else if (get_op(type) == UNION_KW) {
+    fatal_error("handle_enum_struct_union_type_decl: union not supported");
+  }
+
+  // If not an enum, struct, or union, do nothing
+}
+
 void codegen_glo_var_decl(ast node) {
 
   ast name = get_child(node, 0);
@@ -1157,6 +1178,8 @@ void codegen_glo_var_decl(ast node) {
     // All non-array types are represented as a word, even if they are smaller
     size = 1;
   }
+
+  handle_enum_struct_union_type_decl(type);
 
   if (binding == 0) {
     cgc_add_global(name, size, width, type);
@@ -1509,15 +1532,6 @@ void codegen_glo_fun_decl(ast node) {
   cgc_locals_fun = save_locals_fun;
 }
 
-void codegen_enum(ast node) {
-  ast cases = get_child(node, 1);
-
-  while (get_op(cases) == ',') {
-    cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));
-    cases = get_child(cases, 2);
-  }
-}
-
 void codegen_glo_decl(ast node) {
 
   int op = get_op(node);
@@ -1526,8 +1540,8 @@ void codegen_glo_decl(ast node) {
     codegen_glo_var_decl(node);
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
-  } else if (op == ENUM_KW) {
-    codegen_enum(node);
+  } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
+    handle_enum_struct_union_type_decl(node);
   } else {
     putstr("op="); putint(op);
     putstr(" with "); putint(get_nb_children(node)); putstr(" children\n");

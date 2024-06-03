@@ -163,13 +163,13 @@ void fatal_error(char *msg) {
 }
 
 void syntax_error(char *msg) {
-  putstr("syntax error: "); putstr(msg);
-  fatal_error("syntax error");
+  putstr("syntax error: "); putstr(msg); putchar('\n');
+  exit(1);
 }
 
 void missing_feature_error(char *msg) {
   putstr("not yet implemented: "); putstr(msg);
-  fatal_error("syntax error");
+  exit(1);
 }
 
 void print_dec(int n) {
@@ -1498,36 +1498,104 @@ ast parse_compound_statement();
 ast parse_conditional_expression();
 #endif
 
+ast parse_enum() {
+  ast name;
+  ast ident;
+  ast result = 0;
+  ast tail;
+  ast value = 0;
+  int next_value = 0;
+
+  expect_tok(ENUM_KW);
+
+  if (tok == IDENTIFIER) {
+    name = new_ast0(IDENTIFIER, val);
+    get_tok();
+  } else {
+    name = 0;
+  }
+
+  expect_tok('{');
+
+  while (tok != '}') {
+    if (tok != IDENTIFIER) {
+      syntax_error("identifier expected");
+    }
+    ident = new_ast0(IDENTIFIER, val);
+    get_tok();
+
+    if (tok == '=') {
+      get_tok();
+
+      if (tok != INTEGER) {
+        syntax_error("integer expected");
+      }
+      value = new_ast0(INTEGER, val);
+      next_value = val - 1; // Next value is the current value + 1, but val is negative
+      get_tok(); // skip
+    } else {
+      value = new_ast0(INTEGER, next_value);
+      next_value -= 1;
+    }
+
+    if (result == 0) {
+      result = new_ast3(',', ident, value, 0);
+      tail = result;
+    } else {
+      set_child(tail, 2, new_ast3(',', ident, value, 0));
+      tail = get_child(tail, 2);
+    }
+
+    if (tok == ',') {
+      get_tok();
+    } else {
+      break;
+    }
+  }
+
+  expect_tok('}');
+
+  return new_ast2(ENUM_KW, name, result);
+}
+
+ast parse_struct() {
+  fatal_error("struct not supported");
+}
+
+ast parse_union() {
+  fatal_error("union not supported");
+}
+
 ast parse_type() {
 
   int type_kw = 0;
 
   while (1) {
     if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
-      if ((type_kw != 0) AND (type_kw != INT_KW)) {
-        syntax_error("inconsistent type");
-      } else {
-        type_kw = INT_KW;
-        get_tok();
-      }
+      if ((type_kw != 0) AND (type_kw != INT_KW)) syntax_error("inconsistent type");
+      type_kw = INT_KW;
+      get_tok();
     } else if (tok == CHAR_KW) {
-      if (type_kw != 0) {
-        syntax_error("inconsistent type");
-      } else {
-        type_kw = CHAR_KW;
-        get_tok();
-      }
+      if (type_kw != 0) syntax_error("inconsistent type");
+      type_kw = CHAR_KW;
+      get_tok();
     } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
       syntax_error("unsupported type");
     } else if (tok == VOID_KW) {
-      if (type_kw != 0) {
-        syntax_error("inconsistent type");
-      } else {
-        type_kw = VOID_KW;
-        get_tok();
-      }
+      if (type_kw != 0) syntax_error("inconsistent type");
+      type_kw = VOID_KW;
+      get_tok();
     } else if (tok == CONST_KW) {
       get_tok(); // ignore const
+    } else if (tok == ENUM_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_enum();
+    } else if (tok == STRUCT_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_struct();
+    } else if (tok == UNION_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_union();
     } else if (tok == TYPE) {
       /* Look in types table */
       type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
@@ -1561,7 +1629,8 @@ int is_type_starter(int tok) {
   return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
       OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
       OR (tok == TYPE) // User defined types
-      OR (tok == CONST_KW); // Type attributes
+      OR (tok == CONST_KW) // Type attributes
+      OR (tok == ENUM_KW OR tok == STRUCT_KW OR tok == UNION_KW); // Enum, struct, union
 }
 
 ast parse_declaration() {
@@ -1617,68 +1686,6 @@ int parse_declaration_list() {
   return result;
 }
 
-ast parse_enum() {
-  ast name;
-  ast ident;
-  ast result = 0;
-  ast tail;
-  ast value = 0;
-  int next_value = 0;
-
-  expect_tok(ENUM_KW);
-
-  if (tok == IDENTIFIER) {
-    name = new_ast0(IDENTIFIER, val);
-    get_tok();
-  } else {
-    name = 0;
-  }
-
-  expect_tok('{');
-
-  while (tok != '}') {
-    if (tok != IDENTIFIER) {
-      syntax_error("identifier expected");
-    }
-    ident = new_ast0(IDENTIFIER, val);
-    get_tok();
-
-    if (tok == '=') {
-      get_tok();
-
-      if (tok != INTEGER) {
-        syntax_error("integer expected");
-      }
-      value = new_ast0(INTEGER, val);
-      next_value = val - 1; // Next value is the current value + 1, but val is negative
-      get_tok(); // skip
-    } else {
-      value = new_ast0(INTEGER, next_value);
-      next_value -= 1;
-    }
-
-    // printf("name=%s value=%d\n", string_pool + heap[name + 1], value);
-    if (result == 0) {
-      result = new_ast3(',', ident, value, 0);
-      tail = result;
-    } else {
-      set_child(tail, 2, new_ast3(',', ident, value, 0));
-      tail = get_child(tail, 2);
-    }
-
-    if (tok == ',') {
-      get_tok();
-    } else {
-      break;
-    }
-  }
-
-  expect_tok('}');
-  expect_tok(';');
-
-  return new_ast2(ENUM_KW, name, result);
-}
-
 /* Note: Uses a simplified syntax for definitions */
 ast parse_definition(int local) {
 
@@ -1694,6 +1701,15 @@ ast parse_definition(int local) {
   if (is_type_starter(tok)) {
 
     type = parse_type();
+
+    // global enum/struct/union declaration
+    if (tok == ';') {
+      if (get_op(type) != ENUM_KW AND get_op(type) != STRUCT_KW AND get_op(type) != UNION_KW) {
+        syntax_error("enum/struct/union declaration expected");
+      }
+      get_tok();
+      return type;
+    }
 
     while (1) {
 
@@ -1787,8 +1803,6 @@ ast parse_definition(int local) {
     get_tok();
     expect_tok(';');
     return parse_definition(local);
-  } else if (tok == ENUM_KW) {
-    return parse_enum();
   } else {
     return result;
   }

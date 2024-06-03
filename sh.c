@@ -684,7 +684,6 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       /* TODO: Reuse ast node? */
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else if ((op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE)) {
-      /* The parser fails on postfix ++/--, so this is only preincrement/predecrement */
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else {
@@ -1704,6 +1703,18 @@ void comp_enum_cases(ast ident, ast cases) {
   }
 }
 
+void handle_enum_struct_union_type_decl(ast type) {
+  if (get_op(type) == ENUM_KW) {
+    comp_enum_cases(get_child(type, 0), get_child(type, 1));
+  } else if (get_op(type) == STRUCT_KW) {
+    fatal_error("handle_enum_struct_union_type_decl: struct not supported");
+  } else if (get_op(type) == UNION_KW) {
+    fatal_error("handle_enum_struct_union_type_decl: union not supported");
+  }
+
+  // I fnot an enum, struct, or union, do nothing
+}
+
 /*
 This function compiles 1 top level declaration at the time.
 The 3 types of supported top level declarations are:
@@ -1721,11 +1732,12 @@ void comp_glo_decl(ast node) {
   if (op == '=') { /* Assignments */
    comp_assignment(get_child(node, 0), get_child(node, 1));
   } else if (op == VAR_DECL) {
+    handle_enum_struct_union_type_decl(get_child(node, 1));
     comp_glo_var_decl(node);
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
-  } else if (op == ENUM_KW) {
-    comp_enum_cases(get_child(node, 0), get_child(node, 1));
+  } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
+    handle_enum_struct_union_type_decl(node);
   } else {
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
