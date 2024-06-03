@@ -315,6 +315,9 @@ void def_goto_label(int lbl) {
 }
 
 enum {
+  // Because function params, local and global variables all share the same
+  // namespace, BINDING_PARAM_LOCAL, BINDING_VAR_LOCAL and BINDING_VAR_GLOBAL
+  // must be kept together at the beginning.
   BINDING_PARAM_LOCAL,
   BINDING_VAR_LOCAL,
   BINDING_VAR_GLOBAL,
@@ -411,6 +414,28 @@ void cgc_add_goto_label(int ident, int lbl) {
   cgc_locals_fun = binding;
 }
 
+int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == binding_type && heap[binding+2] == ident) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_last_binding(int binding_type, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == binding_type) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
 int cgc_lookup_var(int ident, int env) {
   int binding = env;
   while (binding != 0) {
@@ -423,25 +448,11 @@ int cgc_lookup_var(int ident, int env) {
 }
 
 int cgc_lookup_fun(int ident, int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == BINDING_FUN && heap[binding+2] == ident) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
+  return cgc_lookup_binding_ident(BINDING_FUN, ident, env);
 }
 
 int cgc_lookup_enclosing_loop(int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == BINDING_LOOP) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
+  return cgc_lookup_last_binding(BINDING_LOOP, env);
 }
 
 int cgc_lookup_enclosing_loop_or_switch(int env) {
@@ -456,25 +467,11 @@ int cgc_lookup_enclosing_loop_or_switch(int env) {
 }
 
 int cgc_lookup_enum(int ident, int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == BINDING_ENUM && heap[binding+2] == ident) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
+  return cgc_lookup_binding_ident(BINDING_ENUM, ident, env);
 }
 
 int cgc_lookup_goto_label(int ident, int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == BINDING_GOTO_LABEL && heap[binding+2] == ident) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
+  return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
 }
 
 // A pointer type is either an array type or a type with at least one star
