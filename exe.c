@@ -314,6 +314,7 @@ enum {
   BINDING_VAR_GLOBAL,
   BINDING_ENUM,
   BINDING_LOOP,
+  BINDING_SWITCH,
   BINDING_FUN,
   BINDING_GOTO_LABEL,
 };
@@ -349,6 +350,16 @@ void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
   heap[binding+2] = loop_fs;
   heap[binding+3] = break_lbl;
   heap[binding+4] = continue_lbl;
+  cgc_locals = binding;
+}
+
+void cgc_add_enclosing_switch(int loop_fs, int break_lbl) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = BINDING_SWITCH;
+  heap[binding+2] = loop_fs;
+  heap[binding+3] = break_lbl;
+  heap[binding+4] = 0;
   cgc_locals = binding;
 }
 
@@ -420,6 +431,17 @@ int cgc_lookup_enclosing_loop(int env) {
   int binding = env;
   while (binding != 0) {
     if (heap[binding+1] == BINDING_LOOP) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_enclosing_loop_or_switch(int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_LOOP OR heap[binding+1] == BINDING_SWITCH) {
       break;
     }
     binding = heap[binding];
@@ -1182,6 +1204,7 @@ void codegen_statement(ast node) {
   int save_fs;
   int save_locals;
   int binding;
+  ast patterns;
 
   if (node == 0) return;
 
@@ -1253,9 +1276,81 @@ void codegen_statement(ast node) {
     cgc_fs = save_fs;
     cgc_locals = save_locals;
 
+  } else if (op == SWITCH_KW) {
+
+    save_fs = cgc_fs;
+    save_locals = cgc_locals;
+
+    lbl1 = alloc_label(); // lbl1: end of switch
+    lbl2 = alloc_label(); // lbl2: next case
+    // lbl3: conditional block
+
+    cgc_add_enclosing_switch(cgc_fs, lbl1);
+
+    codegen_rvalue(get_child(node, 0)); // switch operand
+
+    jump(lbl2); // Jump to first case
+
+    node = get_child(node, 1); // switch body
+    if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
+
+    // We iterate through the body of the switch.
+    while (get_op(node) == '{') {
+
+      patterns = get_child(node, 0);
+
+      if (get_op(patterns) == CASE_KW) {
+
+        lbl3 = alloc_label(); // conditional block label
+        // sequence of switch cases are chained together in the CASE_KW AST nodes, so we iterate through them
+        while (get_op(patterns) == CASE_KW) {
+          // If falling through from a previous conditional block, we don't want
+          // to test the case and simply want to execute the conditional block
+          // so we skip the case test.
+          jump(lbl3);
+          def_label(lbl2);
+          // create label for next case
+          lbl2 = alloc_label();
+          // duplicate switch operand for the comparison
+          pop_reg(reg_X); push_reg(reg_X); push_reg(reg_X); grow_fs(1);
+          // Get the value of the case and compare it to the switch operand
+          codegen_rvalue(get_child(patterns, 0));
+          pop_reg(reg_Y); pop_reg(reg_X); grow_fs(-2);
+          jump_cond_reg_reg(EQ, lbl3, reg_X, reg_Y);
+          jump(lbl2); // jump to next case if condition is false
+
+          patterns = get_child(patterns, 1); // next case
+        }
+
+        def_label(lbl3); // conditional block start here
+        codegen_statement(patterns); // patterns now points to first statement of the block
+
+      } else if (get_op(patterns) == DEFAULT_KW) {
+        lbl3 = alloc_label(); // conditional block label
+        def_label(lbl2);
+        lbl2 = alloc_label(); // next case
+        def_label(lbl3); // conditional block start
+        codegen_statement(get_child(patterns, 0)); // default node points to first statement of the block
+      } else {
+        codegen_statement(get_child(node, 0));
+      }
+
+      node = get_child(node, 1);
+    }
+
+    // if we fell through the switch, we need to remove the switch operand.
+    // When exiting the switch with a break statement, the stack has already been adjusted.
+    grow_stack(-1);
+    grow_fs(-1);
+
+    def_label(lbl1); // End of switch label
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
+
   } else if (op == BREAK_KW) {
 
-    binding = cgc_lookup_enclosing_loop(cgc_locals);
+    binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
       grow_stack(heap[binding+2] - cgc_fs);
       jump(heap[binding+3]); // jump to break label
@@ -1266,7 +1361,7 @@ void codegen_statement(ast node) {
   } else if (op == CONTINUE_KW) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
-    if (binding != 0) {
+    if (binding != 0 AND heap[binding+4] != 0) {
       grow_stack(heap[binding+2] - cgc_fs);
       jump(heap[binding+4]); // jump to continue label
     } else {
