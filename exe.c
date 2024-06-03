@@ -63,54 +63,6 @@ void write_i32_le(int n) {
   write_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
-// Label definition
-
-// TODO: generalize (this is currently specialized for x86 32 bit relative addressing)
-
-int alloc_label() {
-  int lbl = alloc_obj(1);
-  heap[lbl] = 0;
-  return lbl;
-}
-
-void use_label(int lbl) {
-
-  int addr = heap[lbl];
-
-  if (addr < 0) {
-    // label address is currently known
-    addr = -addr - (code_alloc + 4); // compute relative address
-    emit_i32_le(addr);
-  } else {
-    // label address is not yet known
-    emit_i32_le(0); // 32 bit placeholder for distance
-    code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl] = code_alloc;
-  }
-}
-
-void def_label(int lbl) {
-
-  int addr = heap[lbl];
-  int label_addr = code_alloc;
-  int next;
-
-  if (addr < 0) {
-    fatal_error("label multiply defined");
-  } else {
-    heap[lbl] = -label_addr; // define label's address
-    while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
-      code_alloc = addr;
-      addr = label_addr - addr; // compute relative address
-      code_alloc -= 4;
-      emit_i32_le(addr);
-      addr = next;
-    }
-    code_alloc = label_addr;
-  }
-}
-
 const int char_width = 1;
 
 const int reg_X;
@@ -141,6 +93,7 @@ void push_reg(int src);
 void pop_reg (int dst);
 
 void jump(int lbl);
+void jump_rel(int offset);
 void call(int lbl);
 void ret();
 
@@ -201,9 +154,159 @@ int fclose_lbl;
 int fgetc_lbl;
 
 int cgc_fs = 0;
+// Function bindings that follows lexical scoping rules
 int cgc_locals = 0;
+// Like cgc_locals, but with 1 scope for the entire function. Used for goto labels
+int cgc_locals_fun = 0;
+// Global bindings
 int cgc_globals = 0;
+// Bump allocator used to allocate static objects
 int cgc_global_alloc = 0;
+
+void grow_fs(int words) {
+  cgc_fs += words;
+}
+
+int round_up_to_word_size(int n) {
+  return (n + word_size - 1) / word_size * word_size;
+}
+
+void grow_stack(int words) {
+  add_reg_imm(reg_SP, -words * word_size);
+}
+
+// Like grow_stack, but takes bytes instead of words.
+// To maintain alignment, the stack is grown by a multiple of word_size (rounded
+// up from the number of bytes).
+void grow_stack_bytes(int bytes) {
+  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
+}
+
+// Label definition
+
+enum {
+  GENERIC_LABEL,
+  GOTO_LABEL,
+};
+
+int alloc_label() {
+  int lbl = alloc_obj(2);
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  return lbl;
+}
+
+int alloc_goto_label() {
+  int lbl = alloc_obj(3);
+  heap[lbl] = GOTO_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  heap[lbl + 2] = 0; // cgc-fs of label
+  return lbl;
+}
+
+void use_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
+
+  if (addr < 0) {
+    // label address is currently known
+    addr = -addr - (code_alloc + 4); // compute relative address
+    emit_i32_le(addr);
+  } else {
+    // label address is not yet known
+    emit_i32_le(0); // 32 bit placeholder for distance
+    code[code_alloc-1] = addr; // chain with previous patch address
+    heap[lbl + 1] = code_alloc;
+  }
+}
+
+void def_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int label_addr = code_alloc;
+  int next;
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+
+  if (addr < 0) {
+    fatal_error("label defined more than once");
+  } else {
+    heap[lbl + 1] = -label_addr; // define label's address
+    while (addr != 0) {
+      next = code[addr-1]; // get pointer to next patch address
+      code_alloc = addr;
+      addr = label_addr - addr; // compute relative address
+      code_alloc -= 4;
+      emit_i32_le(addr);
+      addr = next;
+    }
+    code_alloc = label_addr;
+  }
+}
+
+// Similar to use_label, but for gotos.
+// The main difference is that it adjusts the stack and jumps, as opposed to
+// simply emitting the address.
+void jump_to_goto_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int lbl_fs = heap[lbl + 2];
+  int start_code_alloc = code_alloc;
+
+  if (heap[lbl] != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
+
+  if (addr < 0) {
+    // label address is currently known
+    grow_stack(lbl_fs - cgc_fs);
+    start_code_alloc = code_alloc;
+    jump_rel(0); // Generate dummy jump instruction to get instruction length
+    addr = -addr - code_alloc; // compute relative address
+    code_alloc = start_code_alloc;
+    jump_rel(addr);
+  } else {
+    // label address is not yet known
+    // placeholders for when we know the destination address and frame size
+    grow_stack(0);
+    jump_rel(0);
+    code[code_alloc-1] = addr; // chain with previous patch address
+    code[code_alloc-2] = cgc_fs; // save current frame size
+    code[code_alloc-3] = start_code_alloc; // track initial code alloc so we can come back
+    heap[lbl + 1] = code_alloc;
+  }
+}
+
+void def_goto_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int label_addr = code_alloc;
+  int next;
+  int goto_fs;
+  int start_code_alloc;
+
+  if (heap[lbl] != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
+
+  if (addr < 0) {
+    fatal_error("goto label defined more than once");
+  } else {
+    heap[lbl + 1] = -label_addr; // define label's address
+    heap[lbl + 2] = cgc_fs;      // define label's frame size
+    while (addr != 0) {
+      next = code[addr-1]; // get pointer to next patch address
+      goto_fs = code[addr-2]; // get frame size at goto instruction
+      code_alloc = code[addr-3]; // reset code pointer to start of jump_to_goto_label instruction
+      grow_stack(cgc_fs - goto_fs); // adjust stack
+      start_code_alloc = code_alloc;
+      jump_rel(0); // Generate dummy jump instruction to get instruction length
+      addr = label_addr - code_alloc; // compute relative address
+      code_alloc = start_code_alloc;
+      jump_rel(addr);
+      addr = next;
+    }
+    code_alloc = label_addr;
+  }
+}
 
 enum {
   BINDING_PARAM_LOCAL,
@@ -212,6 +315,7 @@ enum {
   BINDING_ENUM,
   BINDING_LOOP,
   BINDING_FUN,
+  BINDING_GOTO_LABEL,
 };
 
 void cgc_add_local_param(int ident, int size, ast type) {
@@ -281,6 +385,15 @@ void cgc_add_enum(int ident, int value) {
   cgc_globals = binding;
 }
 
+void cgc_add_goto_label(int ident, int lbl) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals_fun;
+  heap[binding+1] = BINDING_GOTO_LABEL;
+  heap[binding+2] = ident;
+  heap[binding+3] = lbl;
+  cgc_locals_fun = binding;
+}
+
 int cgc_lookup_var(int ident, int env) {
   int binding = env;
   while (binding != 0) {
@@ -318,6 +431,17 @@ int cgc_lookup_enum(int ident, int env) {
   int binding = env;
   while (binding != 0) {
     if (heap[binding+1] == BINDING_ENUM && heap[binding+2] == ident) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_goto_label(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_GOTO_LABEL && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -577,26 +701,6 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   push_reg(reg_X);
 }
 
-void grow_fs(int words) {
-  cgc_fs += words;
-}
-
-int round_up_to_word_size(int n) {
-  return (n + word_size - 1) / word_size * word_size;
-}
-
-void grow_stack(int words) {
-  if (words != 0)
-    add_reg_imm(reg_SP, -words * word_size);
-}
-
-// Like grow_stack, but takes bytes instead of words.
-// To maintain alignment, the stack is grown by a multiple of word_size (rounded
-// up from the number of bytes).
-void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
-}
-
 #ifndef PNUT_CC
 void codegen_rvalue(ast node);
 void codegen_statement(ast node);
@@ -641,6 +745,22 @@ void codegen_call(ast node) {
   grow_fs(-nb_params);
 
   push_reg(reg_X);
+}
+
+void codegen_goto(ast node) {
+
+  ast label_ident = get_val(node);
+
+  int binding = cgc_lookup_goto_label(label_ident, cgc_locals_fun);
+  int goto_lbl;
+
+  if (binding == 0) {
+    goto_lbl = alloc_goto_label();
+    cgc_add_goto_label(label_ident, goto_lbl);
+    binding = cgc_locals_fun;
+  }
+
+  jump_to_goto_label(heap[binding + 3]); // Label
 }
 
 // Return the width of the lvalue
@@ -774,7 +894,6 @@ void codegen_rvalue(ast node) {
             mov_reg_imm(reg_X, -get_val(heap[binding+3]));
             push_reg(reg_X);
           } else {
-            printf("ident = %s\n", string_pool+get_val(ident));
             putstr("ident = "); putstr(string_pool+get_val(ident)); putchar('\n');
             fatal_error("codegen_rvalue: identifier not found");
           }
@@ -1170,6 +1289,22 @@ void codegen_statement(ast node) {
 
     codegen_body(node);
 
+  } else if (op == ':') {
+
+    binding = cgc_lookup_goto_label(get_val(get_child(node, 0)), cgc_locals_fun);
+
+    if (binding == 0) {
+      cgc_add_goto_label(get_val(get_child(node, 0)), alloc_goto_label());
+      binding = cgc_locals_fun;
+    }
+
+    def_goto_label(heap[binding + 3]);
+    codegen_statement(get_child(node, 1)); // labelled statement
+
+  } else if (op == GOTO_KW) {
+
+    codegen_goto(node);
+
   } else {
 
     codegen_rvalue(node);
@@ -1208,6 +1343,7 @@ void codegen_glo_fun_decl(ast node) {
   ast body = get_child(node, 3);
   int lbl;
   int binding;
+  int save_locals_fun = cgc_locals_fun;
 
   if (body != 0) {
 
@@ -1234,6 +1370,8 @@ void codegen_glo_fun_decl(ast node) {
 
     ret();
   }
+
+  cgc_locals_fun = save_locals_fun;
 }
 
 void codegen_enum(ast node) {

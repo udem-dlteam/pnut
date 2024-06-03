@@ -317,6 +317,15 @@ void jump(int lbl) {
   use_label(lbl);
 }
 
+void jump_rel(int offset) {
+
+  // JMP rel32  ;; Jump to 32 bit displacement relative to next instruction
+  // See: https://web.archive.org/web/20240407051904/https://www.felixcloutier.com/x86/jmp
+
+  emit_i8(0xe9);
+  emit_i32_le(offset);
+}
+
 void call(int lbl) {
 
   // CALL rel32  ;; Call to 32 bit displacement relative to next instruction
