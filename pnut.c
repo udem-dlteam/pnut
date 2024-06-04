@@ -1513,7 +1513,77 @@ ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
+ast parse_enum();
+ast parse_struct();
+ast parse_union();
 #endif
+
+ast parse_type() {
+
+  int type_kw = 0;
+
+  while (1) {
+    if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
+      if ((type_kw != 0) AND (type_kw != INT_KW)) syntax_error("inconsistent type");
+      type_kw = INT_KW;
+      get_tok();
+    } else if (tok == CHAR_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      type_kw = CHAR_KW;
+      get_tok();
+    } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
+      syntax_error("unsupported type");
+    } else if (tok == VOID_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      type_kw = VOID_KW;
+      get_tok();
+    } else if (tok == CONST_KW) {
+      get_tok(); // ignore const
+    } else if (tok == ENUM_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_enum();
+    } else if (tok == STRUCT_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_struct();
+    } else if (tok == UNION_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_union();
+    } else if (tok == TYPE) {
+      /* Look in types table */
+      type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+      get_tok();
+      break;
+    } else {
+      break;
+    }
+  }
+
+  if (type_kw == 0) {
+    syntax_error("type expected");
+  }
+
+  return new_ast0(type_kw, 0);
+}
+
+int parse_stars() {
+
+  int stars = 0;
+
+  while (tok == '*') {
+    stars += 1;
+    get_tok();
+  }
+
+  return stars;
+}
+
+int is_type_starter(int tok) {
+  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
+      OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
+      OR (tok == TYPE) // User defined types
+      OR (tok == CONST_KW) // Type attributes
+      OR (tok == ENUM_KW OR tok == STRUCT_KW OR tok == UNION_KW); // Enum, struct, union
+}
 
 ast parse_enum() {
   ast name;
@@ -1581,73 +1651,6 @@ ast parse_struct() {
 
 ast parse_union() {
   fatal_error("union not supported");
-}
-
-ast parse_type() {
-
-  int type_kw = 0;
-
-  while (1) {
-    if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
-      if ((type_kw != 0) AND (type_kw != INT_KW)) syntax_error("inconsistent type");
-      type_kw = INT_KW;
-      get_tok();
-    } else if (tok == CHAR_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      type_kw = CHAR_KW;
-      get_tok();
-    } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
-      syntax_error("unsupported type");
-    } else if (tok == VOID_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      type_kw = VOID_KW;
-      get_tok();
-    } else if (tok == CONST_KW) {
-      get_tok(); // ignore const
-    } else if (tok == ENUM_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_enum();
-    } else if (tok == STRUCT_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_struct();
-    } else if (tok == UNION_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_union();
-    } else if (tok == TYPE) {
-      /* Look in types table */
-      type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
-      get_tok();
-      break;
-    } else {
-      break;
-    }
-  }
-
-  if (type_kw == 0) {
-    syntax_error("type expected");
-  }
-
-  return new_ast0(type_kw, 0);
-}
-
-int parse_stars() {
-
-  int stars = 0;
-
-  while (tok == '*') {
-    stars += 1;
-    get_tok();
-  }
-
-  return stars;
-}
-
-int is_type_starter(int tok) {
-  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
-      OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
-      OR (tok == TYPE) // User defined types
-      OR (tok == CONST_KW) // Type attributes
-      OR (tok == ENUM_KW OR tok == STRUCT_KW OR tok == UNION_KW); // Enum, struct, union
 }
 
 ast parse_declaration() {
