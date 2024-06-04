@@ -1157,7 +1157,7 @@ void codegen_begin() {
 }
 
 void codegen_enum(ast node) {
-  ast cases = get_child(node, 1);
+  ast cases = get_child(node, 2);
 
   while (get_op(cases) == ',') {
     cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));

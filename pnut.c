@@ -1598,55 +1598,131 @@ ast parse_enum() {
   if (tok == IDENTIFIER) {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
+  } else if (tok == TYPE) {
+    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
+    get_tok();
+    if (tok == '{') fatal_error("enum type cannot be redefined");
+    return result;
   } else {
     name = 0;
   }
 
-  expect_tok('{');
-
-  while (tok != '}') {
-    if (tok != IDENTIFIER) {
-      syntax_error("identifier expected");
-    }
-    ident = new_ast0(IDENTIFIER, val);
+  if (tok == '{') { // TODO: Distinguish between enum type and enum definition
     get_tok();
 
-    if (tok == '=') {
-      get_tok();
-
-      if (tok != INTEGER) {
-        syntax_error("integer expected");
+    while (tok != '}') {
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
       }
-      value = new_ast0(INTEGER, val);
-      next_value = val - 1; // Next value is the current value + 1, but val is negative
-      get_tok(); // skip
-    } else {
-      value = new_ast0(INTEGER, next_value);
-      next_value -= 1;
-    }
-
-    if (result == 0) {
-      result = new_ast3(',', ident, value, 0);
-      tail = result;
-    } else {
-      set_child(tail, 2, new_ast3(',', ident, value, 0));
-      tail = get_child(tail, 2);
-    }
-
-    if (tok == ',') {
+      ident = new_ast0(IDENTIFIER, val);
       get_tok();
-    } else {
-      break;
+
+      if (tok == '=') {
+        get_tok();
+
+        if (tok != INTEGER) {
+          syntax_error("integer expected");
+        }
+        value = new_ast0(INTEGER, val);
+        next_value = val - 1; // Next value is the current value + 1, but val is negative
+        get_tok(); // skip
+      } else {
+        value = new_ast0(INTEGER, next_value);
+        next_value -= 1;
+      }
+
+      if (result == 0) {
+        result = new_ast3(',', ident, value, 0);
+        tail = result;
+      } else {
+        set_child(tail, 2, new_ast3(',', ident, value, 0));
+        tail = get_child(tail, 2);
+      }
+
+      if (tok == ',') {
+        get_tok();
+      } else {
+        break;
+      }
     }
+
+    expect_tok('}');
+
   }
 
-  expect_tok('}');
-
-  return new_ast2(ENUM_KW, name, result);
+  return new_ast3(ENUM_KW, 0, name, result); // 0 is number of stars
 }
 
 ast parse_struct() {
-  fatal_error("struct not supported");
+  ast name;
+  ast ident;
+  ast type;
+  ast result = 0;
+  ast tail;
+  int stars;
+
+  expect_tok(STRUCT_KW);
+
+  if (tok == IDENTIFIER) {
+    name = new_ast0(IDENTIFIER, val);
+    get_tok();
+  } else if (tok == TYPE) {
+    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
+    get_tok();
+    if (tok == '{') fatal_error("struct type cannot be redefined");
+    return result;
+  } else {
+    name = 0;
+  }
+
+  if (tok == '{') { // TODO: Distinguish between struct type and struct definition
+    get_tok();
+
+    while (tok != '}') {
+      if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
+
+      type = parse_type();
+      stars = parse_stars();
+
+      if (stars != 0) {
+        type = clone_ast(type);
+        set_val(type, stars);
+      }
+
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+
+      ident = new_ast0(IDENTIFIER, val);
+      get_tok();
+
+      if (tok == '[') { // Array
+        get_tok();
+        if (tok != INTEGER) syntax_error("array size must be an integer constant");
+
+        type = new_ast2('[', new_ast0(INTEGER, -val), type);
+        get_tok();
+        expect_tok(']');
+      }
+
+      expect_tok(';');
+
+      if (result == 0) {
+        result = new_ast3(',', ident, type, 0);
+        tail = result;
+      } else {
+        set_child(tail, 2, new_ast3(',', ident, type, 0));
+        tail = get_child(tail, 2);
+      }
+    }
+
+    expect_tok('}');
+
+  }
+
+  return new_ast3(STRUCT_KW, 0, name, result); // 0 is number of stars
 }
 
 ast parse_union() {
@@ -1937,11 +2013,21 @@ ast parse_postfix_expression() {
 
     } else if (tok == '.') {
 
-      syntax_error("Struct/Union not supported");
+      get_tok();
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+      result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
+      get_tok();
 
     } else if (tok == ARROW) {
 
-      syntax_error("Struct/Union not supported");
+      get_tok();
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+      result = new_ast2(ARROW, result, new_ast0(IDENTIFIER, val));
+      get_tok();
 
     } else if (tok == PLUS_PLUS) {
 
@@ -1990,7 +2076,8 @@ ast parse_unary_expression() {
     get_tok();
     if (tok == '(') {
       get_tok();
-      result = parse_type();
+      result = clone_ast(parse_type());
+      set_val(result, parse_stars());
       expect_tok(')');
     } else {
       result = parse_unary_expression();

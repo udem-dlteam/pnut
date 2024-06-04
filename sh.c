@@ -1705,7 +1705,7 @@ void comp_enum_cases(ast ident, ast cases) {
 
 void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
-    comp_enum_cases(get_child(type, 0), get_child(type, 1));
+    comp_enum_cases(get_child(type, 1), get_child(type, 2));
   } else if (get_op(type) == STRUCT_KW) {
     fatal_error("handle_enum_struct_union_type_decl: struct not supported");
   } else if (get_op(type) == UNION_KW) {
