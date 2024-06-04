@@ -19,22 +19,38 @@ const int SP = 4;
 const int BP = 5;
 const int SI = 6;
 const int DI = 7;
+const int R8 = 8;
+const int R9 = 9;
+const int R10 = 10;
+const int R11 = 11;
+const int R12 = 12;
+const int R13 = 13;
+const int R14 = 14;
+const int R15 = 15;
 
 const int reg_X = AX;
 const int reg_Y = CX;
 const int reg_SP = SP;
 const int reg_glo = BX;
 
-void rex_prefix() {
-  if (word_size == 8) emit_i8(0x48); // REX.W
+void rex_prefix(int reg1, int reg2) {
+  if (word_size == 8) {
+    // REX prefix encodes:
+    //  0x40: fixed value
+    //  0x08: REX.W: a 64-bit operand size is used.
+    //  0x04: REX.R: 1-bit extension for first register encoded for mod_rm
+    //  0x02: REX.X: 1-bit extension for SIB index encoded for mod_rm (Not used)
+    //  0x01: REX.B: 1-bit extension for second register encoded for mod_rm
+    emit_i8(0x48 + 0x04 * (reg1 > 7) + 0x01 * (reg2 > 7));
+  }
 }
 
 void mod_rm(int reg1, int reg2) {
-  emit_i8(0xc0 + 8*reg1 + reg2); // ModR/M
+  emit_i8(0xc0 + 8*(reg1 & 7) + (reg2 & 7)); // ModR/M
 }
 
 void op_reg_reg(int opcode, int dst, int src) {
-  rex_prefix();
+  rex_prefix(src, dst);
   emit_i8(opcode);
   mod_rm(src, dst);
 }
@@ -43,12 +59,12 @@ void op_reg_reg(int opcode, int dst, int src) {
 
 // deprecated... kept here in case it might be useful in the future
 
-void inc_reg(int dst) { rex_prefix(); emit_2_i8(0xff, 0xc0 + dst); }
-void dec_reg(int dst) { rex_prefix(); emit_2_i8(0xff, 0xc8 + dst); }
+void inc_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xff, 0xc0 + (dst & 7)); }
+void dec_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xff, 0xc8 + (dst & 7)); }
 void xchg_reg_reg(int dst, int src) { op_reg_reg(0x87, dst, src); }
-void not_reg(int dst) { rex_prefix(); emit_2_i8(0xf7, 0xd0 + dst); }
-void neg_reg(int dst) { rex_prefix(); emit_2_i8(0xf7, 0xd8 + dst); }
-void shr_reg_cl(int dst) { rex_prefix(); emit_2_i8(0xd3, 0xe8 + dst); }
+void not_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xf7, 0xd0 + (dst & 7)); }
+void neg_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xf7, 0xd8 + (dst & 7)); }
+void shr_reg_cl(int dst) { rex_prefix(dst, 0); emit_2_i8(0xd3, 0xe8 + (dst & 7)); }
 void jump_cond_short(int cond, int n) { emit_2_i8(0x70 + cond, n); }
 
 void test_reg_reg(int dst, int src) {
@@ -122,8 +138,8 @@ void mov_reg_imm(int dst, int imm) {
   // MOV dst_reg, imm  ;; Move 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  rex_prefix();
-  emit_i8(0xb8 + dst);
+  rex_prefix(0, dst);
+  emit_i8(0xb8 + (dst & 7));
   emit_word_le(imm);
 }
 
@@ -131,7 +147,7 @@ void add_reg_imm(int dst, int imm) {
 
   // ADD dst_reg, imm  ;; Add 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
-  rex_prefix();
+  rex_prefix(0, dst);
   emit_i8(0x81);
   mod_rm(0, dst);
   emit_i32_le(imm);
@@ -142,10 +158,10 @@ void mov_memory(int op, int reg, int base, int offset) {
   // Move word between register and memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  rex_prefix();
+  rex_prefix(reg, base);
   emit_i8(op);
-  emit_i8(0x80 + reg * 8 + base);
-  if (base == SP) emit_i8(0x24);
+  emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
+  if (base == SP OR base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
   emit_i32_le(offset);
 }
 
@@ -188,7 +204,7 @@ void imul_reg_reg(int dst, int src) {
   // IMUL dst_reg, src_reg ;; dst_reg = dst_reg * src_reg
   // See: https://web.archive.org/web/20240228122220/https://www.felixcloutier.com/x86/imul
 
-  rex_prefix();
+  rex_prefix(dst, src);
   emit_2_i8(0x0f, 0xaf);
   mod_rm(dst, src);
 }
@@ -202,8 +218,8 @@ void idiv_reg(int src) {
   // IDIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
   // See: https://web.archive.org/web/20240407195950/https://www.felixcloutier.com/x86/idiv
 
-  rex_prefix();
-  emit_2_i8(0xf7, 0xf8 + src);
+  rex_prefix(src, 0);
+  emit_2_i8(0xf7, 0xf8 + (src & 7));
 }
 
 void cdq_cqo() {
@@ -212,7 +228,7 @@ void cdq_cqo() {
   // x86-64: CQO ;; Convert Quadword to Octoword (RDX:RAX = sign-extend RAX)
   // See: https://web.archive.org/web/20240118201956/https://www.felixcloutier.com/x86/cwd:cdq:cqo
 
-  rex_prefix();
+  rex_prefix(0, 0);
   emit_i8(0x99);
 }
 
@@ -247,8 +263,8 @@ void shl_reg_cl(int dst) {
   // SHL dst_reg, cl ;; dst_reg = dst_reg << cl
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
 
-  rex_prefix();
-  emit_2_i8(0xd3, 0xe0 + dst);
+  rex_prefix(0, dst);
+  emit_2_i8(0xd3, 0xe0 + (dst & 7));
 }
 
 void shl_reg_reg(int dst, int src) {
@@ -267,8 +283,8 @@ void sar_reg_cl(int dst) {
   // SAR dst_reg, cl ;; dst_reg = dst_reg >> cl
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
 
-  rex_prefix();
-  emit_2_i8(0xd3, 0xf8 + dst);
+  rex_prefix(0, dst);
+  emit_2_i8(0xd3, 0xf8 + (dst & 7));
 }
 
 void sar_reg_reg(int dst, int src) {
