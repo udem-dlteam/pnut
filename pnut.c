@@ -1482,6 +1482,23 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
   return ast_result;
 }
 
+ast clone_ast(ast orig) {
+  int nb_children = get_nb_children(orig);
+  int i;
+
+  // Account for the value of ast nodes with no child
+  if (nb_children == 0) nb_children = 1;
+
+  ast_result = alloc_obj(nb_children + 1);
+
+  heap[ast_result] = heap[orig]; // copy operator and nb of children
+  for (i = 0; i < nb_children; i += 1) {
+    set_child(ast_result, i, get_child(orig, i));
+  }
+
+  return ast_result;
+}
+
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
     putstr("expected_tok="); putint(expected_tok);
@@ -1645,7 +1662,10 @@ ast parse_declaration() {
     type = parse_type();
     stars = parse_stars();
 
-    set_val(type, stars);
+    if (stars != 0) {
+      type = clone_ast(type);
+      set_val(type, stars);
+    }
 
     name = val;
 
@@ -1717,7 +1737,8 @@ ast parse_definition(int local) {
 
       this_type = type;
       if (stars != 0) {
-        this_type = new_ast0(get_op(type), stars);
+        this_type = clone_ast(type);
+        set_child(this_type, 0, stars);
       }
 
       name = val;

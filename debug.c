@@ -108,3 +108,12 @@ void print_tok(int tok, int val) {
     putchar(' ');
   }
 }
+
+void show_ast(char* name, ast obj) {
+  int i;
+  int nb_children = get_nb_children(obj);
+  if (nb_children == 0) nb_children = 1; // Account for value of ast nodes with no child
+  for (i = 0; i < nb_children + 1; i++) {
+    printf("%s[%d] = %d\n", name, i, heap[obj + i]);
+  }
+}
