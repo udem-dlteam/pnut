@@ -3,6 +3,9 @@ const int word_size;
 
 void generate_exe();
 
+// 1MB heap
+#define RT_HEAP_SIZE 1048576
+
 #define MAX_CODE_SIZE 500000
 int code[MAX_CODE_SIZE];
 int code_alloc = 0;
@@ -137,6 +140,7 @@ void os_exit();
 void os_fopen();
 void os_fclose();
 void os_fgetc();
+void os_allocate_memory(int size);
 
 void setup_proc_args();
 
@@ -152,6 +156,8 @@ int putchar_lbl;
 int fopen_lbl;
 int fclose_lbl;
 int fgetc_lbl;
+int malloc_lbl;
+int free_lbl;
 
 int cgc_fs = 0;
 // Function bindings that follows lexical scoping rules
@@ -500,6 +506,7 @@ ast int_type;
 ast char_type;
 ast string_type;
 ast void_type;
+ast void_star_type;
 
 // Compute the type of an expression
 ast value_type(ast node) {
@@ -1072,11 +1079,16 @@ void codegen_begin() {
   init_start_lbl = alloc_label();
   init_next_lbl = init_start_lbl;
 
+  // Make room for heap start and malloc bump pointer.
+  // reg_glo[0]: heap start
+  // reg_glo[word_size]: malloc bump pointer
+  cgc_global_alloc += 2 * word_size;
 
   int_type = new_ast0(INT_KW, 0);
   char_type = new_ast0(CHAR_KW, 0);
   string_type = new_ast0(CHAR_KW, 1);
   void_type = new_ast0(VOID_KW, 0);
+  void_star_type = new_ast0(VOID_KW, 1);
 
   main_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, void_type);
@@ -1098,6 +1110,12 @@ void codegen_begin() {
 
   fgetc_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, char_type);
+
+  malloc_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, void_star_type);
+
+  free_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, char_type);
 
   jump(setup_lbl);
 }
@@ -1495,11 +1513,53 @@ void codegen_glo_decl(ast node) {
   }
 }
 
+void rt_debug(char* msg) {
+  while (*msg != 0) {
+    mov_reg_imm(reg_X, *msg);
+    os_putchar();
+    msg += 1;
+  }
+  mov_reg_imm(reg_X, '\n');
+  os_putchar();
+}
+
+void rt_crash(char* msg) {
+  rt_debug(msg);
+  os_exit();
+}
+
+void rt_malloc() {
+  int end_lbl = alloc_label();
+
+  mov_reg_mem(reg_Y, reg_glo, word_size); // Bump pointer
+  add_reg_reg(reg_X, reg_Y);              // New bump pointer
+  mov_reg_mem(reg_Y, reg_glo, 0);         // Heap start
+  add_reg_imm(reg_Y, RT_HEAP_SIZE);       // End of heap
+
+  // Make sure the heap is large enough.
+  // new bump pointer (reg_x) >= end of heap (reg_y)
+  jump_cond_reg_reg(LE, end_lbl, reg_X, reg_Y);
+  rt_crash("Heap overflow");
+
+  def_label(end_lbl);
+  mov_reg_mem(reg_Y, reg_glo, word_size); // Old bump pointer
+  mov_mem_reg(reg_glo, word_size, reg_X); // Adjust the bump pointer
+  mov_reg_reg(reg_X, reg_Y);              // Return the old bump pointer
+}
+
+void rt_free() {
+  // No-op
+}
+
 void codegen_end() {
 
   def_label(setup_lbl);
   grow_stack_bytes(cgc_global_alloc);
   mov_reg_reg(reg_glo, reg_SP);
+
+  os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
+  mov_mem_reg(reg_glo, 0, reg_X);         // init heap start
+  mov_mem_reg(reg_glo, word_size, reg_X); // init bump pointer
 
   jump(init_start_lbl);
 
@@ -1541,6 +1601,18 @@ void codegen_end() {
   def_label(fgetc_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_fgetc();
+  ret();
+
+  // malloc function
+  def_label(malloc_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  rt_malloc();
+  ret();
+
+  // malloc function
+  def_label(free_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  rt_free();
   ret();
 
   generate_exe();

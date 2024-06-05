@@ -499,6 +499,19 @@ void os_fgetc() {
   pop_reg(BX);              // restore address of global variables table
 }
 
+void os_allocate_memory(int size) {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_imm(AX, 192);   // mov  eax, 192 == SYS_MMAP2
+  mov_reg_imm(BX, 0);     // mov  ebx, 0 | NULL
+  mov_reg_imm(CX, size);  // mov  ecx, size | size
+  mov_reg_imm(DX, 0x3);   // mov  edx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
+  mov_reg_imm(SI, 0x22);  // mov  esi, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
+  mov_reg_imm(DI, -1);    // mov  edi, -1 (file descriptor)
+  mov_reg_imm(BP, 0);     // mov  ebp, 0 (offset)
+  int_i8(0x80);           // system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
 #endif
 
 // For 64 bit linux.
@@ -568,16 +581,15 @@ void os_fgetc(){
   def_label(lbl);          // end label
 }
 
-#endif
-
-#ifdef SKIP
-void os_print_msg(char_ptr msg) {
-  int i = 0;
-  while (msg[i] != 0) {
-    mov_reg_imm(AX, msg[i]);  // mov  eax, c
-    os_putchar();             // putchar
-    i += 1;
-  }
+void os_allocate_memory(int size) {
+  mov_reg_imm(DI, 0);     // mov rdi, 0 | NULL
+  mov_reg_imm(SI, size);  // mov rsi, size | size
+  mov_reg_imm(DX, 0x3);   // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
+  mov_reg_imm(R10, 0x22); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
+  mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
+  mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
+  mov_reg_imm(AX, 9);     // mov rax, 9 | SYS_MMAP
+  emit_2_i8(0x0F, 0x05);  // system call 64 bit
 }
 
 #endif
