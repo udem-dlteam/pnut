@@ -1,0 +1,4 @@
+Local Integer: 2
+Local Array: 1,2,3,
+Global Integer: 1
+Global Array: 4,5,6,
