@@ -1,11 +1,16 @@
 // common part of machine code generators
+const int word_size;
 
 void generate_exe();
 
-int code[100000];
+#define MAX_CODE_SIZE 500000
+int code[MAX_CODE_SIZE];
 int code_alloc = 0;
 
 void emit_i8(int a) {
+  if (code_alloc >= MAX_CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
   code[code_alloc] = (a & 0xff);
   code_alloc += 1;
 }
@@ -22,6 +27,22 @@ void emit_4_i8(int a, int b, int c, int d) {
 
 void emit_i32_le(int n) {
   emit_4_i8(n, n >> 8, n >> 16, n >> 24);
+}
+
+void emit_i64_le(int n) {
+  emit_i32_le(n);
+  // Sign extend to 64 bits. Arithmetic shift by 31 gives -1 for negative numbers and 0 for positive numbers.
+  emit_i32_le(n >> 31);
+}
+
+void emit_word_le(int n) {
+  if (word_size == 4) {
+    emit_i32_le(n);
+  } else if (word_size == 8) {
+    emit_i64_le(n);
+  } else {
+    fatal_error("emit_word_le: unknown word size");
+  }
 }
 
 void write_i8(int n) {
@@ -42,55 +63,6 @@ void write_i32_le(int n) {
   write_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
-// Label definition
-
-// TODO: generalize (this is currently specialized for x86 32 bit relative addressing)
-
-int alloc_label() {
-  int lbl = alloc_obj(1);
-  heap[lbl] = 0;
-  return lbl;
-}
-
-void use_label(int lbl) {
-
-  int addr = heap[lbl];
-
-  if (addr < 0) {
-    // label address is currently known
-    addr = -addr - (code_alloc + 4); // compute relative address
-    emit_i32_le(addr);
-  } else {
-    // label address is not yet known
-    emit_i32_le(0); // 32 bit placeholder for distance
-    code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl] = code_alloc;
-  }
-}
-
-void def_label(int lbl) {
-
-  int addr = heap[lbl];
-  int label_addr = code_alloc;
-  int next;
-
-  if (addr < 0) {
-    fatal_error("label multiply defined");
-  } else {
-    heap[lbl] = -label_addr; // define label's address
-    while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
-      code_alloc = addr;
-      addr = label_addr - addr; // compute relative address
-      code_alloc -= 4;
-      emit_i32_le(addr);
-      addr = next;
-    }
-    code_alloc = label_addr;
-  }
-}
-
-const int word_size;
 const int char_width = 1;
 
 const int reg_X;
@@ -121,6 +93,7 @@ void push_reg(int src);
 void pop_reg (int dst);
 
 void jump(int lbl);
+void jump_rel(int offset);
 void call(int lbl);
 void ret();
 
@@ -161,6 +134,9 @@ void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 void os_getchar();
 void os_putchar();
 void os_exit();
+void os_fopen();
+void os_fclose();
+void os_fgetc();
 
 void setup_proc_args();
 
@@ -173,70 +149,266 @@ int main_lbl;
 int exit_lbl;
 int getchar_lbl;
 int putchar_lbl;
+int fopen_lbl;
+int fclose_lbl;
+int fgetc_lbl;
 
 int cgc_fs = 0;
+// Function bindings that follows lexical scoping rules
 int cgc_locals = 0;
+// Like cgc_locals, but with 1 scope for the entire function. Used for goto labels
+int cgc_locals_fun = 0;
+// Global bindings
 int cgc_globals = 0;
+// Bump allocator used to allocate static objects
 int cgc_global_alloc = 0;
 
+void grow_fs(int words) {
+  cgc_fs += words;
+}
+
+int round_up_to_word_size(int n) {
+  return (n + word_size - 1) / word_size * word_size;
+}
+
+void grow_stack(int words) {
+  add_reg_imm(reg_SP, -words * word_size);
+}
+
+// Like grow_stack, but takes bytes instead of words.
+// To maintain alignment, the stack is grown by a multiple of word_size (rounded
+// up from the number of bytes).
+void grow_stack_bytes(int bytes) {
+  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
+}
+
+// Label definition
+
+enum {
+  GENERIC_LABEL,
+  GOTO_LABEL,
+};
+
+int alloc_label() {
+  int lbl = alloc_obj(2);
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  return lbl;
+}
+
+int alloc_goto_label() {
+  int lbl = alloc_obj(3);
+  heap[lbl] = GOTO_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  heap[lbl + 2] = 0; // cgc-fs of label
+  return lbl;
+}
+
+void use_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
+
+  if (addr < 0) {
+    // label address is currently known
+    addr = -addr - (code_alloc + 4); // compute relative address
+    emit_i32_le(addr);
+  } else {
+    // label address is not yet known
+    emit_i32_le(0); // 32 bit placeholder for distance
+    code[code_alloc-1] = addr; // chain with previous patch address
+    heap[lbl + 1] = code_alloc;
+  }
+}
+
+void def_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int label_addr = code_alloc;
+  int next;
+
+  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+
+  if (addr < 0) {
+    fatal_error("label defined more than once");
+  } else {
+    heap[lbl + 1] = -label_addr; // define label's address
+    while (addr != 0) {
+      next = code[addr-1]; // get pointer to next patch address
+      code_alloc = addr;
+      addr = label_addr - addr; // compute relative address
+      code_alloc -= 4;
+      emit_i32_le(addr);
+      addr = next;
+    }
+    code_alloc = label_addr;
+  }
+}
+
+// Similar to use_label, but for gotos.
+// The main difference is that it adjusts the stack and jumps, as opposed to
+// simply emitting the address.
+void jump_to_goto_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int lbl_fs = heap[lbl + 2];
+  int start_code_alloc = code_alloc;
+
+  if (heap[lbl] != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
+
+  if (addr < 0) {
+    // label address is currently known
+    grow_stack(lbl_fs - cgc_fs);
+    start_code_alloc = code_alloc;
+    jump_rel(0); // Generate dummy jump instruction to get instruction length
+    addr = -addr - code_alloc; // compute relative address
+    code_alloc = start_code_alloc;
+    jump_rel(addr);
+  } else {
+    // label address is not yet known
+    // placeholders for when we know the destination address and frame size
+    grow_stack(0);
+    jump_rel(0);
+    code[code_alloc-1] = addr; // chain with previous patch address
+    code[code_alloc-2] = cgc_fs; // save current frame size
+    code[code_alloc-3] = start_code_alloc; // track initial code alloc so we can come back
+    heap[lbl + 1] = code_alloc;
+  }
+}
+
+void def_goto_label(int lbl) {
+
+  int addr = heap[lbl + 1];
+  int label_addr = code_alloc;
+  int next;
+  int goto_fs;
+  int start_code_alloc;
+
+  if (heap[lbl] != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
+
+  if (addr < 0) {
+    fatal_error("goto label defined more than once");
+  } else {
+    heap[lbl + 1] = -label_addr; // define label's address
+    heap[lbl + 2] = cgc_fs;      // define label's frame size
+    while (addr != 0) {
+      next = code[addr-1]; // get pointer to next patch address
+      goto_fs = code[addr-2]; // get frame size at goto instruction
+      code_alloc = code[addr-3]; // reset code pointer to start of jump_to_goto_label instruction
+      grow_stack(cgc_fs - goto_fs); // adjust stack
+      start_code_alloc = code_alloc;
+      jump_rel(0); // Generate dummy jump instruction to get instruction length
+      addr = label_addr - code_alloc; // compute relative address
+      code_alloc = start_code_alloc;
+      jump_rel(addr);
+      addr = next;
+    }
+    code_alloc = label_addr;
+  }
+}
+
+enum {
+  BINDING_PARAM_LOCAL,
+  BINDING_VAR_LOCAL,
+  BINDING_VAR_GLOBAL,
+  BINDING_ENUM,
+  BINDING_LOOP,
+  BINDING_SWITCH,
+  BINDING_FUN,
+  BINDING_GOTO_LABEL,
+};
+
 void cgc_add_local_param(int ident, int size, ast type) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = ident;
-  heap[binding+2] = size;
-  heap[binding+3] = cgc_fs;
-  heap[binding+4] = type;
+  heap[binding+1] = BINDING_PARAM_LOCAL;
+  heap[binding+2] = ident;
+  heap[binding+3] = size;
+  heap[binding+4] = cgc_fs;
+  heap[binding+5] = type;
   cgc_fs -= size;
   cgc_locals = binding;
 }
 
 void cgc_add_local(int ident, int size, ast type) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   cgc_fs += size;
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = ident;
-  heap[binding+2] = size;
-  heap[binding+3] = cgc_fs;
-  heap[binding+4] = type;
+  heap[binding+1] = BINDING_VAR_LOCAL;
+  heap[binding+2] = ident;
+  heap[binding+3] = size;
+  heap[binding+4] = cgc_fs;
+  heap[binding+5] = type;
   cgc_locals = binding;
 }
 
 void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
   int binding = alloc_obj(5);
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = 0;
+  heap[binding+1] = BINDING_LOOP;
   heap[binding+2] = loop_fs;
   heap[binding+3] = break_lbl;
   heap[binding+4] = continue_lbl;
   cgc_locals = binding;
 }
 
+void cgc_add_enclosing_switch(int loop_fs, int break_lbl) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = BINDING_SWITCH;
+  heap[binding+2] = loop_fs;
+  heap[binding+3] = break_lbl;
+  heap[binding+4] = 0;
+  cgc_locals = binding;
+}
+
 void cgc_add_global(int ident, int size, int width, ast type) {
-  int binding = alloc_obj(6);
+  int binding = alloc_obj(7);
   heap[binding+0] = cgc_globals;
-  heap[binding+1] = ident;
-  heap[binding+2] = size;
-  heap[binding+3] = cgc_global_alloc;
-  heap[binding+4] = type;
-  heap[binding+5] = width;
+  heap[binding+1] = BINDING_VAR_GLOBAL;
+  heap[binding+2] = ident;
+  heap[binding+3] = size;
+  heap[binding+4] = cgc_global_alloc;
+  heap[binding+5] = type;
+  heap[binding+6] = width;
   cgc_global_alloc += size * width;
   cgc_globals = binding;
 }
 
 void cgc_add_global_fun(int ident, int label, ast type) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_globals;
-  heap[binding+1] = ident;
-  heap[binding+2] = 0;
-  heap[binding+3] = label;
-  heap[binding+4] = type;
+  heap[binding+1] = BINDING_FUN;
+  heap[binding+2] = ident;
+  heap[binding+3] = 0;
+  heap[binding+4] = label;
+  heap[binding+5] = type;
   cgc_globals = binding;
+}
+
+void cgc_add_enum(int ident, int value) {
+  int binding = alloc_obj(4);
+  heap[binding+0] = cgc_globals;
+  heap[binding+1] = BINDING_ENUM;
+  heap[binding+2] = ident;
+  heap[binding+3] = value;
+  cgc_globals = binding;
+}
+
+void cgc_add_goto_label(int ident, int lbl) {
+  int binding = alloc_obj(5);
+  heap[binding+0] = cgc_locals_fun;
+  heap[binding+1] = BINDING_GOTO_LABEL;
+  heap[binding+2] = ident;
+  heap[binding+3] = lbl;
+  cgc_locals_fun = binding;
 }
 
 int cgc_lookup_var(int ident, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == ident && heap[binding+2] != 0) {
+    if (heap[binding+1] <= BINDING_VAR_GLOBAL && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -247,7 +419,7 @@ int cgc_lookup_var(int ident, int env) {
 int cgc_lookup_fun(int ident, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == ident && heap[binding+2] == 0) {
+    if (heap[binding+1] == BINDING_FUN && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -258,7 +430,40 @@ int cgc_lookup_fun(int ident, int env) {
 int cgc_lookup_enclosing_loop(int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == 0) {
+    if (heap[binding+1] == BINDING_LOOP) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_enclosing_loop_or_switch(int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_LOOP OR heap[binding+1] == BINDING_SWITCH) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_enum(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_ENUM && heap[binding+2] == ident) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_goto_label(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_GOTO_LABEL && heap[binding+2] == ident) {
       break;
     }
     binding = heap[binding];
@@ -317,18 +522,25 @@ ast value_type(ast node) {
       ident = get_val(node);
       binding = cgc_lookup_var(ident, cgc_locals);
       if (binding != 0) {
-          return heap[binding+4];
+          return heap[binding+5];
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
-          return heap[binding+4];
+          return heap[binding+5];
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
-          fatal_error("value_type: identifier not found");
+          binding = cgc_lookup_enum(ident, cgc_globals);
+          if (binding != 0) {
+            return int_type; // Enums are always integers
+          } else {
+            putstr("ident = ");
+            putstr(string_pool+get_val(ident));
+            putchar('\n');
+            fatal_error("value_type: identifier not found");
+          }
         }
       }
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with nb_children == 0");
     }
 
@@ -341,7 +553,7 @@ ast value_type(ast node) {
       } else if (get_val(left_type) != 0) { // Pointer type
         return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
       } else {
-        printf("left_type=%d %c", left_type, left_type);
+        putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("pointer_width: non pointer is being dereferenced with *");
       }
     } else if (op == '&') {
@@ -351,7 +563,7 @@ ast value_type(ast node) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unexpected operator");
     }
 
@@ -381,7 +593,7 @@ ast value_type(ast node) {
       } else if (get_val(right_type) != 0) {
         return new_ast0(get_op(right_type), get_val(right_type) - 1); // one less indirection
       } else {
-        printf("left_type=%d %c", left_type, left_type);
+        putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("value_type: non pointer is being dereferenced with *");
       }
     } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
@@ -392,9 +604,11 @@ ast value_type(ast node) {
     } else if (op == '(') {
       binding = cgc_lookup_fun(get_val(get_child(node, 0)), cgc_globals);
       if (binding != 0) {
-        return heap[binding+4];
+        return heap[binding+5];
       } else {
-        printf("ident = %s\n", string_pool + get_val(get_val(get_child(node, 0))));
+        putstr("ident = ");
+        putstr(string_pool + get_val(get_val(get_child(node, 0))));
+        putchar('\n');
         fatal_error("value_type: function not found");
       }
     } else {
@@ -406,12 +620,12 @@ ast value_type(ast node) {
     if (op == '?') {
       fatal_error("value_type: ternary operator not supported");
     } else {
-      printf("op=%d %c\n", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with 3 children");
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("value_type: unknown expression with >4 children");
   }
 }
@@ -501,31 +715,12 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       add_reg_reg(reg_X, reg_Y);
       load_mem_operand(reg_X, reg_X, 0, width);
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_binop: unknown op");
     }
   }
 
   push_reg(reg_X);
-}
-
-void grow_fs(int words) {
-  cgc_fs += words;
-}
-
-int round_up_to_word_size(int n) {
-  return (n + word_size - 1) / word_size * word_size;
-}
-
-void grow_stack(int words) {
-  add_reg_imm(reg_SP, -words * word_size);
-}
-
-// Like grow_stack, but takes bytes instead of words.
-// To maintain alignment, the stack is grown by a multiple of word_size (rounded
-// up from the number of bytes).
-void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
 }
 
 #ifndef PNUT_CC
@@ -566,12 +761,28 @@ void codegen_call(ast node) {
     binding = cgc_globals;
   }
 
-  call(heap[binding+3]);
+  call(heap[binding+4]);
 
   grow_stack(-nb_params);
   grow_fs(-nb_params);
 
   push_reg(reg_X);
+}
+
+void codegen_goto(ast node) {
+
+  ast label_ident = get_val(node);
+
+  int binding = cgc_lookup_goto_label(label_ident, cgc_locals_fun);
+  int goto_lbl;
+
+  if (binding == 0) {
+    goto_lbl = alloc_goto_label();
+    cgc_add_goto_label(label_ident, goto_lbl);
+    binding = cgc_locals_fun;
+  }
+
+  jump_to_goto_label(heap[binding + 3]); // Label
 }
 
 // Return the width of the lvalue
@@ -587,13 +798,13 @@ int codegen_lvalue(ast node) {
     if (op == IDENTIFIER) {
       binding = cgc_lookup_var(get_val(node), cgc_locals);
       if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
         add_reg_reg(reg_X, reg_SP);
         push_reg(reg_X);
       } else {
         binding = cgc_lookup_var(get_val(node), cgc_globals);
         if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+3]);
+          mov_reg_imm(reg_X, heap[binding+4]);
           add_reg_reg(reg_X, reg_glo);
           push_reg(reg_X);
         } else {
@@ -601,7 +812,7 @@ int codegen_lvalue(ast node) {
         }
       }
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
     }
 
@@ -611,7 +822,7 @@ int codegen_lvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       grow_fs(-1);
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unexpected operator");
     }
 
@@ -627,7 +838,7 @@ int codegen_lvalue(ast node) {
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_lvalue: unknown lvalue with >2 children");
   }
 
@@ -646,7 +857,7 @@ void codegen_string(int start) {
     if (char_width == 1) {
       emit_i8(string_pool[i]);
     } else {
-      emit_i32_le(string_pool[i]);
+      emit_word_le(string_pool[i]);
     }
     i += 1;
   }
@@ -655,7 +866,7 @@ void codegen_string(int start) {
   if (char_width == 1) {
     emit_i8(0);
   } else {
-    emit_i32_le(0);
+    emit_word_le(0);
   }
 
   def_label(lbl);
@@ -680,34 +891,40 @@ void codegen_rvalue(ast node) {
       ident = get_val(node);
       binding = cgc_lookup_var(ident, cgc_locals);
       if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
         add_reg_reg(reg_X, reg_SP);
         // There are 3 different cases for the type of the lvalue:
         // 1. Array type: the value is stored on the stack, and reg_X already points to it
         // 2. Pointer type: the pointer (to the heap) is stored on the stack, and it needs to be dereferenced
         // 3. Non-pointer type: the value is stored directly in the stack, and it needs to be loaded
-        if (get_op(heap[binding+4]) != '[') {
+        if (get_op(heap[binding+5]) != '[') {
           mov_reg_mem(reg_X, reg_X, 0);
         }
         push_reg(reg_X);
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+3]);
+          mov_reg_imm(reg_X, heap[binding+4]);
           add_reg_reg(reg_X, reg_glo);
-          if (get_op(heap[binding+4]) != '[') {
+          if (get_op(heap[binding+5]) != '[') {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
         } else {
-          printf("ident = %s\n", string_pool+get_val(ident));
-          fatal_error("codegen_rvalue: identifier not found");
+          binding = cgc_lookup_enum(ident, cgc_globals);
+          if (binding != 0) {
+            mov_reg_imm(reg_X, -get_val(heap[binding+3]));
+            push_reg(reg_X);
+          } else {
+            putstr("ident = "); putstr(string_pool+get_val(ident)); putchar('\n');
+            fatal_error("codegen_rvalue: identifier not found");
+          }
         }
       }
     } else if (op == STRING) {
       codegen_string(get_val(node));
     } else {
-      printf("op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
     }
 
@@ -778,7 +995,7 @@ void codegen_rvalue(ast node) {
       codegen_lvalue(get_child(node, 0));
       grow_fs(-1);
     } else {
-      printf("1: op=%d %c", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unexpected operator");
     }
 
@@ -837,12 +1054,12 @@ void codegen_rvalue(ast node) {
     if (op == '?') {
       fatal_error("codegen_rvalue: ternary operator not supported");
     } else {
-      printf("op=%d %c\n", op, op);
+      putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with 3 children");
     }
 
   } else {
-    printf("op=%d %c\n", op, op);
+    putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_rvalue: unknown rvalue with >4 children");
   }
 
@@ -872,6 +1089,15 @@ void codegen_begin() {
 
   putchar_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, void_type);
+
+  fopen_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, int_type);
+
+  fclose_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, void_type);
+
+  fgetc_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, char_type);
 
   jump(setup_lbl);
 }
@@ -913,7 +1139,7 @@ void codegen_glo_var_decl(ast node) {
     pop_reg(reg_X);
     grow_fs(-1);
 
-    mov_mem_reg(reg_glo, heap[binding+3], reg_X);
+    mov_mem_reg(reg_glo, heap[binding+4], reg_X);
 
     jump(init_next_lbl);
   }
@@ -976,9 +1202,11 @@ void codegen_statement(ast node) {
   int op;
   int lbl1;
   int lbl2;
+  int lbl3;
   int save_fs;
   int save_locals;
   int binding;
+  ast patterns;
 
   if (node == 0) return;
 
@@ -1024,11 +1252,107 @@ void codegen_statement(ast node) {
 
   } else if (op == FOR_KW) {
 
-    // TODO
+    lbl1 = alloc_label(); // while statement start
+    lbl2 = alloc_label(); // join point after while
+    lbl3 = alloc_label(); // initial loop starting point
+
+    save_fs = cgc_fs;
+    save_locals = cgc_locals;
+
+    cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
+
+    codegen_statement(get_child(node, 0)); // init
+    jump(lbl3); // skip post loop action
+    def_label(lbl1);
+    codegen_statement(get_child(node, 2)); // post loop action
+    def_label(lbl3);
+    codegen_rvalue(get_child(node, 1)); // test
+    pop_reg(reg_X);
+    grow_fs(-1);
+    xor_reg_reg(reg_Y, reg_Y);
+    jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    codegen_statement(get_child(node, 3));
+    jump(lbl1);
+    def_label(lbl2);
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
+
+  } else if (op == SWITCH_KW) {
+
+    save_fs = cgc_fs;
+    save_locals = cgc_locals;
+
+    lbl1 = alloc_label(); // lbl1: end of switch
+    lbl2 = alloc_label(); // lbl2: next case
+    // lbl3: conditional block
+
+    cgc_add_enclosing_switch(cgc_fs, lbl1);
+
+    codegen_rvalue(get_child(node, 0)); // switch operand
+
+    jump(lbl2); // Jump to first case
+
+    node = get_child(node, 1); // switch body
+    if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
+
+    // We iterate through the body of the switch.
+    while (get_op(node) == '{') {
+
+      patterns = get_child(node, 0);
+
+      if (get_op(patterns) == CASE_KW) {
+
+        lbl3 = alloc_label(); // conditional block label
+        // sequence of switch cases are chained together in the CASE_KW AST nodes, so we iterate through them
+        while (get_op(patterns) == CASE_KW) {
+          // If falling through from a previous conditional block, we don't want
+          // to test the case and simply want to execute the conditional block
+          // so we skip the case test.
+          jump(lbl3);
+          def_label(lbl2);
+          // create label for next case
+          lbl2 = alloc_label();
+          // duplicate switch operand for the comparison
+          pop_reg(reg_X); push_reg(reg_X); push_reg(reg_X); grow_fs(1);
+          // Get the value of the case and compare it to the switch operand
+          codegen_rvalue(get_child(patterns, 0));
+          pop_reg(reg_Y); pop_reg(reg_X); grow_fs(-2);
+          jump_cond_reg_reg(EQ, lbl3, reg_X, reg_Y);
+          jump(lbl2); // jump to next case if condition is false
+
+          patterns = get_child(patterns, 1); // next case
+        }
+
+        def_label(lbl3); // conditional block start here
+        codegen_statement(patterns); // patterns now points to first statement of the block
+
+      } else if (get_op(patterns) == DEFAULT_KW) {
+        lbl3 = alloc_label(); // conditional block label
+        def_label(lbl2);
+        lbl2 = alloc_label(); // next case
+        def_label(lbl3); // conditional block start
+        codegen_statement(get_child(patterns, 0)); // default node points to first statement of the block
+      } else {
+        codegen_statement(get_child(node, 0));
+      }
+
+      node = get_child(node, 1);
+    }
+
+    // if we fell through the switch, we need to remove the switch operand.
+    // When exiting the switch with a break statement, the stack has already been adjusted.
+    grow_stack(-1);
+    grow_fs(-1);
+
+    def_label(lbl1); // End of switch label
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
 
   } else if (op == BREAK_KW) {
 
-    binding = cgc_lookup_enclosing_loop(cgc_locals);
+    binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
       grow_stack(heap[binding+2] - cgc_fs);
       jump(heap[binding+3]); // jump to break label
@@ -1039,7 +1363,7 @@ void codegen_statement(ast node) {
   } else if (op == CONTINUE_KW) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
-    if (binding != 0) {
+    if (binding != 0 AND heap[binding+4] != 0) {
       grow_stack(heap[binding+2] - cgc_fs);
       jump(heap[binding+4]); // jump to continue label
     } else {
@@ -1061,6 +1385,22 @@ void codegen_statement(ast node) {
   } else if (op == '{') {
 
     codegen_body(node);
+
+  } else if (op == ':') {
+
+    binding = cgc_lookup_goto_label(get_val(get_child(node, 0)), cgc_locals_fun);
+
+    if (binding == 0) {
+      cgc_add_goto_label(get_val(get_child(node, 0)), alloc_goto_label());
+      binding = cgc_locals_fun;
+    }
+
+    def_goto_label(heap[binding + 3]);
+    codegen_statement(get_child(node, 1)); // labelled statement
+
+  } else if (op == GOTO_KW) {
+
+    codegen_goto(node);
 
   } else {
 
@@ -1100,6 +1440,7 @@ void codegen_glo_fun_decl(ast node) {
   ast body = get_child(node, 3);
   int lbl;
   int binding;
+  int save_locals_fun = cgc_locals_fun;
 
   if (body != 0) {
 
@@ -1110,7 +1451,7 @@ void codegen_glo_fun_decl(ast node) {
       binding = cgc_globals;
     }
 
-    lbl = heap[binding+3];
+    lbl = heap[binding+4];
 
     def_label(lbl);
 
@@ -1126,6 +1467,17 @@ void codegen_glo_fun_decl(ast node) {
 
     ret();
   }
+
+  cgc_locals_fun = save_locals_fun;
+}
+
+void codegen_enum(ast node) {
+  ast cases = get_child(node, 1);
+
+  while (get_op(cases) == ',') {
+    cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));
+    cases = get_child(cases, 2);
+  }
 }
 
 void codegen_glo_decl(ast node) {
@@ -1139,8 +1491,11 @@ void codegen_glo_decl(ast node) {
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
+  } else if (op == ENUM_KW) {
+    codegen_enum(node);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    putstr("op="); putint(op);
+    putstr(" with "); putint(get_nb_children(node)); putstr(" children\n");
     fatal_error("codegen_glo_decl: unexpected declaration");
   }
 }
@@ -1154,7 +1509,7 @@ void codegen_end() {
   jump(init_start_lbl);
 
   def_label(init_next_lbl);
-  setup_proc_args();
+  setup_proc_args(cgc_global_alloc);
   call(main_lbl);
   os_exit();
   push_reg(reg_X); // exit process with result of main
@@ -1173,6 +1528,24 @@ void codegen_end() {
   def_label(putchar_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_putchar();
+  ret();
+
+  // fopen function
+  def_label(fopen_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fopen();
+  ret();
+
+  // fclose function
+  def_label(fclose_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fclose();
+  ret();
+
+  // fgetc function
+  def_label(fgetc_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_fgetc();
   ret();
 
   generate_exe();

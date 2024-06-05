@@ -49,96 +49,126 @@ int strcmp(char *str1, char *str2) {
 
 #endif
 
-int AUTO_KW        = 300;
-int BREAK_KW       = 301;
-int CASE_KW        = 302;
-int CHAR_KW        = 303;
-int CONST_KW       = 304;
-int CONTINUE_KW    = 305;
-int DEFAULT_KW     = 306;
-int DO_KW          = 307;
-int DOUBLE_KW      = 308;
-int ELSE_KW        = 309;
-int ENUM_KW        = 310;
-int ERROR_KW       = 311;
-int EXTERN_KW      = 312;
-int FLOAT_KW       = 313;
-int FOR_KW         = 314;
-int GOTO_KW        = 315;
-int IF_KW          = 316;
-int IFNDEF_KW      = 317;
-int INCLUDE_KW     = 318;
-int INT_KW         = 319;
-int LONG_KW        = 320;
-int REGISTER_KW    = 321;
-int RETURN_KW      = 322;
-int SHORT_KW       = 323;
-int SIGNED_KW      = 324;
-int SIZEOF_KW      = 325;
-int STATIC_KW      = 326;
-int STRUCT_KW      = 327;
-int SWITCH_KW      = 328;
-int TYPEDEF_KW     = 329;
-int UNION_KW       = 330;
-int UNSIGNED_KW    = 331;
-int VOID_KW        = 332;
-int VOLATILE_KW    = 333;
-int WHILE_KW       = 334;
-int VAR_DECL       = 335;
-int FUN_DECL       = 336;
+enum {
+  // Tokens and AST nodes
+  AUTO_KW = 300,
+  BREAK_KW,
+  CASE_KW,
+  CHAR_KW,
+  CONST_KW,
+  CONTINUE_KW,
+  DEFAULT_KW,
+  DO_KW,
+  DOUBLE_KW,
+  ELSE_KW,
+  ENUM_KW,
+  ERROR_KW,
+  EXTERN_KW,
+  FLOAT_KW,
+  FOR_KW,
+  GOTO_KW,
+  IF_KW,
+  IFNDEF_KW,
+  INCLUDE_KW,
+  INT_KW,
+  LONG_KW,
+  REGISTER_KW,
+  RETURN_KW,
+  SHORT_KW,
+  SIGNED_KW,
+  SIZEOF_KW,
+  STATIC_KW,
+  STRUCT_KW,
+  SWITCH_KW,
+  TYPEDEF_KW,
+  UNION_KW,
+  UNSIGNED_KW,
+  VOID_KW,
+  VOLATILE_KW,
+  WHILE_KW,
+  VAR_DECL,
+  FUN_DECL,
 
-int INTEGER    = 401;
-int CHARACTER  = 402;
-int STRING     = 403;
+  // Non-character operands
+  INTEGER    = 401,
+  CHARACTER,
+  STRING,
+  AMP_AMP,
+  AMP_EQ,
+  ARROW,
+  BAR_BAR,
+  BAR_EQ,
+  CARET_EQ,
+  EQ_EQ,
+  GT_EQ,
+  LSHIFT_EQ,
+  LSHIFT,
+  LT_EQ,
+  MINUS_EQ,
+  MINUS_MINUS,
+  EXCL_EQ,
+  PERCENT_EQ,
+  PLUS_EQ,
+  PLUS_PLUS,
+  RSHIFT_EQ,
+  RSHIFT,
+  SLASH_EQ,
+  STAR_EQ,
+  HASH_HASH,
+  PLUS_PLUS_PRE,
+  MINUS_MINUS_PRE,
+  PLUS_PLUS_POST,
+  MINUS_MINUS_POST,
 
-int AMP_AMP    = 404;
-int AMP_EQ     = 405;
-int ARROW      = 406;
-int BAR_BAR    = 407;
-int BAR_EQ     = 408;
-int CARET_EQ   = 409;
-int EQ_EQ      = 410;
-int GT_EQ      = 411;
-int LSHIFT_EQ  = 412;
-int LSHIFT     = 413;
-int LT_EQ      = 414;
-int MINUS_EQ   = 415;
-int MINUS_MINUS= 416;
-int EXCL_EQ    = 417;
-int PERCENT_EQ = 418;
-int PLUS_EQ    = 419;
-int PLUS_PLUS  = 420;
-int RSHIFT_EQ  = 421;
-int RSHIFT     = 422;
-int SLASH_EQ   = 423;
-int STAR_EQ    = 424;
-int HASH_HASH  = 425;
+  // Other tokens
+  MACRO_ARG = 499,
+  IDENTIFIER = 500,
+  TYPE = 501,
+  MACRO = 502,
+};
 
-//pre and post increment and decrement
-int PLUS_PLUS_PRE = 425;
-int MINUS_MINUS_PRE = 426;
-int PLUS_PLUS_POST = 427;
-int MINUS_MINUS_POST = 428;
+void putstr(char *str) {
+  while (*str) {
+    putchar(*str);
+    str += 1;
+  }
+}
 
+void putint_aux(int n) {
+  if (n <= -10) putint_aux(n / 10);
+  putchar('0' - (n % 10));
+}
 
+void putint(int n) {
+  if (n < 0) {
+    putchar('-');
+    putint_aux(n);
+  } else {
+    putint_aux(-n);
+  }
+}
 
-int MACRO_ARG = 499;
-int IDENTIFIER = 500;
-int TYPE = 501;
-int MACRO = 502;
+void putintneg(int n) {
+  if (n > 0) {
+    putchar('-');
+    putint_aux(-n);
+  } else {
+    putint_aux(n);
+  }
+}
 
 void fatal_error(char *msg) {
-  printf("%s\n", msg);
+  putstr(msg); putchar('\n');
   exit(1);
 }
 
 void syntax_error(char *msg) {
-  printf("syntax error: %s\n", msg);
+  putstr("syntax error: "); putstr(msg);
   fatal_error("syntax error");
 }
 
 void missing_feature_error(char *msg) {
-  printf("not yet implemented: %s\n", msg);
+  putstr("not yet implemented: "); putstr(msg);
   fatal_error("syntax error");
 }
 
@@ -328,9 +358,12 @@ FILE *fp = 0; // Current file pointer that's being read
 #define IFDEF_DEPTH_MAX 20
 bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
 bool ifdef_stack_ix = 0;
-bool ifdef_mask = true;
-// Whether to expand macros or not. Useful to parse macro definitions containing
-// other macros without expanding them.
+bool ifdef_mask = true;         // Indicates if the current if/elif block is being executed
+int  ifdef_nest_level = 0;      // Current number of unmatched #if/#ifdef/#ifndef directives that were masked out
+
+// get_tok parameters:
+// Whether to expand macros or not.
+// Useful to parse macro definitions containing other macros without expanding them.
 bool expand_macro = true;
 // Don't expand macro arguments. Used for stringification and token pasting.
 bool expand_macro_arg = true;
@@ -462,11 +495,11 @@ void print_macro_raw_tokens(int tokens) {
   int i = 0;
   while (tokens != 0) {
     // print_tok(car(car(tokens)), cdr(car(tokens)));
-    printf("%c(%d)", car(car(tokens)), car(car(tokens)));
+    putchar(car(car(tokens))); putchar('('); putint(car(car(tokens))); putchar(')');
     tokens = cdr(tokens);
     i += 1;
   }
-  printf("(%d tokens)", i);
+  putstr("("); putint(i); putstr(" tokens)");
 }
 #endif
 
@@ -484,7 +517,7 @@ void handle_define() {
     heap[val + 2] = MACRO; // Mark the identifier as a macro
     macro = val;
   } else {
-    printf("tok=%d\n", tok);
+    putstr("tok="); putint(tok); putchar('\n');
     fatal_error("#define directive can only be followed by a identifier");
   }
   if (ch == '(') { // Function-like macro
@@ -519,21 +552,20 @@ void handle_define() {
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
     #ifdef DEBUG_CPP
-    if (args_count == -1) {
-      printf("# %s ", string_pool + heap[macro + 1]);
-    } else {
-      printf("# %s(", string_pool + heap[macro + 1]);
-    }
+    putstr("# ");
+    putstr(string_pool + heap[macro + 1]);
+    if (args_count != -1) putchar('('); // Function-like macro
+
     while (args_count > 0) {
-      printf("%s", string_pool + heap[car(args) + 1]);
+      putstr(string_pool + heap[car(args) + 1]);
       args = cdr(args);
       args_count -= 1;
-      if (args_count > 0) printf(", ");
+      if (args_count > 0) putstr(", ");
     }
 
-    if (args_count != -1) printf(") ");
+    if (args_count != -1) putstr(") ");
     print_macro_raw_tokens(car(heap[macro + 3]));
-    printf("\n");
+    putchar('\n');
     #endif
   }
 }
@@ -545,18 +577,34 @@ void handle_preprocessor_directive() {
   get_tok(); // Get the directive
   ifdef_mask = prev_ifdef_mask;
 
-  if (tok == IDENTIFIER AND val == ENDIF_ID) {
-    pop_ifdef_mask();
-  } else if (tok == ELSE_KW) {
-    flip_ifdef_mask();
-  } else if (ifdef_mask) {
-    if (tok == IDENTIFIER AND val == IFDEF_ID) {
-      get_tok_macro();
+  if (tok == IDENTIFIER AND val == IFDEF_ID) {
+    ifdef_mask = true; get_tok_macro(); ifdef_mask = prev_ifdef_mask;
+    if (ifdef_mask) {
       push_ifdef_mask(tok == MACRO);
-    } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
-      get_tok_macro();
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      ifdef_nest_level += 1;
+    }
+  } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
+    ifdef_mask = true; get_tok_macro(); ifdef_mask = prev_ifdef_mask;
+    if (ifdef_mask) {
       push_ifdef_mask(tok != MACRO);
-    } else if (tok == IDENTIFIER AND val == INCLUDE_ID) {
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      ifdef_nest_level += 1;
+    }
+  } else if (tok == ELSE_KW) {
+    if (ifdef_mask OR ifdef_nest_level == 0) {
+      flip_ifdef_mask();
+    }
+  } else if (tok == IDENTIFIER AND val == ENDIF_ID) {
+    if (ifdef_mask OR ifdef_nest_level == 0) {
+      pop_ifdef_mask();
+    } else {
+      ifdef_nest_level -= 1;
+    }
+  } else if (ifdef_mask) {
+    if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
       if (tok == STRING) {
         #ifdef SUPPORT_INCLUDE
@@ -565,7 +613,7 @@ void handle_preprocessor_directive() {
         fatal_error("The #include directive is not supported in this version of the compiler.");
         #endif
       } else {
-        printf("tok=%d\n", tok);
+        putstr("tok="); putint(tok); putchar('\n');
         fatal_error("expected string to #include directive");
       }
     } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
@@ -574,13 +622,13 @@ void handle_preprocessor_directive() {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
         // TODO: Doesn't play nice with typedefs, because they are not marked as macros
       } else {
-        printf("tok=%d\n", tok);
+        putstr("tok="); putint(tok); putchar('\n');
         fatal_error("#undef directive can only be followed by a identifier");
       }
     } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
       handle_define();
     } else {
-      printf("tok=%d: %s\n", tok, string_pool + heap[val + 1]);
+      putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
       fatal_error("unsupported preprocessor directive");
     }
   } else {
@@ -592,7 +640,7 @@ void handle_preprocessor_directive() {
   // Because handle_preprocessor_directive is called from get_tok, and it loops after
   // the call to handle_preprocessor_directive, we don't need to call get_tok here
   if (ch != '\n' AND ch != EOF) {
-    printf("ch=%d\n", ch);
+    putstr("ch="); putint(ch); putchar('\n');
     fatal_error("preprocessor expected end of line");
   }
 }
@@ -612,7 +660,10 @@ void get_ident() {
   val = end_ident();
   tok = heap[val+2];
   /*
-  printf("tok=%d val=%d %s\n", tok, val, string_pool + heap[val+1]);
+  putstr("tok="); putint(tok);
+  putstr(" val="); putint(val);
+  putstr(" "); putstr(string_pool + heap[val+1]);
+  putchar('\n');
   */
 }
 
@@ -803,7 +854,9 @@ int macro_parse_argument() {
 
 void check_macro_arity(int macro_args_count, int expected_argc) {
   if (macro_args_count != expected_argc) {
-    printf("expected_argc=%d != macro_args_count=%d\n", expected_argc, macro_args_count);
+    putstr("expected_argc="); putint(expected_argc);
+    putstr(" != macro_args_count="); putint(macro_args_count);
+    putchar('\n');
     fatal_error("macro argument count mismatch");
   }
 }
@@ -900,7 +953,7 @@ void stringify() {
   get_tok_macro();
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
-    printf("tok=%d\n", tok);
+    putstr("tok="); putint(tok); putchar('\n');
     fatal_error("expected macro argument after #");
   }
   arg = get_macro_arg(val);
@@ -940,7 +993,7 @@ void paste_tokens(int left_tok, int left_val) {
     } else if (right_tok == INTEGER) {
       accum_string_integer(-right_val);
     } else {
-      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       fatal_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -950,11 +1003,11 @@ void paste_tokens(int left_tok, int left_val) {
     if (right_tok == INTEGER) {
       val = -paste_integers(-left_val, -right_val);
     } else {
-      printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       fatal_error("cannot paste an integer with a non-integer");
     }
   } else {
-    printf("left_tok=%d, right_tok=%d\n", left_tok, right_tok);
+    putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
     fatal_error("cannot paste a non-identifier or non-integer");
   }
 }
@@ -1333,11 +1386,11 @@ void get_tok() {
           if (ch == '\n') { /* Continues with next token */
             get_ch();
           } else {
-            printf("ch=%c\n", ch);
+            putstr("ch="); putint(ch); putchar('\n');
             fatal_error("unexpected character after backslash");
           }
         } else {
-          printf("ch=%c\n", ch);
+          putstr("ch="); putint(ch); putchar('\n');
           fatal_error("invalid token");
         }
       }
@@ -1431,7 +1484,8 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
 
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
-    printf("expected_tok=%d tok=%d\n", expected_tok, tok);
+    putstr("expected_tok="); putint(expected_tok);
+    putstr(" tok="); putint(tok); putchar('\n');
     syntax_error("unexpected token");
   }
   get_tok();
@@ -1563,6 +1617,68 @@ int parse_declaration_list() {
   return result;
 }
 
+ast parse_enum() {
+  ast name;
+  ast ident;
+  ast result = 0;
+  ast tail;
+  ast value = 0;
+  int next_value = 0;
+
+  expect_tok(ENUM_KW);
+
+  if (tok == IDENTIFIER) {
+    name = new_ast0(IDENTIFIER, val);
+    get_tok();
+  } else {
+    name = 0;
+  }
+
+  expect_tok('{');
+
+  while (tok != '}') {
+    if (tok != IDENTIFIER) {
+      syntax_error("identifier expected");
+    }
+    ident = new_ast0(IDENTIFIER, val);
+    get_tok();
+
+    if (tok == '=') {
+      get_tok();
+
+      if (tok != INTEGER) {
+        syntax_error("integer expected");
+      }
+      value = new_ast0(INTEGER, val);
+      next_value = val - 1; // Next value is the current value + 1, but val is negative
+      get_tok(); // skip
+    } else {
+      value = new_ast0(INTEGER, next_value);
+      next_value -= 1;
+    }
+
+    // printf("name=%s value=%d\n", string_pool + heap[name + 1], value);
+    if (result == 0) {
+      result = new_ast3(',', ident, value, 0);
+      tail = result;
+    } else {
+      set_child(tail, 2, new_ast3(',', ident, value, 0));
+      tail = get_child(tail, 2);
+    }
+
+    if (tok == ',') {
+      get_tok();
+    } else {
+      break;
+    }
+  }
+
+  expect_tok('}');
+  expect_tok(';');
+
+  return new_ast2(ENUM_KW, name, result);
+}
+
 /* Note: Uses a simplified syntax for definitions */
 ast parse_definition(int local) {
 
@@ -1679,6 +1795,8 @@ ast parse_definition(int local) {
     get_tok();
     expect_tok(';');
     return parse_definition(local);
+  } else if (tok == ENUM_KW) {
+    return parse_enum();
   } else {
     return result;
   }
@@ -2219,6 +2337,8 @@ ast parse_statement() {
 
     if ((tok == ':') AND (start_tok != '(') AND (get_op(result) == IDENTIFIER)) {
 
+      get_tok(); // Skip :
+
       child1 = parse_statement();
 
       result = new_ast2(':', result, child1);
@@ -2303,13 +2423,14 @@ int main(int argc, char **args) {
 
   init_pnut_macros();
 
-  // Parse external macros
   for (i = 1; i < argc; i += 1) {
     if (args[i][0] == '-') {
       if (args[i][1] == 'D') {
         init_ident(MACRO, args[i] + 2);
       } else {
-        printf("Option %s\n", args[i]);
+        putstr("Option ");
+        putstr(args[i]);
+        putchar('\n');
         fatal_error("unknown option");
       }
     } else {
@@ -2324,7 +2445,7 @@ int main(int argc, char **args) {
 
   #ifdef SUPPORT_INCLUDE
   if (fp == 0) {
-    printf("Usage: %s <filename>\n", args[0]);
+    putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
   #endif

@@ -1218,6 +1218,7 @@ void comp_body(ast node) {
 void comp_statement(ast node, int else_if) {
   int op = get_op(node);
   text str;
+  ast patterns;
   int start_loop_end_actions_start;
   int start_loop_end_actions_end;
 
@@ -1312,6 +1313,68 @@ void comp_statement(ast node, int else_if) {
     loop_end_actions_end = start_loop_end_actions_end;
 
     append_glo_decl(wrap_str("done"));
+  } else if (op == SWITCH_KW) {
+    append_glo_decl(string_concat3(
+      wrap_str("case "),
+      comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE),
+      wrap_str(" in")
+    ));
+
+    nest_level += 1;
+
+    node = get_child(node, 1);
+
+    if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
+
+    while (get_op(node) == '{') {
+      patterns = get_child(node, 0);
+      if (get_op(patterns) != CASE_KW AND get_op(patterns) != DEFAULT_KW) {
+        fatal_error("comp_statement: switch body without case");
+      }
+
+      node = get_child(node, 1);
+
+      // Assemble the patterns
+      if (get_op(patterns) == CASE_KW) {
+        str = 0;
+        while (get_op(patterns) == CASE_KW) {
+          // This is much more permissive than what a C compiler would allow,
+          // but Shell allows matching on arbitrary expression in case
+          // patterns so it's fine. If we wanted to do this right, we'd check
+          // that the pattern is a numeric literal or an enum identifier.
+          str = concatenate_strings_with(str, comp_rvalue(get_child(patterns, 0), RVALUE_CTX_BASE), wrap_char('|'));
+          patterns = get_child(patterns, 1);
+        }
+      } else {
+        str = wrap_str("*");
+        patterns = get_child(patterns, 0);
+      }
+
+      append_glo_decl(string_concat(str, wrap_str(")")));
+
+      nest_level += 1;
+      // At this point, patterns points to the first statement of the block
+      comp_statement(patterns, false);
+
+      // And then we compile the rest of the statements following the case
+      while (get_op(node) == '{') {
+        if (get_op(get_child(node, 0)) == BREAK_KW) {
+          node = get_child(node, 1);
+          break;
+        } else if (get_op(get_child(node, 0)) == CASE_KW) {
+          fatal_error("comp_statement: case must be at the beginning of a switch block");
+        }
+        comp_statement(get_child(node, 0), false);
+        node = get_child(node, 1);
+      }
+
+      nest_level -= 1;
+
+      append_glo_decl(wrap_str(";;"));
+    }
+
+    nest_level -= 1;
+    append_glo_decl(wrap_str("esac"));
   } else if (op == BREAK_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
     /* TODO: What's the semantic of break? Should we run the end of loop action before breaking? */
@@ -1347,8 +1410,15 @@ void comp_statement(ast node, int else_if) {
     comp_body(node);
   } else if (op == '=') { /* six.x=y */
     comp_assignment(get_child(node, 0), get_child(node, 1));
+  } else if (op == ':') {
+    // Labelled statement are not very useful as gotos are not supported in the
+    // Shell backend, but we still emit a label comment for readability.
+    append_glo_decl(string_concat3(wrap_str("# "), wrap_str_pool(get_val(get_val(get_child(node, 0)))), wrap_char(':')));
+    comp_statement(get_child(node, 1), false);
+  } else if (op == GOTO_KW) {
+    fatal_error("goto statements not supported");
   } else if (op == VAR_DECL) {
-    fatal_error("Variable declaration must be at the beginning of a function");
+    fatal_error("variable declaration must be at the beginning of a function");
   } else {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
@@ -1600,12 +1670,39 @@ void comp_glo_var_decl(ast node) {
   }
 }
 
+void comp_assignment_constant(ast lhs, ast rhs) {
+  int lhs_op = get_op(lhs);
+  if (lhs_op == IDENTIFIER) {
+    append_glo_decl(string_concat4(wrap_str("readonly "), comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
+  } else {
+    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
+    fatal_error("comp_assignment_constant: unknown lhs");
+  }
+}
+
+// Enums are just like global variables, but they are readonly.
+// Since anything that's not a local variable is considered global, this makes
+// it easy to implement enums.
+void comp_enum_cases(ast ident, ast cases) {
+  if (ident != 0) {
+    append_glo_decl(string_concat3(wrap_str("# "), wrap_str_pool(get_val(get_val(ident))), wrap_str(" enum declaration")));
+  } else {
+    append_glo_decl(wrap_str("# Enum declaration"));
+  }
+  while (get_op(cases) == ',') {
+    comp_assignment_constant(get_child(cases, 0), get_child(cases, 1));
+    cases = get_child(cases, 2);
+  }
+}
+
 /*
 This function compiles 1 top level declaration at the time.
 The 3 types of supported top level declarations are:
   - global variable declarations
   - global variable assignments
   - function declarations
+  - enum declarations
+  - struct declarations (TODO)
 Structures, enums, and unions are not supported.
 */
 void comp_glo_decl(ast node) {
@@ -1624,6 +1721,8 @@ void comp_glo_decl(ast node) {
     }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
+  } else if (op == ENUM_KW) {
+    comp_enum_cases(get_child(node, 0), get_child(node, 1));
   } else {
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("comp_glo_decl: unexpected declaration");
