@@ -1549,10 +1549,10 @@ ast parse_type() {
       if (type_kw != 0) syntax_error("inconsistent type");
       return parse_union();
     } else if (tok == TYPE) {
-      /* Look in types table */
+      /* Look in types table. It's a type, not a type_kw, but we reuse the variable */
       type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
       get_tok();
-      break;
+      return type_kw;
     } else {
       break;
     }
