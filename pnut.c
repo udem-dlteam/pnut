@@ -87,6 +87,7 @@ enum {
   VOLATILE_KW,
   WHILE_KW,
   VAR_DECL,
+  VAR_DECLS,
   FUN_DECL,
 
   // Non-character operands
@@ -1692,6 +1693,7 @@ ast parse_definition(int local) {
   ast result = 0;
   ast tail = 0;
   ast current_declaration;
+  ast temp_tail = 0;
 
   if (is_type_starter(tok)) {
     type = parse_type();
@@ -1758,16 +1760,21 @@ ast parse_definition(int local) {
 
         if (tok == '=') {
           get_tok();
-          init = parse_conditional_expression();
+          if(tok == '{'){ // array is being initialized (not supported)
+            missing_feature_error("static initialization of arrays\n");
+          }else{
+            init = parse_conditional_expression();
+          }
         }
+        current_declaration = new_ast3(VAR_DECL, name, this_type, init); // Create a new declaration
 
-        current_declaration = new_ast3(VAR_DECL, name, this_type, init);
-        if(result == 0) {
-          result = current_declaration;
-          tail = result;
+        if(result == 0) { // First declaration
+          result = new_ast2(',', current_declaration, 0);
+          tail = result; // Keep track of the last declaration
         } else {
-          set_child(tail, 1, current_declaration);
-          tail = current_declaration;
+          temp_tail = new_ast2(',', current_declaration, 0); // Create a new declaration
+          set_child(tail, 1, temp_tail); // Link the new declaration to the last one
+          tail = temp_tail; // Update the last declaration
         }
 
         if (tok == ';') {
@@ -1781,7 +1788,7 @@ ast parse_definition(int local) {
         }
       }
     }
-    return result;
+    return new_ast1(VAR_DECLS, result);
   } else if (tok == TYPEDEF_KW) {
     // When parsing a typedef, the type is added to the types table.
     // Since the code generators don't do anything with typedefs, we then return

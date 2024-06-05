@@ -27,7 +27,7 @@ TEST_ALL_SHELLS=0
 
 if [ $# -gt 0 ] && [ $1 = "TEST_ALL_SHELLS" ] ; then TEST_ALL_SHELLS=1; shift; fi
 
-bootstrap_with_shell "ksh"
+bootstrap_with_shell "bash"
 
 if [ $TEST_ALL_SHELLS -ne 0 ]; then
   bootstrap_with_shell "dash"

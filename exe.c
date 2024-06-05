@@ -1102,7 +1102,7 @@ void codegen_begin() {
   jump(setup_lbl);
 }
 
-void codegen_glo_var_decl(ast node) {
+void codegen_glo_var_decl(ast node) {//issue here?
 
   ast name = get_child(node, 0);
   ast type = get_child(node, 1);
@@ -1129,6 +1129,8 @@ void codegen_glo_var_decl(ast node) {
     init_next_lbl = alloc_label();
 
     if (init != 0) {
+//      printf("name = %s\n", string_pool+get_val(name));
+//      printf("init = %d\n", get_val(init));
       codegen_rvalue(init);
     } else {
       xor_reg_reg(reg_X, reg_X);
@@ -1146,7 +1148,8 @@ void codegen_glo_var_decl(ast node) {
 }
 
 void codegen_body(ast node) {
-
+  ast decls;
+  ast variable;
   ast x;
   int save_fs = cgc_fs;
   int save_locals = cgc_locals;
@@ -1156,15 +1159,15 @@ void codegen_body(ast node) {
   int size;
 
   if (node != 0) {
-
     while (get_op(node) == '{') {
       x = get_child(node, 0);
-      if (get_op(x) == VAR_DECL) { // Variable declaration
-        while( x != 0 && get_op(x) == VAR_DECL) { // Multiple variable declarations
-
-          name = get_child(x, 0);
-          type = get_child(x, 1);
-          init = get_child(x, 2);
+      if (get_op(x) == VAR_DECLS) { // Variable declaration
+        decls = get_child(x, 0); // Declaration list
+        while(decls != 0) { // Multiple variable declarations
+          variable = get_child(decls, 0); // Single variable declaration
+          name = get_child(variable, 0);
+          type = get_child(variable, 1);
+          init = get_child(variable, 2);
 
           if (get_op(type) == '[') { // Array declaration
             size = get_val(get_child(type, 0));
@@ -1182,7 +1185,7 @@ void codegen_body(ast node) {
             size = 1;
             cgc_add_local(name, size, type);
           }
-          x = get_child(x, 1); // Move to the next variable declaration
+          decls = get_child(decls, 1); // Move to the next declaration in the list
         }
       } else {
         codegen_statement(x);
@@ -1481,13 +1484,16 @@ void codegen_enum(ast node) {
 }
 
 void codegen_glo_decl(ast node) {
-
+  ast decls;
+  ast variable;
   int op = get_op(node);
 
-  if (op == VAR_DECL) {
-    while (node != 0 && get_op(node) == VAR_DECL) { // Multiple variable declarations
-      codegen_glo_var_decl(node); // Process each variable declaration
-      node = get_child(node, 1); // Move to the next variable declaration
+  if (op == VAR_DECLS) {
+    decls = get_child(node, 0); // Declaration list
+    while (decls != 0) { // Multiple variable declarations
+      variable = get_child(decls, 0); // Single variable declaration
+      codegen_glo_var_decl(variable); // Process each variable declaration
+      decls = get_child(decls, 1); // Move to the next variable declaration in the list
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
