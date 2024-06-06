@@ -314,19 +314,21 @@ void def_goto_label(int lbl) {
   }
 }
 
-enum {
+enum BINDING {
   // Because function params, local and global variables all share the same
   // namespace, BINDING_PARAM_LOCAL, BINDING_VAR_LOCAL and BINDING_VAR_GLOBAL
   // must be kept together at the beginning.
   BINDING_PARAM_LOCAL,
   BINDING_VAR_LOCAL,
   BINDING_VAR_GLOBAL,
-  BINDING_ENUM,
+  BINDING_ENUM_CST,
   BINDING_LOOP,
   BINDING_SWITCH,
   BINDING_FUN,
   BINDING_GOTO_LABEL,
-  BINDING_TYPEDEF,
+  BINDING_TYPE_STRUCT,
+  BINDING_TYPE_UNION,
+  BINDING_TYPE_ENUM,
 };
 
 void cgc_add_local_param(int ident, int size, ast type) {
@@ -374,14 +376,13 @@ void cgc_add_enclosing_switch(int loop_fs, int break_lbl) {
 }
 
 void cgc_add_global(int ident, int size, int width, ast type) {
-  int binding = alloc_obj(7);
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_VAR_GLOBAL;
   heap[binding+2] = ident;
   heap[binding+3] = size;
   heap[binding+4] = cgc_global_alloc;
   heap[binding+5] = type;
-  heap[binding+6] = width;
   cgc_global_alloc += size * width;
   cgc_globals = binding;
 }
@@ -400,7 +401,7 @@ void cgc_add_global_fun(int ident, int label, ast type) {
 void cgc_add_enum(int ident, int value) {
   int binding = alloc_obj(4);
   heap[binding+0] = cgc_globals;
-  heap[binding+1] = BINDING_ENUM;
+  heap[binding+1] = BINDING_ENUM_CST;
   heap[binding+2] = ident;
   heap[binding+3] = value;
   cgc_globals = binding;
@@ -415,10 +416,10 @@ void cgc_add_goto_label(int ident, int lbl) {
   cgc_locals_fun = binding;
 }
 
-void cgc_add_typedef(int ident, ast type) {
+void cgc_add_typedef(int ident, enum BINDING struct_or_union_or_enum, ast type) {
   int binding = alloc_obj(4);
   heap[binding+0] = cgc_globals;
-  heap[binding+1] = BINDING_TYPEDEF;
+  heap[binding+1] = struct_or_union_or_enum;
   heap[binding+2] = ident;
   heap[binding+3] = type;
   cgc_globals = binding;
@@ -476,16 +477,24 @@ int cgc_lookup_enclosing_loop_or_switch(int env) {
   return binding;
 }
 
-int cgc_lookup_enum(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_ENUM, ident, env);
-}
-
 int cgc_lookup_goto_label(int ident, int env) {
   return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
 }
 
-int cgc_lookup_typedef(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPEDEF, ident, env);
+int cgc_lookup_struct(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_STRUCT, ident, env);
+}
+
+int cgc_lookup_union(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_UNION, ident, env);
+}
+
+int cgc_lookup_enum(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_ENUM, ident, env);
+}
+
+int cgc_lookup_enum_value(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_ENUM_CST, ident, env);
 }
 
 // A pointer type is either an array type or a type with at least one star
@@ -546,7 +555,7 @@ ast value_type(ast node) {
         if (binding != 0) {
           return heap[binding+5];
         } else {
-          binding = cgc_lookup_enum(ident, cgc_globals);
+          binding = cgc_lookup_enum_value(ident, cgc_globals);
           if (binding != 0) {
             return int_type; // Enums are always integers
           } else {
@@ -933,7 +942,7 @@ void codegen_rvalue(ast node) {
           }
           push_reg(reg_X);
         } else {
-          binding = cgc_lookup_enum(ident, cgc_globals);
+          binding = cgc_lookup_enum_value(ident, cgc_globals);
           if (binding != 0) {
             mov_reg_imm(reg_X, -get_val(heap[binding+3]));
             push_reg(reg_X);
@@ -1157,11 +1166,30 @@ void codegen_begin() {
 }
 
 void codegen_enum(ast node) {
+  ast name = get_child(node, 1);
   ast cases = get_child(node, 2);
+  int binding;
 
   while (get_op(cases) == ',') {
     cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));
     cases = get_child(cases, 2);
+  }
+
+  if (name != 0 && get_child(node, 2) != 0) { // if enum has a name and members (not a reference to an existing type)
+    binding = cgc_lookup_enum(get_val(name), cgc_globals);
+    if (binding != 0) { fatal_error("codegen_enum: enum already declared"); }
+    cgc_add_typedef(get_val(name), BINDING_TYPE_ENUM, node);
+  }
+}
+
+void codegen_struct(ast node) {
+  ast name = get_child(node, 1);
+  int binding;
+
+  if (name != 0 && get_child(node, 2) != 0) { // if struct has a name and members (not a reference to an existing type)
+    binding = cgc_lookup_struct(get_val(name), cgc_globals);
+    if (binding != 0 AND heap[binding + 3] != node) { fatal_error("codegen_struct: struct already declared"); }
+    cgc_add_typedef(get_val(name), BINDING_TYPE_STRUCT, node);
   }
 }
 
@@ -1169,7 +1197,7 @@ void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
     codegen_enum(type);
   } else if (get_op(type) == STRUCT_KW) {
-    fatal_error("handle_enum_struct_union_type_decl: struct not supported");
+    codegen_struct(type);
   } else if (get_op(type) == UNION_KW) {
     fatal_error("handle_enum_struct_union_type_decl: union not supported");
   }
@@ -1546,20 +1574,6 @@ void codegen_glo_fun_decl(ast node) {
   cgc_locals_fun = save_locals_fun;
 }
 
-void handle_typedef_decl(ast node) {
-  ast name = get_child(node, 0);
-  ast type = get_child(node, 1);
-  int binding = cgc_lookup_typedef(name, cgc_globals);
-
-  handle_enum_struct_union_type_decl(type);
-
-  if (binding == 0) {
-    cgc_add_typedef(name, type);
-  } else {
-    fatal_error("handle_typedef_decl: duplicate typedef");
-  }
-}
-
 void codegen_glo_decl(ast node) {
 
   int op = get_op(node);
@@ -1569,7 +1583,7 @@ void codegen_glo_decl(ast node) {
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
-    handle_typedef_decl(node);
+    handle_enum_struct_union_type_decl(get_child(node, 1));
   } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
