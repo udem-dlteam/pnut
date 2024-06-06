@@ -1067,7 +1067,7 @@ void get_tok() {
           push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
         } else if (tok == '#') { // Stringizing!
-          stringify(tok, val);
+          stringify();
           break;
         }
         break;
