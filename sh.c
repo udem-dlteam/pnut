@@ -319,6 +319,14 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
   }
 }
 
+text struct_member_var(ast member_name_ident) {
+  return string_concat(wrap_str("__"), wrap_str_pool(get_val(get_val(member_name_ident))));
+}
+
+text struct_sizeof_var(ast struct_name_ident) {
+  return string_concat(wrap_str("__sizeof__"), wrap_str_pool(get_val(get_val(struct_name_ident))));
+}
+
 text global_var(ast ident_tok) {
   return string_concat(wrap_char('_'), wrap_str_pool(get_val(ident_tok)));
 }
@@ -452,17 +460,27 @@ int variable_is_constant_param(ast local_var) {
   of variables to not start with _. Also, because some shells treat some
   variables as special, we prevent their use. Additionally, EOF and NULL cannot
   be redefined.
+
+  Also, the shell backend doesn't support variables with an non-reference struct
+  type.
 */
-void assert_idents_are_safe(ast lst) {
+void assert_vars_are_safe(ast lst) {
   ast ident_tok;
+  ast type;
   char *name;
   while (lst != 0) {
     ident_tok = get_child(get_child(lst, 0), 0);
+    type = get_child(get_child(lst, 0), 1);
     name = string_pool + get_val(ident_tok);
 
     if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
       printf("%s ", name);
       fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    }
+
+    if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+      printf("%s ", name);
+      fatal_error("struct value type is not supported for shell backend. Use a reference type instead.");
     }
 
     lst = get_child(lst, 1);
@@ -686,6 +704,8 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     } else if ((op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE)) {
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
+    } else if (op == SIZEOF_KW) {
+      return node; // sizeof is a compile-time operator
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("unexpected operator");
@@ -732,7 +752,8 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
 
       return sub1;
     } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') ) {
+      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[')
+      OR (op == '.') OR (op == ARROW) ) {
       /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); /* We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call */
@@ -914,6 +935,21 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == PLUS_PLUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
+    } else if (op == SIZEOF_KW) {
+      if (get_op(get_child(node, 0)) == INT_KW
+       || get_op(get_child(node, 0)) == CHAR_KW
+       || get_op(get_child(node, 0)) == VOID_KW
+       || (( get_op(get_child(node, 0)) == STRUCT_KW
+          || get_op(get_child(node, 0)) == UNION_KW
+          || get_op(get_child(node, 0)) == ENUM_KW)
+         && get_child(get_child(node, 0), 0) >= 1)) // If it's a pointer
+      {
+        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
+      } else if (get_op(get_child(node, 0)) == STRUCT_KW) {
+        return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)));
+      } else {
+        fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+      }
     } else if (op == '&') {
       fatal_error("comp_rvalue_go: address of operator not supported");
       return 0;
@@ -931,10 +967,14 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       sub1 = comp_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
-    } else if (op == '[') { /* six.index */
+    } else if (op == '[') { // array indexing
       sub1 = comp_array_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
+    } else if (op == ARROW) { // member access is implemented like array access
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub2 = struct_member_var(get_child(node, 1));
+      return wrap_if_needed(true, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))")));
     } else if (op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '<' OR op == '>') {
       if (context == RVALUE_CTX_TEST) {
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0);
@@ -949,7 +989,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
     } else {
-      fatal_error("comp_rvalue_go: unknown rvalue");
+      fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
       return 0;
     }
   } else if (nb_children == 3) {
@@ -1126,6 +1166,10 @@ text comp_array_lvalue(ast node) {
     sub1 = comp_array_lvalue(get_child(node, 0));
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+  } else if (op == ARROW) {
+    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub2 = struct_member_var(get_child(node, 1));
+    return string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))"));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_array_lvalue: unknown lvalue");
@@ -1147,6 +1191,10 @@ text comp_lvalue(ast node) {
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
+  } else if (op == ARROW) {
+    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub2 = struct_member_var(get_child(node, 1));
+    return string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))"));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue: unknown lvalue");
@@ -1542,8 +1590,8 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == 0) return; // ignore forward declarations
 
-  assert_idents_are_safe(params);
-  assert_idents_are_safe(local_vars);
+  assert_vars_are_safe(params);
+  assert_vars_are_safe(local_vars);
 
   add_vars_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
@@ -1653,6 +1701,11 @@ void comp_glo_var_decl(ast node) {
 
   if (init == 0) init = new_ast0(INTEGER, 0);
 
+  if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+    printf("%s ", string_pool + get_val(name));
+    fatal_error("struct value type is not supported for shell backend. Use a reference type instead.");
+  }
+
   if (get_op(type) == '[') { /* Array declaration */
     append_glo_decl(
       string_concat4(
@@ -1678,14 +1731,8 @@ void comp_glo_var_decl(ast node) {
   }
 }
 
-void comp_assignment_constant(ast lhs, ast rhs) {
-  int lhs_op = get_op(lhs);
-  if (lhs_op == IDENTIFIER) {
-    append_glo_decl(string_concat4(wrap_str("readonly "), comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
-  } else {
-    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
-    fatal_error("comp_assignment_constant: unknown lhs");
-  }
+void comp_assignment_constant(text constant_name, ast rhs) {
+  append_glo_decl(string_concat4(wrap_str("readonly "), constant_name, wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
 }
 
 // Enums are just like global variables, but they are readonly.
@@ -1698,32 +1745,88 @@ void comp_enum_cases(ast ident, ast cases) {
     append_glo_decl(wrap_str("# Enum declaration"));
   }
   while (get_op(cases) == ',') {
-    comp_assignment_constant(get_child(cases, 0), get_child(cases, 1));
+    comp_assignment_constant(env_var(get_child(cases, 0)), get_child(cases, 1));
     cases = get_child(cases, 2);
   }
+}
+
+/*
+  Struct member access is implemented like array indexing. Each member is mapped
+  to a readonly variable containing the offset of the member and accessing to
+  s->a is equivalent to *(s + a).
+
+  For example, for the struct:
+
+    struct Point {
+      int x;
+      int y;
+    }
+
+    Point *p = malloc(sizeof(Point));
+    p->y = 42;
+
+  The following code is generated:
+
+    readonly __x=0
+    readonly __y=1
+    readonly __sizeof__Point=2
+
+    _malloc p $((__sizeof__Point))
+    : $(( _$((p + __x)) = 42 ))
+
+  This approach doesn't work when the same member name is used in different
+  structs, but it makes for readable code and is simple to implement.
+  Because the member offset variables are declared as readonly, name conflicts
+  will result in a runtime error when the shell program initializes.
+*/
+void comp_struct(ast ident, ast members) {
+  int offset = new_ast0(INTEGER, 0);
+  int field_type;
+  if (ident != 0) {
+    append_glo_decl(string_concat3(wrap_str("# "), wrap_str_pool(get_val(get_val(ident))), wrap_str(" struct member declarations")));
+  } else {
+    append_glo_decl(wrap_str("# Struct member declarations"));
+  }
+  while (get_op(members) == ',') {
+    field_type = get_child(members, 1);
+    comp_assignment_constant(struct_member_var(get_child(members, 0)), offset);
+    members = get_child(members, 2);
+    if (get_op(field_type) == '[') {
+      set_val(offset, get_val(offset) - get_val(get_child(field_type, 0)));
+    } else if (get_op(field_type) == STRUCT_KW AND get_val(field_type) == 0) {
+      fatal_error("Nested structures not supported by shell backend. Use a reference type instead.");
+    } else {
+      set_val(offset, get_val(offset) - 1);
+    }
+  }
+
+  if (ident != 0) {
+    comp_assignment_constant(struct_sizeof_var(ident), offset);
+  }
+
+  append_glo_decl(0); // newline
 }
 
 void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
     comp_enum_cases(get_child(type, 1), get_child(type, 2));
   } else if (get_op(type) == STRUCT_KW) {
-    fatal_error("handle_enum_struct_union_type_decl: struct not supported");
+    comp_struct(get_child(type, 1), get_child(type, 2));
   } else if (get_op(type) == UNION_KW) {
     fatal_error("handle_enum_struct_union_type_decl: union not supported");
   }
 
-  // I fnot an enum, struct, or union, do nothing
+  // If not an enum, struct, or union, do nothing
 }
 
 /*
-This function compiles 1 top level declaration at the time.
-The 3 types of supported top level declarations are:
-  - global variable declarations
-  - global variable assignments
-  - function declarations
-  - enum declarations
-  - struct declarations (TODO)
-Structures, enums, and unions are not supported.
+  This function compiles 1 top level declaration at the time.
+  The supported top level declarations are:
+    - global variable declarations
+    - global variable assignments
+    - function declarations
+    - enum declarations
+    - struct declarations
 */
 void comp_glo_decl(ast node) {
   int op = get_op(node);
