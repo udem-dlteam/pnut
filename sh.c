@@ -438,7 +438,7 @@ void add_vars_to_local_env(ast lst, int position, int kind) {
   }
 }
 
-void add_fun_params_to_local_env(ast lst, int position, int kind) { // replace before changes
+void add_fun_params_to_local_env(ast lst, int position, int kind) {
   ast decl;
   while (lst != 0) {
     decl = get_child(lst, 0);
@@ -477,20 +477,8 @@ void assert_idents_are_safe(ast lst) {
   char *name;
   while(lst != 0){
     if(get_op(get_child(lst, 0)) == VAR_DECLS){ /* If it's a list of declarations */
-        decls = get_child(lst, 0);
-        variables = get_child(decls, 0);
-        while(variables != 0){ /* Loop through the list of variables */
-          variable = get_child(variables, 0);
-          ident_tok = get_child(variable, 0);
-          name = string_pool + get_val(ident_tok);
-          if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
-            printf("%s ", name);
-            fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
-          }
-
-          variables = get_child(variables, 1);
-        }
-        lst = get_child(lst, 1);
+      assert_var_decl_is_safe(get_child(lst, 0)); /* Check the variables */
+      lst = get_child(lst, 1); /* Move to the next list of declarations */
     } else{
         ident_tok = get_child(get_child(lst, 0), 0);
         name = string_pool + get_val(ident_tok);
@@ -499,8 +487,22 @@ void assert_idents_are_safe(ast lst) {
           fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
         }
 
-        lst = get_child(lst, 1);
+        lst = get_child(lst, 1); /* Move to the next declaration */
     }
+  }
+}
+
+assert_var_decl_is_safe(ast decls){
+  variables = get_child(decls, 0);
+  while(variables != 0){ /* Loop through the list of variables */
+    variable = get_child(variables, 0);
+    ident_tok = get_child(variable, 0);
+    name = string_pool + get_val(ident_tok);
+    if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+      printf("%s ", name);
+      fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    }
+    variables = get_child(variables, 1); /* Move to the next variable */
   }
 }
 

@@ -1693,7 +1693,6 @@ ast parse_definition(int local) {
   ast result = 0;
   ast tail = 0;
   ast current_declaration;
-  ast temp_tail = 0;
 
   if (is_type_starter(tok)) {
     type = parse_type();
@@ -1760,11 +1759,7 @@ ast parse_definition(int local) {
 
         if (tok == '=') {
           get_tok();
-          if(tok == '{'){ // array is being initialized (not supported)
-            missing_feature_error("static initialization of arrays\n");
-          }else{
             init = parse_conditional_expression();
-          }
         }
         current_declaration = new_ast3(VAR_DECL, name, this_type, init); // Create a new declaration
 
@@ -1772,9 +1767,8 @@ ast parse_definition(int local) {
           result = new_ast2(',', current_declaration, 0);
           tail = result; // Keep track of the last declaration
         } else {
-          temp_tail = new_ast2(',', current_declaration, 0); // Create a new declaration
-          set_child(tail, 1, temp_tail); // Link the new declaration to the last one
-          tail = temp_tail; // Update the last declaration
+          set_child(tail, 1, new_ast2(',', current_declaration, 0)); // Link the new declaration to the last one
+          tail = get_child(tail, 1); // Update the last declaration
         }
 
         if (tok == ';') {
