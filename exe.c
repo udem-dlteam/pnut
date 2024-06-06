@@ -1172,7 +1172,7 @@ void codegen_body(ast node) {
           if (get_op(type) == '[') { // Array declaration
             size = get_val(get_child(type, 0));
             cgc_add_local(name, size, type);
-            grow_stack(size);
+            grow_stack_bytes(size * ref_type_width(type));
           } else {
             // All non-array types are represented as a word, even if they are smaller
             if (init != 0) {
