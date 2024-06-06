@@ -1548,7 +1548,9 @@ void rt_malloc() {
 }
 
 void rt_free() {
-  // No-op
+  // Free are NO-OP for now
+  // This function cannot be empty or it will be considered a forward reference
+  return;
 }
 
 void codegen_end() {
@@ -1609,7 +1611,7 @@ void codegen_end() {
   rt_malloc();
   ret();
 
-  // malloc function
+  // free function
   def_label(free_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   rt_free();
