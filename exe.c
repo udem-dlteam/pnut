@@ -509,6 +509,21 @@ bool is_pointer_type(ast type) {
   return (get_op(type) == '[') | (get_val(type) != 0);
 }
 
+bool is_type(ast type) {
+  switch (get_op(type)) {
+    case INT_KW:
+    case CHAR_KW:
+    case VOID_KW:
+    case STRUCT_KW:
+    case UNION_KW:
+    case ENUM_KW:
+    case '[':
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool is_not_pointer_type(ast type) {
   return !is_pointer_type(type);
 }
@@ -1167,12 +1182,10 @@ void codegen_rvalue(ast node) {
       codegen_lvalue(get_child(node, 0));
       grow_fs(-1);
     } else if (op == SIZEOF_KW) {
-      if (get_op(get_child(node, 0)) == INT_KW
-       || get_op(get_child(node, 0)) == CHAR_KW
-       || get_op(get_child(node, 0)) == VOID_KW) {
-        mov_reg_imm(reg_X, ref_type_width(get_child(node, 0)));
+      if (is_type(get_child(node, 0))) {
+        mov_reg_imm(reg_X, type_width_ast(get_child(node, 0), true, false));
       } else {
-        mov_reg_imm(reg_X, ref_type_width(value_type(get_child(node, 0))));
+        mov_reg_imm(reg_X, type_width_ast(value_type(get_child(node, 0)), true, false));
       }
       push_reg(reg_X);
     } else {
