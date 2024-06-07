@@ -953,23 +953,48 @@ void codegen_binop(int op, ast lhs, ast rhs) {
 #ifndef PNUT_CC
 void codegen_rvalue(ast node);
 void codegen_statement(ast node);
+int codegen_lvalue(ast node);
 #endif
+
+int codegen_param(ast param) {
+  int type = value_type(param);
+  int left_width;
+
+  if (get_op(type) == '[') {
+    left_width = codegen_lvalue(param);
+    pop_reg(reg_X);
+    grow_fs(-1);
+    grow_stack_bytes(round_up_to_word_size(left_width));
+    grow_fs(round_up_to_word_size(left_width) / word_size);
+    copy_obj(reg_SP, 0, reg_X, 0, left_width);
+  } else if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+    left_width = codegen_lvalue(param);
+    pop_reg(reg_X);
+    grow_fs(-1);
+    grow_stack_bytes(round_up_to_word_size(left_width));
+    grow_fs(round_up_to_word_size(left_width) / word_size);
+    copy_obj(reg_SP, 0, reg_X, 0, left_width);
+  } else {
+    codegen_rvalue(param);
+  }
+
+  return type_width_ast(type, false, true) / word_size;
+}
 
 int codegen_params(ast params) {
 
-  int nb_params = 0;
+  int fs = 0;
 
   if (params != 0) {
     if (get_op(params) == ',') {
-      nb_params = 1 + codegen_params(get_child(params, 1));
-      codegen_rvalue(get_child(params, 0));
+      fs = codegen_params(get_child(params, 1));
+      fs += codegen_param(get_child(params, 0));
     } else {
-      nb_params = 1;
-      codegen_rvalue(params);
+      fs = codegen_param(params);
     }
   }
 
-  return nb_params;
+  return fs;
 }
 
 void codegen_call(ast node) {
@@ -1802,7 +1827,7 @@ void add_params(ast params) {
       fatal_error("add_params: duplicate parameter");
     }
 
-    cgc_add_local_param(ident, 1, type);
+    cgc_add_local_param(ident, type_width_ast(type, false, true) / word_size, type);
 
     add_params(get_child(params, 1));
   }
@@ -1817,6 +1842,12 @@ void codegen_glo_fun_decl(ast node) {
   int lbl;
   int binding;
   int save_locals_fun = cgc_locals_fun;
+
+  if (get_op(fun_type) == STRUCT_KW && get_val(fun_type) == 0) {
+    fatal_error("add_params: returning structs from function not supported");
+  } else if (get_op(fun_type) == '[') {
+    fatal_error("add_params: returning arrays from function not supported");
+  }
 
   if (body != 0) {
 
