@@ -43,6 +43,20 @@ elif [ "$action" = "test" ]; then
   fi
 fi
 
+# if action is clean echo "Cleaning up..."
+# if action is test echo "Running tests..."
+if [ "$action" = "clean" ]; then
+  echo "Cleaning up..."
+  clean
+elif [ "$action" = "test" ]; then
+  echo "Compiling $pnut_source with backend $backend..."
+  gcc "$pnut_source" "$backend" -o "$pnut_exe"
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to compile $pnut_source with $backend"
+    exit 1
+  fi
+fi
+
 
 # Determine the file extension based on the backend
 case "$backend" in
@@ -103,7 +117,15 @@ test() {
             if [ $? -ne 1 ]; then # If the executable ran successfully
                 diff_out=$(diff "$dir/$filename.output" "$dir/$filename.golden")
                 if [ $? -eq 0 ]; then # If the output matches the golden file
+        "$pnut_exe" < "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+        if [ $? -eq 0 ]; then # If compilation was successful
+            chmod +x "$dir/$filename.$ext"
+            "./$dir/$filename.$ext" > "$dir/$filename.output" 2> "$dir/$filename.err"
+            if [ $? -ne 1 ]; then # If the executable ran successfully
+                diff_out=$(diff "$dir/$filename.output" "$dir/$filename.golden")
+                if [ $? -eq 0 ]; then # If the output matches the golden file
                     echo "$filename: ✅ Test passed"
+                    rm -f "$dir/$filename.$ext" # Clean up the executable if the test passed
                     rm -f "$dir/$filename.$ext" # Clean up the executable if the test passed
                 else
                     echo "$filename: ❌ Test failed"
@@ -112,11 +134,15 @@ test() {
                 fi
             else
                 echo "$filename: ❌ Failed to run: $(cat $dir/$filename.err)"
+                echo "$filename: ❌ Failed to run: $(cat $dir/$filename.err)"
             fi
+            rm -f "$dir/$filename.output"
             rm -f "$dir/$filename.output"
         else
             echo "$filename: ❌ Failed to compile with pnut: $(cat $dir/$filename.err)"
+            echo "$filename: ❌ Failed to compile with pnut: $(cat $dir/$filename.err)"
         fi
+        rm -f "$dir/$filename.err"
         rm -f "$dir/$filename.err"
     done
 }
