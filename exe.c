@@ -100,19 +100,25 @@ void jump_rel(int offset);
 void call(int lbl);
 void ret();
 
-void load_mem_operand(int dst, int base, int offset, int width) {
+void load_mem_location(int dst, int base, int offset, int width) {
   if (width == 1) {
     mov_reg_mem8(dst, base, offset);
-  } else {
+  } else if (width == word_size) {
     mov_reg_mem(dst, base, offset);
+  } else {
+    fatal_error("load_mem_location: unknown width");
   }
 }
 
-void write_mem_operand(int base, int offset, int src, int width) {
+// Write a value from a register to a memory location
+void write_mem_location(int base, int offset, int src, int width) {
+  int i;
   if (width == 1) {
     mov_mem8_reg(base, offset, src);
-  } else {
+  } else if (width == word_size) {
     mov_mem_reg(base, offset, src);
+  } else {
+    fatal_error("write_mem_location: unknown width");
   }
 }
 
@@ -743,7 +749,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       }
 
       add_reg_reg(reg_X, reg_Y);
-      load_mem_operand(reg_X, reg_X, 0, width);
+      load_mem_location(reg_X, reg_X, 0, width);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_binop: unknown op");
@@ -964,7 +970,7 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_Y);
       grow_fs(-1);
-      load_mem_operand(reg_X, reg_Y, 0, ref_type_width(value_type(get_child(node, 0))));
+      load_mem_location(reg_X, reg_Y, 0, ref_type_width(value_type(get_child(node, 0))));
       push_reg(reg_X);
     } else if (op == '+') {
       codegen_rvalue(get_child(node, 0));
@@ -1047,17 +1053,13 @@ void codegen_rvalue(ast node) {
       grow_fs(-2);
     } else if (op == '=') {
       left_width = codegen_lvalue(get_child(node, 0));
-      codegen_rvalue(get_child(node, 1));
-      pop_reg(reg_X);
-      pop_reg(reg_Y);
-      grow_fs(-2);
-      write_mem_operand(reg_Y, 0, reg_X, left_width);
+      write_mem_location(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
     } else if (op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
       left_width = codegen_lvalue(get_child(node, 0));
       pop_reg(reg_Y);
       push_reg(reg_Y);
-      load_mem_operand(reg_X, reg_Y, 0, left_width);
+      load_mem_location(reg_X, reg_Y, 0, left_width);
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(get_child(node, 1));
@@ -1065,7 +1067,7 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_X);
       pop_reg(reg_Y);
       grow_fs(-3);
-      write_mem_operand(reg_Y, 0, reg_X, left_width);
+      write_mem_location(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       lbl1 = alloc_label();
