@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="CMakeRunConfigurationManager">
+    <generated />
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="5e1e920a-6496-4f30-9989-f9973026cc28" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/tests/test.c" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test.c" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Kraft-Cheese&quot;
+  }
+}</component>
+  <component name="GitHubPullRequestState">{
+  &quot;prStates&quot;: [
+    {
+      &quot;id&quot;: {
+        &quot;id&quot;: &quot;PR_kwDOKlIa985wsc9d&quot;,
+        &quot;number&quot;: 16
+      },
+      &quot;lastSeen&quot;: 1717772850604
+    }
+  ]
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/udem-dlteam/pnut.git&quot;,
+    &quot;accountId&quot;: &quot;43e00a7d-acd7-49e1-b11d-ee7d5f75bb62&quot;
+  }
+}</component>
+  <component name="MakefileLocalSettings">
+    <option name="availableProjects">
+      <map>
+        <entry>
+          <key>
+            <ExternalProjectPojo>
+              <option name="name" value="pnut" />
+              <option name="path" value="$PROJECT_DIR$" />
+            </ExternalProjectPojo>
+          </key>
+          <value>
+            <list>
+              <ExternalProjectPojo>
+                <option name="name" value="pnut" />
+                <option name="path" value="$PROJECT_DIR$" />
+              </ExternalProjectPojo>
+            </list>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="projectSyncType">
+      <map>
+        <entry key="$PROJECT_DIR$" value="RE_IMPORT" />
+      </map>
+    </option>
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectApplicationVersion">
+    <option name="ide" value="CLion" />
+    <option name="majorVersion" value="2023" />
+    <option name="minorVersion" value="3.4" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 8
+}</component>
+  <component name="ProjectId" id="2fuuH0ZUfiixg7GDyvaUjMQsS21" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "com.jetbrains.cidr.cpp.cmake.workspace.CMakeCacheInvalidator.marker": "true",
+    "git-widget-placeholder": "Cassandre/Tests",
+    "last_opened_file_path": "C:/Users/cassa/Desktop/pnut/pnut",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "structure.view.defaults.are.configured": "true",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="5e1e920a-6496-4f30-9989-f9973026cc28" name="Changes" comment="" />
+      <created>1714663192802</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1714663192802</updated>
+      <workItem from="1714663193949" duration="1770000" />
+      <workItem from="1714665270134" duration="13965000" />
+      <workItem from="1714689912075" duration="10000" />
+      <workItem from="1714689933319" duration="3000" />
+      <workItem from="1714751490096" duration="4752000" />
+      <workItem from="1714762898215" duration="12822000" />
+      <workItem from="1715004595860" duration="20812000" />
+      <workItem from="1715087577101" duration="908000" />
+      <workItem from="1715089298518" duration="11000" />
+      <workItem from="1715089325378" duration="22209000" />
+      <workItem from="1715177835875" duration="18031000" />
+      <workItem from="1715263281601" duration="6028000" />
+      <workItem from="1715279324876" duration="9635000" />
+      <workItem from="1715351927542" duration="16657000" />
+      <workItem from="1715609435864" duration="25736000" />
+      <workItem from="1715702242028" duration="8535000" />
+      <workItem from="1715779650559" duration="6974000" />
+      <workItem from="1715790478971" duration="44248000" />
+      <workItem from="1715967817182" duration="6583000" />
+      <workItem from="1715999653451" duration="607000" />
+      <workItem from="1716298780680" duration="1337000" />
+      <workItem from="1716302885373" duration="23544000" />
+      <workItem from="1716389542590" duration="21113000" />
+      <workItem from="1716469675307" duration="19216000" />
+      <workItem from="1716563378177" duration="26966000" />
+      <workItem from="1716831141939" duration="16217000" />
+      <workItem from="1716927126692" duration="14394000" />
+      <workItem from="1717430990980" duration="25637000" />
+      <workItem from="1717514255886" duration="23823000" />
+      <workItem from="1717609403762" duration="2903000" />
+      <workItem from="1717612461702" duration="14184000" />
+      <workItem from="1717698358714" duration="40000" />
+      <workItem from="1717698413898" duration="23000" />
+      <workItem from="1717698448657" duration="19000" />
+      <workItem from="1717698469665" duration="18000" />
+      <workItem from="1717698496089" duration="14355000" />
+      <workItem from="1717775696296" duration="1431000" />
+      <workItem from="1717782906066" duration="9660000" />
+      <workItem from="1718032968802" duration="2440000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/x86.c</url>
+          <line>12</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+</project>
