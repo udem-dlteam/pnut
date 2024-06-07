@@ -123,6 +123,21 @@ void write_mem_location(int base, int offset, int src, int width) {
   }
 }
 
+void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int width) {
+  int i;
+  // move the words
+  for (i = 0; i < width / word_size; i += 1) {
+    mov_reg_mem(reg_Z, src_base, src_offset + i * word_size);
+    mov_mem_reg(dst_base, dst_offset + i * word_size, reg_Z);
+  }
+
+  // then move the remaining bytes
+  for (i = width - width % word_size; i < width; i += 1) {
+    mov_reg_mem8(reg_Z, src_base, src_offset + i);
+    mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
+  }
+}
+
 int is_power_of_2(int n) {
   return n != 0 AND (n & (n - 1)) == 0;
 }
@@ -718,7 +733,7 @@ ast value_type(ast node) {
       ident = get_val(node);
       binding = cgc_lookup_var(ident, cgc_locals);
       if (binding != 0) {
-          return heap[binding+5];
+        return heap[binding+5];
       } else {
         binding = cgc_lookup_var(ident, cgc_globals);
         if (binding != 0) {
@@ -808,6 +823,21 @@ ast value_type(ast node) {
         putstr(string_pool + get_val(get_val(get_child(node, 0))));
         putchar('\n');
         fatal_error("value_type: function not found");
+      }
+    } else if (op == '.') {
+      left_type = value_type(get_child(node, 0));
+      if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 0) {
+        get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
+      } else {
+        fatal_error("value_type: . operator on non-struct pointer type");
+      }
+    } else if (op == ARROW) {
+      // Same as '.', but left_type must be a pointer
+      left_type = value_type(get_child(node, 0));
+      if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 1) {
+        get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
+      } else {
+        fatal_error("value_type: -> operator on non-struct pointer type");
       }
     } else {
       fatal_error("value_type: unknown expression");
@@ -988,10 +1018,10 @@ int codegen_lvalue(ast node) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int binding;
-  int lvalue_width = word_size;
+  int lvalue_width = 0;
+  ast type;
 
   if (nb_children == 0) {
-
     if (op == IDENTIFIER) {
       binding = cgc_lookup_var(get_val(node), cgc_locals);
       if (binding != 0) {
@@ -1008,6 +1038,7 @@ int codegen_lvalue(ast node) {
           fatal_error("codegen_lvalue: identifier not found");
         }
       }
+      lvalue_width = type_width_ast(heap[binding+5], true, true);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
@@ -1018,6 +1049,7 @@ int codegen_lvalue(ast node) {
     if (op == '*') {
       codegen_rvalue(get_child(node, 0));
       grow_fs(-1);
+      lvalue_width = ref_type_width(value_type(get_child(node, 0)));
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unexpected operator");
@@ -1026,17 +1058,48 @@ int codegen_lvalue(ast node) {
   } else if (nb_children == 2) {
 
     if (op == '[') {
+      type = value_type(get_child(node, 0));
       codegen_rvalue(get_child(node, 0));
       codegen_rvalue(get_child(node, 1));
       codegen_binop('+', get_child(node, 0), get_child(node, 1));
       grow_fs(-2);
+      lvalue_width = ref_type_width(type);
+    } else if (op == '.') {
+      type = value_type(get_child(node, 0));
+      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+        codegen_lvalue(get_child(node, 0));
+        pop_reg(reg_X);
+        add_reg_imm(reg_X, struct_member_offset(type, get_child(node, 1)));
+        push_reg(reg_X);
+        grow_fs(-1);
+        lvalue_width = type_width_ast(get_child(struct_member(type, get_child(node, 1)), 1), true, true); // child 1 of member is the type
+      } else {
+        fatal_error("codegen_lvalue: -> operator on non-struct type");
+      }
+    } else if (op == ARROW) {
+      // Same as '.', but type must be a pointer
+      type = value_type(get_child(node, 0));
+      if (get_op(type) == STRUCT_KW && get_val(type) == 1) {
+        codegen_rvalue(get_child(node, 0));
+        pop_reg(reg_X);
+        add_reg_imm(reg_X, struct_member_offset(type, get_child(node, 1)));
+        push_reg(reg_X);
+        grow_fs(-1);
+        lvalue_width = type_width_ast(get_child(struct_member(type, get_child(node, 1)), 1), true, true); // child 1 of member is the type
+      } else {
+        fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
+      }
     } else {
-      fatal_error("codegen_lvalue: unknown lvalue");
+      fatal_error("codegen_lvalue: unknown lvalue with 2 children");
     }
 
   } else {
     putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_lvalue: unknown lvalue with >2 children");
+  }
+
+  if (lvalue_width == 0) {
+    fatal_error("codegen_lvalue: lvalue_width == 0");
   }
 
   grow_fs(1);
@@ -1077,6 +1140,7 @@ void codegen_rvalue(ast node) {
   int lbl1;
   int lbl2;
   int left_width;
+  int type;
 
   if (nb_children == 0) {
     if (op == INTEGER) {
@@ -1091,11 +1155,11 @@ void codegen_rvalue(ast node) {
       if (binding != 0) {
         mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
         add_reg_reg(reg_X, reg_SP);
-        // There are 3 different cases for the type of the lvalue:
-        // 1. Array type: the value is stored on the stack, and reg_X already points to it
-        // 2. Pointer type: the pointer (to the heap) is stored on the stack, and it needs to be dereferenced
-        // 3. Non-pointer type: the value is stored directly in the stack, and it needs to be loaded
-        if (get_op(heap[binding+5]) != '[') {
+        // local arrays are allocated on the stack, so no need to dereference
+        // same thing for non-pointer structs and unions.
+        if (get_op(heap[binding+5]) != '['
+          && !(get_op(heap[binding+5]) == STRUCT_KW && get_val(heap[binding+5]) == 0)
+          && !(get_op(heap[binding+5]) == UNION_KW && get_val(heap[binding+5]) == 0)) {
           mov_reg_mem(reg_X, reg_X, 0);
         }
         push_reg(reg_X);
@@ -1104,7 +1168,11 @@ void codegen_rvalue(ast node) {
         if (binding != 0) {
           mov_reg_imm(reg_X, heap[binding+4]);
           add_reg_reg(reg_X, reg_glo);
-          if (get_op(heap[binding+5]) != '[') {
+          // global arrays are allocated on the stack, so no need to dereference
+          // same thing for non-pointer structs and unions.
+          if (get_op(heap[binding+5]) != '['
+            && !(get_op(heap[binding+5]) == STRUCT_KW && get_val(heap[binding+5]) == 0)
+            && !(get_op(heap[binding+5]) == UNION_KW && get_val(heap[binding+5]) == 0)) {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
@@ -1131,7 +1199,11 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_Y);
       grow_fs(-1);
-      load_mem_location(reg_X, reg_Y, 0, ref_type_width(value_type(get_child(node, 0))));
+      if (is_pointer_type(value_type(get_child(node, 0)))) {
+        load_mem_location(reg_X, reg_Y, 0, ref_type_width(value_type(get_child(node, 0))));
+      } else {
+        fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
+      }
       push_reg(reg_X);
     } else if (op == '+') {
       codegen_rvalue(get_child(node, 0));
@@ -1211,8 +1283,22 @@ void codegen_rvalue(ast node) {
       codegen_binop(op, get_child(node, 0), get_child(node, 1));
       grow_fs(-2);
     } else if (op == '=') {
+      type = value_type(get_child(node, 0));
       left_width = codegen_lvalue(get_child(node, 0));
-      write_mem_location(reg_Y, 0, reg_X, left_width);
+      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+        // Struct assignment, we copy the struct.
+        codegen_lvalue(get_child(node, 1));
+        pop_reg(reg_X);
+        pop_reg(reg_Y);
+        grow_fs(-2);
+        copy_obj(reg_Y, 0, reg_X, 0, left_width);
+      } else {
+        codegen_rvalue(get_child(node, 1));
+        pop_reg(reg_X);
+        pop_reg(reg_Y);
+        grow_fs(-2);
+        write_mem_location(reg_Y, 0, reg_X, left_width);
+      }
       push_reg(reg_X);
     } else if (op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
       left_width = codegen_lvalue(get_child(node, 0));
@@ -1245,8 +1331,30 @@ void codegen_rvalue(ast node) {
       def_label(lbl1);
     } else if (op == '(') {
       codegen_call(node);
+    } else if (op == '.') {
+      type = value_type(get_child(node, 0));
+      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+        codegen_lvalue(get_child(node, 0));
+        pop_reg(reg_Y);
+        grow_fs(-1);
+        load_mem_location(reg_X, reg_Y, struct_member_offset(value_type(get_child(node, 0)), get_child(node, 1)), word_size);
+        push_reg(reg_X);
+      } else {
+        fatal_error("codegen_rvalue: -> operator on non-struct type");
+      }
+    } else if (op == ARROW) {
+      type = value_type(get_child(node, 0));
+      if (get_op(type) == STRUCT_KW && get_val(type) == 1) {
+        codegen_rvalue(get_child(node, 0));
+        pop_reg(reg_Y);
+        grow_fs(-1);
+        load_mem_location(reg_X, reg_Y, struct_member_offset(value_type(get_child(node, 0)), get_child(node, 1)), word_size);
+        push_reg(reg_X);
+      } else {
+        fatal_error("codegen_rvalue: -> operator on non-struct pointer type");
+      }
     } else {
-      fatal_error("codegen_rvalue: unknown rvalue");
+      fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
 
   } else if (nb_children == 3) {
