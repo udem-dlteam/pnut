@@ -390,7 +390,7 @@ void cgc_add_global(int ident, int size, int width, ast type) {
   heap[binding+3] = size;
   heap[binding+4] = cgc_global_alloc;
   heap[binding+5] = type;
-  cgc_global_alloc += size * width;
+  cgc_global_alloc += width;
   cgc_globals = binding;
 }
 
@@ -1348,20 +1348,19 @@ void codegen_glo_var_decl(ast node) {
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
   int size;
-  int width = ref_type_width(type);
   int binding = cgc_lookup_var(name, cgc_globals);
 
   if (get_op(type) == '[') { // Array declaration
     size = get_val(get_child(type, 0));
   } else {
-    // All non-array types are represented as a word, even if they are smaller
+    // All non-array types have size 1
     size = 1;
   }
 
   handle_enum_struct_union_type_decl(type);
 
   if (binding == 0) {
-    cgc_add_global(name, size, width, type);
+    cgc_add_global(name, size, type_width_ast(type, true, false), type);
     binding = cgc_globals;
   }
 
@@ -1408,9 +1407,13 @@ void codegen_body(ast node) {
         init = get_child(x, 2);
 
         if (get_op(type) == '[') { // Array declaration
-          size = get_val(get_child(type, 0));
-          cgc_add_local(name, size, type);
-          grow_stack_bytes(size * ref_type_width(type));
+          size = type_width_ast(type, true, true);  // size in bytes (word aligned)
+          grow_stack_bytes(size);
+          size /= word_size; // size in words
+        } else if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+          size = struct_size(type); // size in bytes (word aligned)
+          grow_stack_bytes(size);
+          size /= word_size; // size in words
         } else {
           // All non-array types are represented as a word, even if they are smaller
           if (init != 0) {
@@ -1421,8 +1424,9 @@ void codegen_body(ast node) {
             push_reg(reg_X);
           }
           size = 1;
-          cgc_add_local(name, size, type);
         }
+
+        cgc_add_local(name, size, type);
 
       } else {
         codegen_statement(x);
