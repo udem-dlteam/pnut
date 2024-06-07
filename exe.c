@@ -70,6 +70,7 @@ const int char_width = 1;
 
 const int reg_X;
 const int reg_Y;
+const int reg_Z;
 const int reg_SP;
 const int reg_glo;
 
