@@ -18,11 +18,25 @@ int odd(int number)
   return even(abs(number)-1);
 }
 
+void putstring(char *s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
 int main() {
   int n1;
   int n2;
   n1 = even(10);
   n2 = odd(10);
-  printf("n1 = %d\n", n1);
-  printf("n2 = %d\n", n2);
+//  printf("n1 = %d\n", n1);
+//  printf("n2 = %d\n", n2);
+  putstring("n1 = ");
+  putchar(n1);
+  putchar('\n');
+  putstring("n2 = ");
+  putchar(n2);
+  putchar('\n');
+  return 0;
 }

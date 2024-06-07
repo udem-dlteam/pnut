@@ -1,23 +1,41 @@
+void putstring(char_ptr s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
 int main() {
   int_ptr arr;
   int acc;
-  int i;
 
   arr = malloc(100);
 
-  for(i = 0; i < 100; i++) {
+  int i = 0;
+  while(i < 100) {
     arr[i] = i;
+    i = i + 1;
   }
 
   acc = 0;
-  for(i = 0; i < 100; i++) {
+  while(i < 100) {
     acc += arr[i] * 13;
+    i = i + 1;
   }
-  printf("acc: %d\n", acc);
+  //printf("acc: %d\n", acc);
+  putstring("acc: ");
+  putchar(acc);
+  putchar('\n');
 
   acc = 0;
-  for(i = 0; i < 100; i++) {
+  int i = 0;
+  for(i < 100) {
     acc += (*(arr + i)) * 13;
+    i = i + 1;
   }
-  printf("acc: %d\n", acc);
+  //printf("acc: %d\n", acc);
+  putstring("acc: ");
+  putchar(acc);
+  putchar('\n');
+  return 0;
 }
