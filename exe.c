@@ -513,17 +513,151 @@ bool is_not_pointer_type(ast type) {
   return !is_pointer_type(type);
 }
 
+#ifndef PNUT_CC
+int struct_size(ast struct_type);
+int type_width_ast(ast type, bool array_value, bool word_align);
+#endif
+
+// Size an object of the given type would occupy in memory (in bytes).
+// If array_value is true, the size of the array is returned, otherwise the
+// size of the pointer is returned.
+// If word_align is true, the size is rounded up to the word size.
+int type_width(ast type, int stars, bool array_value, bool word_align) {
+  // All types have the same shape (kw, stars, ...) except for arrays so we
+  // handle array types separately.
+  if (get_op(type) == '[') {
+    // In certain contexts, we want to know the static size of the array (i.e.
+    // sizeof, in struct definitions, etc.) while in other contexts we care
+    // about the pointer (i.e. when passing an array to a function, etc.)
+    if (array_value) {
+      return round_up_to_word_size(get_val(get_child(type, 0)) * type_width_ast(get_child(type, 1), true, false));
+    } else {
+      return word_size; // Array is a pointer to the first element
+    }
+  } else if (stars) {
+    return word_size; // Pointer
+  }
+
+  // Basic type kw
+  switch (get_op(type)) {
+    case CHAR_KW:
+      if (word_align)
+        return word_size;
+      else
+        return char_width;
+    case STRUCT_KW:
+      return struct_size(type);
+    case VOID_KW:
+      fatal_error("type_width_ast: void type");
+      return 0;
+    default:
+      return word_size;
+  }
+}
+
+int type_width_ast(ast type, bool array_value, bool word_align) {
+  return type_width(type, get_val(type), array_value, word_align);
+}
+
+// Structs, enums and unions types come in 2 variants:
+//  - definition: the type contains the members of the struct/enum/union
+//  - reference: the type reference an already declared struct/enum/union and doesn't contain the members.
+//
+// We mostly want to work with type definitions, and not type references so
+// this function returns the type definition when passed a type reference.
+ast canonicalize_type(ast type) {
+  ast res = type;
+  int binding;
+
+  if (get_op(type) == STRUCT_KW AND get_child(type, 2) == 0) { // struct with empty def => reference
+    binding = cgc_lookup_struct(get_val(get_child(type, 1)), cgc_globals);
+    if (binding == 0) fatal_error("canonicalize_type: struct type not defined");
+    res = heap[binding+3];
+    if (get_val(type) != 0) { // Copy stars
+      res = clone_ast(res);
+      set_child(res, 0, get_child(type, 0));
+    }
+  } else if (get_op(type) == UNION_KW AND get_child(type, 2) == 0) { // union with empty def => reference
+    binding = cgc_lookup_union(get_val(get_child(type, 1)), cgc_globals);
+    if (binding == 0) fatal_error("canonicalize_type: union type not defined");
+    res = heap[binding+3];
+    if (get_val(type) != 0) { // Copy stars
+      res = clone_ast(res);
+      set_child(res, 0, get_child(type, 0));
+    }
+  } else if (get_op(type) == ENUM_KW AND get_child(type, 1) == 0) { // enum with empty def => reference
+    binding = cgc_lookup_enum(get_val(get_child(type, 0)), cgc_globals);
+    if (binding == 0) fatal_error("canonicalize_type: enum type not defined");
+    res = heap[binding+3];
+    if (get_val(type) != 0) { // Copy stars
+      res = clone_ast(res);
+      set_child(res, 0, get_child(type, 0));
+    }
+  }
+
+  return res;
+}
+
+// Size of a struct type, rounded up to the word size
+int struct_size(ast struct_type) {
+  ast members;
+  ast member_type;
+  int size = 0;
+
+  if (get_op(struct_type) != STRUCT_KW) fatal_error("struct_size: not a struct type");
+
+  members = get_child(canonicalize_type(struct_type), 2);
+
+  while (get_op(members) == ',') {
+    member_type = get_child(members, 1);
+    members = get_child(members, 2);
+    size += type_width_ast(member_type, true, true);
+  }
+
+  return round_up_to_word_size(size);
+}
+
+// Return offset of struct member
+int struct_member_offset(ast struct_type, ast member_ident) {
+  ast members = get_child(canonicalize_type(struct_type), 2);
+  ast member_type;
+  int size = 0;
+
+  while (get_op(members) == ',') {
+    if (get_val(member_ident) == get_val(get_child(members, 0))) {
+      return size;
+    }
+
+    member_type = get_child(members, 1);
+    members = get_child(members, 2);
+    size += round_up_to_word_size(type_width_ast(member_type, true, true));
+  }
+
+  fatal_error("struct_member_offset: member not found");
+  return 0;
+}
+
+// Find a struct member
+ast struct_member(ast struct_type, ast member_ident) {
+  ast members = get_child(canonicalize_type(struct_type), 2);
+
+  while (get_op(members) == ',') {
+    if (get_val(member_ident) == get_val(get_child(members, 0)))
+      return members;
+
+    members = get_child(members, 2);
+  }
+
+  fatal_error("struct_member: member not found");
+  return 0;
+}
+
 // Width of an object pointed to by a reference type.
 int ref_type_width(ast type) {
-  ast inner_type;
-
   if (get_op(type) == '[') {
-    inner_type = get_child(type, 1);
-    // For array of char (and not a pointer), width is 1.
-    if (get_op(inner_type) == CHAR_KW AND get_val(inner_type) == 0) return char_width; // char[]
-    else return word_size;
-  } else if (get_op(type) == CHAR_KW AND get_val(type) == 1) { // char*
-    return char_width;
+    return type_width_ast(get_child(type, 1), false, false); // size of inner type
+  } else if (get_val(type) == 1) { // pointer *
+    return type_width(type, 0, false, false); // size of inner type
   } else {
     return word_size;
   }
