@@ -618,7 +618,8 @@ ast value_type(ast node) {
   } else if (nb_children == 3) {
 
     if (op == '?') {
-      fatal_error("value_type: ternary operator not supported");
+      // We assume that the 2 cases have the same type.
+      return value_type(get_child(node, 1));
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with 3 children");
@@ -877,7 +878,8 @@ void codegen_rvalue(ast node) {
   int nb_children = get_nb_children(node);
   int binding;
   int ident;
-  int lbl;
+  int lbl1;
+  int lbl2;
   int left_width;
 
   if (nb_children == 0) {
@@ -1028,21 +1030,20 @@ void codegen_rvalue(ast node) {
       write_mem_operand(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
     } else if (op == AMP_AMP OR op == BAR_BAR) {
-      lbl = alloc_label();
+      lbl1 = alloc_label();
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_X);
-      grow_fs(-1);
       push_reg(reg_X);
       xor_reg_reg(reg_Y, reg_Y);
       if (op == AMP_AMP) {
-        jump_cond_reg_reg(EQ, lbl, reg_X, reg_Y);
+        jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       } else {
-        jump_cond_reg_reg(NE, lbl, reg_X, reg_Y);
+        jump_cond_reg_reg(NE, lbl1, reg_X, reg_Y);
       }
-      pop_reg(reg_X);
+      pop_reg(reg_X); grow_fs(-1);
       codegen_rvalue(get_child(node, 1));
       grow_fs(-1);
-      def_label(lbl);
+      def_label(lbl1);
     } else if (op == '(') {
       codegen_call(node);
     } else {
@@ -1052,7 +1053,20 @@ void codegen_rvalue(ast node) {
   } else if (nb_children == 3) {
 
     if (op == '?') {
-      fatal_error("codegen_rvalue: ternary operator not supported");
+      lbl1 = alloc_label(); // false label
+      lbl2 = alloc_label(); // end label
+      codegen_rvalue(get_child(node, 0));
+      pop_reg(reg_X);
+      grow_fs(-1);
+      xor_reg_reg(reg_Y, reg_Y);
+      jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
+      codegen_rvalue(get_child(node, 1)); // value when true
+      jump(lbl2);
+      def_label(lbl1);
+      grow_fs(-1); // here, the child#1 is not evaluated, so we adjust the stack
+      codegen_rvalue(get_child(node, 2)); // value when false
+      grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
+      def_label(lbl2);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with 3 children");
