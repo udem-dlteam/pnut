@@ -501,6 +501,20 @@ void assert_idents_are_safe(ast lst) {
   }
 }
 
+assert_var_decl_is_safe(ast decls){
+  variables = get_child(decls, 0);
+  while(variables != 0){ /* Loop through the list of variables */
+    variable = get_child(variables, 0);
+    ident_tok = get_child(variable, 0);
+    name = string_pool + get_val(ident_tok);
+    if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+      printf("%s ", name);
+      fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    }
+    variables = get_child(variables, 1); /* Move to the next variable */
+  }
+}
+
 text save_local_vars() {
   ast env = local_env;
   ast local_var;
