@@ -123,12 +123,25 @@ void write_mem_location(int base, int offset, int src, int width) {
   }
 }
 
-void shift_for_pointer_arith(int reg, int type_width) {
+int is_power_of_2(int n) {
+  return n != 0 AND (n & (n - 1)) == 0;
+}
+
+void mul_for_pointer_arith(int reg, int type_width) {
   int i = 0;
-  while (type_width > 1) {
-    i += 1;
-    type_width /= 2;
-    add_reg_reg(reg, reg);
+  int other_reg = reg == reg_X ? reg_Y : reg_X;
+
+  if (is_power_of_2(type_width)) {
+    while (type_width > 1) {
+      i += 1;
+      type_width /= 2;
+      add_reg_reg(reg, reg);
+    }
+  } else {
+    push_reg(other_reg);
+    mov_reg_imm(other_reg, type_width);
+    mul_reg_reg(reg, other_reg);
+    pop_reg(other_reg);
   }
 }
 
@@ -851,12 +864,12 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       // Check if one of the operands is a pointer
       // If so, multiply the other operand by the width of the pointer target object.
 
-      if (is_pointer_type(left_type) & is_not_pointer_type(right_type)) {
-        shift_for_pointer_arith(reg_Y, ref_type_width(left_type));
+      if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
+        mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
       }
 
-      if (is_pointer_type(right_type) & is_not_pointer_type(left_type)) {
-        shift_for_pointer_arith(reg_X, ref_type_width(right_type));
+      if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
+        mul_for_pointer_arith(reg_X, ref_type_width(right_type));
       }
 
       add_reg_reg(reg_X, reg_Y);
@@ -866,14 +879,12 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       // When both operands are pointers, the result is the difference between the two pointers divided by the width of the target object.
       // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
 
-      if (1) {
-        if (is_pointer_type(left_type) & is_pointer_type(right_type)) {
-          fatal_error("codegen_binop: subtraction between pointers not implemented");
-        } else if (is_pointer_type(left_type)) {
-          shift_for_pointer_arith(reg_Y, ref_type_width(left_type));
-        } else if (is_pointer_type(right_type)) {
-          shift_for_pointer_arith(reg_X, ref_type_width(right_type));
-        }
+      if (is_pointer_type(left_type) && is_pointer_type(right_type)) {
+        fatal_error("codegen_binop: subtraction between pointers not implemented");
+      } else if (is_pointer_type(left_type)) {
+        mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
+      } else if (is_pointer_type(right_type)) {
+        mul_for_pointer_arith(reg_X, ref_type_width(right_type));
       }
 
       sub_reg_reg(reg_X, reg_Y);
@@ -889,10 +900,10 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     else if (op == '[') {
       // Same as pointer addition for address calculation
       if (is_pointer_type(left_type) AND is_not_pointer_type(right_type)) {
-        shift_for_pointer_arith(reg_Y, ref_type_width(left_type));
+        mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
         width = ref_type_width(left_type);
       } else if (is_pointer_type(right_type) AND is_not_pointer_type(left_type)) {
-        shift_for_pointer_arith(reg_X, ref_type_width(right_type));
+        mul_for_pointer_arith(reg_X, ref_type_width(right_type));
         width = ref_type_width(right_type);
       } else {
         fatal_error("codegen_binop: invalid array access operands");
