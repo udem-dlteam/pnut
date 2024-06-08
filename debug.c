@@ -117,3 +117,17 @@ void show_ast(char* name, ast obj) {
     printf("%s[%d] = %d\n", name, i, heap[obj + i]);
   }
 }
+
+void show_struct(ast struct_type) {
+  ast members = get_child(canonicalize_type(struct_type), 2);
+
+  char* name = string_pool + get_val(get_val(get_child(struct_type, 1)));
+
+  printf("##### Struct %s #####\n", name);
+  printf("sizeof(%s) = %d\n", name, struct_size(struct_type));
+
+  while (get_op(members) == ',') {
+    printf("%s = obj[%d]\n", string_pool + get_val(get_val(get_child(members, 0))), struct_member_offset(struct_type, get_child(members, 0)));
+    members = get_child(members, 2);
+  }
+}
