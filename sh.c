@@ -551,7 +551,7 @@ text op_to_str(int op) {
   else if (op == LSHIFT)     return wrap_str(" << ");
   else if (op == MINUS_EQ)   return wrap_str(" -= ");
   else if (op == EXCL_EQ)    return wrap_str(" != ");
-  else if (op == PERCENT_EQ) return wrap_str(" %%= ");
+  else if (op == PERCENT_EQ) return wrap_str(" %= ");
   else if (op == PLUS_EQ)    return wrap_str(" += ");
   else if (op == RSHIFT_EQ)  return wrap_str(" >>= ");
   else if (op == RSHIFT)     return wrap_str(" >> ");
@@ -1236,7 +1236,7 @@ void comp_body(ast node) {
 void comp_statement(ast node, int else_if) {
   int op = get_op(node);
   text str;
-  ast patterns;
+  ast statement;
   int start_loop_end_actions_start;
   int start_loop_end_actions_end;
 
@@ -1336,45 +1336,55 @@ void comp_statement(ast node, int else_if) {
     if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
 
     while (get_op(node) == '{') {
-      patterns = get_child(node, 0);
-      if (get_op(patterns) != CASE_KW AND get_op(patterns) != DEFAULT_KW) {
+      statement = get_child(node, 0);
+      if (get_op(statement) != CASE_KW AND get_op(statement) != DEFAULT_KW) {
         fatal_error("comp_statement: switch body without case");
       }
 
-      node = get_child(node, 1);
-
       // Assemble the patterns
-      if (get_op(patterns) == CASE_KW) {
+      if (get_op(statement) == CASE_KW) {
         str = 0;
-        while (get_op(patterns) == CASE_KW) {
+        while (get_op(statement) == CASE_KW) {
           // This is much more permissive than what a C compiler would allow,
           // but Shell allows matching on arbitrary expression in case
           // patterns so it's fine. If we wanted to do this right, we'd check
           // that the pattern is a numeric literal or an enum identifier.
-          str = concatenate_strings_with(str, comp_rvalue(get_child(patterns, 0), RVALUE_CTX_BASE), wrap_char('|'));
-          patterns = get_child(patterns, 1);
+          str = concatenate_strings_with(str, comp_rvalue(get_child(statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
+          statement = get_child(statement, 1);
         }
       } else {
         str = wrap_str("*");
-        patterns = get_child(patterns, 0);
+        statement = get_child(statement, 0);
       }
 
       append_glo_decl(string_concat(str, wrap_str(")")));
 
       nest_level += 1;
-      // At this point, patterns points to the first statement of the block
-      comp_statement(patterns, false);
-
-      // And then we compile the rest of the statements following the case
-      while (get_op(node) == '{') {
-        if (get_op(get_child(node, 0)) == BREAK_KW) {
-          node = get_child(node, 1);
+      // At this point, statement points to the first statement of the block
+      // We simulate a do ... while loop so we first process the trailing statement
+      // from the case/default nodes, and then the rest of the block.
+      // node still points to the first case/default node, but the first iteration
+      // will move it to the next node.
+      while (1) {
+        if (get_op(statement) == BREAK_KW) {
+          node = get_child(node, 1); // skip the break
+          break;
+        } else if (get_op(statement) == RETURN_KW) {
+          comp_statement(statement, false);
+          node = get_child(node, 1); // skip the return
           break;
         } else if (get_op(get_child(node, 0)) == CASE_KW) {
-          fatal_error("comp_statement: case must be at the beginning of a switch block");
+          fatal_error("comp_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
+        } else {
+          comp_statement(statement, false);
         }
-        comp_statement(get_child(node, 0), false);
-        node = get_child(node, 1);
+
+        if (get_op(node) == '{') {
+          statement = get_child(node, 0);
+          node = get_child(node, 1);
+        } else {
+          break;
+        }
       }
 
       nest_level -= 1;
