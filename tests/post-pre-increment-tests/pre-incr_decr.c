@@ -50,7 +50,7 @@ void complexPreIncrementAndDecrement() {
 }
 
 int main() {
-  simplePreIncrement();
-  complexPreIncrement();
+  simplePreIncrementAndDecrement();
+  complexPreIncrementAndDecrement();
   return 0;
 }
