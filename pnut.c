@@ -87,6 +87,7 @@ enum {
   VOLATILE_KW,
   WHILE_KW,
   VAR_DECL,
+  VAR_DECLS,
   FUN_DECL,
 
   // Non-character operands
@@ -1690,9 +1691,10 @@ ast parse_definition(int local) {
   ast body;
   ast this_type;
   ast result = 0;
+  ast tail = 0;
+  ast current_declaration;
 
   if (is_type_starter(tok)) {
-
     type = parse_type();
 
     while (1) {
@@ -1757,23 +1759,30 @@ ast parse_definition(int local) {
 
         if (tok == '=') {
           get_tok();
-          init = parse_conditional_expression();
+            init = parse_conditional_expression();
         }
+        current_declaration = new_ast3(VAR_DECL, name, this_type, init); // Create a new declaration
 
-        result = new_ast3(VAR_DECL, name, this_type, init);
+        if(result == 0) { // First declaration
+          result = new_ast2(',', current_declaration, 0);
+          tail = result; // Keep track of the last declaration
+        } else {
+          set_child(tail, 1, new_ast2(',', current_declaration, 0)); // Link the new declaration to the last one
+          tail = get_child(tail, 1); // Update the last declaration
+        }
 
         if (tok == ';') {
           get_tok();
           break;
         } else if (tok == ',') {
           get_tok();
-          break;
+          continue; // Continue to the next declaration
         } else {
           syntax_error("';' or ',' expected");
         }
       }
     }
-    return result;
+    return new_ast1(VAR_DECLS, result);
   } else if (tok == TYPEDEF_KW) {
     // When parsing a typedef, the type is added to the types table.
     // Since the code generators don't do anything with typedefs, we then return

@@ -403,7 +403,6 @@ A variable is a LOCAL_VAR node with 4 children:
 */
 void add_var_to_local_env(ast ident_tok, int position, int kind) {
   ast var;
-
   /* Check if the variable is not in env. This should always do nothing */
   if (find_var_in_local_env(ident_tok) != -1) {
     fatal_error("add_var_to_local_env: variable already in local environment");
@@ -423,6 +422,23 @@ void add_var_to_local_env(ast ident_tok, int position, int kind) {
 }
 
 void add_vars_to_local_env(ast lst, int position, int kind) {
+  ast decls;
+  ast variables;
+  ast variable;
+  while (lst != 0) {
+    decls = get_child(lst, 0); /* VAR_DECLS node */
+    variables = get_child(decls, 0); /* List of variables */
+    while(variables != 0){ /* Loop through the list of variables */
+      variable = get_child(variables, 0); /* Variable node */
+      add_var_to_local_env(get_child(variable, 0), position, kind);
+      variables = get_child(variables, 1);
+      position += 1; /* Increment position */
+    }
+    lst = get_child(lst, 1);
+  }
+}
+
+void add_fun_params_to_local_env(ast lst, int position, int kind) {
   ast decl;
   while (lst != 0) {
     decl = get_child(lst, 0);
@@ -453,18 +469,34 @@ int variable_is_constant_param(ast local_var) {
   variables as special, we prevent their use. Additionally, EOF and NULL cannot
   be redefined.
 */
+
+void assert_var_decl_is_safe(ast variable){ /* Helper function for assert_idents_are_safe */
+  ast ident_tok = get_child(variable, 0);
+  char* name = string_pool + get_val(ident_tok);
+  if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+    printf("%s ", name);
+    fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+  }
+}
+
 void assert_idents_are_safe(ast lst) {
   ast ident_tok;
+  ast decls;
+  ast variables;
+  ast variable;
   char *name;
-  while (lst != 0) {
-    ident_tok = get_child(get_child(lst, 0), 0);
-    name = string_pool + get_val(ident_tok);
-
-    if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
-      printf("%s ", name);
-      fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+  while(lst != 0){
+    if(get_op(get_child(lst, 0)) == VAR_DECLS){ /* If it's a list of declarations */
+      decls = get_child(lst, 0);
+      variables = get_child(decls, 0);
+      while(variables != 0) { /* Loop through the list of variables */
+        variable = get_child(variables, 0);
+        assert_var_decl_is_safe(variable); /* Check the variables */
+        variables = get_child(variables, 1);
+      }
+    } else{
+      assert_var_decl_is_safe(get_child(lst, 0)); /* Check the variable */
     }
-
     lst = get_child(lst, 1);
   }
 }
@@ -1436,7 +1468,7 @@ void comp_statement(ast node, int else_if) {
     comp_statement(get_child(node, 1), false);
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
-  } else if (op == VAR_DECL) {
+  } else if (op == VAR_DECLS) {
     fatal_error("variable declaration must be at the beginning of a function");
   } else {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
@@ -1455,7 +1487,7 @@ ast get_leading_var_declarations(ast node) {
   if (get_op(node) == '{') {
     while (get_op(node) == '{') {
       local_var = get_child(node, 0);
-      if (get_op(local_var) != VAR_DECL) break;
+      if (get_op(local_var) != VAR_DECLS) break;
 
       /* Initialize list */
       new_tail = new_ast2(',', local_var, 0);
@@ -1548,6 +1580,8 @@ void comp_glo_fun_decl(ast node) {
   ast body = get_child(local_vars_and_body, 1);
   text comment = 0;
   int i;
+  ast decls;
+  ast vars;
   ast var;
   int save_loc_vars_fixup;
 
@@ -1556,7 +1590,7 @@ void comp_glo_fun_decl(ast node) {
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
 
-  add_vars_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
+  add_fun_params_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
 
   #ifdef OPTIMIZE_CONSTANT_PARAM
@@ -1601,10 +1635,18 @@ void comp_glo_fun_decl(ast node) {
 
   /* Initialize local vars */
   while (local_vars != 0) {
-    var = get_child(local_vars, 0);
-    /* TODO: Replace with ternary expression? */
-    if (get_child(var, 2) == 0) { comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0)); }
-    else { comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2)); }
+    decls = get_child(local_vars, 0); /* List of VAR_DECLS */
+    vars = get_child(decls, 0); /* VAR_DECL list */
+    while(vars != 0) {
+      var = get_child(vars, 0); /* Single VAR_DECL */
+      /* TODO: Replace with ternary expression? */
+      if (get_child(var, 2) == 0) {
+        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0));
+      } else {
+        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2));
+      }
+      vars = get_child(vars, 1); /* Next VAR_DECL */
+    }
     local_vars = get_child(local_vars, 1);
   }
 
@@ -1657,7 +1699,6 @@ text comp_constant(ast node) {
 }
 
 void comp_glo_var_decl(ast node) {
-
   ast name = get_child(node, 0);
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
@@ -1725,13 +1766,20 @@ The 3 types of supported top level declarations are:
 Structures, enums, and unions are not supported.
 */
 void comp_glo_decl(ast node) {
+  ast declarations;
+  ast variable;
   int op = get_op(node);
   fun_gensym_ix = 0;
 
   if (op == '=') { /* Assignments */
    comp_assignment(get_child(node, 0), get_child(node, 1));
-  } else if (op == VAR_DECL) {
-    comp_glo_var_decl(node);
+  } else if (op == VAR_DECLS) { /* Variable declarations */
+    declarations = get_child(node, 0);
+    while (declarations != 0) { /* Multiple variable declarations */
+      variable = get_child(declarations, 0); /* Single variable declaration */
+      comp_glo_var_decl(variable); /* Compile variable declaration */
+      declarations = get_child(declarations, 1); /* Next variable declaration */
+    }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
   } else if (op == ENUM_KW) {
