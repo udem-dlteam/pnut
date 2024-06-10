@@ -714,7 +714,9 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       /* TODO: Reuse ast node? */
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else if ((op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE)) {
-      /* The parser fails on postfix ++/--, so this is only preincrement/predecrement */
+      contains_side_effects = true;
+      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
+    } else if ((op == PLUS_PLUS_POST) OR (op == MINUS_MINUS_POST)) {
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else {
