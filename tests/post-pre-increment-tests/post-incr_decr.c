@@ -50,7 +50,7 @@ void complexPostIncrementAndDecrement() {
 }
 
 int main() {
-  simplePostIncrement();
-  complexPostIncrement();
+  simplePostIncrementAndDecrement();
+  complexPostIncrementAndDecrement();
   return 0;
 }
