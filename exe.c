@@ -1102,7 +1102,7 @@ void codegen_begin() {
   jump(setup_lbl);
 }
 
-void codegen_glo_var_decl(ast node) {//issue here?
+void codegen_glo_var_decl(ast node) {
 
   ast name = get_child(node, 0);
   ast type = get_child(node, 1);
@@ -1129,8 +1129,7 @@ void codegen_glo_var_decl(ast node) {//issue here?
     init_next_lbl = alloc_label();
 
     if (init != 0) {
-//      printf("name = %s\n", string_pool+get_val(name));
-//      printf("init = %d\n", get_val(init));
+
       codegen_rvalue(init);
     } else {
       xor_reg_reg(reg_X, reg_X);
