@@ -478,9 +478,11 @@ void assert_vars_are_safe(ast lst) {
       fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
     }
 
-    if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+    // Local variables don't correspond to memory locations, and can't store
+    // more than 1 number/pointer.
+    if (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
       printf("%s ", name);
-      fatal_error("struct value type is not supported for shell backend. Use a reference type instead.");
+      fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
 
     lst = get_child(lst, 1);
@@ -1714,9 +1716,13 @@ void comp_glo_var_decl(ast node) {
 
   if (init == 0) init = new_ast0(INTEGER, 0);
 
-  if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+  // Arrays of structs and struct value types are not supported for now.
+  // When we have type information on the local and global variables, we'll
+  // be able to generate the correct code for these cases.
+  if ((get_op(type) == '[' && get_op(get_child(type, 1)) == STRUCT_KW && get_val(get_child(type, 1)) == 0)
+    || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
     printf("%s ", string_pool + get_val(name));
-    fatal_error("struct value type is not supported for shell backend. Use a reference type instead.");
+    fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
   }
 
   if (get_op(type) == '[') { /* Array declaration */
@@ -1804,9 +1810,11 @@ void comp_struct(ast ident, ast members) {
     field_type = get_child(members, 1);
     comp_assignment_constant(struct_member_var(get_child(members, 0)), offset);
     members = get_child(members, 2);
-    if (get_op(field_type) == '[') {
-      set_val(offset, get_val(offset) - get_val(get_child(field_type, 0)));
-    } else if (get_op(field_type) == STRUCT_KW AND get_val(field_type) == 0) {
+
+    // Arrays and struct value types are not supported for now.
+    // When we have type information on the local and global variables, we'll
+    // be able to generate the correct code for these cases.
+    if (get_op(field_type) == '[' || (get_op(field_type) == STRUCT_KW && get_val(field_type) == 0)) {
       fatal_error("Nested structures not supported by shell backend. Use a reference type instead.");
     } else {
       set_val(offset, get_val(offset) - 1);
