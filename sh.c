@@ -28,7 +28,7 @@ int TEXT_FROM_POOL = 2;
 #ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
 
-text comp_array_lvalue(ast node);
+text comp_lvalue_address(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
@@ -939,11 +939,9 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       if (get_op(get_child(node, 0)) == INT_KW
        || get_op(get_child(node, 0)) == CHAR_KW
        || get_op(get_child(node, 0)) == VOID_KW
-       || (( get_op(get_child(node, 0)) == STRUCT_KW
-          || get_op(get_child(node, 0)) == UNION_KW
-          || get_op(get_child(node, 0)) == ENUM_KW)
-         && get_child(get_child(node, 0), 0) >= 1)) // If it's a pointer
-      {
+       || get_op(get_child(node, 0)) == ENUM_KW
+       || (( get_op(get_child(node, 0)) == STRUCT_KW || get_op(get_child(node, 0)) == UNION_KW)
+          && get_child(get_child(node, 0), 0) >= 1)) { // If it's a pointer
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
       } else if (get_op(get_child(node, 0)) == STRUCT_KW) {
         return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)));
@@ -951,8 +949,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
       }
     } else if (op == '&') {
-      fatal_error("comp_rvalue_go: address of operator not supported");
-      return 0;
+      return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(get_child(node, 0)));
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
@@ -968,13 +965,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == '[') { // array indexing
-      sub1 = comp_array_lvalue(get_child(node, 0));
+      sub1 = comp_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
     } else if (op == ARROW) { // member access is implemented like array access
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
       sub2 = struct_member_var(get_child(node, 1));
-      return wrap_if_needed(true, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))")));
+      return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))")));
     } else if (op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '<' OR op == '>') {
       if (context == RVALUE_CTX_TEST) {
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0);
@@ -1152,27 +1149,43 @@ text comp_rvalue(ast node, int context) {
   return result;
 }
 
-text comp_array_lvalue(ast node) {
+// Unlike in the native backend, there are 2 ways to compile a lvalue.
+//
+// The first (comp_lvalue) returns the variable that represent the memory
+// location, this is useful when we're assigning to the lvalue.
+// The second (comp_lvalue_address) produces the address of the memory location.
+// This is mostly used to implement &.
+//
+// This difference is important as local variables don't have a memory location
+// so we can't take their address and so their lvalue is just their name.
+text comp_lvalue_address(ast node) {
   int op = get_op(node);
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING) {
-    return env_var(node);
-  } else if (op == '*') {
-    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
-    return string_concat(wrap_char('_'), sub1);
+  if (op == IDENTIFIER) {
+    // TODO: Support global variables when SUPPORT_ADDRESS_OF_OP
+    //
+    // This is currently not supported because we treat as globals the enums
+    // and other hardcoded constants which is not what we want.
+    //
+    // We need to integrate the bindings local used in the exe backend here so
+    // we can know more about variables other than "it's local" and "it's not
+    // local so it must be global".
+    fatal_error("comp_rvalue_go: can't take the address of a local variable");
   } else if (op == '[') {
-    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
-    return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+    return string_concat3(sub1, wrap_char('+'), sub2);
+  } else if (op == '*') {
+    return comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
   } else if (op == ARROW) {
-    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child(node, 1));
-    return string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))"));
+    return string_concat3(sub1, wrap_str(" + "), sub2);
   } else {
     printf("op=%d %c\n", op, op);
-    fatal_error("comp_array_lvalue: unknown lvalue");
+    fatal_error("comp_lvalue_address: unknown lvalue");
     return 0;
   }
 }
@@ -1185,14 +1198,14 @@ text comp_lvalue(ast node) {
   if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_EMPTY OR op == IDENTIFIER_DOLLAR) {
     return env_var(node);
   } else if (op == '[') {
-    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
   } else if (op == ARROW) {
-    sub1 = comp_array_lvalue(get_child(node, 0));
+    sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child(node, 1));
     return string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))"));
   } else {
@@ -1892,7 +1905,7 @@ void prologue() {
   printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
 
   #ifdef SUPPORT_ADDRESS_OF_OP
-  printf("defglo() { : $(($1 = $2)) ; }\n\n");
+  printf("defglo() { alloc 1; : $(( $1 = __addr )) ; }\n\n");
   #endif
 
   printf("# Setup argc, argv\n");
