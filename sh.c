@@ -470,7 +470,7 @@ int variable_is_constant_param(ast local_var) {
   be redefined.
 */
 
-void assert_var_decl_is_safe(ast variable){ /* Helper function for assert_idents_are_safe */
+void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_idents_are_safe */
   ast ident_tok = get_child(variable, 0);
   char* name = string_pool + get_val(ident_tok);
   if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
@@ -480,11 +480,9 @@ void assert_var_decl_is_safe(ast variable){ /* Helper function for assert_idents
 }
 
 void assert_idents_are_safe(ast lst) {
-  ast ident_tok;
   ast decls;
   ast variables;
   ast variable;
-  char *name;
   while(lst != 0){
     if(get_op(get_child(lst, 0)) == VAR_DECLS){ /* If it's a list of declarations */
       decls = get_child(lst, 0);
