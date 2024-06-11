@@ -710,14 +710,8 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 1) {
-    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
+    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!') OR (op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE) OR (op == PLUS_PLUS_POST) OR (op == MINUS_MINUS_POST)) {
       /* TODO: Reuse ast node? */
-      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
-    } else if ((op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE)) {
-      contains_side_effects = true;
-      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
-    } else if ((op == PLUS_PLUS_POST) OR (op == MINUS_MINUS_POST)) {
-      contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else {
       printf("1: op=%d %c", op, op);
@@ -952,7 +946,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str("--")));
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str("++")));
+      return wrap_if_needed(true, context, test_side_effects, string_concat4(wrap_str("("), sub1, wrap_str(" += 1)"), wrap_str(" - 1")));
     } else if (op == '&') {
       fatal_error("comp_rvalue_go: address of operator not supported");
       return 0;
