@@ -771,8 +771,15 @@ ast value_type(ast node) {
         fatal_error("pointer_width: non pointer is being dereferenced with *");
       }
     } else if (op == '&') {
-      // TODO: Check that it's a pointable object?
-      return word_size; // always return an address
+      left_type = value_type(get_child(node, 0));
+      if (get_op(left_type) == '[') {
+        left_type = clone_ast(get_child(left_type, 1)); // Inner type
+        set_val(left_type, get_val(left_type) + 1); // Increment star by 2, to account for the [ we just removed
+      } else {
+        left_type = clone_ast(left_type);
+        set_val(left_type, get_val(left_type) + 1); // Increment star by 1
+      }
+      return left_type;
     } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
