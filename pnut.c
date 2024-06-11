@@ -1591,6 +1591,12 @@ ast parse_declaration() {
     */
 
     result = new_ast3(VAR_DECL, name, type, 0);
+  } else if (tok == IDENTIFIER) {
+    // Support K&R param syntax in function definition
+    name = val;
+    expect_tok(IDENTIFIER);
+    type = new_ast0(INT_KW, 0);
+    result = new_ast3(VAR_DECL, name, type, 0);
   }
 
   return result;
