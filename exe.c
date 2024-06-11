@@ -618,8 +618,10 @@ ast value_type(ast node) {
         putchar('\n');
         fatal_error("value_type: function not found");
       }
+    } else if (op == CAST) {
+      return get_child(node, 0);
     } else {
-      fatal_error("value_type: unknown expression");
+      fatal_error("value_type: unknown expression with 2 children");
     }
 
   } else if (nb_children == 3) {
@@ -842,7 +844,7 @@ int codegen_lvalue(ast node) {
       codegen_binop('+', get_child(node, 0), get_child(node, 1));
       grow_fs(-2);
     } else {
-      fatal_error("codegen_lvalue: unknown lvalue");
+      fatal_error("codegen_lvalue: unknown lvalue with 2 children");
     }
 
   } else {
@@ -1053,8 +1055,10 @@ void codegen_rvalue(ast node) {
       def_label(lbl1);
     } else if (op == '(') {
       codegen_call(node);
+    } else if (op == CAST) {
+      codegen_rvalue(get_child(node, 1));
     } else {
-      fatal_error("codegen_rvalue: unknown rvalue");
+      fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
 
   } else if (nb_children == 3) {
