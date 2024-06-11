@@ -556,10 +556,8 @@ bool is_not_pointer_type(ast type) {
   return !is_pointer_type(type);
 }
 
-#ifndef PNUT_CC
 int struct_size(ast struct_type);
 int type_width_ast(ast type, bool array_value, bool word_align);
-#endif
 
 // Size an object of the given type would occupy in memory (in bytes).
 // If array_value is true, the size of the array is returned, otherwise the
@@ -950,11 +948,9 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   push_reg(reg_X);
 }
 
-#ifndef PNUT_CC
 void codegen_rvalue(ast node);
 void codegen_statement(ast node);
 int codegen_lvalue(ast node);
-#endif
 
 int codegen_param(ast param) {
   int type = value_type(param);
@@ -1849,14 +1845,15 @@ void codegen_glo_fun_decl(ast node) {
     fatal_error("add_params: returning arrays from function not supported");
   }
 
-  if (body != 0) {
+  binding = cgc_lookup_fun(name, cgc_globals);
 
-    binding = cgc_lookup_fun(name, cgc_globals);
-    if (binding == 0) {
-      lbl = alloc_label();
-      cgc_add_global_fun(name, lbl, fun_type);
-      binding = cgc_globals;
-    }
+  if (binding == 0) {
+    lbl = alloc_label();
+    cgc_add_global_fun(name, lbl, fun_type);
+    binding = cgc_globals;
+  }
+
+  if (body != 0) {
 
     lbl = heap[binding+4];
 
