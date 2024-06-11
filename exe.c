@@ -538,8 +538,12 @@ bool is_pointer_type(ast type) {
 
 // An aggregate type is either an array type or a struct/union type (that's not a reference)
 bool is_aggregate_type(ast type) {
-  return get_op(type) == '['
-    || ((get_op(type) == STRUCT_KW || get_op(type) == UNION_KW) && get_val(type) == 0);
+  if ( ((get_op(type) == STRUCT_KW || get_op(type) == UNION_KW) && get_val(type) == 0)
+    || get_op(type) == '[') {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 bool is_type(ast type) {
@@ -587,10 +591,7 @@ int type_width(ast type, int stars, bool array_value, bool word_align) {
   // Basic type kw
   switch (get_op(type)) {
     case CHAR_KW:
-      if (word_align)
-        return word_size;
-      else
-        return char_width;
+      return word_align ? word_size : char_width;
     case STRUCT_KW:
       return struct_size(type);
     case VOID_KW:
@@ -1185,8 +1186,8 @@ void codegen_rvalue(ast node) {
         // local arrays are allocated on the stack, so no need to dereference
         // same thing for non-pointer structs and unions.
         if (get_op(heap[binding+5]) != '['
-          && !(get_op(heap[binding+5]) == STRUCT_KW && get_val(heap[binding+5]) == 0)
-          && !(get_op(heap[binding+5]) == UNION_KW && get_val(heap[binding+5]) == 0)) {
+          && (get_op(heap[binding+5]) != STRUCT_KW || get_val(heap[binding+5]) != 0)
+          && (get_op(heap[binding+5]) != UNION_KW || get_val(heap[binding+5]) != 0)) {
           mov_reg_mem(reg_X, reg_X, 0);
         }
         push_reg(reg_X);
@@ -1198,8 +1199,8 @@ void codegen_rvalue(ast node) {
           // global arrays are allocated on the stack, so no need to dereference
           // same thing for non-pointer structs and unions.
           if (get_op(heap[binding+5]) != '['
-            && !(get_op(heap[binding+5]) == STRUCT_KW && get_val(heap[binding+5]) == 0)
-            && !(get_op(heap[binding+5]) == UNION_KW && get_val(heap[binding+5]) == 0)) {
+            && (get_op(heap[binding+5]) != STRUCT_KW || get_val(heap[binding+5]) != 0)
+            && (get_op(heap[binding+5]) != UNION_KW || get_val(heap[binding+5]) != 0)) {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
@@ -1956,6 +1957,7 @@ void rt_free() {
   // Free are NO-OP for now
   // This function cannot be empty or it will be considered a forward reference
   return;
+  fatal_error("rt_free: free is no-op");
 }
 
 void codegen_end() {
