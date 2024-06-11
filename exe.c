@@ -1536,6 +1536,7 @@ void codegen_glo_var_decl(ast node) {
     init_next_lbl = alloc_label();
 
     if (init != 0) {
+
       codegen_rvalue(init);
     } else {
       xor_reg_reg(reg_X, reg_X);
@@ -1553,7 +1554,8 @@ void codegen_glo_var_decl(ast node) {
 }
 
 void codegen_body(ast node) {
-
+  ast decls;
+  ast variable;
   ast x;
   int save_fs = cgc_fs;
   int save_locals = cgc_locals;
@@ -1563,36 +1565,39 @@ void codegen_body(ast node) {
   int size;
 
   if (node != 0) {
-
     while (get_op(node) == '{') {
       x = get_child(node, 0);
-      if (get_op(x) == VAR_DECL) {
+      if (get_op(x) == VAR_DECLS) { // Variable declaration
+        decls = get_child(x, 0); // Declaration list
+        while(decls != 0) { // Multiple variable declarations
+          variable = get_child(decls, 0); // Single variable declaration
+          name = get_child(variable, 0);
+          type = get_child(variable, 1);
+          init = get_child(variable, 2);
 
-        name = get_child(x, 0);
-        type = get_child(x, 1);
-        init = get_child(x, 2);
-
-        if (get_op(type) == '[') { // Array declaration
-          size = type_width_ast(type, true, true);  // size in bytes (word aligned)
-          grow_stack_bytes(size);
-          size /= word_size; // size in words
-        } else if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
-          size = struct_size(type); // size in bytes (word aligned)
-          grow_stack_bytes(size);
-          size /= word_size; // size in words
-        } else {
-          // All non-array types are represented as a word, even if they are smaller
-          if (init != 0) {
-            codegen_rvalue(init);
-            grow_fs(-1);
+          if (get_op(type) == '[') { // Array declaration
+            size = type_width_ast(type, true, true);  // size in bytes (word aligned)
+            grow_stack_bytes(size);
+            size /= word_size; // size in words
+          } else if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+            size = struct_size(type); // size in bytes (word aligned)
+            grow_stack_bytes(size);
+            size /= word_size; // size in words
           } else {
-	          xor_reg_reg(reg_X, reg_X);
-            push_reg(reg_X);
-          }
-          size = 1;
-        }
+            // All non-array types are represented as a word, even if they are smaller
+            if (init != 0) {
+              codegen_rvalue(init);
+              grow_fs(-1);
+            } else {
+              xor_reg_reg(reg_X, reg_X);
+              push_reg(reg_X);
+            }
 
-        cgc_add_local(name, size, type);
+            size = 1;
+          }
+          cgc_add_local(name, size, type);
+          decls = get_child(decls, 1); // Move to the next declaration in the list
+        }
 
       } else {
         codegen_statement(x);
@@ -1889,11 +1894,17 @@ void codegen_glo_fun_decl(ast node) {
 }
 
 void codegen_glo_decl(ast node) {
-
+  ast decls;
+  ast variable;
   int op = get_op(node);
 
-  if (op == VAR_DECL) {
-    codegen_glo_var_decl(node);
+  if (op == VAR_DECLS) {
+    decls = get_child(node, 0); // Declaration list
+    while (decls != 0) { // Multiple variable declarations
+      variable = get_child(decls, 0); // Single variable declaration
+      codegen_glo_var_decl(variable); // Process each variable declaration
+      decls = get_child(decls, 1); // Move to the next variable declaration in the list
+    }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {

@@ -35,6 +35,7 @@ void comp_fun_call(ast node, ast assign_to);
 void comp_body(ast node);
 void comp_statement(ast node, int else_if);
 void mark_mutable_variables_body(ast node);
+void handle_enum_struct_union_type_decl(ast node);
 
 #endif
 
@@ -411,7 +412,6 @@ A variable is a LOCAL_VAR node with 4 children:
 */
 void add_var_to_local_env(ast ident_tok, int position, int kind) {
   ast var;
-
   /* Check if the variable is not in env. This should always do nothing */
   if (find_var_in_local_env(ident_tok) != -1) {
     fatal_error("add_var_to_local_env: variable already in local environment");
@@ -431,6 +431,23 @@ void add_var_to_local_env(ast ident_tok, int position, int kind) {
 }
 
 void add_vars_to_local_env(ast lst, int position, int kind) {
+  ast decls;
+  ast variables;
+  ast variable;
+  while (lst != 0) {
+    decls = get_child(lst, 0); /* VAR_DECLS node */
+    variables = get_child(decls, 0); /* List of variables */
+    while(variables != 0){ /* Loop through the list of variables */
+      variable = get_child(variables, 0); /* Variable node */
+      add_var_to_local_env(get_child(variable, 0), position, kind);
+      variables = get_child(variables, 1);
+      position += 1; /* Increment position */
+    }
+    lst = get_child(lst, 1);
+  }
+}
+
+void add_fun_params_to_local_env(ast lst, int position, int kind) {
   ast decl;
   while (lst != 0) {
     decl = get_child(lst, 0);
@@ -464,27 +481,40 @@ int variable_is_constant_param(ast local_var) {
   Also, the shell backend doesn't support variables with an non-reference struct
   type.
 */
+
+void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_idents_are_safe */
+  ast ident_tok = get_child(variable, 0);
+  char* name = string_pool + get_val(ident_tok);
+  ast type = get_child(variable, 1);
+  if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+    printf("%s ", name);
+    fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+  }
+
+  // Local variables don't correspond to memory locations, and can't store
+  // more than 1 number/pointer.
+  if (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
+    printf("%s ", name);
+    fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
+  }
+}
+
 void assert_vars_are_safe(ast lst) {
-  ast ident_tok;
-  ast type;
-  char *name;
-  while (lst != 0) {
-    ident_tok = get_child(get_child(lst, 0), 0);
-    type = get_child(get_child(lst, 0), 1);
-    name = string_pool + get_val(ident_tok);
-
-    if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
-      printf("%s ", name);
-      fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+  ast decls;
+  ast variables;
+  ast variable;
+  while(lst != 0){
+    if(get_op(get_child(lst, 0)) == VAR_DECLS){ /* If it's a list of declarations */
+      decls = get_child(lst, 0);
+      variables = get_child(decls, 0);
+      while(variables != 0) { /* Loop through the list of variables */
+        variable = get_child(variables, 0);
+        assert_var_decl_is_safe(variable); /* Check the variables */
+        variables = get_child(variables, 1);
+      }
+    } else{
+      assert_var_decl_is_safe(get_child(lst, 0)); /* Check the variable */
     }
-
-    // Local variables don't correspond to memory locations, and can't store
-    // more than 1 number/pointer.
-    if (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
-      printf("%s ", name);
-      fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
-    }
-
     lst = get_child(lst, 1);
   }
 }
@@ -571,7 +601,7 @@ text op_to_str(int op) {
   else if (op == LSHIFT)     return wrap_str(" << ");
   else if (op == MINUS_EQ)   return wrap_str(" -= ");
   else if (op == EXCL_EQ)    return wrap_str(" != ");
-  else if (op == PERCENT_EQ) return wrap_str(" %%= ");
+  else if (op == PERCENT_EQ) return wrap_str(" %= ");
   else if (op == PLUS_EQ)    return wrap_str(" += ");
   else if (op == RSHIFT_EQ)  return wrap_str(" >>= ");
   else if (op == RSHIFT)     return wrap_str(" >> ");
@@ -1295,10 +1325,91 @@ void comp_body(ast node) {
   }
 }
 
+// Return if the statement is a break or return statement, meaning that the block should be terminated.
+// A switch conditional block is considered terminated if it ends with a break or return statement.
+bool comp_switch_block_statement(ast node, bool start_in_tail_position) {
+  if (get_op(node) == BREAK_KW) {
+    return true;
+  } else if (get_op(node) == RETURN_KW) {
+    // A return marks the end of the conditional block, so it's in tail position
+    in_tail_position = start_in_tail_position;
+    comp_statement(node, false);
+    return true;
+  } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
+    fatal_error("comp_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
+  } else {
+    comp_statement(node, false);
+    return false;
+  }
+}
+
+void comp_switch(ast node) {
+  int start_in_tail_position = in_tail_position;
+  ast statement;
+  text str;
+
+  append_glo_decl(string_concat3(
+      wrap_str("case "),
+      comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE),
+      wrap_str(" in")
+    ));
+
+  nest_level += 1;
+
+  node = get_child(node, 1);
+
+  if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
+
+  while (get_op(node) == '{') {
+    statement = get_child(node, 0);
+    node = get_child(node, 1);
+    if (get_op(statement) != CASE_KW AND get_op(statement) != DEFAULT_KW) {
+      fatal_error("comp_statement: switch body without case");
+    }
+
+    // Assemble the patterns
+    if (get_op(statement) == CASE_KW) {
+      str = 0;
+      while (get_op(statement) == CASE_KW) {
+        // This is much more permissive than what a C compiler would allow,
+        // but Shell allows matching on arbitrary expression in case
+        // patterns so it's fine. If we wanted to do this right, we'd check
+        // that the pattern is a numeric literal or an enum identifier.
+        str = concatenate_strings_with(str, comp_rvalue(get_child(statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
+        statement = get_child(statement, 1);
+      }
+    } else {
+      str = wrap_str("*");
+      statement = get_child(statement, 0);
+    }
+
+    append_glo_decl(string_concat(str, wrap_str(")")));
+
+    nest_level += 1;
+
+    in_tail_position = false;
+
+    // case and default nodes contain the first statement of the block. We add it to the list of statements to process.
+    node = new_ast2('{', statement, node); // Allocating memory isn't ideal but it makes the code tidier
+
+    while (get_op(node) == '{') {
+      statement = get_child(node, 0);
+      node = get_child(node, 1);
+      // If we encounter a break or return statement, we stop processing the block
+      if (comp_switch_block_statement(statement, start_in_tail_position)) break;
+    }
+
+    nest_level -= 1;
+    append_glo_decl(wrap_str(";;"));
+  }
+
+  nest_level -= 1;
+  append_glo_decl(wrap_str("esac"));
+}
+
 void comp_statement(ast node, int else_if) {
   int op = get_op(node);
   text str;
-  ast patterns;
   int start_loop_end_actions_start;
   int start_loop_end_actions_end;
 
@@ -1385,67 +1496,7 @@ void comp_statement(ast node, int else_if) {
 
     append_glo_decl(wrap_str("done"));
   } else if (op == SWITCH_KW) {
-    append_glo_decl(string_concat3(
-      wrap_str("case "),
-      comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE),
-      wrap_str(" in")
-    ));
-
-    nest_level += 1;
-
-    node = get_child(node, 1);
-
-    if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
-
-    while (get_op(node) == '{') {
-      patterns = get_child(node, 0);
-      if (get_op(patterns) != CASE_KW AND get_op(patterns) != DEFAULT_KW) {
-        fatal_error("comp_statement: switch body without case");
-      }
-
-      node = get_child(node, 1);
-
-      // Assemble the patterns
-      if (get_op(patterns) == CASE_KW) {
-        str = 0;
-        while (get_op(patterns) == CASE_KW) {
-          // This is much more permissive than what a C compiler would allow,
-          // but Shell allows matching on arbitrary expression in case
-          // patterns so it's fine. If we wanted to do this right, we'd check
-          // that the pattern is a numeric literal or an enum identifier.
-          str = concatenate_strings_with(str, comp_rvalue(get_child(patterns, 0), RVALUE_CTX_BASE), wrap_char('|'));
-          patterns = get_child(patterns, 1);
-        }
-      } else {
-        str = wrap_str("*");
-        patterns = get_child(patterns, 0);
-      }
-
-      append_glo_decl(string_concat(str, wrap_str(")")));
-
-      nest_level += 1;
-      // At this point, patterns points to the first statement of the block
-      comp_statement(patterns, false);
-
-      // And then we compile the rest of the statements following the case
-      while (get_op(node) == '{') {
-        if (get_op(get_child(node, 0)) == BREAK_KW) {
-          node = get_child(node, 1);
-          break;
-        } else if (get_op(get_child(node, 0)) == CASE_KW) {
-          fatal_error("comp_statement: case must be at the beginning of a switch block");
-        }
-        comp_statement(get_child(node, 0), false);
-        node = get_child(node, 1);
-      }
-
-      nest_level -= 1;
-
-      append_glo_decl(wrap_str(";;"));
-    }
-
-    nest_level -= 1;
-    append_glo_decl(wrap_str("esac"));
+    comp_switch(node);
   } else if (op == BREAK_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
     /* TODO: What's the semantic of break? Should we run the end of loop action before breaking? */
@@ -1488,7 +1539,7 @@ void comp_statement(ast node, int else_if) {
     comp_statement(get_child(node, 1), false);
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
-  } else if (op == VAR_DECL) {
+  } else if (op == VAR_DECLS) {
     fatal_error("variable declaration must be at the beginning of a function");
   } else {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
@@ -1507,7 +1558,7 @@ ast get_leading_var_declarations(ast node) {
   if (get_op(node) == '{') {
     while (get_op(node) == '{') {
       local_var = get_child(node, 0);
-      if (get_op(local_var) != VAR_DECL) break;
+      if (get_op(local_var) != VAR_DECLS) break;
 
       /* Initialize list */
       new_tail = new_ast2(',', local_var, 0);
@@ -1600,6 +1651,8 @@ void comp_glo_fun_decl(ast node) {
   ast body = get_child(local_vars_and_body, 1);
   text comment = 0;
   int i;
+  ast decls;
+  ast vars;
   ast var;
   int save_loc_vars_fixup;
 
@@ -1608,7 +1661,7 @@ void comp_glo_fun_decl(ast node) {
   assert_vars_are_safe(params);
   assert_vars_are_safe(local_vars);
 
-  add_vars_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
+  add_fun_params_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
 
   #ifdef OPTIMIZE_CONSTANT_PARAM
@@ -1653,10 +1706,18 @@ void comp_glo_fun_decl(ast node) {
 
   /* Initialize local vars */
   while (local_vars != 0) {
-    var = get_child(local_vars, 0);
-    /* TODO: Replace with ternary expression? */
-    if (get_child(var, 2) == 0) { comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0)); }
-    else { comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2)); }
+    decls = get_child(local_vars, 0); /* List of VAR_DECLS */
+    vars = get_child(decls, 0); /* VAR_DECL list */
+    while(vars != 0) {
+      var = get_child(vars, 0); /* Single VAR_DECL */
+      /* TODO: Replace with ternary expression? */
+      if (get_child(var, 2) == 0) {
+        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0));
+      } else {
+        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2));
+      }
+      vars = get_child(vars, 1); /* Next VAR_DECL */
+    }
     local_vars = get_child(local_vars, 1);
   }
 
@@ -1709,12 +1770,13 @@ text comp_constant(ast node) {
 }
 
 void comp_glo_var_decl(ast node) {
-
   ast name = get_child(node, 0);
   ast type = get_child(node, 1);
   ast init = get_child(node, 2);
 
   if (init == 0) init = new_ast0(INTEGER, 0);
+
+  handle_enum_struct_union_type_decl(type);
 
   // Arrays of structs and struct value types are not supported for now.
   // When we have type information on the local and global variables, we'll
@@ -1850,14 +1912,20 @@ void handle_enum_struct_union_type_decl(ast type) {
     - struct declarations
 */
 void comp_glo_decl(ast node) {
+  ast declarations;
+  ast variable;
   int op = get_op(node);
   fun_gensym_ix = 0;
 
   if (op == '=') { /* Assignments */
    comp_assignment(get_child(node, 0), get_child(node, 1));
-  } else if (op == VAR_DECL) {
-    handle_enum_struct_union_type_decl(get_child(node, 1));
-    comp_glo_var_decl(node);
+  } else if (op == VAR_DECLS) { /* Variable declarations */
+    declarations = get_child(node, 0);
+    while (declarations != 0) { /* Multiple variable declarations */
+      variable = get_child(declarations, 0); /* Single variable declaration */
+      comp_glo_var_decl(variable); /* Compile variable declaration */
+      declarations = get_child(declarations, 1); /* Next variable declaration */
+    }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
