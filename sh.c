@@ -945,6 +945,12 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == PLUS_PLUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
+    } else if (op == MINUS_MINUS_POST) {
+      sub1 = comp_lvalue(get_child(node, 0));
+      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str("--")));
+    } else if (op == PLUS_PLUS_POST) {
+      sub1 = comp_lvalue(get_child(node, 0));
+      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str("++")));
     } else if (op == '&') {
       fatal_error("comp_rvalue_go: address of operator not supported");
       return 0;
