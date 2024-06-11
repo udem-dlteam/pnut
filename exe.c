@@ -968,14 +968,7 @@ int codegen_param(ast param) {
   int type = value_type(param);
   int left_width;
 
-  if (get_op(type) == '[') {
-    left_width = codegen_lvalue(param);
-    pop_reg(reg_X);
-    grow_fs(-1);
-    grow_stack_bytes(round_up_to_word_size(left_width));
-    grow_fs(round_up_to_word_size(left_width) / word_size);
-    copy_obj(reg_SP, 0, reg_X, 0, left_width);
-  } else if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+  if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
