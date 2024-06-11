@@ -113,7 +113,6 @@ void load_mem_location(int dst, int base, int offset, int width) {
 
 // Write a value from a register to a memory location
 void write_mem_location(int base, int offset, int src, int width) {
-  int i;
   if (width == 1) {
     mov_mem8_reg(base, offset, src);
   } else if (width == word_size) {
@@ -535,6 +534,12 @@ int cgc_lookup_enum_value(int ident, int env) {
 // A pointer type is either an array type or a type with at least one star
 bool is_pointer_type(ast type) {
   return (get_op(type) == '[') | (get_val(type) != 0);
+}
+
+// An aggregate type is either an array type or a struct/union type (that's not a reference)
+bool is_aggregate_type(ast type) {
+  return get_op(type) == '['
+    || ((get_op(type) == STRUCT_KW || get_op(type) == UNION_KW) && get_val(type) == 0);
 }
 
 bool is_type(ast type) {
@@ -1161,7 +1166,8 @@ void codegen_rvalue(ast node) {
   int lbl1;
   int lbl2;
   int left_width;
-  int type;
+  ast type1;
+  ast type2;
 
   if (nb_children == 0) {
     if (op == INTEGER) {
@@ -1304,9 +1310,9 @@ void codegen_rvalue(ast node) {
       codegen_binop(op, get_child(node, 0), get_child(node, 1));
       grow_fs(-2);
     } else if (op == '=') {
-      type = value_type(get_child(node, 0));
+      type1 = value_type(get_child(node, 0));
       left_width = codegen_lvalue(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+      if (get_op(type1) == STRUCT_KW && get_val(type1) == 0) {
         // Struct assignment, we copy the struct.
         codegen_lvalue(get_child(node, 1));
         pop_reg(reg_X);
@@ -1353,23 +1359,30 @@ void codegen_rvalue(ast node) {
     } else if (op == '(') {
       codegen_call(node);
     } else if (op == '.') {
-      type = value_type(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+      type1 = value_type(get_child(node, 0));
+      if (get_op(type1) == STRUCT_KW && get_val(type1) == 0) {
+        type2 = get_child(struct_member(type1, get_child(node, 1)), 1);
         codegen_lvalue(get_child(node, 0));
         pop_reg(reg_Y);
+        add_reg_imm(reg_Y, struct_member_offset(type1, get_child(node, 1)));
         grow_fs(-1);
-        load_mem_location(reg_X, reg_Y, struct_member_offset(value_type(get_child(node, 0)), get_child(node, 1)), word_size);
-        push_reg(reg_X);
+        if (!is_aggregate_type(type2)) {
+          load_mem_location(reg_X, reg_Y, 0, word_size);
+          push_reg(reg_X);
+        }
       } else {
         fatal_error("codegen_rvalue: -> operator on non-struct type");
       }
     } else if (op == ARROW) {
-      type = value_type(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 1) {
+      type1 = value_type(get_child(node, 0));
+      if (get_op(type1) == STRUCT_KW && get_val(type1) == 1) {
+        type2 = get_child(struct_member(type1, get_child(node, 1)), 1);
         codegen_rvalue(get_child(node, 0));
         pop_reg(reg_Y);
         grow_fs(-1);
-        load_mem_location(reg_X, reg_Y, struct_member_offset(value_type(get_child(node, 0)), get_child(node, 1)), word_size);
+        if (!is_aggregate_type(type2)) {
+          load_mem_location(reg_X, reg_Y, struct_member_offset(type1, get_child(node, 1)), word_size);
+        }
         push_reg(reg_X);
       } else {
         fatal_error("codegen_rvalue: -> operator on non-struct pointer type");
