@@ -943,7 +943,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str(" += 1")));
     } else if (op == MINUS_MINUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str("--")));
+      return wrap_if_needed(true, context, test_side_effects,string_concat4(wrap_str("("), sub1, wrap_str(" -= 1)"), wrap_str(" + 1")));
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
       return wrap_if_needed(true, context, test_side_effects, string_concat4(wrap_str("("), sub1, wrap_str(" += 1)"), wrap_str(" - 1")));
