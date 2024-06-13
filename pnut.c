@@ -552,7 +552,7 @@ void handle_define() {
     // Accumulate tokens so they can be replayed when the macro is used
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
-    #ifdef DEBUG_CPP
+#ifdef DEBUG_CPP
     putstr("# ");
     putstr(string_pool + heap[macro + 1]);
     if (args_count != -1) putchar('('); // Function-like macro
@@ -567,7 +567,7 @@ void handle_define() {
     if (args_count != -1) putstr(") ");
     print_macro_raw_tokens(car(heap[macro + 3]));
     putchar('\n');
-    #endif
+#endif
   }
 }
 
@@ -608,11 +608,11 @@ void handle_preprocessor_directive() {
     if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       get_tok();
       if (tok == STRING) {
-        #ifdef SUPPORT_INCLUDE
+#ifdef SUPPORT_INCLUDE
         include_file(string_pool + val);
-        #else
+#else
         fatal_error("The #include directive is not supported in this version of the compiler.");
-        #endif
+#endif
       } else {
         putstr("tok="); putint(tok); putchar('\n');
         fatal_error("expected string to #include directive");
@@ -2436,40 +2436,40 @@ int main(int argc, char **args) {
       }
     } else {
       // Options that don't start with '-' are file names
-      #ifdef SUPPORT_INCLUDE
+#ifdef SUPPORT_INCLUDE
       include_file(args[i]);
-      #else
+#else
       fatal_error("input file not supported. Pnut expects the input from stdin.");
-      #endif
+#endif
     }
   }
 
-  #ifdef SUPPORT_INCLUDE
+#ifdef SUPPORT_INCLUDE
   if (fp == 0) {
     putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
-  #endif
+#endif
 
-  #ifndef DEBUG_CPP
+#ifndef DEBUG_CPP
   codegen_begin();
-  #endif
+#endif
 
   ch = '\n';
   get_tok();
 
   while (tok != EOF) {
-    #ifdef DEBUG_CPP
+#ifdef DEBUG_CPP
     print_tok(tok, val);
     get_tok();
-    #else
-    codegen_glo_decl(parse_definition(0));
-    #endif
+#else
+  codegen_glo_decl(parse_definition(0));
+#endif
   }
 
-  #ifndef DEBUG_CPP
+#ifndef DEBUG_CPP
   codegen_end();
-  #endif
+#endif
 
   return 0;
 }
