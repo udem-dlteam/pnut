@@ -22,6 +22,8 @@
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
 #define HANDLE_SIMPLE_PRINTF_not
+// Specifies if we include the C code along with the generated shell code
+#define INCLUDE_C_CODE
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -401,6 +403,59 @@ void pop_ifdef_mask() {
   ifdef_mask = ifdef_stack[ifdef_stack_ix];
 }
 
+// Includes the preprocessed C code along with the generated shell code
+#ifdef INCLUDE_C_CODE
+#define DECLARATION_BUF_LEN 20000
+
+char declaration_char_buf[DECLARATION_BUF_LEN];
+int declaration_char_buf_ix = 0;
+// Point to the last character of the last token.
+// This is used to skip the current token when printing the code of a
+// declaration since it belongs to the next declaration.
+int last_tok_char_buf_ix = 0;
+
+void output_declaration_c_code(bool no_header) {
+
+  int i = 0;
+
+  if (!no_header) {
+    putstr("#################################### C code ####################################\n");
+  }
+  putchar('#');
+  putchar(' ');
+
+  // Skip leading newlines if any.
+  while (declaration_char_buf[i] == '\n') i += 1;
+
+  for (; i < last_tok_char_buf_ix; i += 1) {
+
+    if (declaration_char_buf[i] == '\n') {
+      // Condense the C code by removing extra newlines
+      if (declaration_char_buf[i - 1] != declaration_char_buf[i]) {
+        putchar('\n');
+        putchar('#');
+        putchar(' ');
+      }
+    } else {
+      putchar(declaration_char_buf[i]);
+    }
+  }
+
+  // End of decl
+  putchar('\n');
+  if (!no_header) {
+    putstr("################################## End of code #################################\n");
+  }
+
+  // Copy the last token characters to the beginning of the buffer
+  for (i = 0; i < declaration_char_buf_ix - last_tok_char_buf_ix; i += 1) {
+    declaration_char_buf[i] = declaration_char_buf[last_tok_char_buf_ix + i];
+  }
+
+  declaration_char_buf_ix = i;
+}
+#endif
+
 void get_ch() {
 #ifdef SUPPORT_INCLUDE
   ch = fgetc(fp);
@@ -415,6 +470,11 @@ void get_ch() {
   }
 #else
   ch = getchar();
+#endif
+#ifdef INCLUDE_C_CODE
+  // Save C code chars so they can be displayed with the shell code
+  declaration_char_buf[declaration_char_buf_ix] = ch;
+  declaration_char_buf_ix += 1;
 #endif
 }
 
@@ -573,6 +633,9 @@ void handle_define() {
 
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
+#ifdef INCLUDE_C_CODE
+  int prev_char_buf_ix = declaration_char_buf_ix;
+#endif
   get_ch(); // Skip the #
   ifdef_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
   get_tok(); // Get the directive
@@ -644,6 +707,9 @@ void handle_preprocessor_directive() {
     putstr("ch="); putint(ch); putchar('\n');
     fatal_error("preprocessor expected end of line");
   }
+#ifdef INCLUDE_C_CODE
+  declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
+#endif
 }
 
 void get_ident() {
@@ -1016,10 +1082,21 @@ void paste_tokens(int left_tok, int left_val) {
 void get_tok() {
 
   bool first_time = true; // Used to simulate a do-while loop
+#ifdef INCLUDE_C_CODE
+  int prev_char_buf_ix = declaration_char_buf_ix;
+  // Save the cursor in a local variable so we can restore it when the token is
+  // masked off. Not using the last_tok_char_buf_ix global because get_tok can
+  // be called recursively by handle_preprocessor_directive.
+  int prev_last_tok_char_buf_ix = declaration_char_buf_ix;
+#endif
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while (first_time OR !ifdef_mask) {
     first_time = false;
+#ifdef INCLUDE_C_CODE
+    declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
+#endif
+
     while (1) {
       // Check if there are any tokens to replay. Macros are just identifiers that
       // have been marked as macros. In terms of how we get into that state, a
@@ -1397,6 +1474,9 @@ void get_tok() {
       }
     }
   }
+#ifdef INCLUDE_C_CODE
+  last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
+#endif
 }
 
 /* parser */
@@ -2419,6 +2499,7 @@ ast parse_compound_statement() {
 int main(int argc, char **args) {
 
   int i;
+  ast decl;
 
   init_ident_table();
 
@@ -2463,7 +2544,13 @@ int main(int argc, char **args) {
     print_tok(tok, val);
     get_tok();
 #else
-  codegen_glo_decl(parse_definition(0));
+
+    decl = parse_definition(0);
+#ifdef INCLUDE_C_CODE
+    output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == VAR_DECLS);
+#endif
+    codegen_glo_decl(decl);
+
 #endif
   }
 
