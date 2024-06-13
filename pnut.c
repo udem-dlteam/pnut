@@ -23,7 +23,7 @@
 #define SUPPORT_ADDRESS_OF_OP_not
 #define HANDLE_SIMPLE_PRINTF_not
 // Specifies if we include the C code along with the generated shell code
-#define INCLUDE_C_CODE
+#define INCLUDE_C_CODE_not
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
