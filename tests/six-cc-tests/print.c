@@ -1,6 +1,6 @@
 void main()
 {
-  char_ptr str;
+  char * str;
   str = "ABCDEFHIJKLMNOPQRSTUVWXYZ";
   printf("%d\n", 42);
   printf("Beau %s\n", "velo");

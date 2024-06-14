@@ -1,4 +1,4 @@
-void putstring(char_ptr s) {
+void putstring(char* s) {
   while (*s) {
     putchar(*s);
     s = s + 1;

@@ -1,11 +1,11 @@
-void putstring(char_ptr s) {
+void putstring(char* s) {
   while (*s) {
     putchar(*s);
     s = s + 1;
   }
 }
 
-int hash(char_ptr s) {
+int hash(char* s) {
   int hash;
   int ix;
   hash = 0;
@@ -20,13 +20,13 @@ int hash(char_ptr s) {
 
 int main() {
   int MAX_SIZE;
-  int_ptr f;
-  char_ptr s;
+  int* f;
+  char* s;
   int len;
   int h;
   MAX_SIZE = 200;
   s = malloc(MAX_SIZE);
-  f = open("six-cc-tests/close.c", 0);
+  f = open("tests/six-cc-tests/close.c", 0);
   len = read(f, s, MAX_SIZE - 1);
   s[len] = 0;
   close(f);

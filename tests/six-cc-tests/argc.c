@@ -1,12 +1,12 @@
 /* args: abc def hij */
-void putstring(char_ptr s) {
+void putstring(char * s) {
   while (*s) {
     putchar(*s);
     s = s + 1;
   }
 }
 
-int main(int argc, char_ptr args) {
+int main(int argc, char * args) {
   int i = 0;
   //printf("Number of arguments: %d\n", argc);
   putstring("Number of arguments: ");

@@ -16,14 +16,12 @@ int ack(int m, int n)
 int main() {
   int m = 3;
   int n = 3;
-  //printf("ack(%d, %d) = %d", m, n, ack(m, n));
-  //replace the printf with putstring
   putstring("ack(");
   putchar(48 + m);
   putstring(", ");
   putchar(48 + n);
   putstring(") = ");
-  int ack = ack(m, n);
-  putchar(ack); //'=' == 61
+  int acked = ack(m, n);
+  putchar(acked); //'=' == 61
   return 0;
 }

@@ -1,6 +1,6 @@
 /* typedef char *char_ptr; */
 
-int string_len(char_ptr s) {
+int string_len(char * s) {
   int ix;
   ix = 0;
   while (s[ix] != 0) {
@@ -9,7 +9,7 @@ int string_len(char_ptr s) {
   return ix;
 }
 
-int string_sum(char_ptr s) {
+int string_sum(char * s) {
   int sum;
   sum = 0;
   while (*s != 0) {
@@ -21,7 +21,7 @@ int string_sum(char_ptr s) {
 
 int iota_array(int start, int max) {
   int i;
-  int_ptr arr;
+  int * arr;
   arr = malloc(max - start);
   for (i = 0; i + start < max; i++) {
     arr[i] = i + start;
@@ -29,7 +29,7 @@ int iota_array(int start, int max) {
   return arr;
 }
 
-int array_sum(int_ptr arr, int len) {
+int array_sum(int * arr, int len) {
     int sum;
     int i;
     sum = 0;
