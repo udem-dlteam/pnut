@@ -1,4 +1,4 @@
-void putstring(char_ptr s) {
+void putstring(char * s) {
   while (*s) {
     putchar(*s);
     s = s + 1;
@@ -6,7 +6,7 @@ void putstring(char_ptr s) {
 }
 
 int main() {
-  int_ptr arr;
+  int * arr;
   int acc;
 
   arr = malloc(100);
@@ -29,7 +29,7 @@ int main() {
 
   acc = 0;
   int i = 0;
-  for(i < 100) {
+  while (i < 100) {
     acc += (*(arr + i)) * 13;
     i = i + 1;
   }

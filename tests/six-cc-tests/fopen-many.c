@@ -3,10 +3,11 @@ int main() {
   char c;
   int i = 0;
   while (i < 100) {
-    f = fopen("six-cc-tests/fgetc.c", 0);
+    f = fopen("tests/six-cc-tests/fgetc.c", 0);
     while ((c = fgetc(f)) != -1) {
       putchar(c);
     }
+    putchar('\n');
     fclose(f);
     i = i + 1;
   }
