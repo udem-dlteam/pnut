@@ -566,7 +566,7 @@ ast value_type(ast node) {
     } else if (op == '&') {
       // TODO: Check that it's a pointable object?
       return word_size; // always return an address
-    } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS) {
+    } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS OR op == MINUS_MINUS_POST OR op == PLUS_PLUS_POST OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else {
