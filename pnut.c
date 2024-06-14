@@ -444,7 +444,7 @@ void output_declaration_c_code(bool no_header) {
   // End of decl
   putchar('\n');
   if (!no_header) {
-    putstr("################################## End of code #################################\n");
+    putstr("################################# End of C code ################################\n");
   }
 
   // Copy the last token characters to the beginning of the buffer
