@@ -1,12 +1,9 @@
-#ifndef PNUT_CC
-
+// Those includes are parsed by pnut but ignored
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <string.h>
-
-#endif
 
 #define ast int
 #define true 1
@@ -571,6 +568,28 @@ void handle_define() {
   }
 }
 
+void handle_include() {
+  get_tok();
+  #ifdef SUPPORT_INCLUDE
+  if (tok == STRING) {
+    include_file(string_pool + val);
+  } else if (tok == '<') {
+    get_tok();
+    // Ignore the file name for now.
+    // Note that the token is not a string with the file name, but an identifier
+    // with part of the file. This means we'll need to assemble the filename
+    // string, or change get_tok to consider '<' and '>' as string delimiters.
+    while (tok != '>') get_tok();
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    fatal_error("expected string to #include directive");
+  }
+
+  #else
+  fatal_error("The #include directive is not supported in this version of the compiler.");
+  #endif
+}
+
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
   get_ch(); // Skip the #
@@ -606,17 +625,7 @@ void handle_preprocessor_directive() {
     }
   } else if (ifdef_mask) {
     if (tok == IDENTIFIER AND val == INCLUDE_ID) {
-      get_tok();
-      if (tok == STRING) {
-        #ifdef SUPPORT_INCLUDE
-        include_file(string_pool + val);
-        #else
-        fatal_error("The #include directive is not supported in this version of the compiler.");
-        #endif
-      } else {
-        putstr("tok="); putint(tok); putchar('\n');
-        fatal_error("expected string to #include directive");
-      }
+      handle_include();
     } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
       get_tok_macro();
       if (tok == MACRO) {
