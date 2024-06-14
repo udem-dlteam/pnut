@@ -23,6 +23,7 @@ void testLocalAndGlobalInteraction() {
   putchar(local1+48);
   putchar(10);
   putchar(local2+48);
+  putchar(10);
 }
 
 int global3 = 1, global4 = 2;
