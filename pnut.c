@@ -571,6 +571,20 @@ void handle_define() {
   }
 }
 
+void handle_include() {
+  get_tok();
+  if (tok == STRING) {
+    #ifdef SUPPORT_INCLUDE
+    include_file(string_pool + val);
+    #else
+    fatal_error("The #include directive is not supported in this version of the compiler.");
+    #endif
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    fatal_error("expected string to #include directive");
+  }
+}
+
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
   get_ch(); // Skip the #
@@ -606,17 +620,7 @@ void handle_preprocessor_directive() {
     }
   } else if (ifdef_mask) {
     if (tok == IDENTIFIER AND val == INCLUDE_ID) {
-      get_tok();
-      if (tok == STRING) {
-        #ifdef SUPPORT_INCLUDE
-        include_file(string_pool + val);
-        #else
-        fatal_error("The #include directive is not supported in this version of the compiler.");
-        #endif
-      } else {
-        putstr("tok="); putint(tok); putchar('\n');
-        fatal_error("expected string to #include directive");
-      }
+      handle_include();
     } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
       get_tok_macro();
       if (tok == MACRO) {
