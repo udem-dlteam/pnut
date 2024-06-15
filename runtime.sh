@@ -42,16 +42,6 @@ make_argv() {
   done
 }
 
-unpack_array() {
-  alloc $# # Allocate enough space for all elements. No need to initialize.
-  __ptr=$__addr
-  while [ $# -gt 0 ] ; do
-    : $((_$__ptr = $1))
-    : $((__ptr += 1))
-    shift
-  done
-}
-
 # Push a Shell string to the VM heap. Returns a reference to the string in $__addr.
 unpack_string() {
   __buf="$1"

@@ -1810,12 +1810,9 @@ void prologue() {
   printf("set -e -u\n\n");
 
   printf("# Handle runtime options\n");
-  printf("__STRICT_MODE=1\n");
   printf("__FREE_UNSETS_VARS=1\n");
   printf("__INIT_GLOBALS=1\n\n");
 
-  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-init\" ] ;      then __STRICT_MODE=1; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-no-init\" ] ;   then __STRICT_MODE=0; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then __FREE_UNSETS_VARS=1; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then __FREE_UNSETS_VARS=0; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");
