@@ -418,20 +418,6 @@ _putchar() {
   printf \\$(($1/64))$(($1/8%8))$(($1%8))
 }
 
-# Save the state of getchar so that it can read from a source that's not stdin.
-getchar_save_and_reset() {
-  __stdin_buf_saved="$__stdin_buf"
-  __stdin_line_ends_with_oef_saved="$__stdin_line_ends_with_oef"
-  __stdin_buf=""
-  __stdin_line_ends_with_oef=0
-}
-
-# Restore the state of getchar so it can read from stdin.
-getchar_restore() {
-  __stdin_buf="$__stdin_buf_saved"
-  __stdin_line_ends_with_oef="$__stdin_line_ends_with_oef_saved"
-}
-
 __stdin_buf=
 __stdin_line_ends_with_oef=0
 _getchar() {
@@ -502,13 +488,6 @@ _exit() {
 
 _malloc() { # $2 = malloc_size
   alloc $2
-  : $(($1 = __addr))
-}
-
-# Similar to malloc, but always initializes memory to 0.
-_calloc() { # $2 = nitems, $3 = size
-  alloc $(($2 * $3))
-  initialize_memory $__addr $(($2 * $3))
   : $(($1 = __addr))
 }
 
@@ -604,47 +583,6 @@ _printf() { # $1 = printf format string, $2... = printf args
       esac
     fi
   done
-}
-
-# We represent file descriptors as strings. That means that modes and offsets do not work.
-# These limitations are acceptable since c4.cc does not use them.
-# TODO: Packing and unpacking the string is a lazy way of copying a string
-_open() { # $2: File name, $3: Mode
-  pack_string $2
-  unpack_string "$__res"
-  : $(($1 = __addr))
-}
-
-_read() { # $2: File descriptor, $3: Buffer, $3: Maximum number of bytes to read
-  __fd=$2
-  __buf=$3
-  __count=$4
-  pack_string $__fd
-  read_n_char $__count $__buf < "$__res" # We don't want to use cat because it's not pure Shell
-  : $(($1 = __len))
-}
-
-# File descriptor is just a string, nothing to close
-_close() { # $2: File descriptor
-  : $(($1 = 0))
-}
-
-# Used to implement the read instruction.
-# Does not work with NUL characters.
-read_n_char() {
-  __count=$1
-  __buf_ptr=$2
-  __len=0
-  getchar_save_and_reset
-  while [ $__count -ne 0 ] ; do
-    _getchar __c
-    if [ $__c -eq -1 ]; then break; fi
-    : $((_$__buf_ptr = __c))
-    : $((__buf_ptr += 1))
-    : $((__count -= 1))
-    : $((__len += 1))
-  done
-  getchar_restore
 }
 
 __fopen_fd3=0
@@ -824,34 +762,6 @@ _fgetc() { # $2: File descriptor
   fi
   : $(($1 = _$((__buf + __cur))))
   : $((_$((__fd + 1)) = __cur + 1))      # Increment cursor
-}
-
-_memset() { # $2: Pointer, $3: Value, $4: Length
-  __ptr=$2
-  __val=$3
-  __len=$4
-  __ix=0
-  while [ $__ix -lt $__len ]; do
-    : $((_$((__ptr + __ix)) = __val))
-    : $((__ix += 1))
-  done
-  : $(($1 = __ptr))
-}
-
-_memcmp() { # $2: Pointer 1, $3: Pointer 2, $4: Length
-  __op1=$2
-  __op2=$3
-  __len=$4
-  __ix=0
-  while [ $__ix -lt $__len ]; do
-    if [ $((_$((__op1 + __ix)))) -ne $((_$((__op2 + __ix)))) ] ; then
-      # From man page: returns the difference between the first two differing bytes (treated as unsigned char values
-      : $(($1 = _$((__op1 + __ix)) - _$((__op2 + __ix))))
-      return
-    fi
-    : $((__ix = __ix + 1))
-  done
-  : $(($1 = 0))
 }
 
 # Debug
