@@ -71,20 +71,13 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 DEFINE_RUNTIME_FUN(save_vars)
   printf("# Local variables\n");
   printf("__SP=0\n");
-  printf("save_vars() {\n");
-  printf("  while [ $# -gt 0 ]; do\n");
-  printf("    : $((__SP += 1))\n");
-  printf("    : $((__$__SP=$1))\n");
-  printf("    shift\n");
-  printf("  done\n");
-  printf("}\n\n");
+  printf("save_vars() { while [ $# -gt 0 ]; do : $((__SP += 1)) $((__$__SP=$1)) ; shift; done }\n");
   printf("unsave_vars() {\n");
   printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
   printf("  __return_loc=$1; shift\n");
   printf("  while [ $# -gt 0 ]; do\n");
   printf("    if [ $1 != \"$__return_loc\" ]; then : $(($1=__$__SP)); fi\n");
-  printf("    : $((__SP -= 1))\n");
-  printf("    shift\n");
+  printf("    : $((__SP -= 1)); shift\n");
   printf("  done\n");
   printf("}\n");
 END_RUNTIME_FUN(save_vars)
@@ -470,9 +463,7 @@ END_RUNTIME_FUN(defstr)
 
 DEFINE_RUNTIME_FUN(exit)
   putstr("_exit() {\n");
-  putstr("  : $(($1 = 0)); shift # Return 0\n");
-  putstr("  echo \"Exiting with code $1\"\n");
-  putstr("  exit $1\n");
+  putstr("  exit $2\n");
   putstr("}\n");
 END_RUNTIME_FUN(exit)
 
