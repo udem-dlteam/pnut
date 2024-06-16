@@ -8,11 +8,6 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define DEPENDS_ON(name) runtime_ ## name ();
 #define RETURN_IF_TRUE(var) if (var) return; var = true;
 
-void runtime_constants() {
-  putstr("readonly _NULL=0\n");
-  putstr("readonly _EOF=-1\n\n");
-}
-
 // char<->int conversion
 
 DEFINE_RUNTIME_FUN(int_to_char)
@@ -742,7 +737,6 @@ DEPENDS_ON(char_to_int)
 END_RUNTIME_FUN(fgetc)
 
 void produce_runtime() {
-  runtime_constants();
   runtime_alloc();
   runtime_initialize_memory();
   runtime_make_argv();

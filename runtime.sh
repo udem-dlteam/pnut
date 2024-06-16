@@ -1,6 +1,3 @@
-readonly _NULL=0
-readonly _EOF=-1
-
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 alloc() {
