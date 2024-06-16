@@ -1810,11 +1810,15 @@ void comp_glo_decl(ast node) {
 void prologue() {
   printf("set -e -u\n\n");
 
-  printf("# Handle runtime options\n");
-  printf("__INIT_GLOBALS=1\n\n");
+  runtime_alloc();
 
-  printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then __INIT_GLOBALS=0; shift; fi\n\n");
+#ifdef RT_NO_INIT_GLOBALS
+  printf("defarr() { alloc $2; : $(( $1 = __addr )); }\n\n");
+#else
+  runtime_initialize_memory();
+  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
+#endif
+
 
   printf("# Runtime library\n");
   produce_runtime();
@@ -1840,8 +1844,6 @@ void prologue() {
   printf("    shift\n");
   printf("  done\n");
   printf("}\n\n");
-
-  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
 
   #ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { : $(($1 = $2)) ; }\n\n");

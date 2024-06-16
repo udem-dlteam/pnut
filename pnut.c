@@ -22,6 +22,7 @@
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
+#define RT_NO_INIT_GLOBALS_not
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
