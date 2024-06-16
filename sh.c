@@ -137,7 +137,11 @@ void print_text(text t) {
   } else if (text_pool[t] == TEXT_TREE) {
     i = 0;
     while (i < text_pool[t + 1]) {
-      print_text(text_pool[t + i + 2]);
+      if (text_pool[t + i + 2] < 0) {
+        putchar(-text_pool[t + i + 2]);
+      } else {
+        print_text(text_pool[t + i + 2]);
+      }
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
