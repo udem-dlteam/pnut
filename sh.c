@@ -161,6 +161,7 @@ text glo_decls[GLO_DECL_SIZE];  /* Generated code */
 int glo_decl_ix = 0;            /* Index of last generated line of code  */
 int nest_level = 0;             /* Current level of indentation */
 int in_tail_position = false;   /* Is the current statement in tail position? */
+int in_block_head_position = false;  /* Is the current statement in head position for the current block? */
 int loop_nesting_level = 0;     /* Number of loops surrounding the current statement */
 int loop_end_actions_start = 0; /* Start position of declarations for the last action in a for loop */
 int loop_end_actions_end = 0;   /* End position of declarations for the last action in a for loop */
@@ -1264,6 +1265,7 @@ void comp_assignment(ast lhs, ast rhs) {
 void comp_body(ast node) {
   int start_in_tail_position = in_tail_position;
   in_tail_position = false;
+  in_block_head_position = true;
 
   if (node != 0) {
     while (get_op(node) == '{') {
@@ -1271,6 +1273,7 @@ void comp_body(ast node) {
       if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
       comp_statement(get_child(node, 0), false);
       node = get_child(node, 1);
+      in_block_head_position = false;
     }
   }
 }
@@ -1383,7 +1386,6 @@ void comp_statement(ast node, int else_if) {
         comp_statement(get_child(node, 2), true); /* comp_statement with else_if == true emits elif*/
       } else {
         append_glo_decl(wrap_str("else"));
-        /* TODO: Emit : if body is empty */
         nest_level += 1;
         comp_statement(get_child(node, 2), false);
         nest_level -= 1;
@@ -1470,11 +1472,11 @@ void comp_statement(ast node, int else_if) {
     }
     if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
+    } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
+      append_glo_decl(wrap_str(":")); /* Block only contains a return statement so it's not empty */
     } else if (!in_tail_position OR loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str("return"));
-    } else {
-      /* TODO: Make sure this can't create empty bodies */
     }
   } else if (op == '(') { /* six.call */
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); /* Reuse IDENTIFIER_EMPTY ast? */
