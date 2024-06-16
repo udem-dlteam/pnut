@@ -1199,27 +1199,6 @@ text comp_lvalue(ast node) {
   }
 }
 
-#ifdef SH_AVOID_PRINTF_USE
-bool printf_uses_shell_format_specifiers(char* a) {
-  // The supported format specifiers are those that are common between C and shell,
-  // and those for which the representation is the same in both languages.
-  // For now, this includes %d, %c, %x
-  // Non-literals strings are not supported because they would need to first be unpacked.
-
-  while (*a != '\0') {
-    if (*a == '%') {
-      a += 1;
-      if (*a != 'd' && *a != 'c' && *a != 'x' && *a != '%') {
-        return false; // Unsupported format specifier
-      }
-    }
-
-    a += 1;
-  }
-  return true;
-}
-#endif
-
 text fun_call_params(ast params) {
   ast param;
   text code_params = 0;
@@ -1240,6 +1219,85 @@ text fun_call_params(ast params) {
   return code_params;
 }
 
+#ifdef SH_AVOID_PRINTF_USE
+bool printf_uses_shell_format_specifiers(char* a) {
+  // The supported format specifiers are those that are common between C and shell,
+  // and those for which the representation is the same in both languages.
+  // For now, this includes %d, %c, %x.
+  // Non-literals strings cannot be passed directly to printf as they first need
+  // to be unpacked, but can be passed to _puts from the runtime which can
+  // handle them.
+  while (*a != '\0') {
+    if (*a == '%') {
+      a += 1;
+      if (*a != 'd' && *a != 'c' && *a != 'x' && *a != '%' && *a != 's') {
+        return false; // Unsupported format specifier
+      }
+    }
+
+    a += 1;
+  }
+  return true;
+}
+
+// _printf pulls a lot of dependencies from the runtime. In most cases the
+// format string is known at compile time, and we can avoid calling printf by
+// using the shell's printf instead. This function generates a sequence of shell
+// printf and put_pstr equivalent to the given printf call.
+void handle_printf_call(char* format_str, ast params) {
+  // The supported format specifiers are those that are common between C and shell,
+  // and those for which the representation is the same in both languages.
+  // For now, this includes %d, %c, %x
+  // Non-literals strings are not supported because they would need to first be unpacked.
+  char* a = format_str;
+  char* format_start = format_str;
+  ast params_start = params;
+
+  while (*format_str != '\0') {
+    if (*format_str == '%') {
+      format_str += 1;
+      if (*format_str != '%') {
+        if (*format_str == 'd' || *format_str == 'c' || *format_str == 'x') {
+          // Keep accumulating the format string
+        } else if (*format_str == 's') {
+          // We can't pass strings to printf directly, they need to be unpacked first.
+          // We do that by calling the _print_pnut_str function.
+
+          // Generate the printf call for the format string up to this point.
+          if (format_start != format_str - 1) {
+            set_child(params_start, 1, 0); // Remove the rest of the parameters
+            *(format_str - 1) = '\0'; // Null-terminate the format string
+            append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start)));
+            *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
+          }
+
+          runtime_use_put_pstr = true;
+          append_glo_decl(string_concat(wrap_str("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
+          format_start = format_str + 1; // skip the 's'
+          params_start = get_child(params, 1);
+        } else {
+          fatal_error("Unsupported format specifier");
+        }
+
+        // Advance params
+        if (params == 0) fatal_error("Not enough parameters for printf");
+
+        params = get_child(params, 1);
+      }
+
+    }
+
+    // Keep accumulating the format string
+    format_str += 1;
+  }
+
+  // Dump the remaining format string
+  if (format_start != format_str) {
+    append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start)));
+  }
+}
+#endif
+
 text comp_fun_call_code(ast node, ast assign_to) {
   ast name = get_child(node, 0);
   ast params = get_child(node, 1);
@@ -1252,7 +1310,8 @@ text comp_fun_call_code(ast node, ast assign_to) {
       return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
     } else if (name_id == PRINTF_ID && params != 0 && get_op(params) == ',') {
       if (printf_uses_shell_format_specifiers(string_pool + get_val(get_child(params, 0)))) {
-        return string_concat4(wrap_str("printf \""), escape_string(string_pool + get_val(get_child(params, 0)), false), wrap_str("\" "), fun_call_params(get_child(params, 1)));
+        handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
+        return 0; // This generates no code. I guess we could return the last printf call?
       }
     }
   }
@@ -1278,7 +1337,9 @@ text comp_fun_call_code(ast node, ast assign_to) {
 }
 
 void comp_fun_call(ast node, ast assign_to) {
-  append_glo_decl(comp_fun_call_code(node, assign_to));
+  text res = comp_fun_call_code(node, assign_to);
+  if (res)
+    append_glo_decl(res);
 }
 
 void comp_assignment(ast lhs, ast rhs) {
