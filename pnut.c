@@ -18,7 +18,7 @@
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
-#define HANDLE_SIMPLE_PRINTF_not
+#define HANDLE_SIMPLE_PRINTF
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
@@ -450,6 +450,9 @@ int FOPEN_ID;
 int FCLOSE_ID;
 int FGETC_ID;
 
+int PUTSTR_ID;
+int PUTS_ID;
+
 void get_tok_macro() {
   expand_macro = false;
   get_tok();
@@ -776,6 +779,9 @@ void init_ident_table() {
   FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
   FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
   FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
+
+  PUTSTR_ID = init_ident(IDENTIFIER, "putstr");
+  PUTS_ID = init_ident(IDENTIFIER, "puts");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.

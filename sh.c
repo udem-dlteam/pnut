@@ -1052,10 +1052,11 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
 }
 
 #ifdef HANDLE_SIMPLE_PRINTF
-text escaped_char(char c, int c_style) {
+text escaped_char(char c, int for_printf) {
 #else
 text escaped_char(char c) {
 #endif
+  // C escape sequences
   if      (c == '\a') return wrap_str("\\a");
   else if (c == '\b') return wrap_str("\\b");
   else if (c == '\f') return wrap_str("\\f");
@@ -1064,20 +1065,23 @@ text escaped_char(char c) {
   else if (c == '\t') return wrap_str("\\t");
   else if (c == '\v') return wrap_str("\\v");
   else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
+  // Shell special characters: $, `, ", ', ?, and newline
+  // Note that ' and ? are not escaped properly by dash, but that's ok because
+  // we use double quotes and ' and ? can be left as is.
+  else if (c == '$')  return wrap_str("\\$");
+  else if (c == '`')  return wrap_str("\\`");
   else if (c == '"')  return wrap_str("\\\"");
+  // else if (c == '\'') return wrap_str("\\\'");
+  // else if (c == '?')  return wrap_str("\\?");
 #ifdef HANDLE_SIMPLE_PRINTF
-  else if (c == '\'' && c_style) return wrap_str("\\\'");
-  else if (c == '?'  && c_style) return wrap_str("\\?");
-#else
-  else if (c == '\'') return wrap_str("\\\'");
-  else if (c == '?')  return wrap_str("\\?");
+  // when we're escaping a string for shell's printf, % must be escaped
+  else if (c == '%'  && for_printf) return wrap_str("%%");
 #endif
-  else if (c == '$') return wrap_str("\\$");
   else                return wrap_char(c);
 }
 
 #ifdef HANDLE_SIMPLE_PRINTF
-text escape_string(char *str, int c_style) {
+text escape_string(char *str, int for_printf) {
 #else
 text escape_string(char *str) {
 #endif
@@ -1087,7 +1091,7 @@ text escape_string(char *str) {
 
   while (str[i] != '\0') {
 #ifdef HANDLE_SIMPLE_PRINTF
-    char_text = escaped_char(str[i], c_style);
+    char_text = escaped_char(str[i], for_printf);
 #else
     char_text = escaped_char(str[i]);
 #endif
@@ -1114,7 +1118,7 @@ text comp_rvalue(ast node, int context) {
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
 #ifdef HANDLE_SIMPLE_PRINTF
-                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), true)
+                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), false)
 #else
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
 #endif
@@ -1204,10 +1208,10 @@ text comp_fun_call_code(ast node, ast assign_to) {
 
   #ifdef HANDLE_SIMPLE_PRINTF
   if (get_op(assign_to) == IDENTIFIER_EMPTY
-    && name_id == PRINTF_ID
+    && (name_id == PRINTF_ID OR name_id == PUTSTR_ID OR name_id == PUTS_ID)
     && params != 0
     && get_op(params) == STRING) {
-    return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), false), wrap_str("\""));
+    return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
   }
   #endif
 
