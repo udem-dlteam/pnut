@@ -1934,6 +1934,8 @@ void codegen_begin() {
   prologue();
 }
 
+int max_text_alloc = 0;
+int cumul_text_alloc = 0;
 void codegen_glo_decl(ast decl) {
   comp_glo_decl(decl);
   initialize_function_variables();
@@ -1942,10 +1944,12 @@ void codegen_glo_decl(ast decl) {
   glo_decl_ix = 0;
   local_env_size = 0;
   local_env = 0;
+  max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
+  cumul_text_alloc += text_alloc;
   text_alloc = 1;
 }
 
 void codegen_end() {
   epilogue();
-  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
+  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
 }
