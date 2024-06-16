@@ -8,6 +8,29 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define DEPENDS_ON(name) runtime_ ## name ();
 #define RETURN_IF_TRUE(var) if (var) return; var = true;
 
+// Local variables
+
+DEFINE_RUNTIME_FUN(save_vars)
+  printf("# Local variables\n\n");
+  printf("__SP=0\n\n");
+  printf("save_vars() {\n");
+  printf("  while [ $# -gt 0 ]; do\n");
+  printf("    : $((__SP += 1))\n");
+  printf("    : $((__$__SP=$1))\n");
+  printf("    shift\n");
+  printf("  done\n");
+  printf("}\n\n");
+  printf("unsave_vars() {\n");
+  printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
+  printf("  __return_loc=$1; shift\n");
+  printf("  while [ $# -gt 0 ]; do\n");
+  printf("    if [ $1 != \"$__return_loc\" ]; then : $(($1=__$__SP)); fi\n");
+  printf("    : $((__SP -= 1))\n");
+  printf("    shift\n");
+  printf("  done\n");
+  printf("}\n");
+END_RUNTIME_FUN(save_vars)
+
 // char<->int conversion
 
 DEFINE_RUNTIME_FUN(int_to_char)
@@ -755,4 +778,6 @@ void produce_runtime() {
   runtime_fopen();
   runtime_fclose();
   runtime_fgetc();
+
+  runtime_save_vars();
 }

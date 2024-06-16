@@ -1819,31 +1819,8 @@ void prologue() {
   printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
 #endif
 
-
   printf("# Runtime library\n");
   produce_runtime();
-
-  printf("# Local variables\n\n");
-
-  printf("__SP=0 # Note: Stack grows up, not down\n\n");
-
-  printf("save_vars() {\n");
-  printf("  while [ $# -gt 0 ]; do\n");
-  printf("    : $((__SP += 1))\n");
-  printf("    : $((__$__SP=$1))\n");
-  printf("    shift\n");
-  printf("  done\n");
-  printf("}\n\n");
-
-  printf("unsave_vars() {\n");
-  printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
-  printf("  __return_loc=$1; shift\n");
-  printf("  while [ $# -gt 0 ]; do\n");
-  printf("    if [ $1 != \"$__return_loc\" ]; then : $(($1=__$__SP)); fi\n");
-  printf("    : $((__SP -= 1))\n");
-  printf("    shift\n");
-  printf("  done\n");
-  printf("}\n\n");
 
   #ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { : $(($1 = $2)) ; }\n\n");
