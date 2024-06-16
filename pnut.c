@@ -18,7 +18,9 @@
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
-#define HANDLE_SIMPLE_PRINTF
+
+// Shell backend codegen options
+#define SH_AVOID_PRINTF_USE
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS

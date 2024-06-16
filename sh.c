@@ -1051,7 +1051,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   }
 }
 
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
 text escaped_char(char c, int for_printf) {
 #else
 text escaped_char(char c) {
@@ -1073,14 +1073,14 @@ text escaped_char(char c) {
   else if (c == '"')  return wrap_str("\\\"");
   // else if (c == '\'') return wrap_str("\\\'");
   // else if (c == '?')  return wrap_str("\\?");
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
   // when we're escaping a string for shell's printf, % must be escaped
   else if (c == '%'  && for_printf) return wrap_str("%%");
 #endif
   else                return wrap_char(c);
 }
 
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
 text escape_string(char *str, int for_printf) {
 #else
 text escape_string(char *str) {
@@ -1090,7 +1090,7 @@ text escape_string(char *str) {
   int i = 0;
 
   while (str[i] != '\0') {
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
     char_text = escaped_char(str[i], for_printf);
 #else
     char_text = escaped_char(str[i]);
@@ -1117,7 +1117,7 @@ text comp_rvalue(ast node, int context) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), false)
 #else
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
@@ -1199,10 +1199,7 @@ text comp_lvalue(ast node) {
   }
 }
 
-#ifdef HANDLE_SIMPLE_PRINTF
-// _printf pulls a lot of dependencies from the runtime. In many cases, we can
-// avoid that by using the shell's printf instead. This function checks if the
-// format string contains any unsupported format specifiers.
+#ifdef SH_AVOID_PRINTF_USE
 bool printf_uses_shell_format_specifiers(char* a) {
   // The supported format specifiers are those that are common between C and shell,
   // and those for which the representation is the same in both languages.
@@ -1248,7 +1245,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast params = get_child(node, 1);
   int name_id = get_val(name);
 
-  #ifdef HANDLE_SIMPLE_PRINTF
+  #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
       || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
@@ -1752,7 +1749,7 @@ text comp_constant(ast node) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(new_ident, false)
                                   , wrap_str(" \"")
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
                                   , escape_string(string_pool + get_val(node), true)
 #else
                                   , escape_string(string_pool + get_val(node))
