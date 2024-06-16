@@ -512,6 +512,19 @@ DEPENDS_ON(char_to_int)
   putstr("}\n");
 END_RUNTIME_FUN(getchar)
 
+// An implementation of puts, used to replace printf("%s", ...) calls.
+DEFINE_RUNTIME_FUN(put_pstr)
+DEPENDS_ON(putchar)
+  putstr("_put_pstr() {\n");
+  putstr("  : $(($1 = 0)); shift # Return 0\n");
+  putstr("  __addr=$1; shift\n");
+  putstr("  while [ $(( _$__addr )) -ne 0 ]; do\n");
+  putstr("    _putchar __ $((_$__addr))\n");
+  putstr("    : $(( __addr += 1 ))\n");
+  putstr("  done\n");
+  putstr("}\n");
+END_RUNTIME_FUN(print_pnut_str)
+
 DEFINE_RUNTIME_FUN(print_string)
 DEPENDS_ON(int_to_char)
   putstr("# Emit a C-string line by line so that whitespace isn't mangled\n");
@@ -542,6 +555,7 @@ END_RUNTIME_FUN(print_string)
 
 DEFINE_RUNTIME_FUN(printf)
 DEPENDS_ON(print_string)
+DEPENDS_ON(pack_string)
 DEPENDS_ON(int_to_char)
   putstr("_printf() { # $1 = printf format string, $2... = printf args\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
@@ -796,6 +810,7 @@ void produce_runtime() {
   if (runtime_use_exit)      runtime_exit();
   if (runtime_use_malloc)    runtime_malloc();
   if (runtime_use_free)      runtime_free();
+  if (runtime_use_put_pstr)  runtime_put_pstr();
   if (runtime_use_printf)    runtime_printf();
   if (runtime_use_fopen)     runtime_fopen();
   if (runtime_use_fclose)    runtime_fclose();
