@@ -173,6 +173,7 @@ int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions 
 int string_counter = 0;         /* Counter for string literals */
 #define CHARACTERS_BITFIELD_SIZE 16
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
+bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
 
 // Internal identifier node types. These
@@ -620,6 +621,7 @@ text test_op_to_str(int op) {
 text character_ident(int c) {
   /* Mark character as used */
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
+  any_character_used = true;
 
   if ('a' <= c AND c <= 'z') {
     return string_concat(wrap_str("__CH_"), wrap_char(c));
@@ -1867,12 +1869,14 @@ void prologue() {
 void epilogue() {
   int c;
 
-  printf("# Character constants\n");
-  for(c = 0; c < 256; c += 1) {
-    if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
-      printf("readonly ");
-      print_text(character_ident(c));
-      printf("=%d\n", c);
+  if (any_character_used) {
+    printf("# Character constants\n");
+    for(c = 0; c < 256; c += 1) {
+      if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
+        printf("readonly ");
+        print_text(character_ident(c));
+        printf("=%d\n", c);
+      }
     }
   }
 
