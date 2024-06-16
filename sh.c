@@ -994,7 +994,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
         The left side is always executed, unless the whole expression is executed conditionally.
         We could compile it as always executed, but it makes the Shell code less regular so we compile it conditionally.
       */
-      sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
+      sub1 = handle_side_effects_go(get_child(node, 0), true);
       left_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
       sub2 = handle_side_effects_go(get_child(node, 1), true);
