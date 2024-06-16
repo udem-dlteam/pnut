@@ -530,8 +530,8 @@ text save_local_vars() {
   }
 
   if (res != 0) {
-    runtime_use_save_vars = true;
-    return string_concat(wrap_str("save_vars "), res);
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str("let "), res);
   } else {
     return 0;
   }
@@ -567,8 +567,8 @@ text restore_local_vars() {
   }
 
   if (res != 0) {
-    runtime_use_save_vars = true;
-    return string_concat(wrap_str("unsave_vars $1 "), res);
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str("endlet $1 "), res);
   } else {
     return 0;
   }

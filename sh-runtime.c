@@ -68,11 +68,11 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 
 // Local variables
 
-DEFINE_RUNTIME_FUN(save_vars)
+DEFINE_RUNTIME_FUN(local_vars)
   printf("# Local variables\n");
   printf("__SP=0\n");
-  printf("save_vars() { while [ $# -gt 0 ]; do : $((__SP += 1)) $((__$__SP=$1)) ; shift; done }\n");
-  printf("unsave_vars() {\n");
+  printf("let() { while [ $# -gt 0 ]; do : $((__SP += 1)) $((__$__SP=$1)) ; shift; done }\n");
+  printf("endlet() {\n");
   printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
   printf("  __return_loc=$1; shift\n");
   printf("  while [ $# -gt 0 ]; do\n");
@@ -80,7 +80,7 @@ DEFINE_RUNTIME_FUN(save_vars)
   printf("    : $((__SP -= 1)); shift\n");
   printf("  done\n");
   printf("}\n");
-END_RUNTIME_FUN(save_vars)
+END_RUNTIME_FUN(local_vars)
 
 // char<->int conversion
 
@@ -804,17 +804,17 @@ DEPENDS_ON(char_to_int)
 END_RUNTIME_FUN(fgetc)
 
 void produce_runtime() {
-  if (runtime_use_defstr)    runtime_defstr();
-  if (runtime_use_putchar)   runtime_putchar();
-  if (runtime_use_getchar)   runtime_getchar();
-  if (runtime_use_exit)      runtime_exit();
-  if (runtime_use_malloc)    runtime_malloc();
-  if (runtime_use_free)      runtime_free();
-  if (runtime_use_put_pstr)  runtime_put_pstr();
-  if (runtime_use_printf)    runtime_printf();
-  if (runtime_use_fopen)     runtime_fopen();
-  if (runtime_use_fclose)    runtime_fclose();
-  if (runtime_use_fgetc)     runtime_fgetc();
-  if (runtime_use_make_argv) runtime_make_argv();
-  if (runtime_use_save_vars) runtime_save_vars();
+  if (runtime_use_defstr)     runtime_defstr();
+  if (runtime_use_putchar)    runtime_putchar();
+  if (runtime_use_getchar)    runtime_getchar();
+  if (runtime_use_exit)       runtime_exit();
+  if (runtime_use_malloc)     runtime_malloc();
+  if (runtime_use_free)       runtime_free();
+  if (runtime_use_put_pstr)   runtime_put_pstr();
+  if (runtime_use_printf)     runtime_printf();
+  if (runtime_use_fopen)      runtime_fopen();
+  if (runtime_use_fclose)     runtime_fclose();
+  if (runtime_use_fgetc)      runtime_fgetc();
+  if (runtime_use_make_argv)  runtime_make_argv();
+  if (runtime_use_local_vars) runtime_local_vars();
 }
