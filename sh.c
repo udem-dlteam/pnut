@@ -46,17 +46,13 @@ void mark_mutable_variables_body(ast node);
   string.
 */
 
+#define wrap_char(c) (-c)
+
 text wrap_int(int i) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_INTEGER;
   text_pool[text_alloc + 1] = i;
   return (text_alloc += 2) - 2;
-}
-
-// TODO: Inline this once we have macro with arguments
-text wrap_char(char c) {
-  /* Characters are represent using negative numbers */
-  return -c;
 }
 
 text string_concat(text t1, text t2) {
