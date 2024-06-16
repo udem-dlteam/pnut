@@ -313,6 +313,17 @@ DEFINE_RUNTIME_FUN(initialize_memory)
   putstr("}\n");
 END_RUNTIME_FUN(initialize_memory)
 
+
+DEFINE_RUNTIME_FUN(defarr)
+DEPENDS_ON(alloc)
+#ifdef RT_NO_INIT_GLOBALS
+  printf("defarr() { alloc $2; : $(( $1 = __addr )); }\n\n");
+#else
+DEPENDS_ON(runtime_initialize_memory)
+  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
+#endif
+END_RUNTIME_FUN(defarr)
+
 DEFINE_RUNTIME_FUN(malloc)
 DEPENDS_ON(alloc)
   putstr("_malloc() { # $2 = malloc_size\n");

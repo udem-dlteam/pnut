@@ -1744,6 +1744,7 @@ void comp_glo_var_decl(ast node) {
   if (init == 0) init = new_ast0(INTEGER, 0);
 
   if (get_op(type) == '[') { /* Array declaration */
+    runtime_defarr();
     append_glo_decl(
       string_concat4(
         wrap_str("defarr "),
@@ -1830,15 +1831,6 @@ void comp_glo_decl(ast node) {
 
 void prologue() {
   printf("set -e -u\n\n");
-
-  runtime_alloc();
-
-#ifdef RT_NO_INIT_GLOBALS
-  printf("defarr() { alloc $2; : $(( $1 = __addr )); }\n\n");
-#else
-  runtime_initialize_memory();
-  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
-#endif
 
   #ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { : $(($1 = $2)) ; }\n\n");
