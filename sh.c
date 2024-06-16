@@ -1199,32 +1199,33 @@ text comp_lvalue(ast node) {
   }
 }
 
-text comp_fun_call_code(ast node, ast assign_to) {
-  ast name = get_child(node, 0);
-  ast params = get_child(node, 1);
+#ifdef HANDLE_SIMPLE_PRINTF
+// _printf pulls a lot of dependencies from the runtime. In many cases, we can
+// avoid that by using the shell's printf instead. This function checks if the
+// format string contains any unsupported format specifiers.
+bool printf_uses_shell_format_specifiers(char* a) {
+  // The supported format specifiers are those that are common between C and shell,
+  // and those for which the representation is the same in both languages.
+  // For now, this includes %d, %c, %x
+  // Non-literals strings are not supported because they would need to first be unpacked.
+
+  while (*a != '\0') {
+    if (*a == '%') {
+      a += 1;
+      if (*a != 'd' && *a != 'c' && *a != 'x' && *a != '%') {
+        return false; // Unsupported format specifier
+      }
+    }
+
+    a += 1;
+  }
+  return true;
+}
+#endif
+
+text fun_call_params(ast params) {
   ast param;
   text code_params = 0;
-  int name_id = get_val(name);
-
-  #ifdef HANDLE_SIMPLE_PRINTF
-  if (get_op(assign_to) == IDENTIFIER_EMPTY
-    && (name_id == PRINTF_ID OR name_id == PUTSTR_ID OR name_id == PUTS_ID)
-    && params != 0
-    && get_op(params) == STRING) {
-    return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
-  }
-  #endif
-
-       if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
-  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
-  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
-  else if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
-  else if (name_id == FREE_ID)    { runtime_use_free = true; }
-  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
-  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
-  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
-  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
-
   if (params != 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
       while (get_op(params) == ',') {
@@ -1239,12 +1240,43 @@ text comp_fun_call_code(ast node, ast assign_to) {
     code_params = wrap_str("");
   }
 
+  return code_params;
+}
+
+text comp_fun_call_code(ast node, ast assign_to) {
+  ast name = get_child(node, 0);
+  ast params = get_child(node, 1);
+  int name_id = get_val(name);
+
+  #ifdef HANDLE_SIMPLE_PRINTF
+  if (get_op(assign_to) == IDENTIFIER_EMPTY) {
+    if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
+      || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
+      return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
+    } else if (name_id == PRINTF_ID && params != 0 && get_op(params) == ',') {
+      if (printf_uses_shell_format_specifiers(string_pool + get_val(get_child(params, 0)))) {
+        return string_concat4(wrap_str("printf \""), escape_string(string_pool + get_val(get_child(params, 0)), false), wrap_str("\" "), fun_call_params(get_child(params, 1)));
+      }
+    }
+  }
+  #endif
+
+       if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
+  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
+  else if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
+  else if (name_id == FREE_ID)    { runtime_use_free = true; }
+  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
+  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
+  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
+
   return string_concat5(
     function_name(get_val(name)),
     wrap_char(' '),
     comp_lvalue(assign_to),
     wrap_char(' '),
-    code_params
+    fun_call_params(params)
   );
 }
 
