@@ -86,6 +86,7 @@ enum {
   VAR_DECL,
   VAR_DECLS,
   FUN_DECL,
+  CAST,
 
   // Non-character operands
   INTEGER    = 401,
@@ -922,11 +923,15 @@ void push_macro(int tokens, int args) {
       macro_stack[macro_stack_ix] = macro_tok_lst;
       macro_stack[macro_stack_ix + 1] = macro_args;
       macro_stack_ix += 2;
-    } else {
     }
+
     macro_tok_lst = tokens;
     macro_args = args;
   }
+}
+
+void push_tokens(int tokens) {
+  push_macro(tokens, 0);
 }
 
 // Try to expand a macro.
@@ -1939,7 +1944,7 @@ ast parse_unary_expression() {
   ast result;
   int op;
 
-  if (tok == PLUS_PLUS){
+  if (tok == PLUS_PLUS) {
 
     get_tok();
     result = parse_unary_expression();
@@ -1970,6 +1975,49 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
+  int parens = 0;
+  int tokens = 0;
+  ast result;
+  ast type;
+  int stars;
+
+  if (tok == '(') {
+    // Ideally, we'd parse as many ( as needed, but then we would have to
+    // backtrack when the first parenthesis is for a parenthesized expression
+    // and not a cast.
+    // I think we could write a version of parse_parenthesized_expression that
+    // already has the first parenthesis consumed. It would be called when
+    // after parsing the cast and cast expression, there are still parenthesis
+    // to close, but I'm not sure how we could create the AST since it's all
+    // very top down and that would flip the order of the AST creation.
+
+    // Concretely, this means we can't parse cast expressions where the type
+    // is wrapped in parenthesis, like in the following example:
+    // (((char *)) var)
+    // But that should be ok for TCC.
+    get_tok();
+
+    if (is_type_starter(tok)) {
+      type = parse_type();
+      stars = parse_stars();
+      set_val(type, stars);
+      // TODO: Import clone_ast from other branch
+      // if (stars != 0) {
+      //   type = clone_ast(type);
+      // }
+
+      expect_tok(')');
+      result = new_ast2(CAST, type, parse_cast_expression());
+      return result;
+    } else {
+      // We need to put the current token and '(' back on the token stream.
+      tokens = cons(cons(tok, val), 0);
+      push_tokens(tokens);
+      tok = '(';
+      val = 0;
+    }
+  }
+
   return parse_unary_expression();
 }
 

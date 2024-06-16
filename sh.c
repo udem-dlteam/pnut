@@ -784,6 +784,8 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       right_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = previous_conditional_fun_calls;
       return new_ast4(op, sub1, sub2, left_conditional_fun_calls, right_conditional_fun_calls);
+    } else if (op == CAST) {
+      return new_ast2(CAST, get_child(node, 0), handle_side_effects_go(get_child(node, 1), executes_conditionally));
     } else {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
@@ -978,11 +980,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
         return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
+    } else if (op == CAST) { // Casts are no-op
+      return comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
     } else {
-      fatal_error("comp_rvalue_go: unknown rvalue");
+      fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
       return 0;
     }
   } else if (nb_children == 3) {
@@ -1159,6 +1163,8 @@ text comp_array_lvalue(ast node) {
     sub1 = comp_array_lvalue(get_child(node, 0));
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+  } else if (op == CAST) {
+    return comp_lvalue(get_child(node, 1));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_array_lvalue: unknown lvalue");
@@ -1179,7 +1185,9 @@ text comp_lvalue(ast node) {
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
-    return string_concat(wrap_char('_'), sub1);
+    return string_concat3(wrap_str("_$(("), sub1, wrap_str("))"));
+  } else if (op == CAST) {
+    return comp_lvalue(get_child(node, 1));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue: unknown lvalue");
