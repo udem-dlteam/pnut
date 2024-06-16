@@ -1,8 +1,3 @@
-# Memory management
-
-# C constants
-# readonly is POSIX compliant: https://pubs.opengroup.org/onlinepubs/009695299/utilities/readonly.html
-# Idea: Inlining those constants in the generated code could make it faster, at the cost of readability.
 readonly _NULL=0
 readonly _EOF=-1
 
@@ -28,200 +23,61 @@ initialize_memory() { # $1 = address, $2 = length
   done
 }
 
-make_argv() {
-  __argc=$1; shift;
-  alloc $__argc # Allocate enough space for all elements. No need to initialize.
-  __argv=$__addr # Saving address because its overwritten by unpack_string
-  __argv_ptr=$__addr # __ptr is used by unpack_string
-
-  while [ $# -ge 1 ]; do
-    unpack_string "$1"
-    : $((_$__argv_ptr = $__addr))
-    : $((__argv_ptr += 1))
-    shift
-  done
-}
-
-# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.
-unpack_string() {
-  __buf="$1"
-  alloc $(( ${#__buf} + 1 ))
-  __ptr=$__addr
-  while [ -n "$__buf" ] ; do
-    __char="${__buf%"${__buf#?}"}"   # remove all but first char
-    __buf="${__buf#?}"               # remove the current char from $__buf
-    char_to_int "$__char"
-    : $((_$__ptr = __c))
-    : $((__ptr += 1))
-  done
-  : $((_$__ptr = 0 ))
-}
-
-# See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences
-# Not matching on the most common characters like in _getchar because this
-# function reads strings with a different distribution.
-unpack_escaped_string() {
-  __buf="$1"
-  # Allocates enough space for all characters, assuming that no character is escaped
-  alloc $(( ${#__buf} + 1 ))
-  __ptr=$__addr
-  while [ -n "$__buf" ] ; do
-    case "$__buf" in
-      '\'*)
-        __buf="${__buf#?}"               # remove the current char from $__buf
-        case "$__buf" in
-          'a'*) __c=7 ;;
-          'b'*) __c=8 ;;
-          'f'*) __c=12 ;;
-          'n'*) __c=10 ;;
-          'r'*) __c=13 ;;
-          't'*) __c=9 ;;
-          'v'*) __c=11 ;;
-          '\'*) __c=92 ;;
-          '"'*) __c=34 ;;
-          "'"*) __c=39 ;;
-          '?'*) __c=63 ;;
-          '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes
-          *) echo "invalid escape in string: $__char"; exit 1 ;;
-        esac
-        __buf="${__buf#?}"               # remove the current char from $__buf
-        ;;
-      *)
-        char_to_int "${__buf%"${__buf#?}"}" # remove all but first char
-        __buf="${__buf#?}"               # remove the current char from $__buf
-        ;;
-    esac
-    : $((_$__ptr = __c))
-    : $((__ptr += 1))
-  done
-  : $((_$__ptr = 0 ))
-}
-
-# Convert a VM string reference to a Shell string.
-# $__res is set to the result, and $__len is set to the length of the string.
-pack_string() {
-  __addr=$1; shift
-  __max_len=100000000
-  __delim=0
-  __len=0
-  __res=""
-  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter
-  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length
-  while [ $((_$__addr)) -ne $__delim ] && [ $__max_len -gt $__len ] ; do
-    __char=$((_$__addr))
-    __addr=$((__addr + 1))
-    __len=$((__len + 1))
-    case $__char in
-      10) __res="$__res\n" ;; # 10 == '\n'
-      *)  int_to_char "$__char"; __res="$__res$__char" ;;
-    esac
-  done
-}
-
-# Emit a C-string line by line so that whitespace isn't mangled
-print_string() {
-  __addr=$1; shift
-  __max_len=100000000
-  __delim=0
-  __len=0
-  __acc=""
-  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter
-  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length
-  while [ $((_$__addr)) -ne $__delim ] && [ $__max_len -gt $__len ] ; do
-    __char=$((_$__addr))
-    __addr=$((__addr + 1))
-    __len=$((__len + 1))
-    case $__char in
-      10) # 10 == '\n'
-        printf "%s\n" "$__acc"
-        __acc="" ;;
-      *)
-        int_to_char $__char
-        __acc="$__acc$__char" ;;
-    esac
-  done
-  printf "%s" "$__acc"
-}
-
 char_to_int() {
   case $1 in
     [0-9]) __c=$((48 + $1)) ;;
-    # [a-m])
-    #   case $1 in
-    #     [a-g])
-    #       case $1 in
-            'a') __c=97 ;;
-            'b') __c=98 ;;
-            'c') __c=99 ;;
-            'd') __c=100 ;;
-            'e') __c=101 ;;
-            'f') __c=102 ;;
-            'g') __c=103 ;;
-          # esac ;;
-        'h') __c=104 ;;
-        'i') __c=105 ;;
-        'j') __c=106 ;;
-        'k') __c=107 ;;
-        'l') __c=108 ;;
-        'm') __c=109 ;;
-    #   esac ;;
-    # [n-z])
-    #   case $1 in
-    #     [n-t])
-    #       case $1 in
-            'n') __c=110 ;;
-            'o') __c=111 ;;
-            'p') __c=112 ;;
-            'q') __c=113 ;;
-            'r') __c=114 ;;
-            's') __c=115 ;;
-            't') __c=116 ;;
-          # esac ;;
-        'u') __c=117 ;;
-        'v') __c=118 ;;
-        'w') __c=119 ;;
-        'x') __c=120 ;;
-        'y') __c=121 ;;
-        'z') __c=122 ;;
-    #   esac ;;
-    # [A-M])
-    #   case $1 in
-    #     [A-G])
-    #       case $1 in
-            'A') __c=65 ;;
-            'B') __c=66 ;;
-            'C') __c=67 ;;
-            'D') __c=68 ;;
-            'E') __c=69 ;;
-            'F') __c=70 ;;
-            'G') __c=71 ;;
-          # esac ;;
-        'H') __c=72 ;;
-        'I') __c=73 ;;
-        'J') __c=74 ;;
-        'K') __c=75 ;;
-        'L') __c=76 ;;
-        'M') __c=77 ;;
-    #   esac ;;
-    # [N-Z])
-    #   case $1 in
-    #     [N-T])
-    #       case $1 in
-            'N') __c=78 ;;
-            'O') __c=79 ;;
-            'P') __c=80 ;;
-            'Q') __c=81 ;;
-            'R') __c=82 ;;
-            'S') __c=83 ;;
-            'T') __c=84 ;;
-          # esac ;;
-        'U') __c=85 ;;
-        'V') __c=86 ;;
-        'W') __c=87 ;;
-        'X') __c=88 ;;
-        'Y') __c=89 ;;
-        'Z') __c=90 ;;
-      # esac ;;
+    'a') __c=97 ;;
+    'b') __c=98 ;;
+    'c') __c=99 ;;
+    'd') __c=100 ;;
+    'e') __c=101 ;;
+    'f') __c=102 ;;
+    'g') __c=103 ;;
+    'h') __c=104 ;;
+    'i') __c=105 ;;
+    'j') __c=106 ;;
+    'k') __c=107 ;;
+    'l') __c=108 ;;
+    'm') __c=109 ;;
+    'n') __c=110 ;;
+    'o') __c=111 ;;
+    'p') __c=112 ;;
+    'q') __c=113 ;;
+    'r') __c=114 ;;
+    's') __c=115 ;;
+    't') __c=116 ;;
+    'u') __c=117 ;;
+    'v') __c=118 ;;
+    'w') __c=119 ;;
+    'x') __c=120 ;;
+    'y') __c=121 ;;
+    'z') __c=122 ;;
+    'A') __c=65 ;;
+    'B') __c=66 ;;
+    'C') __c=67 ;;
+    'D') __c=68 ;;
+    'E') __c=69 ;;
+    'F') __c=70 ;;
+    'G') __c=71 ;;
+    'H') __c=72 ;;
+    'I') __c=73 ;;
+    'J') __c=74 ;;
+    'K') __c=75 ;;
+    'L') __c=76 ;;
+    'M') __c=77 ;;
+    'N') __c=78 ;;
+    'O') __c=79 ;;
+    'P') __c=80 ;;
+    'Q') __c=81 ;;
+    'R') __c=82 ;;
+    'S') __c=83 ;;
+    'T') __c=84 ;;
+    'U') __c=85 ;;
+    'V') __c=86 ;;
+    'W') __c=87 ;;
+    'X') __c=88 ;;
+    'Y') __c=89 ;;
+    'Z') __c=90 ;;
     ' ') __c=32 ;;
     '!') __c=33 ;;
     '"') __c=34 ;;
@@ -258,6 +114,72 @@ char_to_int() {
     *)
       __c=$(LC_CTYPE=C printf "%d" "'$1")
   esac
+}
+
+# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.
+unpack_string() {
+  __buf="$1"
+  alloc $(( ${#__buf} + 1 ))
+  __ptr=$__addr
+  while [ -n "$__buf" ] ; do
+    __char="${__buf%"${__buf#?}"}"   # remove all but first char
+    __buf="${__buf#?}"               # remove the current char from $__buf
+    char_to_int "$__char"
+    : $((_$__ptr = __c))
+    : $((__ptr += 1))
+  done
+  : $((_$__ptr = 0 ))
+}
+
+make_argv() {
+  __argc=$1; shift;
+  alloc $__argc # Allocate enough space for all elements. No need to initialize.
+  __argv=$__addr # Saving address because its overwritten by unpack_string
+  __argv_ptr=$__addr # __ptr is used by unpack_string
+
+  while [ $# -ge 1 ]; do
+    unpack_string "$1"
+    : $((_$__argv_ptr = $__addr))
+    : $((__argv_ptr += 1))
+    shift
+  done
+}
+
+unpack_escaped_string() {
+  __buf="$1"
+  # Allocates enough space for all characters, assuming that no character is escaped
+  alloc $(( ${#__buf} + 1 ))
+  __ptr=$__addr
+  while [ -n "$__buf" ] ; do
+    case "$__buf" in
+      '\'*)
+        __buf="${__buf#?}"               # remove the current char from $__buf
+        case "$__buf" in
+          'a'*) __c=7 ;;
+          'b'*) __c=8 ;;
+          'f'*) __c=12 ;;
+          'n'*) __c=10 ;;
+          'r'*) __c=13 ;;
+          't'*) __c=9 ;;
+          'v'*) __c=11 ;;
+          '\'*) __c=92 ;;
+          '"'*) __c=34 ;;
+          "'"*) __c=39 ;;
+          '?'*) __c=63 ;;
+          '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes
+          *) echo "invalid escape in string: $__char"; exit 1 ;;
+        esac
+        __buf="${__buf#?}"               # remove the current char from $__buf
+        ;;
+      *)
+        char_to_int "${__buf%"${__buf#?}"}" # remove all but first char
+        __buf="${__buf#?}"                  # remove the current char from $__buf
+        ;;
+    esac
+    : $((_$__ptr = __c))
+    : $((__ptr += 1))
+  done
+  : $((_$__ptr = 0 ))
 }
 
 int_to_char() {
@@ -348,12 +270,57 @@ int_to_char() {
     124) __char="|" ;;
     125) __char="}" ;;
     126) __char="~" ;;
-    10)  __char="
-" ;;
+    10)  __char="\n" ;;
     *)
       echo "Invalid character code: $1" ; exit 1
       __char=$(printf "\\$(printf "%o" "$1")") ;;
   esac
+}
+
+# Convert a VM string reference to a Shell string.
+# $__res is set to the result, and $__len is set to the length of the string.
+pack_string() {
+  __addr=$1; shift
+  __max_len=100000000
+  __delim=0
+  __len=0
+  __res=""
+  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length
+  while [ $((_$__addr)) -ne $__delim ] && [ $__max_len -gt $__len ] ; do
+    __char=$((_$__addr))
+    __addr=$((__addr + 1))
+    __len=$((__len + 1))
+    case $__char in
+      10) __res="$__res\n" ;; # 10 == '\n'
+      *)  int_to_char "$__char"; __res="$__res$__char" ;;
+    esac
+  done
+}
+
+# Emit a C-string line by line so that whitespace isn't mangled
+print_string() {
+  __addr=$1; shift
+  __max_len=100000000
+  __delim=0
+  __len=0
+  __acc=""
+  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter
+  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length
+  while [ $((_$__addr)) -ne $__delim ] && [ $__max_len -gt $__len ] ; do
+    __char=$((_$__addr))
+    __addr=$((__addr + 1))
+    __len=$((__len + 1))
+    case $__char in
+      10) # 10 == '\n'
+        printf "%s\n" "$__acc"
+        __acc="" ;;
+      *)
+        int_to_char $__char
+        __acc="$__acc$__char" ;;
+    esac
+  done
+  printf "%s" "$__acc"
 }
 
 # Define a string, and return a reference to it in the varible taken as argument.
@@ -367,8 +334,6 @@ defstr() { # $1 = variable name, $2 = string
   fi
   set -u
 }
-
-# Primitives
 
 _putchar() {
   : $(($1 = 0)); shift # Return 0
@@ -406,10 +371,6 @@ _getchar() {
     fi
   fi
 
-  # The current character is at the head of $__stdin_buf. It will be removed in the next call to getchar.
-  # The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
-  # occurrences See analyze-big-c.py to see the frequency of each character in big.c.
-  # Note that adding cases here speeds up all shells except ksh, so the set of optimized characters should be kept small.
   case "$__stdin_buf" in
     " "*) : $(($1 = 32))  ;;
     "e"*) : $(($1 = 101)) ;;
@@ -430,7 +391,6 @@ _getchar() {
     "d"*) : $(($1 = 100)) ;;
     "*"*) : $(($1 = 42))  ;;
     *)
-      # For some reason, inlining char_to_int_ordered here makes bash significantly slower (2.9s to 3.7s)
       char_to_int "${__stdin_buf%"${__stdin_buf#?}"}" # get the first character
       : $(($1 = __c))
       ;;
@@ -503,12 +463,10 @@ _printf() { # $1 = printf format string, $2... = printf args
           pack_string $__fmt_ptr 46 # Read until '.' or end of string
           __fmt_ptr=$((__fmt_ptr + __len + 1))
           __min_len="$__head_char$__res" # Don't forget the first digit we've already read
-
           # Get string length
           pack_string $__fmt_ptr 115 # Read until 's' or end of string
           __fmt_ptr=$((__fmt_ptr + __len))
           __str_len=$__res
-
           __head=$((_$__fmt_ptr))
           int_to_char $__head; __head_char=$__char
           __fmt_ptr=$((__fmt_ptr + 1))
@@ -563,7 +521,6 @@ next_fd() {
   echo "No more file descriptors available" ; exit 1
 }
 
-# exec $fd<"file" does not work as expected, and we don't want to use eval
 open_fd() { # $1: fd id, $2: file to open
   : $((__fopen_fd$1 = 1)) # Mark the fd as opened
   case $1 in
@@ -576,23 +533,6 @@ open_fd() { # $1: fd id, $2: file to open
     7) exec 7< $2 ;;
     8) exec 8< $2 ;;
     9) exec 9< $2 ;;
-    *) echo "Unknown fd: $1"; exit 1 ;;
-  esac
-}
-
-# exec $fd<&- does not work as expected, and we don't want to use eval
-close_fd() { # $1: fd id
-: $((__fopen_fd$1 = 0)) # Mark the fd as closed
-  case $1 in
-    1) exec 1<&- ;;
-    2) exec 2<&- ;;
-    3) exec 3<&- ;;
-    4) exec 4<&- ;;
-    5) exec 5<&- ;;
-    6) exec 6<&- ;;
-    7) exec 7<&- ;;
-    8) exec 8<&- ;;
-    9) exec 9<&- ;;
     *) echo "Unknown fd: $1"; exit 1 ;;
   esac
 }
@@ -621,6 +561,22 @@ _fopen() { # $2: File name, $3: Mode
   : $((_$(($1 + 3)) = __fd))    # Save fd id
 }
 
+close_fd() { # $1: fd id
+: $((__fopen_fd$1 = 0)) # Mark the fd as closed
+  case $1 in
+    1) exec 1<&- ;;
+    2) exec 2<&- ;;
+    3) exec 3<&- ;;
+    4) exec 4<&- ;;
+    5) exec 5<&- ;;
+    6) exec 6<&- ;;
+    7) exec 7<&- ;;
+    8) exec 8<&- ;;
+    9) exec 9<&- ;;
+    *) echo "Unknown fd: $1"; exit 1 ;;
+  esac
+}
+
 _fclose() { # $2: File descriptor
   __fd_id=$((_$(($2 + 3)) ))    # Fd id is at offset 3
   __buf=$((_$(($2 + 0)) ))      # Buffer starts at offset 1
@@ -637,27 +593,27 @@ unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __ends_with_eof=$3
   while [ ! -z "$__fgetc_buf" ]; do
     case "$__fgetc_buf" in
-      " "*) : $(( _$__buf = 32 ))  ;;
-      "e"*) : $(( _$__buf = 101 )) ;;
-      "="*) : $(( _$__buf = 61 ))  ;;
-      "t"*) : $(( _$__buf = 116 )) ;;
-      ";"*) : $(( _$__buf = 59 ))  ;;
-      "i"*) : $(( _$__buf = 105 )) ;;
-      ")"*) : $(( _$__buf = 41 ))  ;;
-      "("*) : $(( _$__buf = 40 ))  ;;
-      "n"*) : $(( _$__buf = 110 )) ;;
-      "s"*) : $(( _$__buf = 115 )) ;;
-      "l"*) : $(( _$__buf = 108 )) ;;
-      "+"*) : $(( _$__buf = 43 ))  ;;
-      "p"*) : $(( _$__buf = 112 )) ;;
-      "a"*) : $(( _$__buf = 97 ))  ;;
-      "r"*) : $(( _$__buf = 114 )) ;;
-      "f"*) : $(( _$__buf = 102 )) ;;
-      "d"*) : $(( _$__buf = 100 )) ;;
-      "*"*) : $(( _$__buf = 42 ))  ;;
+      " "*) : $((_$__buf = 32))  ;;
+      "e"*) : $((_$__buf = 101)) ;;
+      "="*) : $((_$__buf = 61))  ;;
+      "t"*) : $((_$__buf = 116)) ;;
+      ";"*) : $((_$__buf = 59))  ;;
+      "i"*) : $((_$__buf = 105)) ;;
+      ")"*) : $((_$__buf = 41))  ;;
+      "("*) : $((_$__buf = 40))  ;;
+      "n"*) : $((_$__buf = 110)) ;;
+      "s"*) : $((_$__buf = 115)) ;;
+      "l"*) : $((_$__buf = 108)) ;;
+      "+"*) : $((_$__buf = 43))  ;;
+      "p"*) : $((_$__buf = 112)) ;;
+      "a"*) : $((_$__buf = 97))  ;;
+      "r"*) : $((_$__buf = 114)) ;;
+      "f"*) : $((_$__buf = 102)) ;;
+      "d"*) : $((_$__buf = 100)) ;;
+      "*"*) : $((_$__buf = 42))  ;;
       *)
         char_to_int "${__fgetc_buf%"${__fgetc_buf#?}"}" # get the first character
-         : $(( _$__buf = __c ))
+        : $((_$__buf = __c))
         ;;
     esac
 
