@@ -109,6 +109,8 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
+// TODO: All strings passed to wrap_str are literals, so we should just store
+// a reference to the literal instead of copying it.
 text wrap_str(char *s) {
   int i = 0;
   int result = text_alloc;
