@@ -268,13 +268,15 @@ void print_glo_decls() {
   int level;
   while (i < glo_decl_ix) {
     if (glo_decls[i + 1] == 1) { /* Skip inactive declarations */
-      level = glo_decls[i];
-      while (level > 0) {
-        putchar(' '); putchar(' ');
-        level -= 1;
+      if (glo_decls[i + 2] != 0) {
+        level = glo_decls[i];
+        while (level > 0) {
+          putchar(' '); putchar(' ');
+          level -= 1;
+        }
+        print_text(glo_decls[i + 2]);
+        putchar('\n');
       }
-      print_text(glo_decls[i + 2]);
-      putchar('\n');
     }
     i += 3;
   }
