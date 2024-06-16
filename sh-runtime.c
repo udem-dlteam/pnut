@@ -207,11 +207,9 @@ DEFINE_RUNTIME_FUN(alloc)
   putstr("__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.\n\n");
   putstr("alloc() {\n");
 #ifdef RT_FREE_UNSETS_VARS
-  putstr("  # When free isn't a no-op, we need to tag all objects with their size\n");
-  putstr("  if [ $__FREE_UNSETS_VARS -eq 1 ]; then\n");
-  putstr("    : $((_$__ALLOC = $1)) # Save allocation size\n");
-  putstr("    : $((__ALLOC += 1))\n");
-  putstr("  fi\n");
+  // When free isn't a no-op, we need to tag all objects with their size
+  putstr("  : $((_$__ALLOC = $1)) # Save allocation size\n");
+  putstr("  : $((__ALLOC += 1))\n");
 #endif
   putstr("  __addr=$__ALLOC\n");
   putstr("  : $((__ALLOC += $1))\n");
@@ -242,15 +240,13 @@ DEFINE_RUNTIME_FUN(free)
   putstr("_free() { # $1 = pointer to object to free\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
 #ifdef RT_FREE_UNSETS_VARS
-  putstr("  if [ $__FREE_UNSETS_VARS -eq 1 ]; then\n");
-  putstr("    __ptr=$1\n");
-  putstr("    __size=$((_$((__ptr - 1)))) # Get size of allocation\n");
-  putstr("    while [ $__size -gt 0 ]; do\n");
-  putstr("      unset \"_$__ptr\"\n");
-  putstr("      : $((__ptr += 1))\n");
-  putstr("      : $((__size -= 1))\n");
-  putstr("    done\n");
-  putstr("  fi\n");
+  putstr("  __ptr=$1\n");
+  putstr("  __size=$((_$((__ptr - 1)))) # Get size of allocation\n");
+  putstr("  while [ $__size -gt 0 ]; do\n");
+  putstr("    unset \"_$__ptr\"\n");
+  putstr("    : $((__ptr += 1))\n");
+  putstr("    : $((__size -= 1))\n");
+  putstr("  done\n");
 #endif
   putstr("}\n");
 END_RUNTIME_FUN(free)

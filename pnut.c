@@ -20,6 +20,9 @@
 #define SUPPORT_ADDRESS_OF_OP_not
 #define HANDLE_SIMPLE_PRINTF_not
 
+// Options to parameterize the shell runtime library
+#define RT_FREE_UNSETS_VARS
+
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
 #define OR |

@@ -1,5 +1,6 @@
 // POSIX shell codegen
 
+#include "sh-runtime.c"
 
 void print_string_char(int c) {
   if (c == 7) printf("\\a");
@@ -1810,16 +1811,13 @@ void prologue() {
   printf("set -e -u\n\n");
 
   printf("# Handle runtime options\n");
-  printf("__FREE_UNSETS_VARS=1\n");
   printf("__INIT_GLOBALS=1\n\n");
 
-  printf("if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then __FREE_UNSETS_VARS=1; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then __FREE_UNSETS_VARS=0; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then __INIT_GLOBALS=0; shift; fi\n\n");
 
-  printf("# Load runtime library and primitives\n");
-  printf(". ./runtime.sh\n\n");
+  printf("# Runtime library\n");
+  produce_runtime();
 
   printf("# Local variables\n\n");
 
