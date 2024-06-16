@@ -530,6 +530,7 @@ text save_local_vars() {
   }
 
   if (res != 0) {
+    runtime_use_save_vars = true;
     return string_concat(wrap_str("save_vars "), res);
   } else {
     return 0;
@@ -566,6 +567,7 @@ text restore_local_vars() {
   }
 
   if (res != 0) {
+    runtime_use_save_vars = true;
     return string_concat(wrap_str("unsave_vars $1 "), res);
   } else {
     return 0;
@@ -1107,6 +1109,7 @@ text comp_rvalue(ast node, int context) {
   fun_call_decl_start = glo_decl_ix;
 
   while (literals_inits != 0) {
+    runtime_use_defstr = true;
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
@@ -1207,6 +1210,16 @@ text comp_fun_call_code(ast node, ast assign_to) {
     return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), false), wrap_str("\""));
   }
   #endif
+
+       if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
+  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
+  else if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
+  else if (name_id == FREE_ID)    { runtime_use_free = true; }
+  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
+  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
+  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
 
   if (params != 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
@@ -1604,6 +1617,9 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == 0) return; // ignore forward declarations
 
+  // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
+  if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
+
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
 
@@ -1695,6 +1711,7 @@ text comp_constant(ast node) {
   } else if (op == CHARACTER) {
     return string_concat(wrap_char('$'), character_ident(get_val(node)));
   } else if (op == STRING) {
+    runtime_use_defstr = true;
     new_ident = fresh_string_ident();
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(new_ident, false)
@@ -1819,16 +1836,9 @@ void prologue() {
   printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
 #endif
 
-  printf("# Runtime library\n");
-  produce_runtime();
-
   #ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { : $(($1 = $2)) ; }\n\n");
   #endif
-
-  printf("# Setup argc, argv\n");
-  printf("__argc_for_main=$(($# + 1))\n");
-  printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
 }
 
 void epilogue() {
@@ -1843,8 +1853,17 @@ void epilogue() {
     }
   }
 
-  putchar('\n');
-  printf("_main __ $__argc_for_main $__argv_for_main\n");
+  printf("# Runtime library\n");
+  produce_runtime();
+
+  if (runtime_use_make_argv) {
+    printf("# Setup argc, argv\n");
+    printf("__argc_for_main=$(($# + 1))\n");
+    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
+    printf("_main __ $__argc_for_main $__argv_for_main\n");
+  } else {
+    printf("_main __\n");
+  }
 }
 
 /* Initialize local and synthetic variables used by function */

@@ -433,12 +433,21 @@ int INCLUDE_ID;
 
 int NOT_SUPPORTED_ID;
 
-// We want to recognize certain identifers without having to do expensive string
-// comparisons
+// We want to recognize certain identifers without having to do expensive string comparisons
 int ARGV_ID;
 int NULL_ID;
 int EOF_ID;
+int MAIN_ID;
+
+int PUTCHAR_ID;
+int GETCHAR_ID;
+int EXIT_ID;
+int MALLOC_ID;
+int FREE_ID;
 int PRINTF_ID;
+int FOPEN_ID;
+int FCLOSE_ID;
+int FGETC_ID;
 
 void get_tok_macro() {
   expand_macro = false;
@@ -754,9 +763,18 @@ void init_ident_table() {
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
   NULL_ID = init_ident(IDENTIFIER, "NULL");
-  EOF_ID = init_ident(IDENTIFIER, "EOF");
+  EOF_ID  = init_ident(IDENTIFIER, "EOF");
+  MAIN_ID = init_ident(IDENTIFIER, "main");
 
-  PRINTF_ID = init_ident(IDENTIFIER, "printf");
+  PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
+  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
+  EXIT_ID    = init_ident(IDENTIFIER, "exit");
+  MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
+  FREE_ID    = init_ident(IDENTIFIER, "free");
+  PRINTF_ID  = init_ident(IDENTIFIER, "printf");
+  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
+  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
+  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.

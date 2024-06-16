@@ -1,6 +1,13 @@
 // Produce the shell runtime library
 
+#ifdef INCLUDE_ALL_RUNTIME
+#define DEFAULT_USE 1
+#else
+#define DEFAULT_USE 0
+#endif
+
 #define DEFINE_RUNTIME_FUN(name) \
+bool runtime_use_ ## name = DEFAULT_USE; \
 bool runtime_ ## name ## _defined = false; \
 void runtime_ ## name () { \
 RETURN_IF_TRUE(runtime_ ## name ## _defined)
@@ -756,28 +763,16 @@ DEPENDS_ON(char_to_int)
 END_RUNTIME_FUN(fgetc)
 
 void produce_runtime() {
-  runtime_alloc();
-  runtime_initialize_memory();
-  runtime_make_argv();
-  runtime_unpack_string();
-  runtime_unpack_escaped_string();
-  runtime_pack_string();
-  runtime_print_string();
-  runtime_char_to_int();
-  runtime_int_to_char();
-  runtime_defstr();
-
-  runtime_putchar();
-  runtime_getchar();
-
-  runtime_exit();
-  runtime_malloc();
-
-  runtime_free();
-  runtime_printf();
-  runtime_fopen();
-  runtime_fclose();
-  runtime_fgetc();
-
-  runtime_save_vars();
+  if (runtime_use_defstr)    runtime_defstr();
+  if (runtime_use_putchar)   runtime_putchar();
+  if (runtime_use_getchar)   runtime_getchar();
+  if (runtime_use_exit)      runtime_exit();
+  if (runtime_use_malloc)    runtime_malloc();
+  if (runtime_use_free)      runtime_free();
+  if (runtime_use_printf)    runtime_printf();
+  if (runtime_use_fopen)     runtime_fopen();
+  if (runtime_use_fclose)    runtime_fclose();
+  if (runtime_use_fgetc)     runtime_fgetc();
+  if (runtime_use_make_argv) runtime_make_argv();
+  if (runtime_use_save_vars) runtime_save_vars();
 }
