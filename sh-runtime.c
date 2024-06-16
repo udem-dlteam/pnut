@@ -15,11 +15,62 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define DEPENDS_ON(name) runtime_ ## name ();
 #define RETURN_IF_TRUE(var) if (var) return; var = true;
 
+#ifdef RT_COMPACT
+#define call_char_to_int(prefix, char_var) putstr(prefix "__c=$(LC_CTYPE=C printf \"%d\" \"'" char_var "\")\n");
+#else
+#define call_char_to_int(prefix, char_var) putstr(prefix "char_to_int \"" char_var "\"\n");
+#endif
+
+#ifdef RT_COMPACT
+#define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$(printf \"%o\" \"" int_var "\")\")\n");
+#else
+#define call_int_to_char(prefix, int_var) putstr(prefix "int_to_char \"" int_var "\"\n");
+#endif
+
+// The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
+// occurrences See analyze-big-c.py to see the frequency of each character in big.c.
+// Note that adding cases here speeds up all shells except ksh, so the set of optimized characters should be kept small.
+#define extract_first_char_fast(prefix, buf_var, res_var) \
+  putstr(prefix "  case \"$" buf_var "\" in\n"); \
+  putstr(prefix "    \" \"*) : $((" res_var " = 32))  ;;\n"); \
+  putstr(prefix "    \"e\"*) : $((" res_var " = 101)) ;;\n"); \
+  putstr(prefix "    \"=\"*) : $((" res_var " = 61))  ;;\n"); \
+  putstr(prefix "    \"t\"*) : $((" res_var " = 116)) ;;\n"); \
+  putstr(prefix "    \";\"*) : $((" res_var " = 59))  ;;\n"); \
+  putstr(prefix "    \"i\"*) : $((" res_var " = 105)) ;;\n"); \
+  putstr(prefix "    \")\"*) : $((" res_var " = 41))  ;;\n"); \
+  putstr(prefix "    \"(\"*) : $((" res_var " = 40))  ;;\n"); \
+  putstr(prefix "    \"n\"*) : $((" res_var " = 110)) ;;\n"); \
+  putstr(prefix "    \"s\"*) : $((" res_var " = 115)) ;;\n"); \
+  putstr(prefix "    \"l\"*) : $((" res_var " = 108)) ;;\n"); \
+  putstr(prefix "    \"+\"*) : $((" res_var " = 43))  ;;\n"); \
+  putstr(prefix "    \"p\"*) : $((" res_var " = 112)) ;;\n"); \
+  putstr(prefix "    \"a\"*) : $((" res_var " = 97))  ;;\n"); \
+  putstr(prefix "    \"r\"*) : $((" res_var " = 114)) ;;\n"); \
+  putstr(prefix "    \"f\"*) : $((" res_var " = 102)) ;;\n"); \
+  putstr(prefix "    \"d\"*) : $((" res_var " = 100)) ;;\n"); \
+  putstr(prefix "    \"*\"*) : $((" res_var " = 42))  ;;\n"); \
+  putstr(prefix "    *)\n"); \
+  call_char_to_int(prefix "      ", "${" buf_var "%\"${" buf_var "#?}\"}") \
+  putstr(prefix "      : $((" res_var " = __c))\n"); \
+  putstr(prefix "      ;;\n"); \
+  putstr(prefix "  esac\n");
+
+#define extract_first_char_compact(prefix, buf_var, res_var) \
+  call_char_to_int(prefix "  ", "${" buf_var "%\"${" buf_var "#?}\"}") \
+  putstr(prefix "  : $((" res_var " = __c))\n");
+
+#ifdef RT_COMPACT
+#define extract_first_char(prefix, buf_var, res_var) extract_first_char_compact(prefix, buf_var, res_var)
+#else
+#define extract_first_char(prefix, buf_var, res_var) extract_first_char_fast(prefix, buf_var, res_var)
+#endif
+
 // Local variables
 
 DEFINE_RUNTIME_FUN(save_vars)
-  printf("# Local variables\n\n");
-  printf("__SP=0\n\n");
+  printf("# Local variables\n");
+  printf("__SP=0\n");
   printf("save_vars() {\n");
   printf("  while [ $# -gt 0 ]; do\n");
   printf("    : $((__SP += 1))\n");
@@ -41,6 +92,7 @@ END_RUNTIME_FUN(save_vars)
 // char<->int conversion
 
 DEFINE_RUNTIME_FUN(int_to_char)
+#ifndef RT_COMPACT
   putstr("int_to_char() {\n");
   putstr("  case $1 in\n");
   putstr("    48|49|50|51|52|53|54|55|56|57) __char=$(($1 - 48)) ;;\n");
@@ -135,9 +187,11 @@ DEFINE_RUNTIME_FUN(int_to_char)
   putstr("      __char=$(printf \"\\\\$(printf \"%o\" \"$1\")\") ;;\n");
   putstr("  esac\n");
   putstr("}\n");
+#endif
 END_RUNTIME_FUN(int_to_char)
 
 DEFINE_RUNTIME_FUN(char_to_int)
+#ifndef RT_COMPACT
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
   putstr("    [0-9]) __c=$((48 + $1)) ;;\n");
@@ -230,6 +284,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
   putstr("      __c=$(LC_CTYPE=C printf \"%d\" \"'$1\")\n");
   putstr("  esac\n");
   putstr("}\n");
+#endif
 END_RUNTIME_FUN(char_to_int)
 
 // memory allocation
@@ -293,7 +348,7 @@ DEPENDS_ON(char_to_int)
   putstr("  while [ -n \"$__buf\" ] ; do\n");
   putstr("    __char=\"${__buf%\"${__buf#?}\"}\"   # remove all but first char\n");
   putstr("    __buf=\"${__buf#?}\"               # remove the current char from $__buf\n");
-  putstr("    char_to_int \"$__char\"\n");
+  call_char_to_int("    ", "$__char")
   putstr("    : $((_$__ptr = __c))\n");
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
@@ -350,7 +405,7 @@ DEPENDS_ON(char_to_int)
   putstr("        __buf=\"${__buf#?}\"               # remove the current char from $__buf\n");
   putstr("        ;;\n");
   putstr("      *)\n");
-  putstr("        char_to_int \"${__buf%\"${__buf#?}\"}\" # remove all but first char\n");
+  call_char_to_int("        ", "${__buf%\"${__buf#?}\"}")
   putstr("        __buf=\"${__buf#?}\"                  # remove the current char from $__buf\n");
   putstr("        ;;\n");
   putstr("    esac\n");
@@ -379,7 +434,9 @@ DEPENDS_ON(int_to_char)
   putstr("    __len=$((__len + 1))\n");
   putstr("    case $__char in\n");
   putstr("      10) __res=\"$__res\\n\" ;; # 10 == '\\n'\n");
-  putstr("      *)  int_to_char \"$__char\"; __res=\"$__res$__char\" ;;\n");
+  putstr("      *)");
+  call_int_to_char("        ", "$__char")
+  putstr("        __res=\"$__res$__char\" ;;\n");
   putstr("    esac\n");
   putstr("  done\n");
   putstr("}\n");
@@ -416,36 +473,6 @@ DEFINE_RUNTIME_FUN(putchar)
   putstr("}\n");
 END_RUNTIME_FUN(putchar)
 
-// The current character is at the head of $__stdin_buf. It will be removed in the next call to getchar.
-// The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
-// occurrences See analyze-big-c.py to see the frequency of each character in big.c.
-// Note that adding cases here speeds up all shells except ksh, so the set of optimized characters should be kept small.
-#define extract_first_char_fast(prefix, buf_var, res_var) \
-  putstr(prefix "  case \"$" buf_var "\" in\n"); \
-  putstr(prefix "    \" \"*) : $((" res_var " = 32))  ;;\n"); \
-  putstr(prefix "    \"e\"*) : $((" res_var " = 101)) ;;\n"); \
-  putstr(prefix "    \"=\"*) : $((" res_var " = 61))  ;;\n"); \
-  putstr(prefix "    \"t\"*) : $((" res_var " = 116)) ;;\n"); \
-  putstr(prefix "    \";\"*) : $((" res_var " = 59))  ;;\n"); \
-  putstr(prefix "    \"i\"*) : $((" res_var " = 105)) ;;\n"); \
-  putstr(prefix "    \")\"*) : $((" res_var " = 41))  ;;\n"); \
-  putstr(prefix "    \"(\"*) : $((" res_var " = 40))  ;;\n"); \
-  putstr(prefix "    \"n\"*) : $((" res_var " = 110)) ;;\n"); \
-  putstr(prefix "    \"s\"*) : $((" res_var " = 115)) ;;\n"); \
-  putstr(prefix "    \"l\"*) : $((" res_var " = 108)) ;;\n"); \
-  putstr(prefix "    \"+\"*) : $((" res_var " = 43))  ;;\n"); \
-  putstr(prefix "    \"p\"*) : $((" res_var " = 112)) ;;\n"); \
-  putstr(prefix "    \"a\"*) : $((" res_var " = 97))  ;;\n"); \
-  putstr(prefix "    \"r\"*) : $((" res_var " = 114)) ;;\n"); \
-  putstr(prefix "    \"f\"*) : $((" res_var " = 102)) ;;\n"); \
-  putstr(prefix "    \"d\"*) : $((" res_var " = 100)) ;;\n"); \
-  putstr(prefix "    \"*\"*) : $((" res_var " = 42))  ;;\n"); \
-  putstr(prefix "    *)\n"); \
-  putstr(prefix "      char_to_int \"${" buf_var "%\"${" buf_var "#?}\"}\" # get the first character\n"); \
-  putstr(prefix "      : $((" res_var " = __c))\n"); \
-  putstr(prefix "      ;;\n"); \
-  putstr(prefix "  esac\n");
-
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
@@ -479,7 +506,7 @@ DEPENDS_ON(char_to_int)
   putstr("    fi\n");
   putstr("  fi\n");
   putstr("\n");
-  extract_first_char_fast("", "__stdin_buf", "$1")
+  extract_first_char("", "__stdin_buf", "$1")
   putstr("}\n");
 END_RUNTIME_FUN(getchar)
 
@@ -503,7 +530,7 @@ DEPENDS_ON(int_to_char)
   putstr("        printf \"%s\\n\" \"$__acc\"\n");
   putstr("        __acc=\"\" ;;\n");
   putstr("      *)\n");
-  putstr("        int_to_char $__char\n");
+  call_int_to_char("        ", "$__char")
   putstr("        __acc=\"$__acc$__char\" ;;\n");
   putstr("    esac\n");
   putstr("  done\n");
@@ -522,7 +549,8 @@ DEPENDS_ON(int_to_char)
   putstr("    __head=$((_$__fmt_ptr))\n");
   putstr("    __fmt_ptr=$((__fmt_ptr + 1))\n");
   putstr("    if [ $__mod -eq 1 ] ; then\n");
-  putstr("      int_to_char $__head; __head_char=$__char\n");
+  call_int_to_char("      ", "$__head")
+  putstr("      __head_char=$__char\n");
   putstr("      case $__head_char in\n");
   putstr("        'd') # 100 = 'd' Decimal integer\n");
   putstr("          printf \"%d\" $1\n");
@@ -561,7 +589,8 @@ DEPENDS_ON(int_to_char)
   putstr("          __fmt_ptr=$((__fmt_ptr + __len))\n");
   putstr("          __str_len=$__res\n");
   putstr("          __head=$((_$__fmt_ptr))\n");
-  putstr("          int_to_char $__head; __head_char=$__char\n");
+  call_int_to_char("          ", "$__head")
+  putstr("          __head_char=$__char\n");
   putstr("          __fmt_ptr=$((__fmt_ptr + 1))\n");
   putstr("          if [ \"$__head_char\" = 's' ]; then\n");
   putstr("            __str_ref=$1; shift\n");
@@ -699,8 +728,7 @@ DEPENDS_ON(char_to_int)
   putstr("  __buf=$2\n");
   putstr("  __ends_with_eof=$3\n");
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
-  extract_first_char_fast("  ", "__fgetc_buf", "_$__buf")
-  putstr("\n");
+  extract_first_char("  ", "__fgetc_buf", "_$__buf")
   putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
   putstr("    : $((__buf += 1))                 # Move to the next buffer position\n");
   putstr("  done\n");
@@ -736,7 +764,6 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((_$((__fd + 2)) = __buf_size))\n");
   putstr("    __buf=$__addr\n");
   putstr("  fi\n");
-  putstr("\n");
   putstr("  unpack_line \"$__fgetc_buf\" $__buf $__ends_with_eof\n");
   putstr("}\n");
   putstr("\n");
@@ -744,12 +771,10 @@ DEPENDS_ON(char_to_int)
   putstr("  __fd=$2\n");
   putstr("  __buf=$((_$((__fd + 0))))\n");
   putstr("  __cur=$((_$((__fd + 1))))\n");
-  putstr("\n");
   putstr("  # The cursor is at the end of the buffer, we need to read the next line\n");
   putstr("  if [ $((_$((__buf + __cur)))) -eq 0 ]; then\n");
   putstr("    # Buffer has been read completely, read next line\n");
   putstr("    refill_buffer $__fd\n");
-  putstr("\n");
   putstr("    __cur=0 # Reset cursor and reload fd fields\n");
   putstr("    __buf=$((_$((__fd + 0)))) # Reload buffer in case it was reallocated\n");
   putstr("    if [ $((_$((__buf + __cur)))) -eq 0 ]; then\n");
