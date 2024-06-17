@@ -1,20 +1,20 @@
 int square(int x) {
-  return x*x;
+  int y = x*x;
+  return y;
 }
 
 void main()
 {
   int n;
-
-  /* print a number to stdout */
-
   int p;
   int digit;
 
   n = square(10);
   p = 1;
 
-  while (p * 10 <= n) p = p * 10;
+  while (p * 10 <= n){
+    p = p * 10;
+  } 
 
   while (p > 0) {
     digit = n / p;
@@ -24,4 +24,5 @@ void main()
   }
 
   putchar(10);
+  return 0;
 }

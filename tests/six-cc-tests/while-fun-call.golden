@@ -1,19 +1,19 @@
 0: int main() {
-0: int emit_line(int line, FILE_ptr f) {
-1:   FILE_ptr f;
+0: int emit_line(int line, int f) {
+1:   int f;
 1:   char c;
 2:   char c;
-2:   printf("%d: ", line);
-3:   f = fopen("six-cc-tests/fgetc.c", 0);
-3:   while ((c = fgetc(f)) && c != EOF && c != '\n') {
-4:   while ((c = fgetc(f)) != EOF) {
-4:     putchar(c);
+2:   putchar(line+ 48);
+3:   f = fopen("tests/six-cc-tests/fgetc.c", 0);
+3:   putchar(':');
+4:   while ((c = fgetc(f)) != -1) {
+4:   putchar(' ');
 5:     putchar(c);
-5:   }
+5:   while ((c = fgetc(f)) && c != -1 && c != '\n') {
 6:   }
-6:   if (c != EOF) {
+6:     putchar(c);
 7:   fclose(f);
-7:     putchar('\n');
+7:   }
 8: }
-8:   }
-9: 9:   return c;
+8:   if (c != -1) {
+9: 9:     putchar('\n');

@@ -43,7 +43,6 @@ int main() {
       d = d / b;
       i = i - 1;
       if (i == 0){
-        putstring(""); //circumvent break bug
         break;
       }
       d = d * i;
