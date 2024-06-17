@@ -22,6 +22,8 @@
 // Shell backend codegen options
 #define SH_INDIVIDUAL_LET
 #define SH_AVOID_PRINTF_USE
+#define SH_INLINE_PUTCHAR
+#define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
 #define SH_INCLUDE_C_CODE_not
 
@@ -29,6 +31,7 @@
 #define RT_FREE_UNSETS_VARS
 #define RT_NO_INIT_GLOBALS_not
 #define RT_COMPACT_not
+#define RT_INLINE_PUTCHAR
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &

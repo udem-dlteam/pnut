@@ -473,10 +473,12 @@ END_RUNTIME_FUN(exit)
 
 // Input / output
 DEFINE_RUNTIME_FUN(putchar)
+#ifndef RT_INLINE_PUTCHAR
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
+#endif
 END_RUNTIME_FUN(putchar)
 
 DEFINE_RUNTIME_FUN(getchar)
@@ -518,12 +520,18 @@ END_RUNTIME_FUN(getchar)
 
 // An implementation of puts, used to replace printf("%s", ...) calls.
 DEFINE_RUNTIME_FUN(put_pstr)
+#ifndef RT_INLINE_PUTCHAR
 DEPENDS_ON(putchar)
+#endif
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
   putstr("  while [ $(( _$__addr )) -ne 0 ]; do\n");
+#ifdef RT_INLINE_PUTCHAR
+  putstr("    printf \\\\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))\n");
+#else
   putstr("    _putchar __ $((_$__addr))\n");
+#endif
   putstr("    : $(( __addr += 1 ))\n");
   putstr("  done\n");
   putstr("}\n");

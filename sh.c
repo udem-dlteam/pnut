@@ -1323,6 +1323,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast name = get_child(node, 0);
   ast params = get_child(node, 1);
   int name_id = get_val(name);
+  text res;
 
   #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
@@ -1335,6 +1336,24 @@ text comp_fun_call_code(ast node, ast assign_to) {
         return 0; // This generates no code. I guess we could return the last printf call?
       }
     }
+#ifdef SH_INLINE_PUTCHAR
+    else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
+      res = comp_rvalue(params, RVALUE_CTX_BASE);
+      res =
+        string_concat3(
+          string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
+          string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
+          string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
+
+      return string_concat(wrap_str("printf \\\\"), res);
+    }
+#endif
+#ifdef SH_INLINE_EXIT
+    else if (name_id == EXIT_ID && params != 0 && get_op(params) != ',') { // exit with 1 param
+      res = comp_rvalue(params, RVALUE_CTX_BASE);
+      return string_concat(wrap_str("exit "), res);
+    }
+#endif
   }
   #endif
 
