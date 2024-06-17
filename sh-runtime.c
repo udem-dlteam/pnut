@@ -71,7 +71,11 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 DEFINE_RUNTIME_FUN(local_vars)
   printf("# Local variables\n");
   printf("__SP=0\n");
+#ifdef SH_INDIVIDUAL_LET
+  printf("let() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
+#else
   printf("let() { while [ $# -gt 0 ]; do : $((__SP += 1)) $((__$__SP=$1)) ; shift; done }\n");
+#endif
   printf("endlet() {\n");
   printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
   printf("  __return_loc=$1; shift\n");
