@@ -1220,21 +1220,20 @@ text comp_lvalue(ast node) {
   }
 }
 
-text fun_call_params(ast params) {
+text fun_call_params(ast params, int count) {
   ast param;
   text code_params = 0;
-  if (params != 0) { /* Check if not an empty list */
+  if (params != 0 && count > 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
-      while (get_op(params) == ',') {
+      while (get_op(params) == ',' && count > 0) {
         param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
         code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
         params = get_child(params, 1);
+        count -= 1;
       }
     } else {
       code_params = comp_rvalue(params, RVALUE_CTX_BASE);
     }
-  } else {
-    code_params = wrap_str("");
   }
 
   return code_params;
@@ -1270,8 +1269,8 @@ void handle_printf_call(char* format_str, ast params) {
   // and those for which the representation is the same in both languages.
   // For now, this includes %d, %c, %x
   // Non-literals strings are not supported because they would need to first be unpacked.
-  char* a = format_str;
   char* format_start = format_str;
+  int params_count = 0;
   ast params_start = params;
 
   while (*format_str != '\0') {
@@ -1280,30 +1279,28 @@ void handle_printf_call(char* format_str, ast params) {
       if (*format_str != '%') {
         if (*format_str == 'd' || *format_str == 'c' || *format_str == 'x') {
           // Keep accumulating the format string
+          if (params == 0) fatal_error("Not enough parameters for printf");
+          params_count += 1;
+          params = get_child(params, 1);
         } else if (*format_str == 's') {
           // We can't pass strings to printf directly, they need to be unpacked first.
           // We do that by calling the _print_pnut_str function.
 
           // Generate the printf call for the format string up to this point.
           if (format_start != format_str - 1) {
-            set_child(params_start, 1, 0); // Remove the rest of the parameters
             *(format_str - 1) = '\0'; // Null-terminate the format string
-            append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start)));
+            append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, params_count)));
             *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
           }
 
           runtime_use_put_pstr = true;
           append_glo_decl(string_concat(wrap_str("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
           format_start = format_str + 1; // skip the 's'
-          params_start = get_child(params, 1);
+          params = get_child(params, 1); // skip the string parameter
+          params_start = params;
         } else {
           fatal_error("Unsupported format specifier");
         }
-
-        // Advance params
-        if (params == 0) fatal_error("Not enough parameters for printf");
-
-        params = get_child(params, 1);
       }
 
     }
@@ -1314,7 +1311,7 @@ void handle_printf_call(char* format_str, ast params) {
 
   // Dump the remaining format string
   if (format_start != format_str) {
-    append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start)));
+    append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, 1000)));
   }
 }
 #endif
@@ -1372,7 +1369,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     wrap_char(' '),
     comp_lvalue(assign_to),
     wrap_char(' '),
-    fun_call_params(params)
+    fun_call_params(params, 1000) // 1000 is an arbitrary large number
   );
 }
 
