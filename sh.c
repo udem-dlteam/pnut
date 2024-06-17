@@ -1,5 +1,6 @@
 // POSIX shell codegen
 
+#include "sh-runtime.c"
 
 void print_string_char(int c) {
   if (c == 7) printf("\\a");
@@ -480,10 +481,9 @@ void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_ident
   char* name = string_pool + get_val(ident_tok);
   if (name[0] == '_'
     || ident_tok == ARGV_ID
-    || ident_tok == EOF_ID
-    || ident_tok == NULL_ID) {
+    || ident_tok == IFS_ID) {
     printf("%s ", name);
-    fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    fatal_error("variable name is invalid. It can't start with '_', be 'IFS' or 'argv'.");
   }
 }
 
@@ -516,7 +516,11 @@ text save_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(res, string_concat(wrap_char('$'), format_special_var(ident, true)), wrap_char(' '));
+  #ifdef SH_INDIVIDUAL_LET
+    res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
+  #else
+    res = concatenate_strings_with(format_special_var(ident, true), res, wrap_char(' '));
+  #endif
     counter -= 1;
   }
 
@@ -526,14 +530,23 @@ text save_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (!variable_is_constant_param(local_var)) {
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-      res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+#ifdef SH_INDIVIDUAL_LET
+      res = concatenate_strings_with(string_concat(wrap_str("let "), env_var_with_prefix(ident, true)), res, wrap_str("; "));
+#else
+      res = concatenate_strings_with(env_var_with_prefix(ident, true), res, wrap_char(' '));
+#endif
     }
 
     env = get_child(env, 1);
   }
 
   if (res != 0) {
-    return string_concat(wrap_str("save_vars "), res);
+    runtime_use_local_vars = true;
+#ifdef SH_INDIVIDUAL_LET
+    return res;
+#else
+    return string_concat(wrap_str("let "), res);
+#endif
   } else {
     return 0;
   }
@@ -552,7 +565,7 @@ text restore_local_vars() {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(format_special_var(ident, false), res, wrap_char(' '));
+    res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
     counter -= 1;
   }
 
@@ -562,14 +575,15 @@ text restore_local_vars() {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (!variable_is_constant_param(local_var)) {
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-      res = concatenate_strings_with(env_var(ident), res, wrap_char(' '));
+      res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
     }
 
     env = get_child(env, 1);
   }
 
   if (res != 0) {
-    return string_concat(wrap_str("unsave_vars $1 "), res);
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str("endlet $1 "), res);
   } else {
     return 0;
   }
@@ -1060,11 +1074,12 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   }
 }
 
-#ifdef HANDLE_SIMPLE_PRINTF
-text escaped_char(char c, int c_style) {
+#ifdef SH_AVOID_PRINTF_USE
+text escaped_char(char c, int for_printf) {
 #else
 text escaped_char(char c) {
 #endif
+  // C escape sequences
   if      (c == '\a') return wrap_str("\\a");
   else if (c == '\b') return wrap_str("\\b");
   else if (c == '\f') return wrap_str("\\f");
@@ -1073,20 +1088,23 @@ text escaped_char(char c) {
   else if (c == '\t') return wrap_str("\\t");
   else if (c == '\v') return wrap_str("\\v");
   else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
+  // Shell special characters: $, `, ", ', ?, and newline
+  // Note that ' and ? are not escaped properly by dash, but that's ok because
+  // we use double quotes and ' and ? can be left as is.
+  else if (c == '$')  return wrap_str("\\$");
+  else if (c == '`')  return wrap_str("\\`");
   else if (c == '"')  return wrap_str("\\\"");
-#ifdef HANDLE_SIMPLE_PRINTF
-  else if (c == '\'' && c_style) return wrap_str("\\\'");
-  else if (c == '?'  && c_style) return wrap_str("\\?");
-#else
-  else if (c == '\'') return wrap_str("\\\'");
-  else if (c == '?')  return wrap_str("\\?");
+  // else if (c == '\'') return wrap_str("\\\'");
+  // else if (c == '?')  return wrap_str("\\?");
+#ifdef SH_AVOID_PRINTF_USE
+  // when we're escaping a string for shell's printf, % must be escaped
+  else if (c == '%'  && for_printf) return wrap_str("%%");
 #endif
-  else if (c == '$') return wrap_str("\\$");
   else                return wrap_char(c);
 }
 
-#ifdef HANDLE_SIMPLE_PRINTF
-text escape_string(char *str, int c_style) {
+#ifdef SH_AVOID_PRINTF_USE
+text escape_string(char *str, int for_printf) {
 #else
 text escape_string(char *str) {
 #endif
@@ -1095,8 +1113,8 @@ text escape_string(char *str) {
   int i = 0;
 
   while (str[i] != '\0') {
-#ifdef HANDLE_SIMPLE_PRINTF
-    char_text = escaped_char(str[i], c_style);
+#ifdef SH_AVOID_PRINTF_USE
+    char_text = escaped_char(str[i], for_printf);
 #else
     char_text = escaped_char(str[i]);
 #endif
@@ -1118,11 +1136,12 @@ text comp_rvalue(ast node, int context) {
   fun_call_decl_start = glo_decl_ix;
 
   while (literals_inits != 0) {
+    runtime_use_defstr = true;
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
-#ifdef HANDLE_SIMPLE_PRINTF
-                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), true)
+#ifdef SH_AVOID_PRINTF_USE
+                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), false)
 #else
                                   , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
 #endif
@@ -1207,47 +1226,163 @@ text comp_lvalue(ast node) {
   }
 }
 
-text comp_fun_call_code(ast node, ast assign_to) {
-  ast name = get_child(node, 0);
-  ast params = get_child(node, 1);
+text fun_call_params(ast params, int count) {
   ast param;
   text code_params = 0;
-  int name_id = get_val(name);
-
-  #ifdef HANDLE_SIMPLE_PRINTF
-  if (get_op(assign_to) == IDENTIFIER_EMPTY
-    && name_id == PRINTF_ID
-    && params != 0
-    && get_op(params) == STRING) {
-    return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), false), wrap_str("\""));
-  }
-  #endif
-
-  if (params != 0) { /* Check if not an empty list */
+  if (params != 0 && count > 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
-      while (get_op(params) == ',') {
+      while (get_op(params) == ',' && count > 0) {
         param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
         code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
         params = get_child(params, 1);
+        count -= 1;
       }
     } else {
       code_params = comp_rvalue(params, RVALUE_CTX_BASE);
     }
-  } else {
-    code_params = wrap_str("");
   }
+
+  return code_params;
+}
+
+#ifdef SH_AVOID_PRINTF_USE
+bool printf_uses_shell_format_specifiers(char* a) {
+  // The supported format specifiers are those that are common between C and shell,
+  // and those for which the representation is the same in both languages.
+  // For now, this includes %d, %c, %x.
+  // Non-literals strings cannot be passed directly to printf as they first need
+  // to be unpacked, but can be passed to _puts from the runtime which can
+  // handle them.
+  while (*a != '\0') {
+    if (*a == '%') {
+      a += 1;
+      if (*a != 'd' && *a != 'c' && *a != 'x' && *a != '%' && *a != 's') {
+        return false; // Unsupported format specifier
+      }
+    }
+
+    a += 1;
+  }
+  return true;
+}
+
+// _printf pulls a lot of dependencies from the runtime. In most cases the
+// format string is known at compile time, and we can avoid calling printf by
+// using the shell's printf instead. This function generates a sequence of shell
+// printf and put_pstr equivalent to the given printf call.
+void handle_printf_call(char* format_str, ast params) {
+  // The supported format specifiers are those that are common between C and shell,
+  // and those for which the representation is the same in both languages.
+  // For now, this includes %d, %c, %x
+  // Non-literals strings are not supported because they would need to first be unpacked.
+  char* format_start = format_str;
+  int params_count = 0;
+  ast params_start = params;
+
+  while (*format_str != '\0') {
+    if (*format_str == '%') {
+      format_str += 1;
+      if (*format_str != '%') {
+        if (*format_str == 'd' || *format_str == 'c' || *format_str == 'x') {
+          // Keep accumulating the format string
+          if (params == 0) fatal_error("Not enough parameters for printf");
+          params_count += 1;
+          params = get_child(params, 1);
+        } else if (*format_str == 's') {
+          // We can't pass strings to printf directly, they need to be unpacked first.
+          // We do that by calling the _print_pnut_str function.
+
+          // Generate the printf call for the format string up to this point.
+          if (format_start != format_str - 1) {
+            *(format_str - 1) = '\0'; // Null-terminate the format string
+            append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, params_count)));
+            *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
+          }
+
+          runtime_use_put_pstr = true;
+          append_glo_decl(string_concat(wrap_str("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
+          format_start = format_str + 1; // skip the 's'
+          params = get_child(params, 1); // skip the string parameter
+          params_start = params;
+        } else {
+          fatal_error("Unsupported format specifier");
+        }
+      }
+
+    }
+
+    // Keep accumulating the format string
+    format_str += 1;
+  }
+
+  // Dump the remaining format string
+  if (format_start != format_str) {
+    append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, 1000)));
+  }
+}
+#endif
+
+text comp_fun_call_code(ast node, ast assign_to) {
+  ast name = get_child(node, 0);
+  ast params = get_child(node, 1);
+  int name_id = get_val(name);
+  text res;
+
+  #ifdef SH_AVOID_PRINTF_USE
+  if (get_op(assign_to) == IDENTIFIER_EMPTY) {
+    if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
+      || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
+      return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
+    } else if (name_id == PRINTF_ID && params != 0 && get_op(params) == ',') {
+      if (printf_uses_shell_format_specifiers(string_pool + get_val(get_child(params, 0)))) {
+        handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
+        return 0; // This generates no code. I guess we could return the last printf call?
+      }
+    }
+#ifdef SH_INLINE_PUTCHAR
+    else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
+      res = comp_rvalue(params, RVALUE_CTX_BASE);
+      res =
+        string_concat3(
+          string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
+          string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
+          string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
+
+      return string_concat(wrap_str("printf \\\\"), res);
+    }
+#endif
+#ifdef SH_INLINE_EXIT
+    else if (name_id == EXIT_ID && params != 0 && get_op(params) != ',') { // exit with 1 param
+      res = comp_rvalue(params, RVALUE_CTX_BASE);
+      return string_concat(wrap_str("exit "), res);
+    }
+#endif
+  }
+  #endif
+
+       if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
+  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
+  else if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
+  else if (name_id == FREE_ID)    { runtime_use_free = true; }
+  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
+  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
+  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
 
   return string_concat5(
     function_name(get_val(name)),
     wrap_char(' '),
     comp_lvalue(assign_to),
     wrap_char(' '),
-    code_params
+    fun_call_params(params, 1000) // 1000 is an arbitrary large number
   );
 }
 
 void comp_fun_call(ast node, ast assign_to) {
-  append_glo_decl(comp_fun_call_code(node, assign_to));
+  text res = comp_fun_call_code(node, assign_to);
+  if (res)
+    append_glo_decl(res);
 }
 
 void comp_assignment(ast lhs, ast rhs) {
@@ -1622,6 +1757,9 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == 0) return; // ignore forward declarations
 
+  // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
+  if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
+
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
 
@@ -1713,11 +1851,12 @@ text comp_constant(ast node) {
   } else if (op == CHARACTER) {
     return string_concat(wrap_char('$'), character_ident(get_val(node)));
   } else if (op == STRING) {
+    runtime_use_defstr = true;
     new_ident = fresh_string_ident();
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(new_ident, false)
                                   , wrap_str(" \"")
-#ifdef HANDLE_SIMPLE_PRINTF
+#ifdef SH_AVOID_PRINTF_USE
                                   , escape_string(string_pool + get_val(node), true)
 #else
                                   , escape_string(string_pool + get_val(node))
@@ -1741,6 +1880,7 @@ void comp_glo_var_decl(ast node) {
   if (init == 0) init = new_ast0(INTEGER, 0);
 
   if (get_op(type) == '[') { /* Array declaration */
+    runtime_defarr();
     append_glo_decl(
       string_concat4(
         wrap_str("defarr "),
@@ -1828,49 +1968,9 @@ void comp_glo_decl(ast node) {
 void prologue() {
   printf("set -e -u\n\n");
 
-  printf("# Handle runtime options\n");
-  printf("__FREE_UNSETS_VARS=1\n");
-  printf("__INIT_GLOBALS=1\n\n");
-
-  printf("if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then __FREE_UNSETS_VARS=1; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then __FREE_UNSETS_VARS=0; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--no-zero-globals\" ] ;  then __INIT_GLOBALS=0; shift; fi\n\n");
-
-  printf("# Load runtime library and primitives\n");
-  printf(". ./runtime.sh\n\n");
-
-  printf("# Local variables\n\n");
-
-  printf("__SP=0 # Note: Stack grows up, not down\n\n");
-
-  printf("save_vars() {\n");
-  printf("  while [ $# -gt 0 ]; do\n");
-  printf("    : $((__SP += 1))\n");
-  printf("    : $((__$__SP=$1))\n");
-  printf("    shift\n");
-  printf("  done\n");
-  printf("}\n\n");
-
-  printf("unsave_vars() {\n");
-  printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
-  printf("  __return_loc=$1; shift\n");
-  printf("  while [ $# -gt 0 ]; do\n");
-  printf("    if [ $1 != \"$__return_loc\" ]; then : $(($1=__$__SP)); fi\n");
-  printf("    : $((__SP -= 1))\n");
-  printf("    shift\n");
-  printf("  done\n");
-  printf("}\n\n");
-
-  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; if [ $__INIT_GLOBALS -ne 0 ]; then initialize_memory $(($1)) $2; fi; }\n");
-
   #ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { : $(($1 = $2)) ; }\n\n");
   #endif
-
-  printf("# Setup argc, argv\n");
-  printf("__argc_for_main=$(($# + 1))\n");
-  printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
 }
 
 void epilogue() {
@@ -1887,8 +1987,17 @@ void epilogue() {
     }
   }
 
-  putchar('\n');
-  printf("_main __ $__argc_for_main $__argv_for_main\n");
+  printf("# Runtime library\n");
+  produce_runtime();
+
+  if (runtime_use_make_argv) {
+    printf("# Setup argc, argv\n");
+    printf("__argc_for_main=$(($# + 1))\n");
+    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
+    printf("_main __ $__argc_for_main $__argv_for_main\n");
+  } else {
+    printf("_main __\n");
+  }
 }
 
 /* Initialize local and synthetic variables used by function */

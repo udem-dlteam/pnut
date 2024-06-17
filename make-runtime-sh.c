@@ -11,6 +11,9 @@ void putstr(char* s) {
 // Runtime configuration
 #define RT_FREE_UNSETS_VARS
 #define RT_INIT_GLOBALS
+#define RT_COMPACT_not
+
+#define INCLUDE_ALL_RUNTIME
 
 #include "sh-runtime.c"
 

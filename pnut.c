@@ -18,9 +18,20 @@
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
-#define HANDLE_SIMPLE_PRINTF_not
+
+// Shell backend codegen options
+#define SH_INDIVIDUAL_LET
+#define SH_AVOID_PRINTF_USE
+#define SH_INLINE_PUTCHAR
+#define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
-#define INCLUDE_C_CODE_not
+#define SH_INCLUDE_C_CODE_not
+
+// Options to parameterize the shell runtime library
+#define RT_FREE_UNSETS_VARS
+#define RT_NO_INIT_GLOBALS_not
+#define RT_COMPACT_not
+#define RT_INLINE_PUTCHAR
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -392,7 +403,7 @@ void pop_ifdef_mask() {
 }
 
 // Includes the preprocessed C code along with the generated shell code
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
 #define DECLARATION_BUF_LEN 20000
 
 char declaration_char_buf[DECLARATION_BUF_LEN];
@@ -459,7 +470,7 @@ void get_ch() {
 #else
   ch = getchar();
 #endif
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
   // Save C code chars so they can be displayed with the shell code
   declaration_char_buf[declaration_char_buf_ix] = ch;
   declaration_char_buf_ix += 1;
@@ -490,12 +501,23 @@ int INCLUDE_ID;
 
 int NOT_SUPPORTED_ID;
 
-// We want to recognize certain identifers without having to do expensive string
-// comparisons
+// We want to recognize certain identifers without having to do expensive string comparisons
 int ARGV_ID;
-int NULL_ID;
-int EOF_ID;
+int IFS_ID;
+int MAIN_ID;
+
+int PUTCHAR_ID;
+int GETCHAR_ID;
+int EXIT_ID;
+int MALLOC_ID;
+int FREE_ID;
 int PRINTF_ID;
+int FOPEN_ID;
+int FCLOSE_ID;
+int FGETC_ID;
+
+int PUTSTR_ID;
+int PUTS_ID;
 
 void get_tok_macro() {
   expand_macro = false;
@@ -650,7 +672,7 @@ void handle_include() {
 
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
   int prev_char_buf_ix = declaration_char_buf_ix;
 #endif
   get_ch(); // Skip the #
@@ -714,7 +736,7 @@ void handle_preprocessor_directive() {
     putstr("ch="); putint(ch); putchar('\n');
     fatal_error("preprocessor expected end of line");
   }
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
   declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
 #endif
 }
@@ -816,10 +838,21 @@ void init_ident_table() {
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
-  NULL_ID = init_ident(IDENTIFIER, "NULL");
-  EOF_ID = init_ident(IDENTIFIER, "EOF");
+  IFS_ID  = init_ident(IDENTIFIER, "IFS");
+  MAIN_ID = init_ident(IDENTIFIER, "main");
 
-  PRINTF_ID = init_ident(IDENTIFIER, "printf");
+  PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
+  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
+  EXIT_ID    = init_ident(IDENTIFIER, "exit");
+  MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
+  FREE_ID    = init_ident(IDENTIFIER, "free");
+  PRINTF_ID  = init_ident(IDENTIFIER, "printf");
+  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
+  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
+  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
+
+  PUTSTR_ID = init_ident(IDENTIFIER, "putstr");
+  PUTS_ID = init_ident(IDENTIFIER, "puts");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
@@ -1099,7 +1132,7 @@ void paste_tokens(int left_tok, int left_val) {
 void get_tok() {
 
   bool first_time = true; // Used to simulate a do-while loop
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
   int prev_char_buf_ix = declaration_char_buf_ix;
   // Save the cursor in a local variable so we can restore it when the token is
   // masked off. Not using the last_tok_char_buf_ix global because get_tok can
@@ -1110,7 +1143,7 @@ void get_tok() {
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while (first_time OR !ifdef_mask) {
     first_time = false;
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
     declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
 #endif
 
@@ -1491,7 +1524,7 @@ void get_tok() {
       }
     }
   }
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
   last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
 #endif
 }
@@ -2606,7 +2639,7 @@ int main(int argc, char **args) {
 #else
 
     decl = parse_definition(0);
-#ifdef INCLUDE_C_CODE
+#ifdef SH_INCLUDE_C_CODE
     output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == VAR_DECLS);
 #endif
     codegen_glo_decl(decl);
