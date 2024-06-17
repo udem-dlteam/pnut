@@ -163,6 +163,7 @@ text glo_decls[GLO_DECL_SIZE];  /* Generated code */
 int glo_decl_ix = 0;            /* Index of last generated line of code  */
 int nest_level = 0;             /* Current level of indentation */
 int in_tail_position = false;   /* Is the current statement in tail position? */
+int in_block_head_position = false;  /* Is the current statement in head position for the current block? */
 int loop_nesting_level = 0;     /* Number of loops surrounding the current statement */
 int loop_end_actions_start = 0; /* Start position of declarations for the last action in a for loop */
 int loop_end_actions_end = 0;   /* End position of declarations for the last action in a for loop */
@@ -174,6 +175,7 @@ int max_gensym_ix = 0;          /* Maximum value of gensym_ix for all functions 
 int string_counter = 0;         /* Counter for string literals */
 #define CHARACTERS_BITFIELD_SIZE 16
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
+bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
 
 // Internal identifier node types. These
@@ -270,13 +272,15 @@ void print_glo_decls() {
   int level;
   while (i < glo_decl_ix) {
     if (glo_decls[i + 1] == 1) { /* Skip inactive declarations */
-      level = glo_decls[i];
-      while (level > 0) {
-        putchar(' '); putchar(' ');
-        level -= 1;
+      if (glo_decls[i + 2] != 0) {
+        level = glo_decls[i];
+        while (level > 0) {
+          putchar(' '); putchar(' ');
+          level -= 1;
+        }
+        print_text(glo_decls[i + 2]);
+        putchar('\n');
       }
-      print_text(glo_decls[i + 2]);
-      putchar('\n');
     }
     i += 3;
   }
@@ -632,6 +636,7 @@ text test_op_to_str(int op) {
 text character_ident(int c) {
   /* Mark character as used */
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
+  any_character_used = true;
 
   if ('a' <= c AND c <= 'z') {
     return string_concat(wrap_str("__CH_"), wrap_char(c));
@@ -799,6 +804,8 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       right_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = previous_conditional_fun_calls;
       return new_ast4(op, sub1, sub2, left_conditional_fun_calls, right_conditional_fun_calls);
+    } else if (op == CAST) {
+      return new_ast2(CAST, get_child(node, 0), handle_side_effects_go(get_child(node, 1), executes_conditionally));
     } else {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
@@ -993,11 +1000,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
         return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
+    } else if (op == CAST) { // Casts are no-op
+      return comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
     } else {
-      fatal_error("comp_rvalue_go: unknown rvalue");
+      fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
       return 0;
     }
   } else if (nb_children == 3) {
@@ -1179,6 +1188,8 @@ text comp_array_lvalue(ast node) {
     sub1 = comp_array_lvalue(get_child(node, 0));
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+  } else if (op == CAST) {
+    return comp_lvalue(get_child(node, 1));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_array_lvalue: unknown lvalue");
@@ -1199,7 +1210,9 @@ text comp_lvalue(ast node) {
     return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
-    return string_concat(wrap_char('_'), sub1);
+    return string_concat3(wrap_str("_$(("), sub1, wrap_str("))"));
+  } else if (op == CAST) {
+    return comp_lvalue(get_child(node, 1));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue: unknown lvalue");
@@ -1375,6 +1388,7 @@ void comp_assignment(ast lhs, ast rhs) {
 void comp_body(ast node) {
   int start_in_tail_position = in_tail_position;
   in_tail_position = false;
+  in_block_head_position = true;
 
   if (node != 0) {
     while (get_op(node) == '{') {
@@ -1382,6 +1396,7 @@ void comp_body(ast node) {
       if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
       comp_statement(get_child(node, 0), false);
       node = get_child(node, 1);
+      in_block_head_position = false;
     }
   }
 }
@@ -1494,7 +1509,6 @@ void comp_statement(ast node, int else_if) {
         comp_statement(get_child(node, 2), true); /* comp_statement with else_if == true emits elif*/
       } else {
         append_glo_decl(wrap_str("else"));
-        /* TODO: Emit : if body is empty */
         nest_level += 1;
         comp_statement(get_child(node, 2), false);
         nest_level -= 1;
@@ -1581,11 +1595,11 @@ void comp_statement(ast node, int else_if) {
     }
     if (in_tail_position AND loop_nesting_level == 1) {
       append_glo_decl(wrap_str("break")); /* Break out of the loop, and the function prologue will do the rest */
+    } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
+      append_glo_decl(wrap_str(":")); /* Block only contains a return statement so it's not empty */
     } else if (!in_tail_position OR loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str("return"));
-    } else {
-      /* TODO: Make sure this can't create empty bodies */
     }
   } else if (op == '(') { /* six.call */
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); /* Reuse IDENTIFIER_EMPTY ast? */
@@ -1938,12 +1952,14 @@ void prologue() {
 void epilogue() {
   int c;
 
-  printf("# Character constants\n");
-  for(c = 0; c < 256; c += 1) {
-    if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
-      printf("readonly ");
-      print_text(character_ident(c));
-      printf("=%d\n", c);
+  if (any_character_used) {
+    printf("# Character constants\n");
+    for(c = 0; c < 256; c += 1) {
+      if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
+        printf("readonly ");
+        print_text(character_ident(c));
+        printf("=%d\n", c);
+      }
     }
   }
 
