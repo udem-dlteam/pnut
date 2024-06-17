@@ -77,12 +77,9 @@ DEFINE_RUNTIME_FUN(local_vars)
   printf("let() { while [ $# -gt 0 ]; do : $((__SP += 1)) $((__$__SP=$1)) ; shift; done }\n");
 #endif
   printf("endlet() {\n");
-  printf("  # Make sure we don't overwrite the return location if it is part of the local variables\n");
-  printf("  __return_loc=$1; shift\n");
-  printf("  while [ $# -gt 0 ]; do\n");
-  printf("    if [ $1 != \"$__return_loc\" ]; then : $(($1=__$__SP)); fi\n");
-  printf("    : $((__SP -= 1)); shift\n");
-  printf("  done\n");
+  printf("  __ret=$1; : $((__tmp = $__ret)) # Save return value so it's not overwritten\n");
+  printf("  while [ $# -ge 2 ]; do : $(($2 = __$__SP)) $((__SP -= 1)); shift; done\n");
+  printf("  : $(($__ret=__tmp))\n");
   printf("}\n");
 END_RUNTIME_FUN(local_vars)
 
@@ -473,10 +470,12 @@ END_RUNTIME_FUN(exit)
 
 // Input / output
 DEFINE_RUNTIME_FUN(putchar)
+#ifndef RT_INLINE_PUTCHAR
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
+#endif
 END_RUNTIME_FUN(putchar)
 
 DEFINE_RUNTIME_FUN(getchar)
