@@ -316,7 +316,7 @@ DEPENDS_ON(alloc)
 #ifdef RT_NO_INIT_GLOBALS
   printf("defarr() { alloc $2; : $(( $1 = __addr )); }\n\n");
 #else
-DEPENDS_ON(runtime_initialize_memory)
+DEPENDS_ON(initialize_memory)
   printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
 #endif
 END_RUNTIME_FUN(defarr)
