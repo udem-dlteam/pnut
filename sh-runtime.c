@@ -473,12 +473,10 @@ END_RUNTIME_FUN(exit)
 
 // Input / output
 DEFINE_RUNTIME_FUN(putchar)
-#ifndef RT_INLINE_PUTCHAR
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
-#endif
 END_RUNTIME_FUN(putchar)
 
 DEFINE_RUNTIME_FUN(getchar)
