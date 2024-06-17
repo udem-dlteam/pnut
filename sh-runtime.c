@@ -71,6 +71,7 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 DEFINE_RUNTIME_FUN(local_vars)
   printf("# Local variables\n");
   printf("__SP=0\n");
+  printf("__=0\n");
 #ifdef SH_INDIVIDUAL_LET
   printf("let() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
 #else
