@@ -1,3 +1,34 @@
+int counter = 10;
+
+int r[2801];
+
+void putstring(char *s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  if (n == 0) {
+    putchar(48);
+    return;
+  }
+  while (n > 0) {
+    digits[i] = n % 10;
+    n = n / 10;
+    i = i + 1;
+  }
+  i = i - 1;
+  while (i >= 0) {
+    putchar(digits[i] + 48);
+    i = i - 1;
+  }
+}
+
 int abc(int x) {
   return x + 1;
 }
@@ -10,27 +41,38 @@ int hij(int x, int y) {
   return x * y;
 }
 
-int counter;
-counter = 10;
-
-int decrement(int i) {
-  i--;
-  return i;
-}
-
-int r[2801];
-
 int main() {
-  abc(123);
+  int result;
   r[abc(123)] = 2000;
-  printf("%d\n", r[abc(123)]);
-  /* while (counter = decrement(counter)) { */
-  while (counter--) {
-    printf("Counter: %d\n", counter);
+  result = r[abc(123)];
+
+  putnumber(result);
+  putchar('\n');
+
+  while (counter-- > 0) {
+    putstring("Counter: ");
+    putnumber(counter);
+    putchar('\n');
   }
-  printf("%d\n", abc(42)); /* 43 */
-  printf("%d\n", abc(def(123))); /* (123 * 2) + 1 */
-  printf("%d\n", hij(abc(123), def(123))); /* (123 + 1) * (123 * 2) = 30504 */
-  printf("%d\n", hij(abc(123), def(123)) + abc(123)); /* 30504 + 124 = 30628 */
-  printf("%d %d\n", hij(2, 3), abc(123)); /* 6 124 */
+  
+  result = abc(42);
+  putnumber(result);
+  putchar('\n');
+  result = abc(def(123));
+  putnumber(result);
+  putchar('\n');
+  result = hij(abc(123), def(123));
+  putnumber(result);
+  putchar('\n');
+  result = hij(abc(123), def(123)) + abc(123);
+  putnumber(result);
+  putchar('\n');
+  result = hij(2, 3);
+  putnumber(result);
+  putchar(' ');
+  result = abc(123);
+  putnumber(result);
+  putchar('\n');
+
+  return 0;
 }

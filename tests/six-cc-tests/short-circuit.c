@@ -1,5 +1,16 @@
 /* Test that the lazy evaluation properties of || and && are respected */
 
+
+
+void printf(char *s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+
+
 void DO_NOT_CALL(int x) {
   int a; /* Local variable so that the function is not simple */
   printf("Boom!");

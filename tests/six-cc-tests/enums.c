@@ -27,15 +27,15 @@ void putnumber(int n) {
   }
 }
 
-enum ChildEnum() { VAL; NEXT; LL_SIZE; }
+enum ChildEnum { VAL, NEXT, LL_SIZE };
 
-enum ParentEnum() { VAL; NEXT; LL_SIZE; VAL2; NEXT2; LL_SIZE2; }
+enum ParentEnum { VAL, NEXT, LL_SIZE, VAL2, NEXT2, LL_SIZE2 };
 
-struct TestStruct() {
+struct TestStruct {
   int VAL;
   int NEXT;
   int LL_SIZE;
-}
+};
 
 void shadow(int NEXT) {
   int VAL;
