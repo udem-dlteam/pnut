@@ -1,9 +1,9 @@
-enum Category() {
-  LOWERCASE = 1;
-  UPPERCASE;
-  NEWLINE;
-  OTHER;
-}
+enum Category {
+  LOWERCASE = 1,
+  UPPERCASE,
+  NEWLINE,
+  OTHER
+};
 
 /* For all ascii characters, categorize them into 4 categories */
 int categorize_char(char c) {
@@ -83,13 +83,14 @@ void putstring(char *s) {
 int main() {
   int f;
   char c;
-  f = fopen("six-cc-tests/fgetc.c", 0);
+  f = fopen("tests/six-cc-tests/fgetc.c", 0);
   while ((c = fgetc(f)) != -1) {
-    //printf("'%c' = %d: %d\n", c, c, categorize_char(c));
     putstring("'");
     putchar(c);
     putstring("' = ");
     putchar(c);
     putstring(": ");
+    putchar(categorize_char(c) + 48);
+    putchar('\n');
   }
 }

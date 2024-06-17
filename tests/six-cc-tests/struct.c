@@ -1,12 +1,35 @@
 /* Simulating structs using enums like in c4.c */
-struct LinkedList() { void val; void next; }
+struct LinkedList { 
+  int val; 
+  int * next; 
+};
 
-int_ptr iota_linked_list(int max) {
+void putnumber(int n) {
+  int q;
+  if (n < 0) {
+    putchar(45);
+    n = 0 - n;
+  }
+  if (n / 10) {
+    putnumber(n / 10);
+  }
+  q = n % 10;
+  putchar(q + 48);
+}
+
+void putstring(char * s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+int * iota_linked_list(int max) {
   int i;
-  int_ptr head;
-  int_ptr last;
-  int_ptr node;
-  if (max == 0) return NULL;
+  int * head;
+  int * last;
+  int * node;
+  if (max == 0) return 0;
   head = malloc(2);
   head->val = 0;
   last = head;
@@ -14,7 +37,7 @@ int_ptr iota_linked_list(int max) {
   while (i < max) {
     node = malloc(2);
     node->val = i;
-    node->next = NULL;
+    node->next = 0;
     last->next = node;
     last = node;
 
@@ -24,10 +47,10 @@ int_ptr iota_linked_list(int max) {
   return head;
 }
 
-int linked_list_sum(int_ptr head) {
+int linked_list_sum(int* head) {
   int sum;
   sum = 0;
-  while (head != NULL) {
+  while (head != 0) {
     sum += head->val;
     head = head->next;
   }
@@ -35,10 +58,10 @@ int linked_list_sum(int_ptr head) {
   return sum;
 }
 
-int linked_list_sum_except_last(int_ptr head) {
+int linked_list_sum_except_last(int* head) {
   int sum;
   sum = 0;
-  while (head != NULL && head->next != NULL) {
+  while (head != 0 && head->next != 0) {
     sum += head->val;
     head = head->next;
   }
@@ -47,11 +70,19 @@ int linked_list_sum_except_last(int_ptr head) {
 }
 
 int main() {
-  int_ptr ll;
+  int* ll;
 
   ll = iota_linked_list(1000);
 
-  printf("Sum: %d\n", linked_list_sum(ll));
-  printf("Sum: %d\n", linked_list_sum_except_last(NULL));
-  printf("Sum: %d\n", linked_list_sum_except_last(ll));
+  putstring("Sum: ");
+  putnumber(linked_list_sum(ll));
+  putchar('\n');
+  putstring("Sum: ");
+  putnumber(linked_list_sum_except_last(0));
+  putchar('\n');
+  putstring("Sum: ");
+  putnumber(linked_list_sum_except_last(ll));
+  putchar('\n');
+
+  return 0;
 }
