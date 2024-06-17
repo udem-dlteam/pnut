@@ -5,8 +5,14 @@ int fib(int n) {
   return fib(n - 1) + fib(n - 2);
 }
 
-int main(int argc, char **argv) {
+int main() {
   int n;
   n = fib(15);
-  exit(n);
+  if(n != 610) {
+    putchar('X');
+  }
+  else {
+    putchar('O');
+  }
+  return 0;
 }
