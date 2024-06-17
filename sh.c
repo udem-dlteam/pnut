@@ -719,8 +719,11 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 1) {
-    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!') OR (op == PLUS_PLUS_PRE) OR (op == MINUS_MINUS_PRE) OR (op == PLUS_PLUS_POST) OR (op == MINUS_MINUS_POST)) {
+    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
       /* TODO: Reuse ast node? */
+      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
+    } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
+      contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else {
       printf("1: op=%d %c", op, op);
@@ -1504,6 +1507,8 @@ void comp_statement(ast node, int else_if) {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str(": "), str));
+    } else if (in_block_head_position && in_tail_position) {
+      append_glo_decl(wrap_str(":")); /* Block only contains this statement so we have to make sure it's not empty */
     }
   }
 }
