@@ -503,8 +503,7 @@ int NOT_SUPPORTED_ID;
 
 // We want to recognize certain identifers without having to do expensive string comparisons
 int ARGV_ID;
-int NULL_ID;
-int EOF_ID;
+int IFS_ID;
 int MAIN_ID;
 
 int PUTCHAR_ID;
@@ -839,8 +838,7 @@ void init_ident_table() {
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
-  NULL_ID = init_ident(IDENTIFIER, "NULL");
-  EOF_ID  = init_ident(IDENTIFIER, "EOF");
+  IFS_ID  = init_ident(IDENTIFIER, "IFS");
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");

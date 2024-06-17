@@ -481,10 +481,9 @@ void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_ident
   char* name = string_pool + get_val(ident_tok);
   if (name[0] == '_'
     || ident_tok == ARGV_ID
-    || ident_tok == EOF_ID
-    || ident_tok == NULL_ID) {
+    || ident_tok == IFS_ID) {
     printf("%s ", name);
-    fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
+    fatal_error("variable name is invalid. It can't start with '_', be 'IFS' or 'argv'.");
   }
 }
 
