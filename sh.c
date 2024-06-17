@@ -313,9 +313,17 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
     return string_concat(wrap_str("__str_"), get_val(ident));
   } else if (op == IDENTIFIER_DOLLAR) {
     if (prefixed_with_dollar) {
-      return wrap_int(get_val(ident));
+      if (get_val(ident) <= 9) {
+        return wrap_int(get_val(ident));
+      } else {
+        return string_concat3(wrap_char('{'), wrap_int(get_val(ident)), wrap_char('}'));
+      }
     } else {
-      return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      if (get_val(ident) <= 9) {
+        return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      } else {
+        return string_concat3(wrap_str("${"), wrap_int(get_val(ident)), wrap_char('}'));
+      }
     }
   } else if (op == IDENTIFIER_EMPTY) {
     return wrap_str("__");
