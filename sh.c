@@ -1,5 +1,6 @@
 // POSIX shell codegen
 
+
 void print_string_char(int c) {
   if (c == 7) printf("\\a");
   else if (c == 8) printf("\\b");
@@ -477,7 +478,10 @@ int variable_is_constant_param(ast local_var) {
 void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_idents_are_safe */
   ast ident_tok = get_child(variable, 0);
   char* name = string_pool + get_val(ident_tok);
-  if (name[0] == '_' OR !strcmp(name, "EOF") OR !strcmp(name, "NULL") OR !strcmp(name, "argv")) {
+  if (name[0] == '_'
+    || ident_tok == ARGV_ID
+    || ident_tok == EOF_ID
+    || ident_tok == NULL_ID) {
     printf("%s ", name);
     fatal_error("variable name is invalid. It can't start with '_', be 'OEF', 'NULL' or 'argv'.");
   }
@@ -1205,10 +1209,11 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast params = get_child(node, 1);
   ast param;
   text code_params = 0;
+  int name_id = get_val(name);
 
   #ifdef HANDLE_SIMPLE_PRINTF
   if (get_op(assign_to) == IDENTIFIER_EMPTY
-    && strcmp("printf", string_pool + get_val(get_val(name))) == 0
+    && name_id == PRINTF_ID
     && params != 0
     && get_op(params) == STRING) {
     return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), false), wrap_str("\""));
@@ -1819,12 +1824,9 @@ void prologue() {
   printf("set -e -u\n\n");
 
   printf("# Handle runtime options\n");
-  printf("__STRICT_MODE=1\n");
   printf("__FREE_UNSETS_VARS=1\n");
   printf("__INIT_GLOBALS=1\n\n");
 
-  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-init\" ] ;      then __STRICT_MODE=1; shift; fi\n");
-  printf("if [ $# -gt 0 ] && [ $1 = \"--malloc-no-init\" ] ;   then __STRICT_MODE=0; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--free-unsets-vars\" ] ; then __FREE_UNSETS_VARS=1; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--free-noop\" ] ;        then __FREE_UNSETS_VARS=0; shift; fi\n");
   printf("if [ $# -gt 0 ] && [ $1 = \"--zero-globals\" ] ;     then __INIT_GLOBALS=1; shift; fi\n");

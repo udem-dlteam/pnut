@@ -36,16 +36,6 @@ typedef int bool;
 
 typedef int FILE;
 
-/* Redefining strcmp because it's not part of the Shell runtime */
-int strcmp(char *str1, char *str2) {
-  int i = 0;
-  while (str1[i] == str2[i]) {
-    if (str1[i] == '\0') return 0;
-    i += 1;
-  }
-  return str1[i] - str2[i];
-}
-
 #endif
 
 enum {
@@ -500,6 +490,13 @@ int INCLUDE_ID;
 
 int NOT_SUPPORTED_ID;
 
+// We want to recognize certain identifers without having to do expensive string
+// comparisons
+int ARGV_ID;
+int NULL_ID;
+int EOF_ID;
+int PRINTF_ID;
+
 void get_tok_macro() {
   expand_macro = false;
   get_tok();
@@ -817,6 +814,12 @@ void init_ident_table() {
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+
+  ARGV_ID = init_ident(IDENTIFIER, "argv");
+  NULL_ID = init_ident(IDENTIFIER, "NULL");
+  EOF_ID = init_ident(IDENTIFIER, "EOF");
+
+  PRINTF_ID = init_ident(IDENTIFIER, "printf");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
