@@ -1,0 +1,51 @@
+
+void putstring(char *s) {
+    while (*s) {
+        putchar(*s);
+        s++;
+    }
+}
+
+int main() {
+    int MAX_SIZE = 100;
+    char *s = malloc(MAX_SIZE); // Allocate memory for s
+    char *s2 = malloc(MAX_SIZE); // Allocate memory for s2
+    int *f;
+    int res;
+    int len = 0;
+    int cmp = 0;
+
+    f = fopen("tests/six-cc-tests/memset.c", 0); // Open file for reading
+  
+
+    // Read file content into s
+    while ((res = fgetc(f)) != -1 && len < MAX_SIZE - 1) {
+        s[len] = res;
+        len++;
+    }
+    s[len] = '\0'; // Null-terminate s
+
+    int i = 0;
+    while (i < len) {
+        s2[i] = s[i];
+        i++;
+    }
+    s2[len] = '\0'; 
+
+    putstring("s = s2: ");
+    cmp = memcmp(s, s2, len);
+    putchar(cmp + 48);
+    putchar('\n');
+
+    s[12] += 25;
+    putstring("s[12] += 25: ");
+    cmp = memcmp(s, s2, len); 
+    putchar(cmp + 48);
+    putchar('\n');
+
+    fclose(f); // Close the file
+    free(s); // Free allocated memory for s
+    free(s2); // Free allocated memory for s2
+
+    return 0;
+}
