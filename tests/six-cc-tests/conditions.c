@@ -13,14 +13,12 @@ void main() {
 
   if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_')
   {
-    //printf("p: %c\n", *p);
     putstring("p: ");
     putchar(*p);
     putchar('\n');
   }
   if ((*p >= 'a' || *p <= 'z') && (*p >= 'A' || *p <= 'Z') && !(*p >= '0' || *p <= '9') && *p == '_')
   {
-    //printf("p: %c\n", *p);
     putstring("p: ");
     putchar(*p);
     putchar('\n');

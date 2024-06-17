@@ -1,3 +1,23 @@
+void putnumber(int n) {
+  if (n == 0) {
+    putchar(48);
+    return;
+  }
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  while (n > 0) {
+    digits[i] = n % 10;
+    n = n / 10;
+    i = i + 1;
+  }
+  i = i - 1;
+  while (i >= 0) {
+    putchar(digits[i] + 48);
+    i = i - 1;
+  }
+}
+
 int abs(int number)
 {
   if(number < 0) return -number;
@@ -30,13 +50,11 @@ int main() {
   int n2;
   n1 = even(10);
   n2 = odd(10);
-//  printf("n1 = %d\n", n1);
-//  printf("n2 = %d\n", n2);
   putstring("n1 = ");
-  putchar(n1);
+  putnumber(n1);
   putchar('\n');
   putstring("n2 = ");
-  putchar(n2);
+  putnumber(n2);
   putchar('\n');
   return 0;
 }

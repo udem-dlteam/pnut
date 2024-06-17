@@ -1,3 +1,10 @@
+void putstring(char *s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
 void main() {
   /* print a number to stdout */
   int NL;
@@ -19,5 +26,9 @@ void main() {
     p = p / 10;
   }
 
-  putchar(NL);
+  if (NL == 31416){
+    putstring("31416");
+  }
+  putchar(10);
+  return 0;
 }

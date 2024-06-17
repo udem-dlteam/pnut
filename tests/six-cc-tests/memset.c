@@ -12,7 +12,7 @@ int main() {
   char * f;
   int len;
   int res;
-  int i;
+  int i = 0;
   MAX_SIZE = 100;
   malloc(MAX_SIZE);
   s = malloc(MAX_SIZE);
@@ -21,9 +21,9 @@ int main() {
   len = read(f, s, MAX_SIZE - 1);
   s[len] = 0;
   /* Initialize s2 with s */
-  for (i = 0; i < len; i++) {
+  while(i < len) {
     s2[i] = s[i];
-
+    i = i + 1;
   }
   putstring("s = s2: ");
   putchar(memcmp(s, s2, len));

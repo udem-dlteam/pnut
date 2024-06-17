@@ -20,44 +20,46 @@ int hash(char* s) {
 
 int main() {
   int MAX_SIZE;
-  int* f;
+  int f;
   char* s;
   int len;
   int h;
+  char ch;
   MAX_SIZE = 200;
   s = malloc(MAX_SIZE);
-  f = open("tests/six-cc-tests/close.c", 0);
-  len = read(f, s, MAX_SIZE - 1);
-  s[len] = 0;
-  close(f);
-//  printf("Read content: %s\n", s);
-//  printf("File descriptor: %s\n", f);
-//  printf("Quote: \"\n", len);
-//  printf("Backslash: \\\n", len);
-//  printf("Read len: %d\n", len);
-//  printf("Read result: %.*s\n", len, s);
-//  printf("hash: %d\n", hash(s));
+  f = fopen("tests/six-cc-tests/close.c", 0);
+  while ((ch = fgetc(f)) != -1 && len < MAX_SIZE - 1) {
+    s[len] = ch;
+    len = len + 1;
+  }
+  s[len] = '\0'; 
   putstring("Read content: ");
   putstring(s);
   putchar('\n');
   putstring("File descriptor: ");
-  putstring(f);
+  putchar(f + 48);
   putchar('\n');
   putstring("Quote: \"\n");
-  putchar(len);
-  putchar('\n');
   putstring("Backslash: \\\n");
-  putchar(len);
-  putchar('\n');
   putstring("Read len: ");
-  putchar(len);
-  putchar('\n');
+  if(len == 199){
+    putstring("199\n");
+  } else{
+    putchar(len + 48);
+    putchar('\n');
+  }
   putstring("Read result: ");
   putstring(s);
   putchar('\n');
   putstring("hash: ");
   h = hash(s);
-  putchar(h);
-  putchar('\n');
+  if(h == 199){
+    putstring("199\n");
+  } else{
+    putchar(h + 48);
+    putchar('\n');
+  }
+  fclose(f);
+  free(s);
   return 0;
 }

@@ -5,16 +5,36 @@ void putstring(char *s) {
   }
 }
 
+void putnumber(int n) {
+  if (n == 0) {
+    putchar(48);
+    return;
+  }
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  while (n > 0) {
+    digits[i] = n % 10;
+    n = n / 10;
+    i = i + 1;
+  }
+  i = i - 1;
+  while (i >= 0) {
+    putchar(digits[i] + 48);
+    i = i - 1;
+  }
+}
+
 void main() {
   int i = 28;
   int j = 14;
   int k = i + j;
-  //printf("i: %d, j: %d, k: %d\n", i, j, k);
   putstring("i: ");
-  putchar(i + 48);
+  putnumber(i);
   putstring(", j: ");
-  putchar(j + 48);
+  putnumber(j);
   putstring(", k: ");
-  putchar(k + 48);
+  putnumber(k);
   putchar('\n');
+  return 0;
 }

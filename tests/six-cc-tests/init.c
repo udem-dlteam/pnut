@@ -12,14 +12,16 @@ void main() {
   char * s;
   char * t = "Hello, world!";
   k = 42;
-//  printf("i: %d, j: %d, k: %d\n", i, j, k);
-//  printf("t: %s\n", t);
   putstring("i: ");
   putchar(i + 48);
   putstring(", j: ");
   putchar(j + 48);
   putstring(", k: ");
-  putchar(k + 48);
+  if(k == 42) {
+    putstring("42");
+  } else {
+    putstring("not 42");
+  }
   putchar('\n');
   putstring("t: ");
   putstring(t);

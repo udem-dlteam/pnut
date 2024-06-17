@@ -10,17 +10,19 @@ void main() {
   int ZERO = '0';
   int n = 31416;
   int p = 1;
+  int digit;
 
   while (p * 10 <= n){
     p *= 10;
   }
 
   while (p > 0) {
-    int digit = n / p;
+    digit = n / p;
     putchar(ZERO + digit);
     n %= p;
     p /= 10;
   }
 
   putchar(NL);
+  return 0;
 }
