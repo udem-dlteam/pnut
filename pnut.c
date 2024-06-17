@@ -18,7 +18,20 @@
 
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
-#define HANDLE_SIMPLE_PRINTF_not
+
+// Shell backend codegen options
+#define SH_INDIVIDUAL_LET
+#define SH_AVOID_PRINTF_USE
+#define SH_INLINE_PUTCHAR
+#define SH_INLINE_EXIT
+// Specifies if we include the C code along with the generated shell code
+#define SH_INCLUDE_C_CODE_not
+
+// Options to parameterize the shell runtime library
+#define RT_FREE_UNSETS_VARS
+#define RT_NO_INIT_GLOBALS_not
+#define RT_COMPACT_not
+#define RT_INLINE_PUTCHAR
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -33,16 +46,6 @@ typedef int bool;
 #ifdef PNUT_CC
 
 typedef int FILE;
-
-/* Redefining strcmp because it's not part of the Shell runtime */
-int strcmp(char *str1, char *str2) {
-  int i = 0;
-  while (str1[i] == str2[i]) {
-    if (str1[i] == '\0') return 0;
-    i += 1;
-  }
-  return str1[i] - str2[i];
-}
 
 #endif
 
@@ -399,6 +402,59 @@ void pop_ifdef_mask() {
   ifdef_mask = ifdef_stack[ifdef_stack_ix];
 }
 
+// Includes the preprocessed C code along with the generated shell code
+#ifdef SH_INCLUDE_C_CODE
+#define DECLARATION_BUF_LEN 20000
+
+char declaration_char_buf[DECLARATION_BUF_LEN];
+int declaration_char_buf_ix = 0;
+// Point to the last character of the last token.
+// This is used to skip the current token when printing the code of a
+// declaration since it belongs to the next declaration.
+int last_tok_char_buf_ix = 0;
+
+void output_declaration_c_code(bool no_header) {
+
+  int i = 0;
+
+  if (!no_header) {
+    putstr("#################################### C code ####################################\n");
+  }
+  putchar('#');
+  putchar(' ');
+
+  // Skip leading newlines if any.
+  while (declaration_char_buf[i] == '\n') i += 1;
+
+  for (; i < last_tok_char_buf_ix; i += 1) {
+
+    if (declaration_char_buf[i] == '\n') {
+      // Condense the C code by removing extra newlines
+      if (declaration_char_buf[i - 1] != declaration_char_buf[i]) {
+        putchar('\n');
+        putchar('#');
+        putchar(' ');
+      }
+    } else {
+      putchar(declaration_char_buf[i]);
+    }
+  }
+
+  // End of decl
+  putchar('\n');
+  if (!no_header) {
+    putstr("################################# End of C code ################################\n");
+  }
+
+  // Copy the last token characters to the beginning of the buffer
+  for (i = 0; i < declaration_char_buf_ix - last_tok_char_buf_ix; i += 1) {
+    declaration_char_buf[i] = declaration_char_buf[last_tok_char_buf_ix + i];
+  }
+
+  declaration_char_buf_ix = i;
+}
+#endif
+
 void get_ch() {
 #ifdef SUPPORT_INCLUDE
   ch = fgetc(fp);
@@ -413,6 +469,11 @@ void get_ch() {
   }
 #else
   ch = getchar();
+#endif
+#ifdef SH_INCLUDE_C_CODE
+  // Save C code chars so they can be displayed with the shell code
+  declaration_char_buf[declaration_char_buf_ix] = ch;
+  declaration_char_buf_ix += 1;
 #endif
 }
 
@@ -439,6 +500,24 @@ int UNDEF_ID;
 int INCLUDE_ID;
 
 int NOT_SUPPORTED_ID;
+
+// We want to recognize certain identifers without having to do expensive string comparisons
+int ARGV_ID;
+int IFS_ID;
+int MAIN_ID;
+
+int PUTCHAR_ID;
+int GETCHAR_ID;
+int EXIT_ID;
+int MALLOC_ID;
+int FREE_ID;
+int PRINTF_ID;
+int FOPEN_ID;
+int FCLOSE_ID;
+int FGETC_ID;
+
+int PUTSTR_ID;
+int PUTS_ID;
 
 void get_tok_macro() {
   expand_macro = false;
@@ -550,7 +629,7 @@ void handle_define() {
     // Accumulate tokens so they can be replayed when the macro is used
     heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
-    #ifdef DEBUG_CPP
+#ifdef DEBUG_CPP
     putstr("# ");
     putstr(string_pool + heap[macro + 1]);
     if (args_count != -1) putchar('('); // Function-like macro
@@ -565,13 +644,13 @@ void handle_define() {
     if (args_count != -1) putstr(") ");
     print_macro_raw_tokens(car(heap[macro + 3]));
     putchar('\n');
-    #endif
+#endif
   }
 }
 
 void handle_include() {
   get_tok();
-  #ifdef SUPPORT_INCLUDE
+#ifdef SUPPORT_INCLUDE
   if (tok == STRING) {
     include_file(string_pool + val);
   } else if (tok == '<') {
@@ -586,13 +665,16 @@ void handle_include() {
     fatal_error("expected string to #include directive");
   }
 
-  #else
+#else
   fatal_error("The #include directive is not supported in this version of the compiler.");
-  #endif
+#endif
 }
 
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
+#ifdef SH_INCLUDE_C_CODE
+  int prev_char_buf_ix = declaration_char_buf_ix;
+#endif
   get_ch(); // Skip the #
   ifdef_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
   get_tok(); // Get the directive
@@ -654,6 +736,9 @@ void handle_preprocessor_directive() {
     putstr("ch="); putint(ch); putchar('\n');
     fatal_error("preprocessor expected end of line");
   }
+#ifdef SH_INCLUDE_C_CODE
+  declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
+#endif
 }
 
 void get_ident() {
@@ -751,6 +836,23 @@ void init_ident_table() {
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+
+  ARGV_ID = init_ident(IDENTIFIER, "argv");
+  IFS_ID  = init_ident(IDENTIFIER, "IFS");
+  MAIN_ID = init_ident(IDENTIFIER, "main");
+
+  PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
+  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
+  EXIT_ID    = init_ident(IDENTIFIER, "exit");
+  MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
+  FREE_ID    = init_ident(IDENTIFIER, "free");
+  PRINTF_ID  = init_ident(IDENTIFIER, "printf");
+  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
+  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
+  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
+
+  PUTSTR_ID = init_ident(IDENTIFIER, "putstr");
+  PUTS_ID = init_ident(IDENTIFIER, "puts");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
@@ -1030,10 +1132,21 @@ void paste_tokens(int left_tok, int left_val) {
 void get_tok() {
 
   bool first_time = true; // Used to simulate a do-while loop
+#ifdef SH_INCLUDE_C_CODE
+  int prev_char_buf_ix = declaration_char_buf_ix;
+  // Save the cursor in a local variable so we can restore it when the token is
+  // masked off. Not using the last_tok_char_buf_ix global because get_tok can
+  // be called recursively by handle_preprocessor_directive.
+  int prev_last_tok_char_buf_ix = declaration_char_buf_ix;
+#endif
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while (first_time OR !ifdef_mask) {
     first_time = false;
+#ifdef SH_INCLUDE_C_CODE
+    declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
+#endif
+
     while (1) {
       // Check if there are any tokens to replay. Macros are just identifiers that
       // have been marked as macros. In terms of how we get into that state, a
@@ -1411,6 +1524,9 @@ void get_tok() {
       }
     }
   }
+#ifdef SH_INCLUDE_C_CODE
+  last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
+#endif
 }
 
 /* parser */
@@ -2476,6 +2592,7 @@ ast parse_compound_statement() {
 int main(int argc, char **args) {
 
   int i;
+  ast decl;
 
   init_ident_table();
 
@@ -2493,40 +2610,46 @@ int main(int argc, char **args) {
       }
     } else {
       // Options that don't start with '-' are file names
-      #ifdef SUPPORT_INCLUDE
+#ifdef SUPPORT_INCLUDE
       include_file(args[i]);
-      #else
+#else
       fatal_error("input file not supported. Pnut expects the input from stdin.");
-      #endif
+#endif
     }
   }
 
-  #ifdef SUPPORT_INCLUDE
+#ifdef SUPPORT_INCLUDE
   if (fp == 0) {
     putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
-  #endif
+#endif
 
-  #ifndef DEBUG_CPP
+#ifndef DEBUG_CPP
   codegen_begin();
-  #endif
+#endif
 
   ch = '\n';
   get_tok();
 
   while (tok != EOF) {
-    #ifdef DEBUG_CPP
+#ifdef DEBUG_CPP
     print_tok(tok, val);
     get_tok();
-    #else
-    codegen_glo_decl(parse_definition(0));
-    #endif
+#else
+
+    decl = parse_definition(0);
+#ifdef SH_INCLUDE_C_CODE
+    output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == VAR_DECLS);
+#endif
+    codegen_glo_decl(decl);
+
+#endif
   }
 
-  #ifndef DEBUG_CPP
+#ifndef DEBUG_CPP
   codegen_end();
-  #endif
+#endif
 
   return 0;
 }

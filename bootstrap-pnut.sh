@@ -1,7 +1,7 @@
 #! /bin/sh
 
 TEMP_DIR="bootstrap-results"
-PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -Dsh"
+PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
@@ -15,7 +15,7 @@ bootstrap_with_shell() {
 
   echo "Bootstrap with $1"
 
-  time $1 "$TEMP_DIR/pnut.sh" --no-zero-globals $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-twice-bootstrapped.sh"
+  time $1 "$TEMP_DIR/pnut.sh" $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 
   diff "$TEMP_DIR/pnut.sh" "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 
