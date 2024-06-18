@@ -781,7 +781,7 @@ ast value_type(ast node) {
         set_val(left_type, get_val(left_type) + 1); // Increment star by 1
       }
       return left_type;
-    } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS) {
+    } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS OR op == MINUS_MINUS_POST OR op == PLUS_PLUS_POST OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else if (op == SIZEOF_KW) {
@@ -850,8 +850,10 @@ ast value_type(ast node) {
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
       }
+    } else if (op == CAST) {
+      return get_child(node, 0);
     } else {
-      fatal_error("value_type: unknown expression");
+      fatal_error("value_type: unknown expression with 2 children");
     }
 
   } else if (nb_children == 3) {
@@ -1388,6 +1390,8 @@ void codegen_rvalue(ast node) {
       } else {
         fatal_error("codegen_rvalue: -> operator on non-struct pointer type");
       }
+    } else if (op == CAST) {
+      codegen_rvalue(get_child(node, 1));
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
