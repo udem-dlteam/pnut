@@ -177,6 +177,7 @@ int string_counter = 0;         /* Counter for string literals */
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
+bool main_returns;              /* If the main function returns a value */
 
 // Internal identifier node types. These
 int IDENTIFIER_INTERNAL = 600;
@@ -1743,7 +1744,7 @@ void mark_mutable_variables_body(ast node) {
 
 void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
-  /* ast fun_type = get_child(node, 1); */
+  ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
   ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
   ast local_vars = get_child(local_vars_and_body, 0);
@@ -1759,6 +1760,8 @@ void comp_glo_fun_decl(ast node) {
 
   // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
   if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
+  // Check if main returns an exit code.
+  if (name == MAIN_ID && get_op(fun_type) != VOID_KW) main_returns = true;
 
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
@@ -1976,6 +1979,8 @@ void prologue() {
 void epilogue() {
   int c;
 
+  text main_args = 0;
+
   if (any_character_used) {
     printf("# Character constants\n");
     for(c = 0; c < 256; c += 1) {
@@ -1993,10 +1998,15 @@ void epilogue() {
   if (runtime_use_make_argv) {
     printf("# Setup argc, argv\n");
     printf("__argc_for_main=$(($# + 1))\n");
-    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
-    printf("_main __ $__argc_for_main $__argv_for_main\n");
+    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+    main_args = wrap_str(" $__argc_for_main $__argv_for_main");
+  }
+
+  if (main_returns) {
+    printf("_code=0; # Success exit code\n");
+    print_text(string_concat3(wrap_str("_main _code"), main_args, wrap_str("; exit $_code\n")));
   } else {
-    printf("_main __\n");
+    print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
   }
 }
 
