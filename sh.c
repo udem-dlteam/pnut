@@ -579,10 +579,11 @@ void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_ident
   char* name = string_pool + get_val(ident_tok);
   ast type = get_child(variable, 1);
   if (name[0] == '_'
+    || (name[0] != '\0' && name[1] == '_' && name[2] == '\0') // Check for a_ variables that could conflict with character constants
     || ident_tok == ARGV_ID
     || ident_tok == IFS_ID) {
     printf("%s ", name);
-    fatal_error("variable name is invalid. It can't start with '_', be 'IFS' or 'argv'.");
+    fatal_error("variable name is invalid. It can't start or end with '_', be 'IFS' or 'argv'.");
   }
 
   // Local variables don't correspond to memory locations, and can't store
@@ -829,11 +830,11 @@ text character_ident(int c) {
   any_character_used = true;
 
   if ('a' <= c AND c <= 'z') {
-    return string_concat(wrap_str("__CH_"), wrap_char(c));
+    return string_concat3(wrap_char('_'), wrap_char(c), wrap_char('_'));
   } else if ('A' <= c AND c <= 'Z') {
-    return string_concat(wrap_str("__CH_"), wrap_char(c));
+    return string_concat3(wrap_char('_'), wrap_char(c), wrap_char('_'));
   } else if ('0' <= c AND c <= '9') {
-    return string_concat(wrap_str("__CH_"), wrap_int(c - 48));
+    return string_concat3(wrap_char('_'), wrap_int(c - 48), wrap_char('_'));
   } else {
     if      (c == '\0') return wrap_str("__CH_NULL");
     else if (c == '\n') return wrap_str("__CH_NEWLINE");
