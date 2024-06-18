@@ -1442,6 +1442,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast params = get_child(node, 1);
   int name_id = get_val(name);
   text res;
+  ast ident;
 
   #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
@@ -1457,6 +1458,11 @@ text comp_fun_call_code(ast node, ast assign_to) {
 #ifdef SH_INLINE_PUTCHAR
     else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
       res = comp_rvalue(params, RVALUE_CTX_BASE);
+      if (contains_side_effects) {
+        ident = fresh_ident();
+        append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
+        res = comp_lvalue(ident);
+      }
       res =
         string_concat3(
           string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
