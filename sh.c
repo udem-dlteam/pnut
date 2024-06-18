@@ -23,9 +23,12 @@ int text_pool[TEXT_POOL_SIZE];
 int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 
 // Text pool nodes
-int TEXT_TREE = 0;
-int TEXT_INTEGER = 1;
-int TEXT_FROM_POOL = 2;
+enum TEXT_NODES {
+  TEXT_TREE,
+  TEXT_INTEGER,
+  TEXT_FROM_POOL,
+  TEXT_ESCAPED
+};
 
 #ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
@@ -48,6 +51,8 @@ void mark_mutable_variables_body(ast node);
   string.
 */
 
+#define wrap_char(c) (-c)
+
 text wrap_int(int i) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_INTEGER;
@@ -55,10 +60,13 @@ text wrap_int(int i) {
   return (text_alloc += 2) - 2;
 }
 
-// TODO: Inline this once we have macro with arguments
-text wrap_char(char c) {
-  /* Characters are represent using negative numbers */
-  return -c;
+text escape_text(text t, bool for_printf) {
+  if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+
+  text_pool[text_alloc] = TEXT_ESCAPED;
+  text_pool[text_alloc + 1] = t;
+  text_pool[text_alloc + 2] = for_printf;
+  return (text_alloc += 3) - 3;
 }
 
 text string_concat(text t1, text t2) {
@@ -103,6 +111,8 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
+// TODO: All strings passed to wrap_str are literals, so we should just store
+// a reference to the literal instead of copying it.
 text wrap_str(char *s) {
   int i = 0;
   int result = text_alloc;
@@ -133,6 +143,67 @@ text concatenate_strings_with(text t1, text t2, text sep) {
   return string_concat3(t1, sep, t2);
 }
 
+void print_escaped_char(char c, int for_printf) {
+  // C escape sequences
+  if      (c == '\a') { putchar('\\');  putchar('a'); }
+  else if (c == '\b') { putchar('\\');  putchar('b'); }
+  else if (c == '\f') { putchar('\\');  putchar('f'); }
+  else if (c == '\n') { putchar('\\');  putchar('n'); }
+  else if (c == '\r') { putchar('\\');  putchar('r'); }
+  else if (c == '\t') { putchar('\\');  putchar('t'); }
+  else if (c == '\v') { putchar('\\');  putchar('v'); }
+  /* backslashes are escaped twice, first by the shell and then by def_str */
+  else if (c == '\\') { putchar('\\');  putchar('\\'); putchar('\\'); putchar('\\'); }
+  // Shell special characters: $, `, ", ', ?, and newline
+  // Note that ' and ? are not escaped properly by dash, but that's ok because
+  // we use double quotes and ' and ? can be left as is.
+  else if (c == '$')  { putchar('\\'); putchar('$');  }
+  else if (c == '`')  { putchar('\\'); putchar('`');  }
+  else if (c == '"')  { putchar('\\'); putchar('"');  }
+  // else if (c == '\'') { putchar('\\'); putchar('\''); }
+  // else if (c == '?')  { putchar('\\'); putchar('?');  }
+  // when we're escaping a string for shell's printf, % must be escaped
+  else if (c == '%'  && for_printf) { putchar('%'); putchar('%'); }
+  else                putchar(c);
+}
+
+void print_escaped_string(char *s, int for_printf) {
+  int i = 0;
+  while (s[i] != 0) {
+    print_escaped_char(s[i], for_printf);
+    i += 1;
+  }
+}
+
+void print_escaped_text(text t, bool for_printf) {
+  int i;
+
+  if (t == 0) return;
+
+  if (t < 0) { /* it's a character */
+    print_escaped_char(-t, for_printf);
+  } else if (text_pool[t] == TEXT_TREE) {
+    i = 0;
+    while (i < text_pool[t + 1]) {
+      if (text_pool[t + i + 2] < 0) {
+        print_escaped_char(-text_pool[t + i + 2], for_printf);
+      } else {
+        print_escaped_text(text_pool[t + i + 2], for_printf);
+      }
+      i += 1;
+    }
+  } else if (text_pool[t] == TEXT_INTEGER) {
+    printf("%d", text_pool[t + 1]);
+  } else if ( text_pool[t] == TEXT_FROM_POOL) {
+    print_escaped_string(string_pool + text_pool[t + 1], for_printf);
+  } else if (text_pool[t] == TEXT_ESCAPED) {
+    fatal_error("Cannot escape a string that is already escaped");
+  } else {
+    printf("\nt=%d %d\n", t, text_pool[t]);
+    fatal_error("print_escaped_text: unexpected string tree node");
+  }
+}
+
 void print_text(text t) {
   int i;
 
@@ -143,16 +214,22 @@ void print_text(text t) {
   } else if (text_pool[t] == TEXT_TREE) {
     i = 0;
     while (i < text_pool[t + 1]) {
-      print_text(text_pool[t + i + 2]);
+      if (text_pool[t + i + 2] < 0) {
+        putchar(-text_pool[t + i + 2]);
+      } else {
+        print_text(text_pool[t + i + 2]);
+      }
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_FROM_POOL) {
     printf("%s", string_pool + text_pool[t + 1]);
+  } else if (text_pool[t] == TEXT_ESCAPED) {
+    print_escaped_text(text_pool[t + 1], text_pool[t + 2]);
   } else {
     printf("\nt=%d %d\n", t, text_pool[t]);
-    fatal_error("unexpected string tree node");
+    fatal_error("print_text: unexpected string tree node");
   }
 }
 
@@ -1164,56 +1241,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   }
 }
 
-#ifdef SH_AVOID_PRINTF_USE
-text escaped_char(char c, int for_printf) {
-#else
-text escaped_char(char c) {
-#endif
-  // C escape sequences
-  if      (c == '\a') return wrap_str("\\a");
-  else if (c == '\b') return wrap_str("\\b");
-  else if (c == '\f') return wrap_str("\\f");
-  else if (c == '\n') return wrap_str("\\n");
-  else if (c == '\r') return wrap_str("\\r");
-  else if (c == '\t') return wrap_str("\\t");
-  else if (c == '\v') return wrap_str("\\v");
-  else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
-  // Shell special characters: $, `, ", ', ?, and newline
-  // Note that ' and ? are not escaped properly by dash, but that's ok because
-  // we use double quotes and ' and ? can be left as is.
-  else if (c == '$')  return wrap_str("\\$");
-  else if (c == '`')  return wrap_str("\\`");
-  else if (c == '"')  return wrap_str("\\\"");
-  // else if (c == '\'') return wrap_str("\\\'");
-  // else if (c == '?')  return wrap_str("\\?");
-#ifdef SH_AVOID_PRINTF_USE
-  // when we're escaping a string for shell's printf, % must be escaped
-  else if (c == '%'  && for_printf) return wrap_str("%%");
-#endif
-  else                return wrap_char(c);
-}
-
-#ifdef SH_AVOID_PRINTF_USE
-text escape_string(char *str, int for_printf) {
-#else
-text escape_string(char *str) {
-#endif
-  text res = wrap_str("");
-  text char_text;
-  int i = 0;
-
-  while (str[i] != '\0') {
-#ifdef SH_AVOID_PRINTF_USE
-    char_text = escaped_char(str[i], for_printf);
-#else
-    char_text = escaped_char(str[i]);
-#endif
-    res = string_concat(res, char_text);
-    i += 1;
-  }
-  return res;
-}
-
 text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
   /* Calling comp_fun_call/comp_rvalue can overwrite replaced_fun_calls and contains_side_effects, so they are saved */
@@ -1230,11 +1257,7 @@ text comp_rvalue(ast node, int context) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
-#ifdef SH_AVOID_PRINTF_USE
-                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), false)
-#else
-                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
-#endif
+                                  , escape_text(wrap_str_pool(get_child(get_child(literals_inits, 0), 1)), false)
                                   , wrap_char('\"')));
     literals_inits = get_child(literals_inits, 1);
   }
@@ -1319,6 +1342,7 @@ text comp_lvalue(ast node) {
 text fun_call_params(ast params, int count) {
   ast param;
   text code_params = 0;
+
   if (params != 0 && count > 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
       while (get_op(params) == ',' && count > 0) {
@@ -1385,7 +1409,8 @@ void handle_printf_call(char* format_str, ast params) {
           // Generate the printf call for the format string up to this point.
           if (format_start != format_str - 1) {
             *(format_str - 1) = '\0'; // Null-terminate the format string
-            append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, params_count)));
+
+            append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
             *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
           }
 
@@ -1407,7 +1432,7 @@ void handle_printf_call(char* format_str, ast params) {
 
   // Dump the remaining format string
   if (format_start != format_str) {
-    append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, 1000)));
+    append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, 1000)));
   }
 }
 #endif
@@ -1422,7 +1447,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
       || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
-      return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
+      return string_concat3(wrap_str("printf \""), escape_text(wrap_str_pool(get_val(params)), true), wrap_str("\""));
     } else if (name_id == PRINTF_ID && params != 0 && get_op(params) == ',') {
       if (printf_uses_shell_format_specifiers(string_pool + get_val(get_child(params, 0)))) {
         handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
@@ -1948,11 +1973,7 @@ text comp_constant(ast node) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(new_ident, false)
                                   , wrap_str(" \"")
-#ifdef SH_AVOID_PRINTF_USE
-                                  , escape_string(string_pool + get_val(node), true)
-#else
-                                  , escape_string(string_pool + get_val(node))
-#endif
+                                  , escape_text(wrap_str_pool(get_val(node)), false)
                                   , wrap_char('\"')));
 
     return format_special_var(new_ident, false);
@@ -2136,6 +2157,8 @@ void codegen_begin() {
   prologue();
 }
 
+int max_text_alloc = 0;
+int cumul_text_alloc = 0;
 void codegen_glo_decl(ast decl) {
   comp_glo_decl(decl);
   initialize_function_variables();
@@ -2144,10 +2167,12 @@ void codegen_glo_decl(ast decl) {
   glo_decl_ix = 0;
   local_env_size = 0;
   local_env = 0;
+  max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
+  cumul_text_alloc += text_alloc;
   text_alloc = 1;
 }
 
 void codegen_end() {
   epilogue();
-  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
+  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
 }
