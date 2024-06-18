@@ -388,7 +388,7 @@ void flip_ifdef_mask() {
 
 void push_ifdef_mask(bool new_mask) {
   if (ifdef_stack_ix >= IFDEF_DEPTH_MAX) {
-    fatal_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
+    syntax_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
   }
   // Save current mask on the stack because it's about to be overwritten
   ifdef_stack[ifdef_stack_ix] = ifdef_mask;
@@ -399,7 +399,7 @@ void push_ifdef_mask(bool new_mask) {
 
 void pop_ifdef_mask() {
   if (ifdef_stack_ix == 0) {
-    fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
+    syntax_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
   }
   ifdef_stack_ix -= 1;
   ifdef_mask = ifdef_stack[ifdef_stack_ix];
@@ -564,7 +564,7 @@ int read_macro_tokens(int args) {
 
     // Check that there are no leading or trailing ##
     if (car(car(toks)) == HASH_HASH OR car(car(tail)) == HASH_HASH) {
-      fatal_error("'##' cannot appear at either end of a macro expansion");
+      syntax_error("'##' cannot appear at either end of a macro expansion");
     }
   }
 
@@ -599,7 +599,7 @@ void handle_define() {
     macro = val;
   } else {
     putstr("tok="); putint(tok); putchar('\n');
-    fatal_error("#define directive can only be followed by a identifier");
+    syntax_error("#define directive can only be followed by a identifier");
   }
   if (ch == '(') { // Function-like macro
     args_count = 0;
@@ -665,11 +665,11 @@ void handle_include() {
     while (tok != '>') get_tok();
   } else {
     putstr("tok="); putint(tok); putchar('\n');
-    fatal_error("expected string to #include directive");
+    syntax_error("expected string to #include directive");
   }
 
 #else
-  fatal_error("The #include directive is not supported in this version of the compiler.");
+  syntax_error("The #include directive is not supported in this version of the compiler.");
 #endif
 }
 
@@ -719,13 +719,13 @@ void handle_preprocessor_directive() {
         // TODO: Doesn't play nice with typedefs, because they are not marked as macros
       } else {
         putstr("tok="); putint(tok); putchar('\n');
-        fatal_error("#undef directive can only be followed by a identifier");
+        syntax_error("#undef directive can only be followed by a identifier");
       }
     } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
       handle_define();
     } else {
       putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
-      fatal_error("unsupported preprocessor directive");
+      syntax_error("unsupported preprocessor directive");
     }
   } else {
     // Skip the directive
@@ -737,7 +737,7 @@ void handle_preprocessor_directive() {
   // the call to handle_preprocessor_directive, we don't need to call get_tok here
   if (ch != '\n' AND ch != EOF) {
     putstr("ch="); putint(ch); putchar('\n');
-    fatal_error("preprocessor expected end of line");
+    syntax_error("preprocessor expected end of line");
   }
 #ifdef SH_INCLUDE_C_CODE
   declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
@@ -914,7 +914,7 @@ void get_string_char() {
       if (accum_digit(16)) {
         accum_digit(16);
       } else {
-        fatal_error("invalid hex escape -- it must have at least one digit");
+        syntax_error("invalid hex escape -- it must have at least one digit");
       }
       val = -(val % 256); /* keep low 8 bits, without overflowing */
     } else {
@@ -935,7 +935,7 @@ void get_string_char() {
       } else if ((ch == '\\') OR (ch == '\'') OR (ch == '\"')) {
         val = ch;
       } else {
-        fatal_error("unimplemented string character escape");
+        syntax_error("unimplemented string character escape");
       }
       get_ch();
     }
@@ -973,7 +973,7 @@ void check_macro_arity(int macro_args_count, int expected_argc) {
     putstr("expected_argc="); putint(expected_argc);
     putstr(" != macro_args_count="); putint(macro_args_count);
     putchar('\n');
-    fatal_error("macro argument count mismatch");
+    syntax_error("macro argument count mismatch");
   }
 }
 
@@ -1012,7 +1012,7 @@ int get_macro_args_toks(int expected_argc) {
 int get_macro_arg(int ix) {
   int arg = macro_args;
   while (ix > 0) {
-    if (arg == 0) fatal_error("too few arguments to macro");
+    if (arg == 0) syntax_error("too few arguments to macro");
     arg = cdr(arg);
     ix -= 1;
   }
@@ -1023,7 +1023,7 @@ void push_macro(int tokens, int args) {
   if (tokens != 0) {
     if (macro_tok_lst != 0) {
       if (macro_stack_ix + 2 >= MACRO_RECURSION_MAX) {
-        fatal_error("Macro recursion depth exceeded.");
+        syntax_error("Macro recursion depth exceeded.");
       }
       macro_stack[macro_stack_ix] = macro_tok_lst;
       macro_stack[macro_stack_ix + 1] = macro_args;
@@ -1074,7 +1074,7 @@ void stringify() {
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
     putstr("tok="); putint(tok); putchar('\n');
-    fatal_error("expected macro argument after #");
+    syntax_error("expected macro argument after #");
   }
   arg = get_macro_arg(val);
   tok = STRING;
@@ -1114,7 +1114,7 @@ void paste_tokens(int left_tok, int left_val) {
       accum_string_integer(-right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
-      fatal_error("cannot paste an identifier with a non-identifier or non-negative integer");
+      syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
     val = end_ident();
@@ -1124,11 +1124,11 @@ void paste_tokens(int left_tok, int left_val) {
       val = -paste_integers(-left_val, -right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
-      fatal_error("cannot paste an integer with a non-integer");
+      syntax_error("cannot paste an integer with a non-integer");
     }
   } else {
     putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
-    fatal_error("cannot paste a non-identifier or non-integer");
+    syntax_error("cannot paste a non-identifier or non-integer");
   }
 }
 
@@ -1180,7 +1180,7 @@ void get_tok() {
             // If we are not in a macro expansion, we can't paste the last token
             // This should not happen if the macro is well-formed, which is
             // checked by read_macro_tokens.
-            fatal_error("## cannot appear at the end of a macro expansion");
+            syntax_error("## cannot appear at the end of a macro expansion");
           }
           macro_stack_ix -= 2;
           macro_tok_lst = macro_stack[macro_stack_ix];
@@ -1264,7 +1264,7 @@ void get_tok() {
             if (accum_digit(16)) {
               while (accum_digit(16));
             } else {
-              fatal_error("invalid hex integer -- it must have at least one digit");
+              syntax_error("invalid hex integer -- it must have at least one digit");
             }
           } else {
             while (accum_digit(8));
@@ -1283,7 +1283,7 @@ void get_tok() {
         get_string_char();
 
         if (ch != '\'') {
-          fatal_error("unterminated character literal");
+          syntax_error("unterminated character literal");
         }
 
         get_ch();
@@ -1307,7 +1307,7 @@ void get_tok() {
         }
 
         if (ch != '\"') {
-          fatal_error("unterminated string literal");
+          syntax_error("unterminated string literal");
         }
 
         ch = 0;
@@ -1335,7 +1335,7 @@ void get_tok() {
               get_ch();
             }
             if (ch == EOF) {
-              fatal_error("unterminated comment");
+              syntax_error("unterminated comment");
             }
             get_ch();
             /* will continue while (1) loop */
@@ -1518,11 +1518,11 @@ void get_tok() {
             get_ch();
           } else {
             putstr("ch="); putint(ch); putchar('\n');
-            fatal_error("unexpected character after backslash");
+            syntax_error("unexpected character after backslash");
           }
         } else {
           putstr("ch="); putint(ch); putchar('\n');
-          fatal_error("invalid token");
+          syntax_error("invalid token");
         }
       }
     }
@@ -1736,7 +1736,7 @@ ast parse_enum() {
     result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
     if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
     get_tok();
-    if (tok == '{') fatal_error("enum type cannot be redefined");
+    if (tok == '{') syntax_error("enum type cannot be redefined");
     return result;
   } else {
     name = 0;
@@ -1805,7 +1805,7 @@ ast parse_struct() {
     result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
     if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
     get_tok();
-    if (tok == '{') fatal_error("struct type cannot be redefined");
+    if (tok == '{') syntax_error("struct type cannot be redefined");
     return result;
   } else {
     name = 0;
@@ -1860,7 +1860,7 @@ ast parse_struct() {
 }
 
 ast parse_union() {
-  fatal_error("union not supported");
+  syntax_error("union not supported");
 }
 
 ast parse_declaration() {
@@ -2059,7 +2059,7 @@ ast parse_definition(int local) {
     // don't always have a name.
     if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW OR get_op(type) == ENUM_KW) {
       if (get_child(type, 1) != 0 && get_val(get_child(type, 1)) != val) {
-        fatal_error("typedef name must match struct/union/enum name");
+        syntax_error("typedef name must match struct/union/enum name");
       }
       set_child(type, 1, new_ast0(IDENTIFIER, val));
     }
