@@ -70,8 +70,9 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 
 DEFINE_RUNTIME_FUN(local_vars)
   printf("# Local variables\n");
-  printf("__SP=0\n");
   printf("__=0\n");
+#ifndef SH_SAVE_VARS_WITH_SET
+  printf("__SP=0\n");
 #ifdef SH_INDIVIDUAL_LET
   printf("let() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
 #else
@@ -82,6 +83,7 @@ DEFINE_RUNTIME_FUN(local_vars)
   printf("  while [ $# -ge 2 ]; do : $(($2 = __$__SP)) $((__SP -= 1)); shift; done\n");
   printf("  : $(($__ret=__tmp))\n");
   printf("}\n");
+#endif
 END_RUNTIME_FUN(local_vars)
 
 // char<->int conversion
@@ -471,12 +473,10 @@ END_RUNTIME_FUN(exit)
 
 // Input / output
 DEFINE_RUNTIME_FUN(putchar)
-#ifndef RT_INLINE_PUTCHAR
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
-#endif
 END_RUNTIME_FUN(putchar)
 
 DEFINE_RUNTIME_FUN(getchar)

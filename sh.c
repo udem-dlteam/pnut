@@ -23,9 +23,12 @@ int text_pool[TEXT_POOL_SIZE];
 int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 
 // Text pool nodes
-int TEXT_TREE = 0;
-int TEXT_INTEGER = 1;
-int TEXT_FROM_POOL = 2;
+enum TEXT_NODES {
+  TEXT_TREE,
+  TEXT_INTEGER,
+  TEXT_FROM_POOL,
+  TEXT_ESCAPED
+};
 
 #ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
@@ -48,6 +51,8 @@ void mark_mutable_variables_body(ast node);
   string.
 */
 
+#define wrap_char(c) (-c)
+
 text wrap_int(int i) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_INTEGER;
@@ -55,10 +60,13 @@ text wrap_int(int i) {
   return (text_alloc += 2) - 2;
 }
 
-// TODO: Inline this once we have macro with arguments
-text wrap_char(char c) {
-  /* Characters are represent using negative numbers */
-  return -c;
+text escape_text(text t, bool for_printf) {
+  if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+
+  text_pool[text_alloc] = TEXT_ESCAPED;
+  text_pool[text_alloc + 1] = t;
+  text_pool[text_alloc + 2] = for_printf;
+  return (text_alloc += 3) - 3;
 }
 
 text string_concat(text t1, text t2) {
@@ -103,6 +111,8 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
+// TODO: All strings passed to wrap_str are literals, so we should just store
+// a reference to the literal instead of copying it.
 text wrap_str(char *s) {
   int i = 0;
   int result = text_alloc;
@@ -133,6 +143,67 @@ text concatenate_strings_with(text t1, text t2, text sep) {
   return string_concat3(t1, sep, t2);
 }
 
+void print_escaped_char(char c, int for_printf) {
+  // C escape sequences
+  if      (c == '\a') { putchar('\\');  putchar('a'); }
+  else if (c == '\b') { putchar('\\');  putchar('b'); }
+  else if (c == '\f') { putchar('\\');  putchar('f'); }
+  else if (c == '\n') { putchar('\\');  putchar('n'); }
+  else if (c == '\r') { putchar('\\');  putchar('r'); }
+  else if (c == '\t') { putchar('\\');  putchar('t'); }
+  else if (c == '\v') { putchar('\\');  putchar('v'); }
+  /* backslashes are escaped twice, first by the shell and then by def_str */
+  else if (c == '\\') { putchar('\\');  putchar('\\'); putchar('\\'); putchar('\\'); }
+  // Shell special characters: $, `, ", ', ?, and newline
+  // Note that ' and ? are not escaped properly by dash, but that's ok because
+  // we use double quotes and ' and ? can be left as is.
+  else if (c == '$')  { putchar('\\'); putchar('$');  }
+  else if (c == '`')  { putchar('\\'); putchar('`');  }
+  else if (c == '"')  { putchar('\\'); putchar('"');  }
+  // else if (c == '\'') { putchar('\\'); putchar('\''); }
+  // else if (c == '?')  { putchar('\\'); putchar('?');  }
+  // when we're escaping a string for shell's printf, % must be escaped
+  else if (c == '%'  && for_printf) { putchar('%'); putchar('%'); }
+  else                putchar(c);
+}
+
+void print_escaped_string(char *s, int for_printf) {
+  int i = 0;
+  while (s[i] != 0) {
+    print_escaped_char(s[i], for_printf);
+    i += 1;
+  }
+}
+
+void print_escaped_text(text t, bool for_printf) {
+  int i;
+
+  if (t == 0) return;
+
+  if (t < 0) { /* it's a character */
+    print_escaped_char(-t, for_printf);
+  } else if (text_pool[t] == TEXT_TREE) {
+    i = 0;
+    while (i < text_pool[t + 1]) {
+      if (text_pool[t + i + 2] < 0) {
+        print_escaped_char(-text_pool[t + i + 2], for_printf);
+      } else {
+        print_escaped_text(text_pool[t + i + 2], for_printf);
+      }
+      i += 1;
+    }
+  } else if (text_pool[t] == TEXT_INTEGER) {
+    printf("%d", text_pool[t + 1]);
+  } else if ( text_pool[t] == TEXT_FROM_POOL) {
+    print_escaped_string(string_pool + text_pool[t + 1], for_printf);
+  } else if (text_pool[t] == TEXT_ESCAPED) {
+    fatal_error("Cannot escape a string that is already escaped");
+  } else {
+    printf("\nt=%d %d\n", t, text_pool[t]);
+    fatal_error("print_escaped_text: unexpected string tree node");
+  }
+}
+
 void print_text(text t) {
   int i;
 
@@ -143,16 +214,22 @@ void print_text(text t) {
   } else if (text_pool[t] == TEXT_TREE) {
     i = 0;
     while (i < text_pool[t + 1]) {
-      print_text(text_pool[t + i + 2]);
+      if (text_pool[t + i + 2] < 0) {
+        putchar(-text_pool[t + i + 2]);
+      } else {
+        print_text(text_pool[t + i + 2]);
+      }
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
     printf("%d", text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_FROM_POOL) {
     printf("%s", string_pool + text_pool[t + 1]);
+  } else if (text_pool[t] == TEXT_ESCAPED) {
+    print_escaped_text(text_pool[t + 1], text_pool[t + 2]);
   } else {
     printf("\nt=%d %d\n", t, text_pool[t]);
-    fatal_error("unexpected string tree node");
+    fatal_error("print_text: unexpected string tree node");
   }
 }
 
@@ -177,6 +254,7 @@ int string_counter = 0;         /* Counter for string literals */
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
+bool main_returns;              /* If the main function returns a value */
 
 // Internal identifier node types. These
 int IDENTIFIER_INTERNAL = 600;
@@ -312,9 +390,17 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
     return string_concat(wrap_str("__str_"), get_val(ident));
   } else if (op == IDENTIFIER_DOLLAR) {
     if (prefixed_with_dollar) {
-      return wrap_int(get_val(ident));
+      if (get_val(ident) <= 9) {
+        return wrap_int(get_val(ident));
+      } else {
+        return string_concat3(wrap_char('{'), wrap_int(get_val(ident)), wrap_char('}'));
+      }
     } else {
-      return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      if (get_val(ident) <= 9) {
+        return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      } else {
+        return string_concat3(wrap_str("${"), wrap_int(get_val(ident)), wrap_char('}'));
+      }
     }
   } else if (op == IDENTIFIER_EMPTY) {
     return wrap_str("__");
@@ -507,20 +593,106 @@ void assert_idents_are_safe(ast lst) {
   }
 }
 
-text save_local_vars() {
+int num_vars_to_save() {
+  ast env = local_env;
+  int counter = fun_gensym_ix;
+
+  while (env != 0) {
+    if (!variable_is_constant_param(get_child(env, 0))) counter += 1;
+    env = get_child(env, 1);
+  }
+
+  return counter;
+}
+
+#ifdef SH_SAVE_VARS_WITH_SET
+// Save the value of local variables to positional parameters
+text save_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
 
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
+
+  while (params_count > 0) {
+    ident = new_ast0(IDENTIFIER_DOLLAR, params_count);
+    res = concatenate_strings_with(format_special_var(ident, false), res, wrap_char(' '));
+    params_count -= 1;
+  }
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    env = get_child(env, 1);
+    if (variable_is_constant_param(local_var)) continue;
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+  }
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+    counter -= 1;
+  }
+
+  return string_concat(wrap_str("set "), res);
+}
+
+// Restore the previous value of local variables from positional parameters
+text restore_local_vars(int params_count) {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  int local_var_pos = params_count;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    env = get_child(env, 1);
+    if (variable_is_constant_param(local_var)) continue;
+    local_var_pos += 1;
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    res = concatenate_strings_with(res, string_concat4(env_var_with_prefix(ident, true), wrap_str("=\"$"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("\";")), wrap_char(' '));
+  }
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    local_var_pos += 1;
+    res = concatenate_strings_with(res, string_concat4(env_var_with_prefix(ident, true), wrap_str("=$"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_char(';')), wrap_char(' '));
+    counter -= 1;
+  }
+
+  return string_concat3(wrap_str(": $((_tmp = $1)); "), res, wrap_str(" : $(($1 = _tmp))"));
+}
+
+#else
+
+text save_local_vars(int params_count) {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
+
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-  #ifdef SH_INDIVIDUAL_LET
+#ifdef SH_INDIVIDUAL_LET
     res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
-  #else
+#else
     res = concatenate_strings_with(format_special_var(ident, true), res, wrap_char(' '));
-  #endif
+#endif
     counter -= 1;
   }
 
@@ -540,28 +712,27 @@ text save_local_vars() {
     env = get_child(env, 1);
   }
 
-  if (res != 0) {
-    runtime_use_local_vars = true;
 #ifdef SH_INDIVIDUAL_LET
-    return res;
+  return res;
 #else
-    return string_concat(wrap_str("let "), res);
+  return string_concat(wrap_str("let "), res);
 #endif
-  } else {
-    return 0;
-  }
 }
 
 /*
   The only difference between save_local_vars and restore_local_vars is the
   order of the arguments and the call to unsave_vars instead of save_vars.
 */
-text restore_local_vars() {
+text restore_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
+
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
@@ -581,13 +752,9 @@ text restore_local_vars() {
     env = get_child(env, 1);
   }
 
-  if (res != 0) {
-    runtime_use_local_vars = true;
-    return string_concat(wrap_str("endlet $1 "), res);
-  } else {
-    return 0;
-  }
+  return string_concat(wrap_str("endlet $1 "), res);
 }
+#endif
 
 text op_to_str(int op) {
   if      (op < 256)         return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
@@ -1074,56 +1241,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   }
 }
 
-#ifdef SH_AVOID_PRINTF_USE
-text escaped_char(char c, int for_printf) {
-#else
-text escaped_char(char c) {
-#endif
-  // C escape sequences
-  if      (c == '\a') return wrap_str("\\a");
-  else if (c == '\b') return wrap_str("\\b");
-  else if (c == '\f') return wrap_str("\\f");
-  else if (c == '\n') return wrap_str("\\n");
-  else if (c == '\r') return wrap_str("\\r");
-  else if (c == '\t') return wrap_str("\\t");
-  else if (c == '\v') return wrap_str("\\v");
-  else if (c == '\\') return wrap_str("\\\\\\\\"); /* backslashes are escaped twice, first by the shell and then by def_str */
-  // Shell special characters: $, `, ", ', ?, and newline
-  // Note that ' and ? are not escaped properly by dash, but that's ok because
-  // we use double quotes and ' and ? can be left as is.
-  else if (c == '$')  return wrap_str("\\$");
-  else if (c == '`')  return wrap_str("\\`");
-  else if (c == '"')  return wrap_str("\\\"");
-  // else if (c == '\'') return wrap_str("\\\'");
-  // else if (c == '?')  return wrap_str("\\?");
-#ifdef SH_AVOID_PRINTF_USE
-  // when we're escaping a string for shell's printf, % must be escaped
-  else if (c == '%'  && for_printf) return wrap_str("%%");
-#endif
-  else                return wrap_char(c);
-}
-
-#ifdef SH_AVOID_PRINTF_USE
-text escape_string(char *str, int for_printf) {
-#else
-text escape_string(char *str) {
-#endif
-  text res = wrap_str("");
-  text char_text;
-  int i = 0;
-
-  while (str[i] != '\0') {
-#ifdef SH_AVOID_PRINTF_USE
-    char_text = escaped_char(str[i], for_printf);
-#else
-    char_text = escaped_char(str[i]);
-#endif
-    res = string_concat(res, char_text);
-    i += 1;
-  }
-  return res;
-}
-
 text comp_rvalue(ast node, int context) {
   ast simple_ast = handle_side_effects(node);
   /* Calling comp_fun_call/comp_rvalue can overwrite replaced_fun_calls and contains_side_effects, so they are saved */
@@ -1140,11 +1257,7 @@ text comp_rvalue(ast node, int context) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
                                   , wrap_str(" \"")
-#ifdef SH_AVOID_PRINTF_USE
-                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1), false)
-#else
-                                  , escape_string(string_pool + get_child(get_child(literals_inits, 0), 1))
-#endif
+                                  , escape_text(wrap_str_pool(get_child(get_child(literals_inits, 0), 1)), false)
                                   , wrap_char('\"')));
     literals_inits = get_child(literals_inits, 1);
   }
@@ -1229,6 +1342,7 @@ text comp_lvalue(ast node) {
 text fun_call_params(ast params, int count) {
   ast param;
   text code_params = 0;
+
   if (params != 0 && count > 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
       while (get_op(params) == ',' && count > 0) {
@@ -1295,7 +1409,8 @@ void handle_printf_call(char* format_str, ast params) {
           // Generate the printf call for the format string up to this point.
           if (format_start != format_str - 1) {
             *(format_str - 1) = '\0'; // Null-terminate the format string
-            append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, params_count)));
+
+            append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
             *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
           }
 
@@ -1317,7 +1432,7 @@ void handle_printf_call(char* format_str, ast params) {
 
   // Dump the remaining format string
   if (format_start != format_str) {
-    append_glo_decl(string_concat4(wrap_str("printf \""), escape_string(format_start, false), wrap_str("\" "), fun_call_params(params_start, 1000)));
+    append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, 1000)));
   }
 }
 #endif
@@ -1332,7 +1447,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
       || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
-      return string_concat3(wrap_str("printf \""), escape_string(string_pool + get_val(params), true), wrap_str("\""));
+      return string_concat3(wrap_str("printf \""), escape_text(wrap_str_pool(get_val(params)), true), wrap_str("\""));
     } else if (name_id == PRINTF_ID && params != 0 && get_op(params) == ',') {
       if (printf_uses_shell_format_specifiers(string_pool + get_val(get_child(params, 0)))) {
         handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
@@ -1710,8 +1825,8 @@ void mark_mutable_variables_statement(ast node) {
     mark_mutable_variables_body(node);
   } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
     /* Do nothing */
-  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_EQ
-         OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
+  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_PLUS_POST OR op == MINUS_MINUS_POST
+         OR op == PLUS_EQ OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
          OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
     mark_variable_as_mutable(get_child(node, 0));
     if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
@@ -1743,13 +1858,13 @@ void mark_mutable_variables_body(ast node) {
 
 void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
-  /* ast fun_type = get_child(node, 1); */
+  ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
   ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
   ast local_vars = get_child(local_vars_and_body, 0);
   ast body = get_child(local_vars_and_body, 1);
   text comment = 0;
-  int i;
+  int params_ix;
   ast decls;
   ast vars;
   ast var;
@@ -1759,6 +1874,8 @@ void comp_glo_fun_decl(ast node) {
 
   // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
   if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
+  // Check if main returns an exit code.
+  if (name == MAIN_ID && get_op(fun_type) != VOID_KW) main_returns = true;
 
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
@@ -1771,12 +1888,12 @@ void comp_glo_fun_decl(ast node) {
   #endif
 
   /* Show the mapping between the function parameters and $1, $2, etc. */
-  i = 2; /* Start at 2 because $1 is assigned to result location */
+  params_ix = 2; /* Start at 2 because $1 is assigned to result location */
   while (params != 0) {
     var = get_child(params, 0);
-    comment = concatenate_strings_with(comment, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    comment = concatenate_strings_with(comment, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(params_ix)), wrap_str(", "));
     params = get_child(params, 1);
-    i += 1;
+    params_ix += 1;
   }
   if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
 
@@ -1793,17 +1910,17 @@ void comp_glo_fun_decl(ast node) {
 
   /* Initialize parameters */
   params = get_child(node, 2); /* Reload params because params is now = 0 */
-  i = 2;
+  params_ix = 2;
   while (params != 0) {
     var = get_child(params, 0);
 
     /* Constant parameters don't need to be initialized */
     if (!variable_is_constant_param(find_var_in_local_env(get_val(var)))) {
-      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, i));
+      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, params_ix));
     }
 
     params = get_child(params, 1);
-    i += 1;
+    params_ix += 1;
   }
 
   /* Initialize local vars */
@@ -1825,15 +1942,15 @@ void comp_glo_fun_decl(ast node) {
 
   comp_body(body);
 
-  append_glo_decl(restore_local_vars());
+  append_glo_decl(restore_local_vars(params_ix - 1));
 
   /*
     We only know the full set of temporary variables after compiling the function body.
     So we fixup the calls to save_vars and unsave_vars at the end.
   */
-  fixup_glo_decl(save_loc_vars_fixup, save_local_vars());
+  fixup_glo_decl(save_loc_vars_fixup, save_local_vars(params_ix - 1));
   while (rest_loc_var_fixups != 0) {
-    fixup_glo_decl(get_child(rest_loc_var_fixups, 0), restore_local_vars());
+    fixup_glo_decl(get_child(rest_loc_var_fixups, 0), restore_local_vars(params_ix - 1));
     rest_loc_var_fixups = get_child(rest_loc_var_fixups, 1);
   }
 
@@ -1856,11 +1973,7 @@ text comp_constant(ast node) {
     append_glo_decl(string_concat5( wrap_str("defstr ")
                                   , format_special_var(new_ident, false)
                                   , wrap_str(" \"")
-#ifdef SH_AVOID_PRINTF_USE
-                                  , escape_string(string_pool + get_val(node), true)
-#else
-                                  , escape_string(string_pool + get_val(node))
-#endif
+                                  , escape_text(wrap_str_pool(get_val(node)), false)
                                   , wrap_char('\"')));
 
     return format_special_var(new_ident, false);
@@ -1976,6 +2089,8 @@ void prologue() {
 void epilogue() {
   int c;
 
+  text main_args = 0;
+
   if (any_character_used) {
     printf("# Character constants\n");
     for(c = 0; c < 256; c += 1) {
@@ -1993,10 +2108,15 @@ void epilogue() {
   if (runtime_use_make_argv) {
     printf("# Setup argc, argv\n");
     printf("__argc_for_main=$(($# + 1))\n");
-    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
-    printf("_main __ $__argc_for_main $__argv_for_main\n");
+    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+    main_args = wrap_str(" $__argc_for_main $__argv_for_main");
+  }
+
+  if (main_returns) {
+    printf("_code=0; # Success exit code\n");
+    print_text(string_concat3(wrap_str("_main _code"), main_args, wrap_str("; exit $_code\n")));
   } else {
-    printf("_main __\n");
+    print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
   }
 }
 
@@ -2037,6 +2157,8 @@ void codegen_begin() {
   prologue();
 }
 
+int max_text_alloc = 0;
+int cumul_text_alloc = 0;
 void codegen_glo_decl(ast decl) {
   comp_glo_decl(decl);
   initialize_function_variables();
@@ -2045,10 +2167,12 @@ void codegen_glo_decl(ast decl) {
   glo_decl_ix = 0;
   local_env_size = 0;
   local_env = 0;
+  max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
+  cumul_text_alloc += text_alloc;
   text_alloc = 1;
 }
 
 void codegen_end() {
   epilogue();
-  printf("\n# string_pool_alloc=%d heap_alloc=%d text_alloc=%d\n", string_pool_alloc, heap_alloc, text_alloc);
+  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
 }
