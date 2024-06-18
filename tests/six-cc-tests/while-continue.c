@@ -7,13 +7,15 @@ void putstring(char *s) {
 }
 
 void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
   if (n == 0) {
     putchar(48);
     return;
   }
-  int acc = 0;
-  int i = 0;
-  int digits[10];
+  
   while (n > 0) {
     digits[i] = n % 10;
     n = n / 10;

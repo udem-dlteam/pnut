@@ -1,8 +1,3 @@
-int test_status = 0; // 0: not run, 1: pass, -1: fail
-
-void observer(int status) {
-    test_status = status;
-}
 
 // Test Functions
 void test_basic_allocation() {
@@ -10,20 +5,20 @@ void test_basic_allocation() {
     if (ptr) {
         *ptr = 42;
         if (*ptr == 42) {
-            observer(1); // Test passed
+            putchar('P');
         } else {
-            observer(-1); // Test failed
+            putchar('X');
         }
         free(ptr);
     } else {
-        observer(-1); // Test failed
+        putchar('X');
     }
 }
 
 void test_array_allocation() {
     int *arr = malloc(10 * 4);
+    int i = 0;
     if (arr) {
-        int i = 0;
         while (i < 10) {
             arr[i] = i;
             i++;
@@ -31,26 +26,26 @@ void test_array_allocation() {
         i = 0;
         while (i < 10) {
             if (arr[i] != i) {
-                observer(-1); // Test failed
+                putchar('X');
                 free(arr);
                 return;
             }
             i++;
         }
-        observer(1); // Test passed
+        putchar('A');
         free(arr);
     } else {
-        observer(-1); // Test failed
+        putchar('X');
     }
 }
 
 void test_zero_allocation() {
     int *ptr = malloc(0);
     if (ptr) {
-        observer(1); // Non-standard but acceptable behavior
+        putchar('S');
         free(ptr);
     } else {
-        observer(1); // Standard behavior (NULL pointer)
+        putchar('X');
     }
 }
 
@@ -58,10 +53,10 @@ void test_large_allocation() {
     int large_size = 1024; // That doesn't cause a heap overflow
     int *ptr = malloc(large_size);
     if (ptr) {
-        observer(1); // Test passed
+        putchar('S');
         free(ptr);
     } else {
-        observer(-1); // Test failed
+        putchar('X');
     }
 }
 
@@ -71,9 +66,9 @@ void test_multiple_allocations() {
     int *ptr3 = malloc(3 * 4);
 
     if (ptr1 && ptr2 && ptr3) {
-        observer(1); // Test passed
+        putchar('!');
     } else {
-        observer(-1); // Test failed
+        putchar('X');
     }
 
     free(ptr1);
@@ -84,50 +79,10 @@ void test_multiple_allocations() {
 // Main Function
 int main() {
     test_basic_allocation();
-    if (test_status == 1) {
-        putchar('1');
-        putchar(10);
-    } else {
-        putchar('x');
-        putchar(10);
-    }
-
     test_array_allocation();
-    if (test_status == 1) {
-        putchar('2');
-        putchar(10);
-    } else {
-        putchar('x');
-        putchar(10);
-    }
-
     test_zero_allocation();
-    if (test_status == 1) {
-        putchar('3');
-        putchar(10);
-    } else {
-        putchar('x');
-        putchar(10);
-    }
-
-
     test_large_allocation();
-    if (test_status == 1) {
-        putchar('4');
-        putchar(10);
-    } else {
-        putchar('x');
-        putchar(10);
-    }
-
     test_multiple_allocations();
-    if (test_status == 1) {
-        putchar('5');
-        putchar(10);
-    } else {
-        putchar('x');
-        putchar(10);
-    }
 
     putchar(':');
     putchar(')');

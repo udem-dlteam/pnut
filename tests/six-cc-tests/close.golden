@@ -5,14 +5,15 @@ Read content: void putstring(char* s) {
   }
 }
 
-int hash(char* s) {
-  int hash;
-  int ix;
-  hash = 0;
-  ix = 0;
-  while (s[ix] != 0) {
-    hash = s[ix] + (hash << 6) +
-File descriptor: 3
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
 Quote: "
 Backslash: \
 Read len: 199
@@ -23,11 +24,121 @@ Read result: void putstring(char* s) {
   }
 }
 
-int hash(char* s) {
-  int hash;
-  int ix;
-  hash = 0;
-  ix = 0;
-  while (s[ix] != 0) {
-    hash = s[ix] + (hash << 6) +
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
+hash: 199
+Read content: void putstring(char* s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
+Quote: "
+Backslash: \
+Read len: 199
+Read result: void putstring(char* s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
+hash: 199
+Read content: void putstring(char* s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
+Quote: "
+Backslash: \
+Read len: 199
+Read result: void putstring(char* s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
+hash: 199
+Read content: void putstring(char* s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
+Quote: "
+Backslash: \
+Read len: 199
+Read result: void putstring(char* s) {
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
+}
+
+void putnumber(int n) {
+  int acc = 0;
+  int i = 0;
+  int digits[10];
+  
+  if (n == 0) {
+    putchar(48);
+    return;
+ 
 hash: 199

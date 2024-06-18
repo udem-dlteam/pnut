@@ -40,6 +40,11 @@ enum LargeEnum {
 int main(){
 
     int c = RED;
+    int day = MONDAY;
+    int dir = SOUTH;
+    int flag = TRUE;
+    int value = THIRD;
+
     putstring("Color: ");
     if(c == 0){
         putstring("RED \n");
@@ -49,14 +54,12 @@ int main(){
         putchar(c + 48);
         putchar(10);
     }
-
-    int day = MONDAY;
+    
     if (day == MONDAY){
         putstring("Day: ");
         putstring("Garfield hates Mondays\n");
     }
-
-    int dir = SOUTH;
+    
     putstring("Direction: ");
     if(dir == NORTH) {
         putstring("NORTH");
@@ -68,15 +71,12 @@ int main(){
         putstring("WEST");
     }
     putchar(10);
-
-    int flag = TRUE;
+    
     if (flag) {
         putstring("Boolean: TRUE \n");
     } else {
         putstring("Boolean: FALSE \n");
     }
-
-    int value = THIRD;
 
     putstring("Large Enum: ");
     if (value == FIRST) {

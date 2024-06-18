@@ -6,6 +6,8 @@ void putstring(char *s) {
 }
 
 void putnumber(int n) {
+  int i = 0;
+  int digits[10];
   if (n == 0) {
     putchar('0');
     return;
@@ -14,8 +16,6 @@ void putnumber(int n) {
     putchar('-');
     n = -n;
   }
-  int i = 0;
-  int digits[10];
   while (n > 0) {
     digits[i] = n % 10;
     n = n / 10;

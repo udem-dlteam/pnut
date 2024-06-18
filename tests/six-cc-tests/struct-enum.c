@@ -1,12 +1,15 @@
 /* Simulating structs using enums like in c4.c */
-enum LinkedList() { VAL; NEXT; LL_SIZE; }
+enum LinkedList { 
+  VAL, 
+  NEXT,
+  LL_SIZE };
 
-int_ptr iota_linked_list(int max) {
+int * iota_linked_list(int max) {
   int i;
-  int_ptr head;
-  int_ptr last;
-  int_ptr node;
-  if (max == 0) return NULL;
+  int * head;
+  int * last;
+  int * node;
+  if (max == 0) return 0;
   head = malloc(LL_SIZE);
   head[VAL] = 0;
   last = head;
@@ -14,7 +17,7 @@ int_ptr iota_linked_list(int max) {
   while (i < max) {
     node = malloc(LL_SIZE);
     node[VAL] = i;
-    node[NEXT] = NULL;
+    node[NEXT] = 0;
     last[NEXT] = node;
     last = node;
 
@@ -24,10 +27,10 @@ int_ptr iota_linked_list(int max) {
   return head;
 }
 
-int linked_list_sum(int_ptr head) {
+int linked_list_sum(int * head) {
   int sum;
   sum = 0;
-  while (head != NULL) {
+  while (head != 0) {
     sum += head[VAL];
     head = head[NEXT];
   }
@@ -36,9 +39,9 @@ int linked_list_sum(int_ptr head) {
 }
 
 int main() {
-  int_ptr ll;
+  int * ll;
   int sum;
-  char_ptr str;
+  char * str;
 
   ll = iota_linked_list(1000);
 

@@ -20,9 +20,10 @@ int c = 0;
 int main() {
   int newline;
   int newline2;
+  int i = 0;
   newline = identity(10, 2, 3);
 
-  int i = 0;
+  
   while (i < 2800) {
     r[i] = 2000;
     i = i + 1;
