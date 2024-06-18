@@ -16,7 +16,8 @@
 
 #define AVOID_AMPAMP_BARBAR_not
 
-#define OPTIMIZE_CONSTANT_PARAM_not
+// Use positional parameter directly for function parameters that are constants
+#define OPTIMIZE_CONSTANT_PARAM
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
@@ -26,6 +27,8 @@
 #define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
 #define SH_INCLUDE_C_CODE_not
+// If we use the `set` command and positional parameters to simulate local vars
+#define SH_SAVE_VARS_WITH_SET
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
