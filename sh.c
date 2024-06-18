@@ -254,6 +254,7 @@ int string_counter = 0;         /* Counter for string literals */
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
+bool main_returns;              /* If the main function returns a value */
 
 // Internal identifier node types. These
 int IDENTIFIER_INTERNAL = 600;
@@ -389,9 +390,17 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
     return string_concat(wrap_str("__str_"), get_val(ident));
   } else if (op == IDENTIFIER_DOLLAR) {
     if (prefixed_with_dollar) {
-      return wrap_int(get_val(ident));
+      if (get_val(ident) <= 9) {
+        return wrap_int(get_val(ident));
+      } else {
+        return string_concat3(wrap_char('{'), wrap_int(get_val(ident)), wrap_char('}'));
+      }
     } else {
-      return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      if (get_val(ident) <= 9) {
+        return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      } else {
+        return string_concat3(wrap_str("${"), wrap_int(get_val(ident)), wrap_char('}'));
+      }
     }
   } else if (op == IDENTIFIER_EMPTY) {
     return wrap_str("__");
@@ -584,20 +593,106 @@ void assert_idents_are_safe(ast lst) {
   }
 }
 
-text save_local_vars() {
+int num_vars_to_save() {
+  ast env = local_env;
+  int counter = fun_gensym_ix;
+
+  while (env != 0) {
+    if (!variable_is_constant_param(get_child(env, 0))) counter += 1;
+    env = get_child(env, 1);
+  }
+
+  return counter;
+}
+
+#ifdef SH_SAVE_VARS_WITH_SET
+// Save the value of local variables to positional parameters
+text save_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
 
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
+
+  while (params_count > 0) {
+    ident = new_ast0(IDENTIFIER_DOLLAR, params_count);
+    res = concatenate_strings_with(format_special_var(ident, false), res, wrap_char(' '));
+    params_count -= 1;
+  }
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    env = get_child(env, 1);
+    if (variable_is_constant_param(local_var)) continue;
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+  }
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+    counter -= 1;
+  }
+
+  return string_concat(wrap_str("set "), res);
+}
+
+// Restore the previous value of local variables from positional parameters
+text restore_local_vars(int params_count) {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  int local_var_pos = params_count;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    env = get_child(env, 1);
+    if (variable_is_constant_param(local_var)) continue;
+    local_var_pos += 1;
+    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    res = concatenate_strings_with(res, string_concat4(env_var_with_prefix(ident, true), wrap_str("=\"$"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("\";")), wrap_char(' '));
+  }
+
+  while (counter > 0) {
+    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    local_var_pos += 1;
+    res = concatenate_strings_with(res, string_concat4(env_var_with_prefix(ident, true), wrap_str("=$"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_char(';')), wrap_char(' '));
+    counter -= 1;
+  }
+
+  return string_concat3(wrap_str(": $((_tmp = $1)); "), res, wrap_str(" : $(($1 = _tmp))"));
+}
+
+#else
+
+text save_local_vars(int params_count) {
+  ast env = local_env;
+  ast local_var;
+  ast ident;
+  text res = 0;
+  int counter = fun_gensym_ix;
+
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
+
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-  #ifdef SH_INDIVIDUAL_LET
+#ifdef SH_INDIVIDUAL_LET
     res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
-  #else
+#else
     res = concatenate_strings_with(format_special_var(ident, true), res, wrap_char(' '));
-  #endif
+#endif
     counter -= 1;
   }
 
@@ -617,28 +712,27 @@ text save_local_vars() {
     env = get_child(env, 1);
   }
 
-  if (res != 0) {
-    runtime_use_local_vars = true;
 #ifdef SH_INDIVIDUAL_LET
-    return res;
+  return res;
 #else
-    return string_concat(wrap_str("let "), res);
+  return string_concat(wrap_str("let "), res);
 #endif
-  } else {
-    return 0;
-  }
 }
 
 /*
   The only difference between save_local_vars and restore_local_vars is the
   order of the arguments and the call to unsave_vars instead of save_vars.
 */
-text restore_local_vars() {
+text restore_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
+
+  if (num_vars_to_save() == 0) return 0;
+
+  runtime_use_local_vars = true;
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
@@ -658,13 +752,9 @@ text restore_local_vars() {
     env = get_child(env, 1);
   }
 
-  if (res != 0) {
-    runtime_use_local_vars = true;
-    return string_concat(wrap_str("endlet $1 "), res);
-  } else {
-    return 0;
-  }
+  return string_concat(wrap_str("endlet $1 "), res);
 }
+#endif
 
 text op_to_str(int op) {
   if      (op < 256)         return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
@@ -1735,8 +1825,8 @@ void mark_mutable_variables_statement(ast node) {
     mark_mutable_variables_body(node);
   } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
     /* Do nothing */
-  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_EQ
-         OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
+  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_PLUS_POST OR op == MINUS_MINUS_POST
+         OR op == PLUS_EQ OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
          OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
     mark_variable_as_mutable(get_child(node, 0));
     if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
@@ -1768,13 +1858,13 @@ void mark_mutable_variables_body(ast node) {
 
 void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
-  /* ast fun_type = get_child(node, 1); */
+  ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
   ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
   ast local_vars = get_child(local_vars_and_body, 0);
   ast body = get_child(local_vars_and_body, 1);
   text comment = 0;
-  int i;
+  int params_ix;
   ast decls;
   ast vars;
   ast var;
@@ -1784,6 +1874,8 @@ void comp_glo_fun_decl(ast node) {
 
   // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
   if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
+  // Check if main returns an exit code.
+  if (name == MAIN_ID && get_op(fun_type) != VOID_KW) main_returns = true;
 
   assert_idents_are_safe(params);
   assert_idents_are_safe(local_vars);
@@ -1796,12 +1888,12 @@ void comp_glo_fun_decl(ast node) {
   #endif
 
   /* Show the mapping between the function parameters and $1, $2, etc. */
-  i = 2; /* Start at 2 because $1 is assigned to result location */
+  params_ix = 2; /* Start at 2 because $1 is assigned to result location */
   while (params != 0) {
     var = get_child(params, 0);
-    comment = concatenate_strings_with(comment, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(i)), wrap_str(", "));
+    comment = concatenate_strings_with(comment, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(params_ix)), wrap_str(", "));
     params = get_child(params, 1);
-    i += 1;
+    params_ix += 1;
   }
   if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
 
@@ -1818,17 +1910,17 @@ void comp_glo_fun_decl(ast node) {
 
   /* Initialize parameters */
   params = get_child(node, 2); /* Reload params because params is now = 0 */
-  i = 2;
+  params_ix = 2;
   while (params != 0) {
     var = get_child(params, 0);
 
     /* Constant parameters don't need to be initialized */
     if (!variable_is_constant_param(find_var_in_local_env(get_val(var)))) {
-      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, i));
+      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, params_ix));
     }
 
     params = get_child(params, 1);
-    i += 1;
+    params_ix += 1;
   }
 
   /* Initialize local vars */
@@ -1850,15 +1942,15 @@ void comp_glo_fun_decl(ast node) {
 
   comp_body(body);
 
-  append_glo_decl(restore_local_vars());
+  append_glo_decl(restore_local_vars(params_ix - 1));
 
   /*
     We only know the full set of temporary variables after compiling the function body.
     So we fixup the calls to save_vars and unsave_vars at the end.
   */
-  fixup_glo_decl(save_loc_vars_fixup, save_local_vars());
+  fixup_glo_decl(save_loc_vars_fixup, save_local_vars(params_ix - 1));
   while (rest_loc_var_fixups != 0) {
-    fixup_glo_decl(get_child(rest_loc_var_fixups, 0), restore_local_vars());
+    fixup_glo_decl(get_child(rest_loc_var_fixups, 0), restore_local_vars(params_ix - 1));
     rest_loc_var_fixups = get_child(rest_loc_var_fixups, 1);
   }
 
@@ -1997,6 +2089,8 @@ void prologue() {
 void epilogue() {
   int c;
 
+  text main_args = 0;
+
   if (any_character_used) {
     printf("# Character constants\n");
     for(c = 0; c < 256; c += 1) {
@@ -2014,10 +2108,15 @@ void epilogue() {
   if (runtime_use_make_argv) {
     printf("# Setup argc, argv\n");
     printf("__argc_for_main=$(($# + 1))\n");
-    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n\n");
-    printf("_main __ $__argc_for_main $__argv_for_main\n");
+    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+    main_args = wrap_str(" $__argc_for_main $__argv_for_main");
+  }
+
+  if (main_returns) {
+    printf("_code=0; # Success exit code\n");
+    print_text(string_concat3(wrap_str("_main _code"), main_args, wrap_str("; exit $_code\n")));
   } else {
-    printf("_main __\n");
+    print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
   }
 }
 
