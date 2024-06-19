@@ -751,12 +751,14 @@ ast value_type(ast node) {
             putstr(string_pool+get_val(ident));
             putchar('\n');
             fatal_error("value_type: identifier not found");
+            return -1;
           }
         }
       }
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with nb_children == 0");
+      return -1;
     }
 
   } else if (nb_children == 1) {
@@ -772,6 +774,7 @@ ast value_type(ast node) {
       } else {
         putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("pointer_width: non pointer is being dereferenced with *");
+        return -1;
       }
     } else if (op == '&') {
       left_type = value_type(get_child(node, 0));
@@ -791,6 +794,7 @@ ast value_type(ast node) {
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unexpected operator");
+      return -1;
     }
 
   } else if (nb_children == 2) {
@@ -825,6 +829,7 @@ ast value_type(ast node) {
       } else {
         putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("value_type: non pointer is being dereferenced with *");
+        return -1;
       }
     } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
       return value_type(get_child(node, 0)); // Only the left side is relevant here
@@ -840,26 +845,30 @@ ast value_type(ast node) {
         putstr(string_pool + get_val(get_val(get_child(node, 0))));
         putchar('\n');
         fatal_error("value_type: function not found");
+        return -1;
       }
     } else if (op == '.') {
       left_type = value_type(get_child(node, 0));
       if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 0) {
-        get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
+        return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: . operator on non-struct pointer type");
+        return -1;
       }
     } else if (op == ARROW) {
       // Same as '.', but left_type must be a pointer
       left_type = value_type(get_child(node, 0));
       if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 1) {
-        get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
+        return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
+        return -1;
       }
     } else if (op == CAST) {
       return get_child(node, 0);
     } else {
       fatal_error("value_type: unknown expression with 2 children");
+      return -1;
     }
 
   } else if (nb_children == 3) {
@@ -870,11 +879,13 @@ ast value_type(ast node) {
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with 3 children");
+      return -1;
     }
 
   } else {
     putstr("op="); putint(op); putchar('\n');
     fatal_error("value_type: unknown expression with >4 children");
+    return -1;
   }
 }
 
