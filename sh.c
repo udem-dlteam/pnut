@@ -2063,7 +2063,8 @@ void comp_glo_var_decl(ast node) {
 
   if (init == 0) init = new_ast0(INTEGER, 0);
 
-  handle_enum_struct_union_type_decl(type);
+  // TODO: Add enum/struct/union to env if it's not already there
+  // handle_enum_struct_union_type_decl(type);
 
   // Arrays of structs and struct value types are not supported for now.
   // When we have type information on the local and global variables, we'll

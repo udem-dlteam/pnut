@@ -50,6 +50,9 @@ void pass_as_ref_int(int *x) {
   printf("pass_as_ref_int: %d\n", *x);
 }
 
+// Show that we can have a struct pointer
+struct Point *pts;
+
 void main() {
   Direction up = Up;
   const enum Direction down = Down;
