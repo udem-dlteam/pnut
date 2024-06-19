@@ -1579,12 +1579,22 @@ void codegen_enum(ast node) {
 
 void codegen_struct(ast node) {
   ast name = get_child(node, 1);
+  ast members = get_child(node, 2);
   int binding;
 
   if (name != 0 && get_child(node, 2) != 0) { // if struct has a name and members (not a reference to an existing type)
     binding = cgc_lookup_struct(get_val(name), cgc_globals);
     if (binding != 0 AND heap[binding + 3] != node) { fatal_error("codegen_struct: struct already declared"); }
     cgc_add_typedef(get_val(name), BINDING_TYPE_STRUCT, node);
+  }
+
+  // Traverse the structure to find any other structure declarations
+  members = get_child(node, 2);
+  while (members != 0 && get_op(members) == ',') {
+    if (get_op(get_child(members, 1)) == STRUCT_KW) {
+      codegen_struct(get_child(members, 1));
+    }
+    members = get_child(members, 2);
   }
 }
 

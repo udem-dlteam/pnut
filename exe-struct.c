@@ -55,6 +55,24 @@ typedef struct Shape {
   Rectangle r;
 } Shape;
 
+// We can define a struct inside another struct
+struct NestedStruct {
+  struct N1 {
+    int x;
+    int y;
+  } n1;
+  struct N1 n2;
+  struct { // Anonymous struct
+    int x;
+    int y;
+  } n3;
+};
+
+struct RecursiveStruct {
+  int val;
+  struct RecursiveStruct *next;
+};
+
 struct NonPowerOf2Struct {
   int val;
   int val2;
@@ -235,6 +253,8 @@ void test_ptr_arith() {
 
 void test_nested_structs() {
   Shape *shapes = (Shape*) malloc(3 * sizeof(Shape));
+  struct NestedStruct ns1;
+  struct NestedStruct ns2;
   int i;
 
   putstr("# test_nested_structs\n");
@@ -257,6 +277,22 @@ void test_nested_structs() {
     putint(shapes[i].r.h);
     putchar('\n');
   }
+
+  ns1.n1.x = 1;
+  ns1.n1.y = 2;
+  ns1.n2.x = 3;
+  ns1.n2.y = 4;
+  ns1.n3.x = 5;
+  ns1.n3.y = 6;
+
+  ns2 = ns1;
+  putstr("ns1: "); putint(ns1.n1.x); putstr(" "); putint(ns1.n1.y); putstr(" ");
+  putint(ns1.n2.x); putstr(" "); putint(ns1.n2.y); putstr(" ");
+  putint(ns1.n3.x); putstr(" "); putint(ns1.n3.y); putchar('\n');
+  putstr("ns2 before: "); putint(ns2.n1.x); putstr(" "); putint(ns2.n1.y); putstr(" ");
+  putint(ns2.n2.x); putstr(" "); putint(ns2.n2.y); putstr(" ");
+  putint(ns2.n3.x); putstr(" "); putint(ns2.n3.y); putchar('\n');
+
 }
 
 void pass_as_value(Point pt) {
