@@ -2052,6 +2052,19 @@ ast parse_definition(int local) {
     type = parse_type();
     if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
 
+#ifdef sh
+    // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
+    // This is not correct, but it's a limitation of the current shell backend where we
+    // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
+    // don't always have a name.
+    if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW OR get_op(type) == ENUM_KW) {
+      if (get_child(type, 1) != 0 && get_val(get_child(type, 1)) != val) {
+        fatal_error("typedef name must match struct/union/enum name");
+      }
+      set_child(type, 1, new_ast0(IDENTIFIER, val));
+    }
+#endif
+
     heap[val + 2] = TYPE;
     heap[val + 3] = type;
     result = new_ast2(TYPEDEF_KW, val, type);
