@@ -766,7 +766,9 @@ ast value_type(ast node) {
       if (get_op(left_type) == '[') { // Array type
         return get_child(left_type, 1);
       } else if (get_val(left_type) != 0) { // Pointer type
-        return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
+        left_type = clone_ast(left_type);
+        set_val(left_type, get_val(left_type) - 1); // one less indirection
+        return left_type;
       } else {
         putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("pointer_width: non pointer is being dereferenced with *");
@@ -806,16 +808,20 @@ ast value_type(ast node) {
       }
     } else if (op == '[') {
       left_type = value_type(get_child(node, 0));
-      right_type = value_type(get_child(node, 0));
+      right_type = value_type(get_child(node, 1));
 
       if (get_op(left_type) == '[') { // Array
         return get_child(left_type, 1); // array inner type
       } else if (get_val(left_type) != 0) { // Pointer
-        return new_ast0(get_op(left_type), get_val(left_type) - 1); // one less indirection
+        left_type = clone_ast(left_type);
+        set_val(left_type, get_val(left_type) - 1); // one less indirection
+        return left_type;
       } else if (get_op(right_type) == '[') { // Array, but with the operands flipped (i.e. 0[arr] instead of arr[0])
         return get_child(right_type, 1); // array inner type
       } else if (get_val(right_type) != 0) {
-        return new_ast0(get_op(right_type), get_val(right_type) - 1); // one less indirection
+        right_type = clone_ast(right_type);
+        set_val(right_type, get_val(right_type) - 1); // one less indirection
+        return right_type;
       } else {
         putstr("left_type="); putint(left_type); putchar('\n');
         fatal_error("value_type: non pointer is being dereferenced with *");
