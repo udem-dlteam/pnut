@@ -141,9 +141,20 @@ int is_power_of_2(int n) {
   return n != 0 AND (n & (n - 1)) == 0;
 }
 
+int power_of_2_log(int n) {
+  int i = 0;
+  while (n > 1) {
+    n /= 2;
+    i += 1;
+  }
+  return i;
+}
+
 void mul_for_pointer_arith(int reg, int type_width) {
   int i = 0;
   int other_reg = reg == reg_X ? reg_Y : reg_X;
+
+  if (type_width == 1) return;
 
   if (is_power_of_2(type_width)) {
     while (type_width > 1) {
@@ -156,6 +167,55 @@ void mul_for_pointer_arith(int reg, int type_width) {
     mov_reg_imm(other_reg, type_width);
     mul_reg_reg(reg, other_reg);
     pop_reg(other_reg);
+  }
+}
+
+void div_for_pointer_arith(int reg, int type_width) {
+  int i = 0;
+  int other_reg = reg == reg_X ? reg_Y : reg_X;
+  int reg_start = reg;
+
+  if (type_width == 1) return;
+
+  if (is_power_of_2(type_width)) {
+    // sar_reg_reg does not work with reg_Y, so we need to shift the value to reg_X
+    if (reg_start != reg_X) {
+      push_reg(reg_X);                // Save reg_X
+      mov_reg_reg(reg_X, reg_start);  // Move the value to reg_X
+      reg = reg_X;
+    } else {
+      push_reg(reg_Y);                // Otherwise we still clobber reg_Y so save it
+    }
+
+    // At this point, reg is always reg_X, and reg_Y is free
+    mov_reg_imm(reg_Y, power_of_2_log(type_width));
+    sar_reg_reg(reg_X, reg_Y);
+
+    // Now reg_X contains the result, and we move it back in reg_start if needed
+    if (reg_start != reg_X) {
+      mov_reg_reg(reg_start, reg_X);
+      pop_reg(reg_X);
+    } else {
+      pop_reg(reg_Y); // Otherwise, we still need to restore reg_Y
+    }
+  } else {
+    // div_reg_reg only works with reg_X on certain architectures, so we need to save it
+    if (reg_start != reg_X) {
+      push_reg(reg_X);
+      reg = reg_X;
+    } else {
+      push_reg(reg_Y);
+    }
+
+    mov_reg_imm(reg_Y, type_width);
+    div_reg_reg(reg_X, reg_Y);
+
+    if (reg_start != reg_X) {
+      mov_reg_reg(reg_start, reg_X);
+      pop_reg(reg_X);
+    } else {
+      pop_reg(reg_Y);
+    }
   }
 }
 
@@ -803,7 +863,9 @@ ast value_type(ast node) {
      OR op == LSHIFT OR op == RSHIFT OR op == '<' OR op == '>' OR op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ) {
       left_type = value_type(get_child(node, 0));
       right_type = value_type(get_child(node, 1));
-      if (is_pointer_type(left_type)) {
+      if (is_pointer_type(left_type) && is_pointer_type(right_type) && op == '-') {
+        return int_type; // Pointer - Pointer = Integer
+      } else if (is_pointer_type(left_type)) {
         // if left is an array or a pointer, the type is also a pointer
         return left_type;
       } else {
@@ -940,14 +1002,17 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
 
       if (is_pointer_type(left_type) && is_pointer_type(right_type)) {
-        fatal_error("codegen_binop: subtraction between pointers not implemented");
+        sub_reg_reg(reg_X, reg_Y);
+        div_for_pointer_arith(reg_X, ref_type_width(left_type));
       } else if (is_pointer_type(left_type)) {
         mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
+        sub_reg_reg(reg_X, reg_Y);
       } else if (is_pointer_type(right_type)) {
         mul_for_pointer_arith(reg_X, ref_type_width(right_type));
+        sub_reg_reg(reg_X, reg_Y);
+      } else {
+        sub_reg_reg(reg_X, reg_Y);
       }
-
-      sub_reg_reg(reg_X, reg_Y);
     }
     else if (op == '*' OR op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
     else if (op == '/' OR op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);

@@ -55,6 +55,12 @@ typedef struct Shape {
   Rectangle r;
 } Shape;
 
+struct NonPowerOf2Struct {
+  int val;
+  int val2;
+  int val3;
+};
+
 void f(enum Direction dir, Direction dir2) {
   putstr("Direction: "); putint(dir); putstr(" "); putint(dir2); putchar('\n');
 }
@@ -171,14 +177,29 @@ void test_struct_assignment() {
 void test_ptr_arith() {
   int i;
   struct Point *pts = (struct Point *) malloc(3 * sizeof(struct Point));
-  struct Point **pts2 = (struct Point *) malloc(3 * sizeof(struct Point*));
+  struct Point **pts2 = (struct Point **) malloc(3 * sizeof(struct Point*));
   struct Point pts3[3];
+  struct NonPowerOf2Struct nonPowerOf2Structs[10];
 
   putstr("# test_ptr_arith\n");
 
+  if (&pts[7] - &pts[1] != 6) {
+    putstr("Struct pointer arithmetic failed (subtraction): ");
+    putint((long) (&pts[1] - &pts[7]));
+    putchar('\n');
+    exit(-1);
+  }
+
+  if (&nonPowerOf2Structs[7] - &nonPowerOf2Structs[4] != 3) {
+    putstr("Struct pointer arithmetic failed (subtraction): ");
+    putint((long) (&nonPowerOf2Structs[1] - &nonPowerOf2Structs[7]));
+    putchar('\n');
+    exit(-1);
+  }
+
   for (i = 0; i < 3; i++) {
     if (pts + i != &pts[i]) {
-      putstr("Struct pointer arithmetic failed: ");
+      putstr("Struct pointer arithmetic failed (addition struct*): ");
       putint((long) (pts + i));
       putstr(" ");
       putint((long) &pts[i]);
@@ -190,7 +211,7 @@ void test_ptr_arith() {
   // On double indirections
   for (i = 0; i < 3; i++) {
     if (pts2 + i != &pts2[i]) {
-      putstr("Struct pointer arithmetic failed: ");
+      putstr("Struct pointer arithmetic failed (addition struct[]): ");
       putint((long) (pts2 + i));
       putstr(" ");
       putint((long) &pts2[i]);
