@@ -353,10 +353,14 @@ void get_ident();
 void expect_tok(int expected);
 #endif
 
+struct IncludeStack {
+  char *filename;
+  FILE* fp;
+  struct IncludeStack *next;
+};
+
 #ifdef SUPPORT_INCLUDE
-#define INCLUDE_DEPTH_MAX 5
-FILE *include_stack[INCLUDE_DEPTH_MAX]; // Stack of file pointers that get_ch reads from
-int include_stack_ptr = 0; // Points to the next available slot in the stack
+struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
 #endif
 
@@ -463,10 +467,12 @@ void get_ch() {
   ch = fgetc(fp);
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
-    if (include_stack_ptr > 1) {
-      fclose(include_stack[include_stack_ptr-1]);
-      include_stack_ptr -= 1;
-      fp = include_stack[include_stack_ptr-1];
+    if (include_stack->next != 0) {
+      fclose(include_stack->fp);
+      include_stack2 = include_stack;
+      include_stack = include_stack->next;
+      fp = include_stack->fp;
+      free(include_stack2);
       get_ch();
     }
   }
@@ -482,12 +488,14 @@ void get_ch() {
 
 #ifdef SUPPORT_INCLUDE
 void include_file(char *file_name) {
-  if (include_stack_ptr >= INCLUDE_DEPTH_MAX) {
-    fatal_error("Too many nested #include directives. Maximum supported is 5.");
-  }
   fp = fopen(file_name, "r");
-  include_stack[include_stack_ptr] = fp;
-  include_stack_ptr += 1;
+  include_stack2 = malloc(sizeof(struct IncludeStack));
+  include_stack2->next = include_stack;
+  include_stack2->filename = file_name;
+  include_stack2->line_number = line_number;
+  include_stack2->column_number = column_number;
+  include_stack2->fp = fp;
+  include_stack = include_stack2;
 }
 #endif
 
