@@ -1135,6 +1135,10 @@ int codegen_lvalue(ast node) {
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
+    } else if (op == CAST) {
+      codegen_lvalue(get_child(node, 1));
+      lvalue_width = type_width_ast(get_child(node, 0), true, true);
+      grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       fatal_error("codegen_lvalue: unknown lvalue with 2 children");
     }
@@ -1409,6 +1413,7 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == CAST) {
       codegen_rvalue(get_child(node, 1));
+      grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
