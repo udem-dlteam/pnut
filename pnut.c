@@ -14,6 +14,8 @@
 // support fopen and fgetc, meaning that #include directives can't be used.
 #define SUPPORT_INCLUDE_not
 
+#define INCLUDE_LINE_NUMBER_ON_ERROR
+
 #define AVOID_AMPAMP_BARBAR_not
 
 // Use positional parameter directly for function parameters that are constants
@@ -50,6 +52,26 @@ typedef int bool;
 
 typedef int FILE;
 
+#endif
+
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+int line_number = 1;
+int column_number = 1;
+int last_tok_line_number = 1;
+int last_tok_column_number = 1;
+
+struct IncludeStack {
+  char *filename;
+  FILE* fp;
+  int line_number;
+  int column_number;
+  struct IncludeStack *next;
+};
+#endif
+
+#ifdef SUPPORT_INCLUDE
+struct IncludeStack *include_stack, *include_stack2;
+FILE *fp = 0; // Current file pointer that's being read
 #endif
 
 enum {
@@ -168,7 +190,17 @@ void fatal_error(char *msg) {
 }
 
 void syntax_error(char *msg) {
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  if (last_tok_column_number == 1) {
+    last_tok_line_number -= 1;
+    last_tok_column_number = -1; // Indicate last column with -1
+  }
+  putstr(include_stack->filename); putchar(' '); putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+  putstr("syntax error on line "); putint(last_tok_line_number); putstr(", column "); putint(last_tok_column_number); putchar('\n');
+  putstr(msg); putchar('\n');
+#else
   putstr("syntax error: "); putstr(msg); putchar('\n');
+#endif
   exit(1);
 }
 
@@ -353,17 +385,6 @@ void get_ident();
 void expect_tok(int expected);
 #endif
 
-struct IncludeStack {
-  char *filename;
-  FILE* fp;
-  struct IncludeStack *next;
-};
-
-#ifdef SUPPORT_INCLUDE
-struct IncludeStack *include_stack, *include_stack2;
-FILE *fp = 0; // Current file pointer that's being read
-#endif
-
 #define IFDEF_DEPTH_MAX 20
 bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
 bool ifdef_stack_ix = 0;
@@ -472,12 +493,30 @@ void get_ch() {
       include_stack2 = include_stack;
       include_stack = include_stack->next;
       fp = include_stack->fp;
+      line_number = include_stack->line_number;
+      column_number = include_stack->column_number;
       free(include_stack2);
       get_ch();
     }
   }
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  else if (ch == '\n') {
+    line_number += 1;
+    column_number = 1;
+  } else {
+    column_number += 1;
+  }
+#endif
 #else
   ch = getchar();
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  if (ch == '\n') {
+    line_number += 1;
+    column_number = 1;
+  } else {
+    column_number += 1;
+  }
+#endif
 #endif
 #ifdef SH_INCLUDE_C_CODE
   // Save C code chars so they can be displayed with the shell code
@@ -496,6 +535,8 @@ void include_file(char *file_name) {
   include_stack2->column_number = column_number;
   include_stack2->fp = fp;
   include_stack = include_stack2;
+  line_number = 1;
+  column_number = 1;
 }
 #endif
 
@@ -1151,6 +1192,11 @@ void get_tok() {
   int prev_last_tok_char_buf_ix = declaration_char_buf_ix;
 #endif
 
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  int prev_tok_line_number = line_number;
+  int prev_tok_column_number = column_number;
+#endif
+
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   while (first_time OR !ifdef_mask) {
     first_time = false;
@@ -1537,6 +1583,11 @@ void get_tok() {
   }
 #ifdef SH_INCLUDE_C_CODE
   last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
+#endif
+
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  last_tok_line_number = prev_tok_line_number;
+  last_tok_column_number = prev_tok_column_number;
 #endif
 }
 
