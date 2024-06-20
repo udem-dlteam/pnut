@@ -1080,7 +1080,7 @@ text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, te
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
   } else if (context == RVALUE_CTX_TEST) {
-    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(( "), code, wrap_str(" )) -ne 0 ]")));
+    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(("), code, wrap_str(")) -ne 0 ]")));
   } else {
     return string_concat3(wrap_str("$(("), code, wrap_str("))"));
   }
@@ -1590,7 +1590,7 @@ void comp_assignment(ast lhs, ast rhs) {
       if (lhs_op == IDENTIFIER) {
         append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
       } else {
-        append_glo_decl(string_concat5(wrap_str(": $(( "), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str(" ))")));
+        append_glo_decl(string_concat5(wrap_str(": $(("), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str("))")));
       }
     }
   } else {
@@ -1801,9 +1801,9 @@ void comp_statement(ast node, int else_if) {
         comp_fun_call(get_child(node, 0), new_ast0(IDENTIFIER_DOLLAR, 1));
       } else {
         append_glo_decl(string_concat3(
-          wrap_str(": $(( $1 = "),
+          wrap_str(": $(($1 = "),
           comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
-          wrap_str(" ))")
+          wrap_str("))")
         ));
       }
     }
@@ -2237,7 +2237,7 @@ void prologue() {
   printf("set -e -u\n\n");
 
   #ifdef SUPPORT_ADDRESS_OF_OP
-  printf("defglo() { alloc 1; : $(( $1 = __addr )) ; }\n\n");
+  printf("defglo() { alloc 1; : $(($1 = __addr)) ; }\n\n");
   #endif
 }
 
