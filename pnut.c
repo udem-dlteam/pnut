@@ -168,13 +168,13 @@ void fatal_error(char *msg) {
 }
 
 void syntax_error(char *msg) {
-  putstr("syntax error: "); putstr(msg);
-  fatal_error("syntax error");
+  putstr("syntax error: "); putstr(msg); putchar('\n');
+  exit(1);
 }
 
 void missing_feature_error(char *msg) {
   putstr("not yet implemented: "); putstr(msg);
-  fatal_error("syntax error");
+  exit(1);
 }
 
 void print_dec(int n) {
@@ -1616,6 +1616,23 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
   return ast_result;
 }
 
+ast clone_ast(ast orig) {
+  int nb_children = get_nb_children(orig);
+  int i;
+
+  // Account for the value of ast nodes with no child
+  if (nb_children == 0) nb_children = 1;
+
+  ast_result = alloc_obj(nb_children + 1);
+
+  heap[ast_result] = heap[orig]; // copy operator and nb of children
+  for (i = 0; i < nb_children; i += 1) {
+    set_child(ast_result, i, get_child(orig, i));
+  }
+
+  return ast_result;
+}
+
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
     putstr("expected_tok="); putint(expected_tok);
@@ -1630,6 +1647,9 @@ ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
+ast parse_enum();
+ast parse_struct();
+ast parse_union();
 #endif
 
 ast parse_type() {
@@ -1638,35 +1658,35 @@ ast parse_type() {
 
   while (1) {
     if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
-      if ((type_kw != 0) AND (type_kw != INT_KW)) {
-        syntax_error("inconsistent type");
-      } else {
-        type_kw = INT_KW;
-        get_tok();
-      }
+      if ((type_kw != 0) AND (type_kw != INT_KW)) syntax_error("inconsistent type");
+      type_kw = INT_KW;
+      get_tok();
     } else if (tok == CHAR_KW) {
-      if (type_kw != 0) {
-        syntax_error("inconsistent type");
-      } else {
-        type_kw = CHAR_KW;
-        get_tok();
-      }
+      if (type_kw != 0) syntax_error("inconsistent type");
+      type_kw = CHAR_KW;
+      get_tok();
     } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
       syntax_error("unsupported type");
     } else if (tok == VOID_KW) {
-      if (type_kw != 0) {
-        syntax_error("inconsistent type");
-      } else {
-        type_kw = VOID_KW;
-        get_tok();
-      }
+      if (type_kw != 0) syntax_error("inconsistent type");
+      type_kw = VOID_KW;
+      get_tok();
     } else if (tok == CONST_KW) {
       get_tok(); // ignore const
+    } else if (tok == ENUM_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_enum();
+    } else if (tok == STRUCT_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_struct();
+    } else if (tok == UNION_KW) {
+      if (type_kw != 0) syntax_error("inconsistent type");
+      return parse_union();
     } else if (tok == TYPE) {
-      /* Look in types table */
+      /* Look in types table. It's a type, not a type_kw, but we reuse the variable */
       type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
       get_tok();
-      break;
+      return type_kw;
     } else {
       break;
     }
@@ -1695,7 +1715,152 @@ int is_type_starter(int tok) {
   return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
       OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
       OR (tok == TYPE) // User defined types
-      OR (tok == CONST_KW); // Type attributes
+      OR (tok == CONST_KW) // Type attributes
+      OR (tok == ENUM_KW OR tok == STRUCT_KW OR tok == UNION_KW); // Enum, struct, union
+}
+
+ast parse_enum() {
+  ast name;
+  ast ident;
+  ast result = 0;
+  ast tail;
+  ast value = 0;
+  int next_value = 0;
+
+  expect_tok(ENUM_KW);
+
+  if (tok == IDENTIFIER) {
+    name = new_ast0(IDENTIFIER, val);
+    get_tok();
+  } else if (tok == TYPE) {
+    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
+    get_tok();
+    if (tok == '{') fatal_error("enum type cannot be redefined");
+    return result;
+  } else {
+    name = 0;
+  }
+
+  if (tok == '{') { // TODO: Distinguish between enum type and enum definition
+    get_tok();
+
+    while (tok != '}') {
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+      ident = new_ast0(IDENTIFIER, val);
+      get_tok();
+
+      if (tok == '=') {
+        get_tok();
+
+        if (tok != INTEGER) {
+          syntax_error("integer expected");
+        }
+        value = new_ast0(INTEGER, val);
+        next_value = val - 1; // Next value is the current value + 1, but val is negative
+        get_tok(); // skip
+      } else {
+        value = new_ast0(INTEGER, next_value);
+        next_value -= 1;
+      }
+
+      if (result == 0) {
+        result = new_ast3(',', ident, value, 0);
+        tail = result;
+      } else {
+        set_child(tail, 2, new_ast3(',', ident, value, 0));
+        tail = get_child(tail, 2);
+      }
+
+      if (tok == ',') {
+        get_tok();
+      } else {
+        break;
+      }
+    }
+
+    expect_tok('}');
+
+  }
+
+  return new_ast3(ENUM_KW, 0, name, result); // 0 is number of stars
+}
+
+ast parse_struct() {
+  ast name;
+  ast ident;
+  ast type;
+  ast result = 0;
+  ast tail;
+  int stars;
+
+  expect_tok(STRUCT_KW);
+
+  if (tok == IDENTIFIER) {
+    name = new_ast0(IDENTIFIER, val);
+    get_tok();
+  } else if (tok == TYPE) {
+    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
+    get_tok();
+    if (tok == '{') fatal_error("struct type cannot be redefined");
+    return result;
+  } else {
+    name = 0;
+  }
+
+  if (tok == '{') { // TODO: Distinguish between struct type and struct definition
+    get_tok();
+
+    while (tok != '}') {
+      if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
+
+      type = parse_type();
+      stars = parse_stars();
+
+      if (stars != 0) {
+        type = clone_ast(type);
+        set_val(type, stars);
+      }
+
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+
+      ident = new_ast0(IDENTIFIER, val);
+      get_tok();
+
+      if (tok == '[') { // Array
+        get_tok();
+        if (tok != INTEGER) syntax_error("array size must be an integer constant");
+
+        type = new_ast2('[', new_ast0(INTEGER, -val), type);
+        get_tok();
+        expect_tok(']');
+      }
+
+      expect_tok(';');
+
+      if (result == 0) {
+        result = new_ast3(',', ident, type, 0);
+        tail = result;
+      } else {
+        set_child(tail, 2, new_ast3(',', ident, type, 0));
+        tail = get_child(tail, 2);
+      }
+    }
+
+    expect_tok('}');
+
+  }
+
+  return new_ast3(STRUCT_KW, 0, name, result); // 0 is number of stars
+}
+
+ast parse_union() {
+  fatal_error("union not supported");
 }
 
 ast parse_declaration() {
@@ -1710,7 +1875,10 @@ ast parse_declaration() {
     type = parse_type();
     stars = parse_stars();
 
-    set_val(type, stars);
+    if (stars != 0) {
+      type = clone_ast(type);
+      set_val(type, stars);
+    }
 
     name = val;
 
@@ -1757,68 +1925,6 @@ int parse_declaration_list() {
   return result;
 }
 
-ast parse_enum() {
-  ast name;
-  ast ident;
-  ast result = 0;
-  ast tail;
-  ast value = 0;
-  int next_value = 0;
-
-  expect_tok(ENUM_KW);
-
-  if (tok == IDENTIFIER) {
-    name = new_ast0(IDENTIFIER, val);
-    get_tok();
-  } else {
-    name = 0;
-  }
-
-  expect_tok('{');
-
-  while (tok != '}') {
-    if (tok != IDENTIFIER) {
-      syntax_error("identifier expected");
-    }
-    ident = new_ast0(IDENTIFIER, val);
-    get_tok();
-
-    if (tok == '=') {
-      get_tok();
-
-      if (tok != INTEGER) {
-        syntax_error("integer expected");
-      }
-      value = new_ast0(INTEGER, val);
-      next_value = val - 1; // Next value is the current value + 1, but val is negative
-      get_tok(); // skip
-    } else {
-      value = new_ast0(INTEGER, next_value);
-      next_value -= 1;
-    }
-
-    // printf("name=%s value=%d\n", string_pool + heap[name + 1], value);
-    if (result == 0) {
-      result = new_ast3(',', ident, value, 0);
-      tail = result;
-    } else {
-      set_child(tail, 2, new_ast3(',', ident, value, 0));
-      tail = get_child(tail, 2);
-    }
-
-    if (tok == ',') {
-      get_tok();
-    } else {
-      break;
-    }
-  }
-
-  expect_tok('}');
-  expect_tok(';');
-
-  return new_ast2(ENUM_KW, name, result);
-}
-
 /* Note: Uses a simplified syntax for definitions */
 ast parse_definition(int local) {
 
@@ -1836,13 +1942,23 @@ ast parse_definition(int local) {
   if (is_type_starter(tok)) {
     type = parse_type();
 
+    // global enum/struct/union declaration
+    if (tok == ';') {
+      if (get_op(type) != ENUM_KW AND get_op(type) != STRUCT_KW AND get_op(type) != UNION_KW) {
+        syntax_error("enum/struct/union declaration expected");
+      }
+      get_tok();
+      return type;
+    }
+
     while (1) {
 
       stars = parse_stars();
 
       this_type = type;
       if (stars != 0) {
-        this_type = new_ast0(get_op(type), stars);
+        this_type = clone_ast(type);
+        set_child(this_type, 0, stars);
       }
 
       name = val;
@@ -1924,19 +2040,37 @@ ast parse_definition(int local) {
     return new_ast1(VAR_DECLS, result);
   } else if (tok == TYPEDEF_KW) {
     // When parsing a typedef, the type is added to the types table.
-    // Since the code generators don't do anything with typedefs, we then return
-    // the next definition.
+    // This is so the parser can determine if an identifier is a type or not.
+    // This implementation is not completely correct, as an identifier that was
+    // typedef'ed can also be used as a variable name, but TCC doesn't do that so
+    // it should be fine for now.
+    //
+    // When we want to implement typedef correctly, we'll want to tag
+    // identifiers as typedef'ed and have the typedef be scoped to the block
+    // it was defined in (global or in function).
     get_tok();
     type = parse_type();
     if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
 
+#ifdef sh
+    // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
+    // This is not correct, but it's a limitation of the current shell backend where we
+    // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
+    // don't always have a name.
+    if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW OR get_op(type) == ENUM_KW) {
+      if (get_child(type, 1) != 0 && get_val(get_child(type, 1)) != val) {
+        fatal_error("typedef name must match struct/union/enum name");
+      }
+      set_child(type, 1, new_ast0(IDENTIFIER, val));
+    }
+#endif
+
     heap[val + 2] = TYPE;
     heap[val + 3] = type;
+    result = new_ast2(TYPEDEF_KW, val, type);
     get_tok();
     expect_tok(';');
-    return parse_definition(local);
-  } else if (tok == ENUM_KW) {
-    return parse_enum();
+    return result;
   } else {
     return result;
   }
@@ -2040,11 +2174,21 @@ ast parse_postfix_expression() {
 
     } else if (tok == '.') {
 
-      syntax_error("Struct/Union not supported");
+      get_tok();
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+      result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
+      get_tok();
 
     } else if (tok == ARROW) {
 
-      syntax_error("Struct/Union not supported");
+      get_tok();
+      if (tok != IDENTIFIER) {
+        syntax_error("identifier expected");
+      }
+      result = new_ast2(ARROW, result, new_ast0(IDENTIFIER, val));
+      get_tok();
 
     } else if (tok == PLUS_PLUS) {
 
@@ -2090,7 +2234,16 @@ ast parse_unary_expression() {
 
   } else if (tok == SIZEOF_KW) {
 
-    syntax_error("sizeof not supported");
+    get_tok();
+    if (tok == '(') {
+      get_tok();
+      result = clone_ast(parse_type());
+      set_val(result, parse_stars());
+      expect_tok(')');
+    } else {
+      result = parse_unary_expression();
+    }
+    result = new_ast1(SIZEOF_KW, result);
 
   } else {
     result = parse_postfix_expression();
@@ -2125,11 +2278,11 @@ ast parse_cast_expression() {
     if (is_type_starter(tok)) {
       type = parse_type();
       stars = parse_stars();
-      set_val(type, stars);
-      // TODO: Import clone_ast from other branch
-      // if (stars != 0) {
-      //   type = clone_ast(type);
-      // }
+
+      if (stars != 0) {
+        type = clone_ast(type);
+        set_val(type, stars);
+      }
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());

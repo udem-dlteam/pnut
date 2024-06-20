@@ -3,7 +3,7 @@ all: test
 .SUFFIXES:
 
 #CC=clang -Wno-incompatible-pointer-types-discards-qualifiers
-CC=gcc -Wno-discarded-qualifiers
+CC=gcc-13 -Wno-discarded-qualifiers
 
 test: test_with_gcc test_with_gcc_using_portable_libc test_with_pnut_using_portable_libc
 

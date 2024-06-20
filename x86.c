@@ -30,6 +30,7 @@ const int R15 = 15;
 
 const int reg_X = AX;
 const int reg_Y = CX;
+const int reg_Z = BP; // used as a temporary register for certain meta instructions
 const int reg_SP = SP;
 const int reg_glo = BX;
 
