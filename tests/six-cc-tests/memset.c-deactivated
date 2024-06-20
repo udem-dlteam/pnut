@@ -8,22 +8,20 @@ void putstring(char *s) {
 
 int main() {
     int MAX_SIZE = 100;
-    char *s = malloc(MAX_SIZE); // Allocate memory for s
-    char *s2 = malloc(MAX_SIZE); // Allocate memory for s2
+    char *s = malloc(MAX_SIZE); 
+    char *s2 = malloc(MAX_SIZE);
     int *f;
     int res;
     int len = 0;
     int cmp = 0;
 
-    f = fopen("tests/six-cc-tests/memset.c", 0); // Open file for reading
-  
+    f = fopen("tests/six-cc-tests/memset.c", 0); 
 
-    // Read file content into s
     while ((res = fgetc(f)) != -1 && len < MAX_SIZE - 1) {
         s[len] = res;
-        len++;
+        len = len + 1;
     }
-    s[len] = '\0'; // Null-terminate s
+    s[len] = '\0';
 
     int i = 0;
     while (i < len) {
