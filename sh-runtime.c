@@ -310,14 +310,13 @@ DEFINE_RUNTIME_FUN(initialize_memory)
   putstr("}\n");
 END_RUNTIME_FUN(initialize_memory)
 
-
 DEFINE_RUNTIME_FUN(defarr)
 DEPENDS_ON(alloc)
 #ifdef RT_NO_INIT_GLOBALS
-  printf("defarr() { alloc $2; : $(( $1 = __addr )); }\n\n");
+  printf("defarr() { alloc $2; : $(($1 = __addr)); }\n\n");
 #else
 DEPENDS_ON(initialize_memory)
-  printf("defarr() { alloc $2; : $(( $1 = __addr )) ; initialize_memory $(($1)) $2; }\n\n");
+  printf("defarr() { alloc $2; : $(($1 = __addr)) ; initialize_memory $(($1)) $2; }\n\n");
 #endif
 END_RUNTIME_FUN(defarr)
 
@@ -351,7 +350,7 @@ DEPENDS_ON(char_to_int)
   putstr("# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.\n");
   putstr("unpack_string() {\n");
   putstr("  __buf=\"$1\"\n");
-  putstr("  alloc $(( ${#__buf} + 1 ))\n");
+  putstr("  alloc $((${#__buf} + 1))\n");
   putstr("  __ptr=$__addr\n");
   putstr("  while [ -n \"$__buf\" ] ; do\n");
   putstr("    __char=\"${__buf%\"${__buf#?}\"}\"   # remove all but first char\n");
@@ -360,7 +359,7 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((_$__ptr = __c))\n");
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
-  putstr("  : $((_$__ptr = 0 ))\n");
+  putstr("  : $((_$__ptr = 0))\n");
   putstr("}\n");
 END_RUNTIME_FUN(unpack_string)
 
@@ -390,7 +389,7 @@ DEPENDS_ON(char_to_int)
   putstr("unpack_escaped_string() {\n");
   putstr("  __buf=\"$1\"\n");
   putstr("  # Allocates enough space for all characters, assuming that no character is escaped\n");
-  putstr("  alloc $(( ${#__buf} + 1 ))\n");
+  putstr("  alloc $((${#__buf} + 1))\n");
   putstr("  __ptr=$__addr\n");
   putstr("  while [ -n \"$__buf\" ] ; do\n");
   putstr("    case \"$__buf\" in\n");
@@ -421,7 +420,7 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((_$__ptr = __c))\n");
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
-  putstr("  : $((_$__ptr = 0 ))\n");
+  putstr("  : $((_$__ptr = 0))\n");
   putstr("}\n");
 END_RUNTIME_FUN(unpack_escaped_string)
 
@@ -460,7 +459,7 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("  set +u # Necessary to allow the variable to be empty\n");
   putstr("  if [ $(($1)) -eq 0 ]; then\n");
   putstr("    unpack_escaped_string \"$2\"\n");
-  putstr("    : $(( $1 = __addr ))\n");
+  putstr("    : $(($1 = __addr))\n");
   putstr("  fi\n");
   putstr("  set -u\n");
   putstr("}\n");
@@ -531,13 +530,13 @@ DEPENDS_ON(putchar)
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
-  putstr("  while [ $(( _$__addr )) -ne 0 ]; do\n");
+  putstr("  while [ $((_$__addr)) -ne 0 ]; do\n");
 #ifdef RT_INLINE_PUTCHAR
   putstr("    printf \\\\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))\n");
 #else
   putstr("    _putchar __ $((_$__addr))\n");
 #endif
-  putstr("    : $(( __addr += 1 ))\n");
+  putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
 END_RUNTIME_FUN(print_pnut_str)
@@ -661,7 +660,7 @@ DEPENDS_ON(alloc)
 DEPENDS_ON(pack_string)
   putstr("__state_fd0=0;\n");
   putstr("alloc 1000                    # Allocate buffer\n");
-  putstr(": $(( _$__addr = 0 ))         # Init buffer to \"\"\n");
+  putstr(": $((_$__addr = 0))           # Init buffer to \"\"\n");
   putstr(": $((__buffer_fd0 = __addr))  # Save buffer address\n");
   putstr(": $((__cursor_fd0 = 0))       # Make buffer empty\n");
   putstr(": $((__buflen_fd0 = 1000))    # Init buffer length\n");
@@ -692,10 +691,10 @@ DEPENDS_ON(pack_string)
   putstr("    # values can't be assigned to dynamic variables, each line\n");
   putstr("    # is read and then unpacked in the buffer.\n");
   putstr("    alloc 1000                          # Allocate buffer\n");
-  putstr("    : $(( _$__addr = 0 ))               # Init buffer to \"\"\n");
-  putstr("    : $(( __buffer_fd$__fd = __addr ))  # Save buffer address\n");
-  putstr("    : $(( __cursor_fd$__fd = 0 ))       # Make buffer empty\n");
-  putstr("    : $(( __buflen_fd$__fd = 1000 ))    # Init buffer length\n");
+  putstr("    : $((_$__addr = 0))                 # Init buffer to \"\"\n");
+  putstr("    : $((__buffer_fd$__fd = __addr))    # Save buffer address\n");
+  putstr("    : $((__cursor_fd$__fd = 0))         # Make buffer empty\n");
+  putstr("    : $((__buflen_fd$__fd = 1000))      # Init buffer length\n");
   putstr("    : $((__state_fd$__fd = $3))         # Mark the fd as opened\n");
   putstr("    pack_string $2\n");
   putstr("    if [ $3 = 0 ] ; then\n");
@@ -743,10 +742,10 @@ DEPENDS_ON(char_to_int)
   putstr("  done\n");
   putstr("\n");
   putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
-  putstr("    : $(( _$__buffer = 10))           # Line ends with newline\n");
+  putstr("    : $((_$__buffer = 10))            # Line ends with newline\n");
   putstr("    : $((__buffer += 1))\n");
   putstr("  fi\n");
-  putstr("  : $(( _$__buffer = 0))              # Then \\0\n");
+  putstr("  : $((_$__buffer = 0))               # Then \\0\n");
   putstr("}\n");
   putstr("\n");
   putstr("refill_buffer() { # $1: fd\n");
@@ -836,8 +835,8 @@ DEPENDS_ON(_open)
   putstr("_fopen() { # $2: File name, $3: Mode\n");
   putstr("  __open __fd $2 $((_$3 == 119)) 511\n");
   putstr("  alloc 1                   # Allocate FILE structure\n");
-  putstr("  : $(( _$__addr = __fd ))  # Save fd\n");
-  putstr("  : $(( $1 = __addr ))\n");
+  putstr("  : $((_$__addr = __fd))    # Save fd\n");
+  putstr("  : $(($1 = __addr))\n");
   putstr("}\n");
 END_RUNTIME_FUN(fopen)
 
