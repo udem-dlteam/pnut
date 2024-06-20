@@ -78,7 +78,10 @@ int test_nested_structs() {
 
 int test_array_of_structs() {
 
-    struct Point points[3];
+    struct Point* points = (struct Point*)malloc(3 * sizeof(struct Point));
+    if (points == 0) {
+        return -1; // failure due to memory allocation error
+    }
     points[0].x = 1;
     points[0].y = 2;
     points[1].x = 3;

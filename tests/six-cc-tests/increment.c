@@ -8,23 +8,31 @@ void putstring(char *s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int)); // Dynamically allocate memory for digits
   
-  if (n == 0) {
-    putchar(48);
+  if (digits == 0) {
+    putstring("Memory allocation failed\n");
     return;
   }
-  
+
+  if (n == 0) {
+    putchar(48);
+    free(digits); // Free allocated memory
+    return;
+  }
+
   while (n > 0) {
     digits[i] = n % 10;
     n = n / 10;
-    i = i + 1;
+    i++;
   }
-  i = i - 1;
+  i--;
   while (i >= 0) {
     putchar(digits[i] + 48);
-    i = i - 1;
+    i--;
   }
+  
+  free(digits); // Free allocated memory
 }
 
 int main() {

@@ -8,11 +8,9 @@ Read content: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 Quote: "
 Backslash: \
@@ -27,11 +25,9 @@ Read result: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 hash: 199
 Read content: void putstring(char* s) {
@@ -44,11 +40,9 @@ Read content: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 Quote: "
 Backslash: \
@@ -63,11 +57,9 @@ Read result: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 hash: 199
 Read content: void putstring(char* s) {
@@ -80,11 +72,9 @@ Read content: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 Quote: "
 Backslash: \
@@ -99,11 +89,9 @@ Read result: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 hash: 199
 Read content: void putstring(char* s) {
@@ -116,11 +104,9 @@ Read content: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 Quote: "
 Backslash: \
@@ -135,10 +121,8 @@ Read result: void putstring(char* s) {
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int));
   
-  if (n == 0) {
-    putchar(48);
-    return;
+  if (digits == 0) {
  
 hash: 199

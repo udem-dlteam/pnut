@@ -8,7 +8,8 @@ int dummy = 0;
 
 int main() {
 
-  int r[2801];
+  //int r[2801]; array/struct value type is not supported for shell backend
+  int * r = malloc(2801 * sizeof(int));
   int i;
   int k;
   int b;

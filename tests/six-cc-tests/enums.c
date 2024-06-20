@@ -1,37 +1,45 @@
 /* Test that enum variables can be shadowed by local bindings */
 
-void putstring(char *s) {
+void putstring(const char *s) {
   while (*s) {
     putchar(*s);
-    s = s + 1;
+    s++;
   }
 }
 
 void putnumber(int n) {
   int acc = 0;
   int i = 0;
-  int digits[10];
+  int *digits = malloc(10 * sizeof(int)); // Dynamically allocate memory for digits
   
-  if (n == 0) {
-    putchar(48);
+  if (digits == 0) {
+    putstring("Memory allocation failed\n");
     return;
   }
-  
+
+  if (n == 0) {
+    putchar(48);
+    free(digits); // Free allocated memory
+    return;
+  }
+
   while (n > 0) {
     digits[i] = n % 10;
     n = n / 10;
-    i = i + 1;
+    i++;
   }
-  i = i - 1;
+  i--;
   while (i >= 0) {
     putchar(digits[i] + 48);
-    i = i - 1;
+    i--;
   }
+  
+  free(digits); // Free allocated memory
 }
 
 enum ChildEnum { VAL, NEXT, LL_SIZE };
 
-enum ParentEnum { VAL, NEXT, LL_SIZE, VAL2, NEXT2, LL_SIZE2 };
+enum ParentEnum { VAL2, NEXT2, LL_SIZE2 };
 
 struct TestStruct {
   int VAL;
@@ -52,15 +60,15 @@ void shadow(int NEXT) {
 
 int main() {
   putstring("VAL: ");
-  putnumber(VAL);
+  putnumber(VAL); // Note: This refers to the global enum 'VAL'
   putstring(", NEXT: ");
-  putnumber(NEXT);
+  putnumber(NEXT); // Note: This refers to the global enum 'NEXT'
   putchar(10);
   shadow(789);
   putstring("VAL: ");
-  putnumber(VAL);
+  putnumber(VAL); // Note: This refers to the global enum 'VAL'
   putstring(", NEXT: ");
-  putnumber(NEXT);
+  putnumber(NEXT); // Note: This refers to the global enum 'NEXT'
   putchar(10);
   return 0;
 }

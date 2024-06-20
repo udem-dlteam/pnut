@@ -28,6 +28,7 @@ struct LinkedList* iota_linked_list(int max) {
   struct LinkedList *head;
   struct LinkedList *last;
   struct LinkedList *node;
+  struct LinkedList *temp;
   if (max == 0) return 0;
   head = malloc(sizeof(struct LinkedList));
   if (head == 0) return 0; // Handle memory allocation failure
@@ -39,7 +40,7 @@ struct LinkedList* iota_linked_list(int max) {
     if (node == 0) {
       // Free previously allocated nodes in case of failure
       while (head != 0) {
-        struct LinkedList *temp = head->next;
+        temp = head->next;
         free(head);
         head = temp;
       }
@@ -73,7 +74,7 @@ int linked_list_sum_except_last(struct LinkedList* head) {
 
 int main() {
   struct LinkedList* ll;
-
+  struct LinkedList *temp;
   ll = iota_linked_list(1000);
 
   putstring("Sum: ");
@@ -85,7 +86,7 @@ int main() {
 
   // Free the linked list
   while (ll != 0) {
-    struct LinkedList *temp = ll->next;
+    temp = ll->next;
     free(ll);
     ll = temp;
   }

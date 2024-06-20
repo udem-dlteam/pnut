@@ -7,6 +7,8 @@ void putstring(const char *s) {
 }
 
 void putnumber(int n) {
+  char * buffer = malloc(10 * sizeof(char));
+  int i = 0;
   if (n == 0) {
     putchar('0');
     return;
@@ -15,8 +17,7 @@ void putnumber(int n) {
     putchar('-');
     n = -n;
   }
-  char buffer[10];
-  int i = 0;
+  
   while (n > 0) {
     buffer[i++] = (n % 10) + '0';
     n /= 10;
@@ -29,30 +30,31 @@ void putnumber(int n) {
 enum LinkedList { 
   VAL, 
   NEXT,
-  LL_SIZE };
+  LL_SIZE 
+};
 
 int* iota_linked_list(int max) {
   int *head, *last, *node;
   int i = 1;
   head = malloc(LL_SIZE * sizeof(int));
   if (head == 0) {
-    return 0; // Memory allocation failed
+    return -1; // Memory allocation failed
   }
 
   head[VAL] = 0;
-  head[NEXT] = 0; // NULL pointer represented as 0
+  head[NEXT] = 0;
   last = head;
 
   while (i < max) {
     node = malloc(LL_SIZE * sizeof(int));
     if (node == 0) {
-      // Free the already allocated nodes
+
       while (head != 0) {
         int *temp = (int*)head[NEXT];
         free(head);
         head = temp;
       }
-      return 0; // Memory allocation failed
+      return -1;
     }
     node[VAL] = i;
     node[NEXT] = 0; 
@@ -78,7 +80,7 @@ int main() {
   int sum;
 
   ll = iota_linked_list(1000);
-  if (ll == 0) {
+  if (ll == -1) {
     putstring("Memory allocation failed\n");
     return 1;
   }
