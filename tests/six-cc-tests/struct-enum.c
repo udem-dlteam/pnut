@@ -1,50 +1,98 @@
-/* Simulating structs using enums like in c4.c */
+
+void putstring(const char *s) {
+  while (*s) {
+    putchar(*s);
+    s++;
+  }
+}
+
+void putnumber(int n) {
+  if (n == 0) {
+    putchar('0');
+    return;
+  }
+  if (n < 0) {
+    putchar('-');
+    n = -n;
+  }
+  char buffer[10];
+  int i = 0;
+  while (n > 0) {
+    buffer[i++] = (n % 10) + '0';
+    n /= 10;
+  }
+  while (i > 0) {
+    putchar(buffer[--i]);
+  }
+}
+
 enum LinkedList { 
   VAL, 
   NEXT,
   LL_SIZE };
 
-int * iota_linked_list(int max) {
-  int i;
-  int * head;
-  int * last;
-  int * node;
-  if (max == 0) return 0;
-  head = malloc(LL_SIZE);
-  head[VAL] = 0;
-  last = head;
-  i = 1;
-  while (i < max) {
-    node = malloc(LL_SIZE);
-    node[VAL] = i;
-    node[NEXT] = 0;
-    last[NEXT] = node;
-    last = node;
+int* iota_linked_list(int max) {
+  int *head, *last, *node;
+  int i = 1;
+  head = malloc(LL_SIZE * sizeof(int));
+  if (head == 0) {
+    return 0; // Memory allocation failed
+  }
 
-    i++;
+  head[VAL] = 0;
+  head[NEXT] = 0; // NULL pointer represented as 0
+  last = head;
+
+  while (i < max) {
+    node = malloc(LL_SIZE * sizeof(int));
+    if (node == 0) {
+      // Free the already allocated nodes
+      while (head != 0) {
+        int *temp = (int*)head[NEXT];
+        free(head);
+        head = temp;
+      }
+      return 0; // Memory allocation failed
+    }
+    node[VAL] = i;
+    node[NEXT] = 0; 
+    last[NEXT] = (int)node; 
+    last = node;
+    i = i + 1;
   }
 
   return head;
 }
 
-int linked_list_sum(int * head) {
-  int sum;
-  sum = 0;
+int linked_list_sum(int *head) {
+  int sum = 0;
   while (head != 0) {
     sum += head[VAL];
-    head = head[NEXT];
+    head = (int*)head[NEXT];
   }
-
   return sum;
 }
 
 int main() {
-  int * ll;
+  int *ll;
   int sum;
-  char * str;
 
   ll = iota_linked_list(1000);
+  if (ll == 0) {
+    putstring("Memory allocation failed\n");
+    return 1;
+  }
 
   sum = linked_list_sum(ll);
-  printf("Sum: %d\n", sum);
+  putstring("Sum: ");
+  putnumber(sum);
+  putchar('\n');
+
+  // Free the linked list
+  while (ll != 0) {
+    int *temp = (int*)ll[NEXT];
+    free(ll);
+    ll = temp;
+  }
+  return 0;
 }
