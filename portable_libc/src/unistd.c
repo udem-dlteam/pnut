@@ -1,7 +1,8 @@
 #include "include/unistd.h"
+#include "include/crt1.h"
 
 void exit(int status) {
-  /*TODO*/
+  _exit(status);
 }
 
 char *getcwd(char *buf, size_t size) {
@@ -19,8 +20,7 @@ char *getcwd(char *buf, size_t size) {
 }
 
 int open(const char *pathname, int flags, mode_t mode) {
-  /*TODO*/
-  return 0;
+  return _open(pathname, flags, mode);
 }
 
 int close(int fd) {
@@ -29,13 +29,11 @@ int close(int fd) {
 }
 
 ssize_t write(int fd, void *buf, size_t count) {
-  /*TODO*/
-  return 0;
+  return _write(fd, buf, count);
 }
 
 ssize_t read(int fd, void *buf, size_t count) {
-  /*TODO*/
-  return 0;
+  return _read(fd, buf, count);
 }
 
 off_t lseek(int fd, off_t offset, int whence) {

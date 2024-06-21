@@ -21,7 +21,7 @@ int comp(int code) {
 char buf[12];
 jmp_buf jbuf;
 
-int main() {
+int main(int argc, char **argv) {
 
   int failed = 0;
   void *vp;
@@ -110,6 +110,11 @@ int main() {
 
   if (setjmp(jbuf) != 0)
     failed = 12;
+
+
+  if (argc != 1 ||
+      strcmp(argv[0], "./a.out") != 0)
+    failed = 13;
 
 
   return failed;
