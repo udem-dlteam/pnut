@@ -6,7 +6,7 @@ void putstring(char * s) {
   }
 }
 
-int main(int argc, char * args) {
+int main(int argc, char ** args) {
   int i = 0;
   putstring("Number of arguments: ");
   putchar(48 + argc);
