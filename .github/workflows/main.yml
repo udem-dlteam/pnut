@@ -1,0 +1,26 @@
+name: run-tests
+on:
+  push:  # Should trigger on push and pull requests for all branches
+    branches:
+      - '**'  # Matches all branches
+  pull_request:
+    branches:
+      - '**'  # Matches all branches
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:  # Checkout code from the branch that triggered the workflow
+          ref: ${{ github.ref }}
+
+      - name: Run unit tests
+        run: |
+          chmod +x pnut/run-tests.sh
+          ./pnut/run-tests.sh -Di386 test
+          ./pnut/run-tests.sh -Dsh test
+          ./pnut/run-tests.sh -Di386 clean
+          ./pnut/run-tests.sh -Dsh clean
