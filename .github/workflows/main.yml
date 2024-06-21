@@ -17,8 +17,12 @@ jobs:
         with:  # Checkout code from the branch that triggered the workflow
           ref: ${{ github.ref }}
           
-      - name: Change directory to pnut
-        run: cd pnut
+      - name: Check current directory
+        run: |
+          echo "Current working directory:"
+          pwd
+          echo "List of files and directories:"
+          ls -al
         
       - name: Run unit tests
         run: |
