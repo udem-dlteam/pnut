@@ -16,18 +16,11 @@ jobs:
         uses: actions/checkout@v2
         with:  # Checkout code from the branch that triggered the workflow
           ref: ${{ github.ref }}
-          
-      - name: Check current directory
-        run: |
-          echo "Current working directory:"
-          pwd
-          echo "List of files and directories:"
-          ls -al
         
       - name: Run unit tests
         run: |
-          chmod +x pnut/run-tests.sh
-          ./pnut/run-tests.sh -Di386 test
-          ./pnut/run-tests.sh -Dsh test
-          ./pnut/run-tests.sh -Di386 clean
-          ./pnut/run-tests.sh -Dsh clean
+          chmod +x run-tests.sh
+          ./run-tests.sh -Di386 test
+          ./run-tests.sh -Dsh test
+          ./run-tests.sh -Di386 clean
+          ./run-tests.sh -Dsh clean
