@@ -1,9 +1,6 @@
 name: run-tests
 on:
-  push:  # Should trigger on push and pull requests for all branches
-    branches:
-      - '**'  # Matches all branches
-  pull_request:
+  pull_request: # Should trigger on pull requests for all branches
     branches:
       - '**'  # Matches all branches
 
