@@ -29,11 +29,11 @@ int isupper(int c) {
 }
 
 int isalpha(int c) {
-  return islower(c) || isupper(c);
+  return islower(c) | isupper(c);
 }
 
 int isalnum(int c) {
-  return isdigit(c) || isalpha(c);
+  return isdigit(c) | isalpha(c);
 }
 
 int tolower(int c) {
@@ -69,5 +69,5 @@ int isspace(int c) {
 }
 
 int ispunct(int c) {
-  return isprint(c) && !isspace(c) && !isalnum(c);
+  return isprint(c) & !isspace(c) & !isalnum(c);
 }
