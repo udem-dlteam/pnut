@@ -4,6 +4,12 @@
 #include "include/sys/types.h"
 #include "include/stdarg.h"
 
+#ifdef PNUT_CC
+
+typedef int FILE;
+
+#else
+
 typedef struct {
   int fd;
   char buf[1];
@@ -15,6 +21,8 @@ typedef struct {
 extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
+
+#endif
 
 FILE *fopen(const char *pathname, const char *mode);
 FILE *fdopen(int fd, const char *mode);

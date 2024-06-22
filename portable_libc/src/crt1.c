@@ -2,31 +2,17 @@
 
 int main(int argc, char **argv); /* defined in user program */
 
-#ifdef _PNUT_CC
+#ifdef PNUT_CC
 
-void _exit(int status) {
-  /*TODO*/
-}
+/* these are builtin operations of pnut
 
-int _read(int fd, void *buf, int count) {
-  /*TODO*/
-  return 0;
-}
+void _exit(int status);
+int _read(int fd, void *buf, int count);
+int _write(int fd, void *buf, int count);
+int _open(const char *pathname, int flags, int mode);
+int _close(int fd);
 
-int _write(int fd, void *buf, int count) {
-  /*TODO*/
-  return 0;
-}
-
-int _open(const char *pathname, int flags, int mode) {
-  /*TODO*/
-  return 0;
-}
-
-int _close(int fd) {
-  /*TODO*/
-  return 0;
-}
+*/
 
 #else
 

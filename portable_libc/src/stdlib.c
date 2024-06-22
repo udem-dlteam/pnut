@@ -19,6 +19,8 @@ void *realloc(void *ptr, size_t size) {
   return 0; /*TODO*/
 }
 
+#ifndef PNUT_CC
+
 double strtod(const char *str, char **endptr) {
   return 0.0; /*TODO*/
 }
@@ -30,6 +32,8 @@ float strtof(const char *str, char **endptr) {
 long double strtold(const char *str, char **endptr) {
   return 0.0; /*TODO*/
 }
+
+#endif
 
 long int strtol(const char *str, char **endptr, int base) {
 
