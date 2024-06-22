@@ -366,6 +366,7 @@ END_RUNTIME_FUN(unpack_string)
 
 // argv
 DEFINE_RUNTIME_FUN(make_argv)
+DEPENDS_ON(alloc)
 DEPENDS_ON(unpack_string)
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
@@ -465,8 +466,14 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("}\n");
 END_RUNTIME_FUN(defstr)
 
+DEFINE_RUNTIME_FUN(_exit)
+  putstr("__exit() { # $2: exit status\n");
+  putstr("  exit $2\n");
+  putstr("}\n");
+END_RUNTIME_FUN(_exit)
+
 DEFINE_RUNTIME_FUN(exit)
-  putstr("_exit() {\n");
+  putstr("_exit() { # $2: exit status\n");
   putstr("  exit $2\n");
   putstr("}\n");
 END_RUNTIME_FUN(exit)
@@ -482,12 +489,12 @@ END_RUNTIME_FUN(putchar)
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
-  putstr("__stdin_line_ends_with_oef=0\n");
+  putstr("__stdin_line_ends_with_eof=0\n");
   putstr("_getchar() {\n");
   putstr("  if [ -z \"$__stdin_buf\" ] ; then                   # need to get next line when buffer empty\n");
-  putstr("    if [ $__stdin_line_ends_with_oef -eq 1 ]; then  # EOF at end of line, return -1\n");
+  putstr("    if [ $__stdin_line_ends_with_eof -eq 1 ]; then  # EOF at end of line, return -1\n");
   putstr("      : $(($1 = -1))\n");
-  putstr("      __stdin_line_ends_with_oef=0                  # Reset EOF flag for next getchar call\n");
+  putstr("      __stdin_line_ends_with_eof=0                  # Reset EOF flag for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
   putstr("    IFS=                                            # don't split input\n");
@@ -501,7 +508,7 @@ DEPENDS_ON(char_to_int)
   putstr("        : $(($1 = -1))\n");
   putstr("        return\n");
   putstr("      else\n");
-  putstr("        __stdin_line_ends_with_oef=1\n");
+  putstr("        __stdin_line_ends_with_eof=1\n");
   putstr("      fi\n");
   putstr("    fi\n");
   putstr("  else\n");
@@ -649,167 +656,224 @@ DEPENDS_ON(int_to_char)
   putstr("}\n");
 END_RUNTIME_FUN(printf)
 
-// exec $fd<&- does not work as expected, and we don't want to use eval so we
-// instead have a case statement that calls the appropriate exec command to open
-// and close file descriptors.
-DEFINE_RUNTIME_FUN(fopen)
+DEFINE_RUNTIME_FUN(_open)
 DEPENDS_ON(alloc)
 DEPENDS_ON(pack_string)
-  putstr("__fopen_fd3=0\n");
-  putstr("__fopen_fd4=0\n");
-  putstr("__fopen_fd5=0\n");
-  putstr("__fopen_fd6=0\n");
-  putstr("__fopen_fd7=0\n");
-  putstr("__fopen_fd8=0\n");
-  putstr("__fopen_fd9=0\n");
+  putstr("__state_fd0=0;\n");
+  putstr("alloc 1000                     # Allocate buffer\n");
+  putstr(": $(( _$__addr = 0 ))          # Init buffer to \"\"\n");
+  putstr(": $(( _buffer_fd0 = __addr ))  # Save buffer address\n");
+  putstr(": $(( _cursor_fd0 = 0 ))       # Make buffer empty\n");
+  putstr(": $(( _buflen_fd0 = 1000 ))    # Init buffer length\n");
+  putstr("__state_fd1=1\n");
+  putstr("__state_fd2=1\n");
+  putstr("__state_fd3=-1\n");
+  putstr("__state_fd4=-1\n");
+  putstr("__state_fd5=-1\n");
+  putstr("__state_fd6=-1\n");
+  putstr("__state_fd7=-1\n");
+  putstr("__state_fd8=-1\n");
+  putstr("__state_fd9=-1\n");
   putstr("\n");
-  putstr("next_fd() {\n");
-  putstr("  __i=3\n");
-  putstr("  while [ $__i -lt 10 ]; do\n");
-  putstr("    if [ $((__fopen_fd$__i)) -eq 0 ]; then\n");
-  putstr("      __fd=$__i\n");
-  putstr("      return\n");
+  putstr("__open() { # $2: filename, $3: flags, $4: mode\n");
+  putstr("  # Get available fd\n");
+  putstr("  __fd=0\n");
+  putstr("  while [ $__fd -lt 10 ]; do\n");
+  putstr("    if [ $((__state_fd$__fd)) -lt 0 ]; then\n");
+  putstr("      break\n");
   putstr("    fi\n");
-  putstr("    : $((__i += 1))\n");
+  putstr("    : $((__fd += 1))\n");
   putstr("  done\n");
-  putstr("  # Some shells don't support fd > 9\n");
-  putstr("  echo \"No more file descriptors available\" ; exit 1\n");
+  putstr("  if [ $__fd -gt 9 ] ; then\n");
+  putstr("    # Some shells don't support fd > 9\n");
+  putstr("    echo \"No more file descriptors available\" ; exit 1\n");
+  putstr("  else\n");
+  putstr("    # Because the file must be read line-by-line, and string\n");
+  putstr("    # values can't be assigned to dynamic variables, each line\n");
+  putstr("    # is read and then unpacked in the buffer.\n");
+  putstr("    alloc 1000                         # Allocate buffer\n");
+  putstr("    : $(( _$__addr = 0 ))              # Init buffer to \"\"\n");
+  putstr("    : $(( _buffer_fd$__fd = __addr ))  # Save buffer address\n");
+  putstr("    : $(( _cursor_fd$__fd = 0 ))       # Make buffer empty\n");
+  putstr("    : $(( _buflen_fd$__fd = 1000 ))    # Init buffer length\n");
+  putstr("    : $((__state_fd$__fd = $3))        # Mark the fd as opened\n");
+  putstr("    pack_string $2\n");
+  putstr("    if [ $3 = 0 ] ; then\n");
+  putstr("      case $__fd in\n");
+  putstr("        0) exec 0< $__res ;; 1) exec 1< $__res ;; 2) exec 2< $__res ;;\n");
+  putstr("        3) exec 3< $__res ;; 4) exec 4< $__res ;; 5) exec 5< $__res ;;\n");
+  putstr("        6) exec 6< $__res ;; 7) exec 7< $__res ;; 8) exec 8< $__res ;;\n");
+  putstr("        9) exec 9< $__res ;;\n");
+  putstr("      esac\n");
+  putstr("    elif [ $3 = 1 ] ; then\n");
+  putstr("      case $__fd in\n");
+  putstr("        0) exec 0> $__res ;; 1) exec 1> $__res ;; 2) exec 2> $__res ;;\n");
+  putstr("        3) exec 3> $__res ;; 4) exec 4> $__res ;; 5) exec 5> $__res ;;\n");
+  putstr("        6) exec 6> $__res ;; 7) exec 7> $__res ;; 8) exec 8> $__res ;;\n");
+  putstr("        9) exec 9> $__res ;;\n");
+  putstr("      esac\n");
+  putstr("    else\n");
+  putstr("      case $__fd in\n");
+  putstr("        0) exec 0>> $__res ;; 1) exec 1>> $__res ;; 2) exec 2>> $__res ;;\n");
+  putstr("        3) exec 3>> $__res ;; 4) exec 4>> $__res ;; 5) exec 5>> $__res ;;\n");
+  putstr("        6) exec 6>> $__res ;; 7) exec 7>> $__res ;; 8) exec 8>> $__res ;;\n");
+  putstr("        9) exec 9>> $__res ;;\n");
+  putstr("      esac\n");
+  putstr("    fi\n");
+  putstr("  fi\n");
+  putstr("  : $(($1 = __fd))\n");
   putstr("}\n");
-  putstr("\n");
-  putstr("open_fd() { # $1: fd id, $2: file to open\n");
-  putstr("  : $((__fopen_fd$1 = 1)) # Mark the fd as opened\n");
-  putstr("  case $1 in\n");
-  putstr("    1) exec 1< $2 ;;\n");
-  putstr("    2) exec 2< $2 ;;\n");
-  putstr("    3) exec 3< $2 ;;\n");
-  putstr("    4) exec 4< $2 ;;\n");
-  putstr("    5) exec 5< $2 ;;\n");
-  putstr("    6) exec 6< $2 ;;\n");
-  putstr("    7) exec 7< $2 ;;\n");
-  putstr("    8) exec 8< $2 ;;\n");
-  putstr("    9) exec 9< $2 ;;\n");
-  putstr("    *) echo \"Unknown fd: $1\"; exit 1 ;;\n");
-  putstr("  esac\n");
-  putstr("}\n");
-  putstr("\n");
-  putstr("# Read the file, and return a file descriptor to the file.\n");
-  putstr("# The file descriptor fields:\n");
-  putstr("# - 0: Buffer\n");
-  putstr("# - 1: Read cursor\n");
-  putstr("# - 2: Buffer size\n");
-  putstr("# - 3: File descriptor number\n");
-  putstr("# - 4: EOF?\n");
-  putstr("# Because the file must be read line-by-line, and string values can't be\n");
-  putstr("# assigned to dynamic variables, each line is read and then unpacked in the\n");
-  putstr("# buffer.\n");
-  putstr("_fopen() { # $2: File name, $3: Mode\n");
-  putstr("  pack_string $2\n");
-  putstr("  next_fd                       # Get available fd\n");
-  putstr("  open_fd $__fd $__res\n");
-  putstr("  alloc 4                       # Allocate file descriptor object\n");
-  putstr("  : $(( $1 = __addr ))\n");
-  putstr("  alloc 1000                    # Allocate buffer\n");
-  putstr("  : $(( _$((__addr)) = 0 ))     # Initialize buf to \"\"\n");
-  putstr("  : $((_$(($1 + 0)) = __addr))  # Save buffer address\n");
-  putstr("  : $((_$(($1 + 1)) = 0))       # Initialize cursor to 0\n");
-  putstr("  : $((_$(($1 + 2)) = 200))     # Initial buffer size is 1000\n");
-  putstr("  : $((_$(($1 + 3)) = __fd))    # Save fd id\n");
-  putstr("}\n");
-END_RUNTIME_FUN(fopen)
+END_RUNTIME_FUN(_open)
 
-DEFINE_RUNTIME_FUN(fclose)
-DEPENDS_ON(fopen)
+DEFINE_RUNTIME_FUN(read_byte)
+DEPENDS_ON(alloc)
 DEPENDS_ON(free)
-  putstr("close_fd() { # $1: fd id\n");
-  putstr(": $((__fopen_fd$1 = 0)) # Mark the fd as closed\n");
-  putstr("  case $1 in\n");
-  putstr("    1) exec 1<&- ;;\n");
-  putstr("    2) exec 2<&- ;;\n");
-  putstr("    3) exec 3<&- ;;\n");
-  putstr("    4) exec 4<&- ;;\n");
-  putstr("    5) exec 5<&- ;;\n");
-  putstr("    6) exec 6<&- ;;\n");
-  putstr("    7) exec 7<&- ;;\n");
-  putstr("    8) exec 8<&- ;;\n");
-  putstr("    9) exec 9<&- ;;\n");
-  putstr("    *) echo \"Unknown fd: $1\"; exit 1 ;;\n");
-  putstr("  esac\n");
-  putstr("}\n");
-  putstr("\n");
-  putstr("_fclose() { # $2: File descriptor\n");
-  putstr("  __fd_id=$((_$(($2 + 3)) ))    # Fd id is at offset 3\n");
-  putstr("  __buf=$((_$(($2 + 0)) ))      # Buffer starts at offset 1\n");
-  putstr("  _free __ $__buf               # Release file descriptor buffer\n");
-  putstr("  _free __ $2                   # Release file descriptor object\n");
-  putstr("  close_fd $__fd_id\n");
-  putstr("  : $(($1 = 0))\n");
-  putstr("}\n");
-END_RUNTIME_FUN(fclose)
-
-DEFINE_RUNTIME_FUN(fgetc)
 DEPENDS_ON(char_to_int)
   putstr("# Unpack a Shell string into an appropriately sized buffer\n");
   putstr("unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
   putstr("  __fgetc_buf=$1\n");
-  putstr("  __buf=$2\n");
+  putstr("  __buffer=$2\n");
   putstr("  __ends_with_eof=$3\n");
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
-  extract_first_char("  ", "__fgetc_buf", "_$__buf")
+  extract_first_char("  ", "__fgetc_buf", "_$__buffer")
   putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
-  putstr("    : $((__buf += 1))                 # Move to the next buffer position\n");
+  putstr("    : $((__buffer += 1))                 # Move to the next buffer position\n");
   putstr("  done\n");
   putstr("\n");
   putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
-  putstr("    : $(( _$__buf = 10))              # Line end with newline\n");
-  putstr("    : $((__buf += 1))\n");
+  putstr("    : $(( _$__buffer = 10))              # Line ends with newline\n");
+  putstr("    : $((__buffer += 1))\n");
   putstr("  fi\n");
-  putstr("  : $(( _$__buf = 0))                 # Then \\0\n");
+  putstr("  : $(( _$__buffer = 0))                 # Then \\0\n");
   putstr("}\n");
   putstr("\n");
-  putstr("refill_buffer() { # $1: File descriptor\n");
+  putstr("refill_buffer() { # $1: fd\n");
   putstr("  __fd=$1\n");
-  putstr("  __buf=$((_$((__fd + 0))))\n");
-  putstr("  __fd_id=$((_$((__fd + 3))))\n");
+  putstr("  __buffer=$((_buffer_fd$__fd))\n");
   putstr("\n");
   putstr("  IFS=\n");
-  putstr("  if read -r __fgetc_buf <&$__fd_id ; then  # read next line into $__fgetc_buf\n");
+  putstr("  if read -r __temp_buf <&$__fd ; then  # read next line into $__temp_buf\n");
   putstr("    __ends_with_eof=0\n");
   putstr("  else\n");
   putstr("    __ends_with_eof=1\n");
   putstr("  fi\n");
   putstr("\n");
   putstr("  # Check that the buffer is large enough to unpack the line\n");
-  putstr("  __buf_size=$((_$((__fd + 2)) - 2)) # Minus 2 to account for newline and \\0\n");
-  putstr("  __len=${#__fgetc_buf}\n");
-  putstr("  if [ $__len -gt $__buf_size ]; then\n");
+  putstr("  __buflen=$((_buflen_fd$__fd - 2)) # Minus 2 to account for newline and \\0\n");
+  putstr("  __len=${#__temp_buf}\n");
+  putstr("  if [ $__len -gt $__buflen ]; then\n");
   putstr("    # Free buffer and reallocate a new one double the line size\n");
-  putstr("    __buf_size=$((__len * 2))\n");
-  putstr("    _free __ $__buf\n");
-  putstr("    alloc $__buf_size\n");
-  putstr("    : $((_$((__fd + 0)) = __addr))\n");
-  putstr("    : $((_$((__fd + 2)) = __buf_size))\n");
-  putstr("    __buf=$__addr\n");
+  putstr("    __buflen=$((__len * 2))\n");
+  putstr("    _free __ $__buffer\n");
+  putstr("    alloc $__buflen\n");
+  putstr("    : $((_buffer_fd$__fd = __addr))\n");
+  putstr("    : $((_buflen_fd$__fd = __buflen))\n");
+  putstr("    __buffer=$__addr\n");
   putstr("  fi\n");
-  putstr("  unpack_line \"$__fgetc_buf\" $__buf $__ends_with_eof\n");
+  putstr("  unpack_line \"$__temp_buf\" $__buffer $__ends_with_eof\n");
   putstr("}\n");
   putstr("\n");
-  putstr("_fgetc() { # $2: File descriptor\n");
+  putstr("read_byte() { # $2: fd\n");
   putstr("  __fd=$2\n");
-  putstr("  __buf=$((_$((__fd + 0))))\n");
-  putstr("  __cur=$((_$((__fd + 1))))\n");
+  putstr("  : $((__buffer=_buffer_fd$__fd))\n");
+  putstr("  : $((__cursor=_cursor_fd$__fd))\n");
   putstr("  # The cursor is at the end of the buffer, we need to read the next line\n");
-  putstr("  if [ $((_$((__buf + __cur)))) -eq 0 ]; then\n");
+  putstr("  if [ $((_$((__buffer + __cursor)))) -eq 0 ]; then\n");
   putstr("    # Buffer has been read completely, read next line\n");
   putstr("    refill_buffer $__fd\n");
-  putstr("    __cur=0 # Reset cursor and reload fd fields\n");
-  putstr("    __buf=$((_$((__fd + 0)))) # Reload buffer in case it was reallocated\n");
-  putstr("    if [ $((_$((__buf + __cur)))) -eq 0 ]; then\n");
+  putstr("    __cursor=0 # Reset cursor and reload buffer\n");
+  putstr("    : $((__buffer=_buffer_fd$__fd))\n");
+  putstr("    if [ $((_$((__buffer + __cursor)))) -eq 0 ]; then\n");
   putstr("      : $(($1 = -1)) # EOF\n");
   putstr("      return\n");
   putstr("    fi\n");
   putstr("  fi\n");
-  putstr("  : $(($1 = _$((__buf + __cur))))\n");
-  putstr("  : $((_$((__fd + 1)) = __cur + 1))      # Increment cursor\n");
+  putstr("  : $(($1 = _$((__buffer + __cursor))))\n");
+  putstr("  : $((_cursor_fd$__fd = __cursor + 1))  # Increment cursor\n");
+  putstr("}\n");
+END_RUNTIME_FUN(read_byte)
+
+DEFINE_RUNTIME_FUN(_read)
+DEPENDS_ON(read_byte)
+DEPENDS_ON(_open)
+  putstr("__read() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+  putstr("  : $((__i = 0))\n");
+  putstr("  while [ $__i -lt $__count ] ; do\n");
+  putstr("    read_byte __byte $__fd\n");
+  putstr("    if [ $__byte -lt 0 ] ; then\n");
+  putstr("      break\n");
+  putstr("    fi\n");
+  putstr("    : $((_$((__buf + __i)) = __byte))\n");
+  putstr("    : $((__i += 1))\n");
+  putstr("  done\n");
+  putstr("  : $(($1 = __i))\n");
+  putstr("}\n");
+END_RUNTIME_FUN(_read)
+
+DEFINE_RUNTIME_FUN(_write)
+DEPENDS_ON(_open)
+  putstr("__write() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+  putstr("  : $((__i = 0))\n");
+  putstr("  while [ $__i -lt $__count ] ; do\n");
+  putstr("    : $((__byte = _$((__buf+__i))))\n");
+  putstr("    printf \\\\$(($__byte/64))$(($__byte/8%8))$(($__byte%8)) >&$__fd\n");
+  putstr("    : $((__i += 1))\n");
+  putstr("  done\n");
+  putstr("  : $(($1 = __count))\n");
+  putstr("}\n");
+END_RUNTIME_FUN(_write)
+
+// exec $fd<&- does not work as expected, and we don't want to use eval so we
+// instead have a case statement that calls the appropriate exec command to open
+// and close file descriptors.
+DEFINE_RUNTIME_FUN(fopen)
+DEPENDS_ON(alloc)
+DEPENDS_ON(_open)
+  putstr("# Open the file and return a FILE* for the file.\n");
+  putstr("# The FILE structure contains the file descriptor.\n");
+  putstr("_fopen() { # $2: File name, $3: Mode\n");
+  putstr("  __open __fd $2 $((_$3 == 119)) 511\n");
+  putstr("  alloc 1                   # Allocate FILE structure\n");
+  putstr("  : $(( _$__addr = __fd ))  # Save fd\n");
+  putstr("  : $(( $1 = __addr ))\n");
+  putstr("}\n");
+END_RUNTIME_FUN(fopen)
+
+DEFINE_RUNTIME_FUN(_close)
+DEPENDS_ON(_open)
+DEPENDS_ON(free)
+  putstr("__close() { # $2: fd\n");
+  putstr("  __fd=$2\n");
+  putstr("  __buf=$((_buffer_fd$__fd))   # Get buffer\n");
+  putstr("  _free __ $__buf              # Release buffer\n");
+  putstr("  : $((__state_fd$__fd = -1))  # Mark the fd as closed\n");
+  putstr("  case $__fd in\n");
+  putstr("    0) exec 0<&- ;; 1) exec 1<&- ;; 2) exec 2<&- ;;\n");
+  putstr("    3) exec 3<&- ;; 4) exec 4<&- ;; 5) exec 5<&- ;;\n");
+  putstr("    6) exec 6<&- ;; 7) exec 7<&- ;; 8) exec 8<&- ;;\n");
+  putstr("    9) exec 9<&- ;;\n");
+  putstr("  esac\n");
+  putstr("  : $(($1 = 0))\n");
+  putstr("}\n");
+END_RUNTIME_FUN(_close)
+
+DEFINE_RUNTIME_FUN(fclose)
+DEPENDS_ON(free)
+DEPENDS_ON(_close)
+  putstr("_fclose() { # $2: file\n");
+  putstr("  __file=$2\n");
+  putstr("  __fd=$((_$__file))  # Get fd\n");
+  putstr("  _free __ $__file    # Release FILE structure\n");
+  putstr("  __close $1 $__fd\n");
+  putstr("}\n");
+END_RUNTIME_FUN(fclose)
+
+DEFINE_RUNTIME_FUN(fgetc)
+DEPENDS_ON(read_byte)
+  putstr("_fgetc() { # $2: file\n");
+  putstr("  __file=$2\n");
+  putstr("  __fd=$((_$__file))\n");
+  putstr("  read_byte $1 $__fd\n");
   putstr("}\n");
 END_RUNTIME_FUN(fgetc)
 
@@ -825,6 +889,11 @@ void produce_runtime() {
   if (runtime_use_fopen)      runtime_fopen();
   if (runtime_use_fclose)     runtime_fclose();
   if (runtime_use_fgetc)      runtime_fgetc();
+  if (runtime_use__exit)      runtime__exit();
+  if (runtime_use__read)      runtime__read();
+  if (runtime_use__write)     runtime__write();
+  if (runtime_use__open)      runtime__open();
+  if (runtime_use__close)     runtime__close();
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
 }
