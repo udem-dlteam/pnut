@@ -522,6 +522,12 @@ int FGETC_ID;
 int PUTSTR_ID;
 int PUTS_ID;
 
+int _EXIT_ID;
+int _READ_ID;
+int _WRITE_ID;
+int _OPEN_ID;
+int _CLOSE_ID;
+
 void get_tok_macro() {
   expand_macro = false;
   get_tok();
@@ -854,8 +860,14 @@ void init_ident_table() {
   FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
   FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
 
-  PUTSTR_ID = init_ident(IDENTIFIER, "putstr");
-  PUTS_ID = init_ident(IDENTIFIER, "puts");
+  PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
+  PUTS_ID    = init_ident(IDENTIFIER, "puts");
+
+  _EXIT_ID   = init_ident(IDENTIFIER, "_exit");
+  _READ_ID   = init_ident(IDENTIFIER, "_read");
+  _WRITE_ID  = init_ident(IDENTIFIER, "_write");
+  _OPEN_ID   = init_ident(IDENTIFIER, "_open");
+  _CLOSE_ID  = init_ident(IDENTIFIER, "_close");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.

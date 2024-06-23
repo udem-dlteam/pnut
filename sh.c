@@ -1555,6 +1555,11 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
   else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
   else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
+  else if (name_id == _EXIT_ID)   { runtime_use__exit = true; }
+  else if (name_id == _READ_ID)   { runtime_use__read = true; }
+  else if (name_id == _WRITE_ID)  { runtime_use__write = true; }
+  else if (name_id == _OPEN_ID)   { runtime_use__open = true; }
+  else if (name_id == _CLOSE_ID)  { runtime_use__close = true; }
 
   return string_concat5(
     function_name(get_val(name)),
