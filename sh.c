@@ -1208,7 +1208,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
     } else if (op == '[') { // array indexing
       sub1 = comp_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
-      return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))")));
+      return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))")));
     } else if (op == ARROW) { // member access is implemented like array access
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
       sub2 = struct_member_var(get_child(node, 1));
@@ -1370,14 +1370,14 @@ text comp_lvalue_address(ast node) {
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
-    return string_concat3(sub1, wrap_char('+'), sub2);
+    return string_concat3(sub1, wrap_str(" + "), sub2);
   } else if (op == '*') {
     return comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
   } else if (op == ARROW) {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child(node, 1));
     return string_concat3(sub1, wrap_str(" + "), sub2);
-    return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+    return string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))"));
   } else if (op == CAST) {
     return comp_lvalue_address(get_child(node, 1));
   } else {
@@ -1397,7 +1397,7 @@ text comp_lvalue(ast node) {
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
-    return string_concat5(wrap_str("_$(("), sub1, wrap_char('+'), sub2, wrap_str("))"));
+    return string_concat5(wrap_str("_$(("), sub1, wrap_str(" + "), sub2, wrap_str("))"));
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
