@@ -256,6 +256,7 @@ int characters_useds[16];       /* Characters used in string literals. Bitfield,
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
 bool main_returns;              /* If the main function returns a value */
+bool top_level_stmt = true;     /* If the current statement is at the top level */
 
 // Internal identifier node types. These
 int IDENTIFIER_INTERNAL = 600;
@@ -1045,6 +1046,21 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
+void comp_defstr(ast ident, int string_pool_str) {
+  if (top_level_stmt) {
+    // If defstr is used at the top level, it needs to be included beforehand
+    runtime_defstr();
+  } else {
+    runtime_use_defstr = true;
+  }
+
+  append_glo_decl(string_concat5( wrap_str("defstr ")
+                                , format_special_var(ident, false)
+                                , wrap_str(" \"")
+                                , escape_text(wrap_str_pool(string_pool_str), false)
+                                , wrap_char('\"')));
+}
+
 int RVALUE_CTX_BASE = 0;
 int RVALUE_CTX_ARITH_EXPANSION = 1; /* Like base context, except that we're already in $(( ... )) */
 int RVALUE_CTX_TEST = 2;
@@ -1292,12 +1308,7 @@ text comp_rvalue(ast node, int context) {
   fun_call_decl_start = glo_decl_ix;
 
   while (literals_inits != 0) {
-    runtime_use_defstr = true;
-    append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
-                                  , wrap_str(" \"")
-                                  , escape_text(wrap_str_pool(get_child(get_child(literals_inits, 0), 1)), false)
-                                  , wrap_char('\"')));
+    comp_defstr(get_child(get_child(literals_inits, 0), 0), get_child(get_child(literals_inits, 0), 1));
     literals_inits = get_child(literals_inits, 1);
   }
 
@@ -1948,6 +1959,8 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == 0) return; // ignore forward declarations
 
+  top_level_stmt = false;
+
   assert_vars_are_safe(params);
   assert_vars_are_safe(local_vars);
 
@@ -2046,12 +2059,7 @@ text comp_constant(ast node) {
   } else if (op == STRING) {
     runtime_use_defstr = true;
     new_ident = fresh_string_ident();
-    append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , format_special_var(new_ident, false)
-                                  , wrap_str(" \"")
-                                  , escape_text(wrap_str_pool(get_val(node)), false)
-                                  , wrap_char('\"')));
-
+    comp_defstr(new_ident, get_val(node));
     return format_special_var(new_ident, false);
   } else if ((op == '-') AND get_nb_children(node) == 1) {
     return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
@@ -2210,6 +2218,8 @@ void comp_glo_decl(ast node) {
   ast variable;
   int op = get_op(node);
   fun_gensym_ix = 0;
+
+  top_level_stmt = true;
 
   if (op == '=') { /* Assignments */
    comp_assignment(get_child(node, 0), get_child(node, 1));
