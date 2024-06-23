@@ -2765,7 +2765,7 @@ ast parse_compound_statement() {
 #include "debug.c"
 #endif
 
-int main(int argc, char **args) {
+int main(int argc, char **argv) {
 
   int i;
   ast decl;
@@ -2775,19 +2775,19 @@ int main(int argc, char **args) {
   init_pnut_macros();
 
   for (i = 1; i < argc; i += 1) {
-    if (args[i][0] == '-') {
-      if (args[i][1] == 'D') {
-        init_ident(MACRO, args[i] + 2);
+    if (argv[i][0] == '-') {
+      if (argv[i][1] == 'D') {
+        init_ident(MACRO, argv[i] + 2);
       } else {
         putstr("Option ");
-        putstr(args[i]);
+        putstr(argv[i]);
         putchar('\n');
         fatal_error("unknown option");
       }
     } else {
       // Options that don't start with '-' are file names
 #ifdef SUPPORT_INCLUDE
-      include_file(args[i]);
+      include_file(argv[i]);
 #else
       fatal_error("input file not supported. Pnut expects the input from stdin.");
 #endif
@@ -2796,7 +2796,7 @@ int main(int argc, char **args) {
 
 #ifdef SUPPORT_INCLUDE
   if (fp == 0) {
-    putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
+    putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
 #endif
