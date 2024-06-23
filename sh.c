@@ -1090,7 +1090,7 @@ text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, te
     if (parens_otherwise) return string_concat3(wrap_char('('), code, wrap_char(')'));
     else return code;
   } else if (context == RVALUE_CTX_TEST) {
-    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(("), code, wrap_str(")) -ne 0 ]")));
+    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ $(("), code, wrap_str(")) != 0 ]")));
   } else {
     return string_concat3(wrap_str("$(("), code, wrap_str("))"));
   }
@@ -1102,7 +1102,7 @@ text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, te
 */
 text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) {
   if (context == RVALUE_CTX_TEST) {
-    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ "), code, wrap_str(" -ne 0 ]")));
+    return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str("[ "), code, wrap_str(" != 0 ]")));
   } else {
     return code;
   }

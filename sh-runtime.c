@@ -427,7 +427,7 @@ DEPENDS_ON(int_to_char)
   putstr("  __res=\"\"\n");
   putstr("  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter\n");
   putstr("  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length\n");
-  putstr("  while [ $((_$__addr)) -ne $__delim ] && [ $__max_len -gt $__len ] ; do\n");
+  putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
   putstr("    __char=$((_$__addr))\n");
   putstr("    __addr=$((__addr + 1))\n");
   putstr("    __len=$((__len + 1))\n");
@@ -521,7 +521,7 @@ DEPENDS_ON(putchar)
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
-  putstr("  while [ $((_$__addr)) -ne 0 ]; do\n");
+  putstr("  while [ $((_$__addr)) != 0 ]; do\n");
 #ifdef RT_INLINE_PUTCHAR
   putstr("    printf \\\\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))\n");
 #else
@@ -543,7 +543,7 @@ DEPENDS_ON(int_to_char)
   putstr("  __acc=\"\"\n");
   putstr("  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter\n");
   putstr("  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length\n");
-  putstr("  while [ $((_$__addr)) -ne $__delim ] && [ $__max_len -gt $__len ] ; do\n");
+  putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
   putstr("    __char=$((_$__addr))\n");
   putstr("    __addr=$((__addr + 1))\n");
   putstr("    __len=$((__len + 1))\n");
@@ -568,7 +568,7 @@ DEPENDS_ON(int_to_char)
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __fmt_ptr=$1; shift\n");
   putstr("  __mod=0\n");
-  putstr("  while [ \"$((_$__fmt_ptr))\" -ne 0 ] ; do\n");
+  putstr("  while [ \"$((_$__fmt_ptr))\" != 0 ] ; do\n");
   putstr("    __head=$((_$__fmt_ptr))\n");
   putstr("    __fmt_ptr=$((__fmt_ptr + 1))\n");
   putstr("    if [ $__mod -eq 1 ] ; then\n");
