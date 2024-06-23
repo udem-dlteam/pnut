@@ -42,7 +42,7 @@ void rex_prefix(int reg1, int reg2) {
     //  0x04: REX.R: 1-bit extension for first register encoded for mod_rm
     //  0x02: REX.X: 1-bit extension for SIB index encoded for mod_rm (Not used)
     //  0x01: REX.B: 1-bit extension for second register encoded for mod_rm
-    emit_i8(0x48 + 0x04 * (reg1 > 7) + 0x01 * (reg2 > 7));
+    emit_i8(0x48 + 0x04 * (reg1 >= R8) + 0x01 * (reg2 >= R8));
   }
 }
 
@@ -466,7 +466,7 @@ void os_exit() {
 
 void os_fopen() {
   push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, AX);    // mov ebx, ax | file name
+  mov_reg_reg(BX, AX);    // mov ebx, eax | file name
   mov_reg_imm(AX, 5);     // mov eax, 5 == SYS_OPEN
   mov_reg_imm(CX, 0);     // mov ecx, 0 | flags
   mov_reg_imm(DX, 0);     // mov edx, 0 | mode
@@ -513,6 +513,52 @@ void os_allocate_memory(int size) {
   pop_reg(BX);            // restore address of global variables table
 }
 
+void os_exit() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov  ebx, reg_X  # exit status
+  mov_reg_imm(AX, 1);     // mov  eax, 1      # 1 = SYS_EXIT
+  int_i8(0x80);           // int  0x80        # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_read() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
+  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # buffer
+  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # count
+  mov_reg_imm(AX, 3);     // mov eax, 3      # 3 = SYS_READ
+  int_i8(0x80);           // int  0x80       # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_write() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
+  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # buffer
+  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # count
+  mov_reg_imm(AX, 4);     // mov eax, 4      # 4 = SYS_READ
+  int_i8(0x80);           // int  0x80       # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_open() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # filename
+  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # flags
+  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # mode
+  mov_reg_imm(AX, 5);     // mov eax, 5      # 5 = SYS_OPEN
+  int_i8(0x80);           // int  0x80       # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_close() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov  ebx, reg_X  # file descriptor
+  mov_reg_imm(AX, 6);     // mov  eax, 6      # 6 = SYS_CLOSE
+  int_i8(0x80);           // int  0x80        # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
 #endif
 
 // For 64 bit linux.
@@ -545,13 +591,7 @@ void os_putchar() {
   pop_reg(AX);           // pop rax
 }
 
-void os_exit() {
-  mov_reg_reg(DI, AX);    // mov edi, eax
-  mov_reg_imm(AX, 60);    // mov eax, 60 == SYS_EXIT
-  emit_2_i8(0x0F, 0x05);  // system call 64 bit
-}
-
-void os_fopen(){
+void os_fopen() {
   mov_reg_reg(DI, AX);    // mov rdi, rax | file name
   mov_reg_imm(SI, 0);     // mov rsi, 0 | flags
   mov_reg_imm(DX, 0);     // mov rdx, 0 | mode
@@ -559,20 +599,20 @@ void os_fopen(){
   emit_2_i8(0x0F, 0x05);  // system call 64 bit (file descriptor is in rax)
 }
 
-void os_fclose(){
+void os_fclose() {
   mov_reg_reg(DI, reg_X); // mov  rdi, file descriptor
   mov_reg_imm(AX, 3);     // mov rax, 3 == SYS_CLOSE
   emit_2_i8(0x0F, 0x05);  // system call 64 bit
 }
 
-void os_fgetc(){
+void os_fgetc() {
   int lbl = alloc_label(); // label for EOF
   mov_reg_reg(DI, reg_X);  // mov  edi, file descriptor
   mov_reg_imm(AX, 0);      // mov  eax, 0
   push_reg(AX);            // push eax      # buffer to read byte
   mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
   mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
-  mov_reg_imm(AX, 0);      // mov  rax, 1   # SYS_READ
+  mov_reg_imm(AX, 0);      // mov  rax, 0   # SYS_READ
   emit_2_i8(0x0F, 0x05);   // system call 64 bit
   xor_reg_reg(DX, DX);     // rdx = 0
   cmp_reg_reg(AX, DX);     // cmp  eax, rdx
@@ -591,6 +631,36 @@ void os_allocate_memory(int size) {
   mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
   mov_reg_imm(AX, 9);     // mov rax, 9 | SYS_MMAP
   emit_2_i8(0x0F, 0x05);  // system call 64 bit
+}
+
+void os_exit() {
+  mov_reg_reg(DI, reg_X); // mov edi, reg_X
+  mov_reg_imm(AX, 60);    // mov eax, 60  # 60 = SYS_EXIT
+  emit_2_i8(0x0F, 0x05);  // system call 64 bit
+}
+
+void os_read() {
+  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
+  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
+  mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # count
+  mov_reg_imm(AX, 0);      // mov  rax, 0      # 0 = SYS_READ
+  emit_2_i8(0x0F, 0x05);   // system call 64 bit
+}
+
+void os_write() {
+  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
+  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
+  mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # count
+  mov_reg_imm(AX, 1);      // mov  rax, 1      # 1 = SYS_WRITE
+  emit_2_i8(0x0F, 0x05);   // system call 64 bit
+}
+
+void os_open() {
+  /*TODO*/
+}
+
+void os_close() {
+  /*TODO*/
 }
 
 #endif

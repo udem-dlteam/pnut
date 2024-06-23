@@ -2,23 +2,20 @@
 
 int main(int argc, char **argv); /* defined in user program */
 
-#ifdef PNUT_CC
-
-/* these are builtin operations of pnut
-
-void _exit(int status);
-int _read(int fd, void *buf, int count);
-int _write(int fd, void *buf, int count);
-int _open(const char *pathname, int flags, int mode);
-int _close(int fd);
-
-*/
-
-#else
+#ifndef PNUT_CC
 
 #ifdef i386
 
 /* This implementation assumes the OS is linux */
+
+void exit(int status) {
+  __asm__ (
+    "mov   $1, %%eax\n"  /* 1 = SYS_EXIT */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : : "b" (status)
+  );
+  while (1) ; /* avoid noreturn warning */
+}
 
 void _start() {
   int argc;
@@ -28,19 +25,10 @@ void _start() {
     "lea  8(%%ebp), %1\n"  /* get argv */
     : "=a" (argc), "=d" (argv)
   );
-  _exit(main(argc, argv));
+  exit(main(argc, argv));
 }
 
-void _exit(int status) {
-  __asm__ (
-    "mov   $1, %%eax\n"  /* 1 = SYS_EXIT */
-    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
-    : : "b" (status)
-  );
-  while (1) ; /* avoid noreturn warning */
-}
-
-int _read(int fd, void *buf, int count) {
+int read(int fd, void *buf, int count) {
   int result;
   __asm__ (
     "mov   $3, %%eax\n"  /* 3 = SYS_READ */
@@ -50,7 +38,7 @@ int _read(int fd, void *buf, int count) {
   return result;
 }
 
-int _write(int fd, void *buf, int count) {
+int write(int fd, void *buf, int count) {
   int result;
   __asm__ (
     "mov   $4, %%eax\n"  /* 4 = SYS_WRITE */
@@ -60,7 +48,7 @@ int _write(int fd, void *buf, int count) {
   return result;
 }
 
-int _open(const char *pathname, int flags, int mode) {
+int open(const char *pathname, int flags, int mode) {
   int result;
   __asm__ (
     "mov   $5, %%eax\n"  /* 5 = SYS_OPEN */
@@ -70,7 +58,7 @@ int _open(const char *pathname, int flags, int mode) {
   return result;
 }
 
-int _close(int fd) {
+int close(int fd) {
   int result;
   __asm__ (
     "mov   $5, %%eax\n"  /* 6 = SYS_CLOSE */

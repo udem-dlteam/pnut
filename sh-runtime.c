@@ -466,12 +466,6 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("}\n");
 END_RUNTIME_FUN(defstr)
 
-DEFINE_RUNTIME_FUN(_exit)
-  putstr("__exit() { # $2: exit status\n");
-  putstr("  exit $2\n");
-  putstr("}\n");
-END_RUNTIME_FUN(_exit)
-
 DEFINE_RUNTIME_FUN(exit)
   putstr("_exit() { # $2: exit status\n");
   putstr("  exit $2\n");
@@ -656,7 +650,7 @@ DEPENDS_ON(int_to_char)
   putstr("}\n");
 END_RUNTIME_FUN(printf)
 
-DEFINE_RUNTIME_FUN(_open)
+DEFINE_RUNTIME_FUN(open)
 DEPENDS_ON(alloc)
 DEPENDS_ON(pack_string)
   putstr("__state_fd0=0;\n");
@@ -675,7 +669,7 @@ DEPENDS_ON(pack_string)
   putstr("__state_fd8=-1\n");
   putstr("__state_fd9=-1\n");
   putstr("\n");
-  putstr("__open() { # $2: filename, $3: flags, $4: mode\n");
+  putstr("_open() { # $2: filename, $3: flags, $4: mode\n");
   putstr("  # Get available fd\n");
   putstr("  __fd=0\n");
   putstr("  while [ $__fd -lt 10 ]; do\n");
@@ -725,7 +719,7 @@ DEPENDS_ON(pack_string)
   putstr("  fi\n");
   putstr("  : $(($1 = __fd))\n");
   putstr("}\n");
-END_RUNTIME_FUN(_open)
+END_RUNTIME_FUN(open)
 
 DEFINE_RUNTIME_FUN(read_byte)
 DEPENDS_ON(alloc)
@@ -795,10 +789,10 @@ DEPENDS_ON(char_to_int)
   putstr("}\n");
 END_RUNTIME_FUN(read_byte)
 
-DEFINE_RUNTIME_FUN(_read)
+DEFINE_RUNTIME_FUN(read)
 DEPENDS_ON(read_byte)
-DEPENDS_ON(_open)
-  putstr("__read() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+DEPENDS_ON(open)
+  putstr("_read() { : $((__fd = $2, __buf = $3, __count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    read_byte __byte $__fd\n");
@@ -810,11 +804,11 @@ DEPENDS_ON(_open)
   putstr("  done\n");
   putstr("  : $(($1 = __i))\n");
   putstr("}\n");
-END_RUNTIME_FUN(_read)
+END_RUNTIME_FUN(read)
 
-DEFINE_RUNTIME_FUN(_write)
-DEPENDS_ON(_open)
-  putstr("__write() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+DEFINE_RUNTIME_FUN(write)
+DEPENDS_ON(open)
+  putstr("_write() { : $((__fd = $2, __buf = $3, __count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    : $((__byte = _$((__buf+__i))))\n");
@@ -823,28 +817,28 @@ DEPENDS_ON(_open)
   putstr("  done\n");
   putstr("  : $(($1 = __count))\n");
   putstr("}\n");
-END_RUNTIME_FUN(_write)
+END_RUNTIME_FUN(write)
 
 // exec $fd<&- does not work as expected, and we don't want to use eval so we
 // instead have a case statement that calls the appropriate exec command to open
 // and close file descriptors.
 DEFINE_RUNTIME_FUN(fopen)
 DEPENDS_ON(alloc)
-DEPENDS_ON(_open)
+DEPENDS_ON(open)
   putstr("# Open the file and return a FILE* for the file.\n");
   putstr("# The FILE structure contains the file descriptor.\n");
   putstr("_fopen() { # $2: File name, $3: Mode\n");
-  putstr("  __open __fd $2 $((_$3 == 119)) 511\n");
+  putstr("  _open __fd $2 $((_$3 == 119)) 511\n");
   putstr("  alloc 1                   # Allocate FILE structure\n");
   putstr("  : $(( _$__addr = __fd ))  # Save fd\n");
   putstr("  : $(( $1 = __addr ))\n");
   putstr("}\n");
 END_RUNTIME_FUN(fopen)
 
-DEFINE_RUNTIME_FUN(_close)
-DEPENDS_ON(_open)
+DEFINE_RUNTIME_FUN(close)
+DEPENDS_ON(open)
 DEPENDS_ON(free)
-  putstr("__close() { # $2: fd\n");
+  putstr("_close() { # $2: fd\n");
   putstr("  __fd=$2\n");
   putstr("  __buf=$((__buffer_fd$__fd))  # Get buffer\n");
   putstr("  _free __ $__buf              # Release buffer\n");
@@ -857,16 +851,16 @@ DEPENDS_ON(free)
   putstr("  esac\n");
   putstr("  : $(($1 = 0))\n");
   putstr("}\n");
-END_RUNTIME_FUN(_close)
+END_RUNTIME_FUN(close)
 
 DEFINE_RUNTIME_FUN(fclose)
 DEPENDS_ON(free)
-DEPENDS_ON(_close)
+DEPENDS_ON(close)
   putstr("_fclose() { # $2: file\n");
   putstr("  __file=$2\n");
   putstr("  __fd=$((_$__file))  # Get fd\n");
   putstr("  _free __ $__file    # Release FILE structure\n");
-  putstr("  __close $1 $__fd\n");
+  putstr("  _close $1 $__fd\n");
   putstr("}\n");
 END_RUNTIME_FUN(fclose)
 
@@ -891,11 +885,10 @@ void produce_runtime() {
   if (runtime_use_fopen)      runtime_fopen();
   if (runtime_use_fclose)     runtime_fclose();
   if (runtime_use_fgetc)      runtime_fgetc();
-  if (runtime_use__exit)      runtime__exit();
-  if (runtime_use__read)      runtime__read();
-  if (runtime_use__write)     runtime__write();
-  if (runtime_use__open)      runtime__open();
-  if (runtime_use__close)     runtime__close();
+  if (runtime_use_read)       runtime_read();
+  if (runtime_use_write)      runtime_write();
+  if (runtime_use_open)       runtime_open();
+  if (runtime_use_close)      runtime_close();
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
 }
