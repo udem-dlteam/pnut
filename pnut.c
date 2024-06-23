@@ -2050,6 +2050,11 @@ ast parse_definition(int local) {
     // it was defined in (global or in function).
     get_tok();
     type = parse_type();
+    stars = parse_stars();
+    if (stars != 0) {
+      type = clone_ast(type);
+      set_val(type, stars);
+    }
     if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
 
 #ifdef sh
