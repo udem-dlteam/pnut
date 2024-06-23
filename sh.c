@@ -435,7 +435,11 @@ text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
         res = wrap_int(get_child(var, 1));
         if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
       } else {
-        res = wrap_str_pool(get_val(get_val(ident)));
+        if (get_val(ident) == ARGV_ID) {
+          res = wrap_str("argv_"); //
+        } else {
+          res = wrap_str_pool(get_val(get_val(ident)));
+        }
       }
     } else {
       res = global_var(get_val(ident));
@@ -574,27 +578,33 @@ int variable_is_constant_param(ast local_var) {
   type.
 */
 
-void assert_var_decl_is_safe(ast variable) { /* Helper function for assert_idents_are_safe */
+void assert_var_decl_is_safe(ast variable, bool local) { /* Helper function for assert_idents_are_safe */
   ast ident_tok = get_child(variable, 0);
   char* name = string_pool + get_val(ident_tok);
   ast type = get_child(variable, 1);
   if (name[0] == '_'
-    || (name[0] != '\0' && name[1] == '_' && name[2] == '\0') // Check for a_ variables that could conflict with character constants
-    || ident_tok == ARGV_ID
-    || ident_tok == IFS_ID) {
+  || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
     printf("%s ", name);
-    fatal_error("variable name is invalid. It can't start or end with '_', be 'IFS' or 'argv'.");
+    fatal_error("variable name is invalid. It can't start or end with '_'.");
+  }
+
+  // IFS is a special shell variable that's overwritten by certain.
+  // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
+  // This check only applies to local variables because globals are prefixed with _.
+  if (local && (ident_tok == ARGV__ID || ident_tok == IFS_ID)) {
+    printf("%s ", name);
+    fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
   }
 
   // Local variables don't correspond to memory locations, and can't store
   // more than 1 number/pointer.
-  if (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
+  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0))) {
     printf("%s ", name);
     fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
   }
 }
 
-void assert_vars_are_safe(ast lst) {
+void assert_vars_are_safe(ast lst, bool local) {
   ast decls;
   ast variables;
   ast variable;
@@ -604,11 +614,11 @@ void assert_vars_are_safe(ast lst) {
       variables = get_child(decls, 0);
       while(variables != 0) { /* Loop through the list of variables */
         variable = get_child(variables, 0);
-        assert_var_decl_is_safe(variable); /* Check the variables */
+        assert_var_decl_is_safe(variable, local); /* Check the variables */
         variables = get_child(variables, 1);
       }
     } else{
-      assert_var_decl_is_safe(get_child(lst, 0)); /* Check the variable */
+      assert_var_decl_is_safe(get_child(lst, 0), local); /* Check the variable */
     }
     lst = get_child(lst, 1);
   }
@@ -1949,8 +1959,8 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == 0) return; // ignore forward declarations
 
-  assert_vars_are_safe(params);
-  assert_vars_are_safe(local_vars);
+  assert_vars_are_safe(params, true);
+  assert_vars_are_safe(local_vars, true);
 
   // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
   if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
@@ -2071,6 +2081,8 @@ void comp_glo_var_decl(ast node) {
 
   // TODO: Add enum/struct/union to env if it's not already there
   // handle_enum_struct_union_type_decl(type);
+
+  assert_var_decl_is_safe(node, false);
 
   // Arrays of structs and struct value types are not supported for now.
   // When we have type information on the local and global variables, we'll
