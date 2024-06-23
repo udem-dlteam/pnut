@@ -660,11 +660,11 @@ DEFINE_RUNTIME_FUN(_open)
 DEPENDS_ON(alloc)
 DEPENDS_ON(pack_string)
   putstr("__state_fd0=0;\n");
-  putstr("alloc 1000                     # Allocate buffer\n");
-  putstr(": $(( _$__addr = 0 ))          # Init buffer to \"\"\n");
-  putstr(": $(( _buffer_fd0 = __addr ))  # Save buffer address\n");
-  putstr(": $(( _cursor_fd0 = 0 ))       # Make buffer empty\n");
-  putstr(": $(( _buflen_fd0 = 1000 ))    # Init buffer length\n");
+  putstr("alloc 1000               # Allocate buffer\n");
+  putstr(": $(( _$__addr = 0 ))    # Init buffer to \"\"\n");
+  putstr(": __buffer_fd0 = __addr  # Save buffer address\n");
+  putstr(": __cursor_fd0 = 0       # Make buffer empty\n");
+  putstr(": __buflen_fd0 = 1000    # Init buffer length\n");
   putstr("__state_fd1=1\n");
   putstr("__state_fd2=1\n");
   putstr("__state_fd3=-1\n");
@@ -691,12 +691,12 @@ DEPENDS_ON(pack_string)
   putstr("    # Because the file must be read line-by-line, and string\n");
   putstr("    # values can't be assigned to dynamic variables, each line\n");
   putstr("    # is read and then unpacked in the buffer.\n");
-  putstr("    alloc 1000                         # Allocate buffer\n");
-  putstr("    : $(( _$__addr = 0 ))              # Init buffer to \"\"\n");
-  putstr("    : $(( _buffer_fd$__fd = __addr ))  # Save buffer address\n");
-  putstr("    : $(( _cursor_fd$__fd = 0 ))       # Make buffer empty\n");
-  putstr("    : $(( _buflen_fd$__fd = 1000 ))    # Init buffer length\n");
-  putstr("    : $((__state_fd$__fd = $3))        # Mark the fd as opened\n");
+  putstr("    alloc 1000                          # Allocate buffer\n");
+  putstr("    : $(( _$__addr = 0 ))               # Init buffer to \"\"\n");
+  putstr("    : $(( __buffer_fd$__fd = __addr ))  # Save buffer address\n");
+  putstr("    : $(( __cursor_fd$__fd = 0 ))       # Make buffer empty\n");
+  putstr("    : $(( __buflen_fd$__fd = 1000 ))    # Init buffer length\n");
+  putstr("    : $((__state_fd$__fd = $3))         # Mark the fd as opened\n");
   putstr("    pack_string $2\n");
   putstr("    if [ $3 = 0 ] ; then\n");
   putstr("      case $__fd in\n");
@@ -712,13 +712,15 @@ DEPENDS_ON(pack_string)
   putstr("        6) exec 6> $__res ;; 7) exec 7> $__res ;; 8) exec 8> $__res ;;\n");
   putstr("        9) exec 9> $__res ;;\n");
   putstr("      esac\n");
-  putstr("    else\n");
+  putstr("    elif [ $3 = 2 ] ; then\n");
   putstr("      case $__fd in\n");
   putstr("        0) exec 0>> $__res ;; 1) exec 1>> $__res ;; 2) exec 2>> $__res ;;\n");
   putstr("        3) exec 3>> $__res ;; 4) exec 4>> $__res ;; 5) exec 5>> $__res ;;\n");
   putstr("        6) exec 6>> $__res ;; 7) exec 7>> $__res ;; 8) exec 8>> $__res ;;\n");
   putstr("        9) exec 9>> $__res ;;\n");
   putstr("      esac\n");
+  putstr("    else\n");
+  putstr("      echo \"Unknow file mode\" ; exit 1\n");
   putstr("    fi\n");
   putstr("  fi\n");
   putstr("  : $(($1 = __fd))\n");
@@ -737,19 +739,19 @@ DEPENDS_ON(char_to_int)
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
   extract_first_char("  ", "__fgetc_buf", "_$__buffer")
   putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
-  putstr("    : $((__buffer += 1))                 # Move to the next buffer position\n");
+  putstr("    : $((__buffer += 1))              # Move to the next buffer position\n");
   putstr("  done\n");
   putstr("\n");
   putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
-  putstr("    : $(( _$__buffer = 10))              # Line ends with newline\n");
+  putstr("    : $(( _$__buffer = 10))           # Line ends with newline\n");
   putstr("    : $((__buffer += 1))\n");
   putstr("  fi\n");
-  putstr("  : $(( _$__buffer = 0))                 # Then \\0\n");
+  putstr("  : $(( _$__buffer = 0))              # Then \\0\n");
   putstr("}\n");
   putstr("\n");
   putstr("refill_buffer() { # $1: fd\n");
   putstr("  __fd=$1\n");
-  putstr("  __buffer=$((_buffer_fd$__fd))\n");
+  putstr("  __buffer=$((__buffer_fd$__fd))\n");
   putstr("\n");
   putstr("  IFS=\n");
   putstr("  if read -r __temp_buf <&$__fd ; then  # read next line into $__temp_buf\n");
@@ -759,15 +761,15 @@ DEPENDS_ON(char_to_int)
   putstr("  fi\n");
   putstr("\n");
   putstr("  # Check that the buffer is large enough to unpack the line\n");
-  putstr("  __buflen=$((_buflen_fd$__fd - 2)) # Minus 2 to account for newline and \\0\n");
+  putstr("  __buflen=$((__buflen_fd$__fd - 2)) # Minus 2 to account for newline and \\0\n");
   putstr("  __len=${#__temp_buf}\n");
   putstr("  if [ $__len -gt $__buflen ]; then\n");
   putstr("    # Free buffer and reallocate a new one double the line size\n");
   putstr("    __buflen=$((__len * 2))\n");
   putstr("    _free __ $__buffer\n");
   putstr("    alloc $__buflen\n");
-  putstr("    : $((_buffer_fd$__fd = __addr))\n");
-  putstr("    : $((_buflen_fd$__fd = __buflen))\n");
+  putstr("    : $((__buffer_fd$__fd = __addr))\n");
+  putstr("    : $((__buflen_fd$__fd = __buflen))\n");
   putstr("    __buffer=$__addr\n");
   putstr("  fi\n");
   putstr("  unpack_line \"$__temp_buf\" $__buffer $__ends_with_eof\n");
@@ -775,21 +777,21 @@ DEPENDS_ON(char_to_int)
   putstr("\n");
   putstr("read_byte() { # $2: fd\n");
   putstr("  __fd=$2\n");
-  putstr("  : $((__buffer=_buffer_fd$__fd))\n");
-  putstr("  : $((__cursor=_cursor_fd$__fd))\n");
+  putstr("  : $((__buffer=__buffer_fd$__fd))\n");
+  putstr("  : $((__cursor=__cursor_fd$__fd))\n");
   putstr("  # The cursor is at the end of the buffer, we need to read the next line\n");
   putstr("  if [ $((_$((__buffer + __cursor)))) -eq 0 ]; then\n");
   putstr("    # Buffer has been read completely, read next line\n");
   putstr("    refill_buffer $__fd\n");
   putstr("    __cursor=0 # Reset cursor and reload buffer\n");
-  putstr("    : $((__buffer=_buffer_fd$__fd))\n");
+  putstr("    : $((__buffer=__buffer_fd$__fd))\n");
   putstr("    if [ $((_$((__buffer + __cursor)))) -eq 0 ]; then\n");
   putstr("      : $(($1 = -1)) # EOF\n");
   putstr("      return\n");
   putstr("    fi\n");
   putstr("  fi\n");
   putstr("  : $(($1 = _$((__buffer + __cursor))))\n");
-  putstr("  : $((_cursor_fd$__fd = __cursor + 1))  # Increment cursor\n");
+  putstr("  : $((__cursor_fd$__fd = __cursor + 1))  # Increment cursor\n");
   putstr("}\n");
 END_RUNTIME_FUN(read_byte)
 
@@ -844,7 +846,7 @@ DEPENDS_ON(_open)
 DEPENDS_ON(free)
   putstr("__close() { # $2: fd\n");
   putstr("  __fd=$2\n");
-  putstr("  __buf=$((_buffer_fd$__fd))   # Get buffer\n");
+  putstr("  __buf=$((__buffer_fd$__fd))  # Get buffer\n");
   putstr("  _free __ $__buf              # Release buffer\n");
   putstr("  : $((__state_fd$__fd = -1))  # Mark the fd as closed\n");
   putstr("  case $__fd in\n");
