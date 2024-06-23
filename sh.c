@@ -1875,8 +1875,13 @@ void mark_mutable_variables_statement(ast node) {
     if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
     if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
     if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
-  } else if (op == BREAK_KW OR op == CONTINUE_KW) {
+  } else if (op == SWITCH_KW) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
+  } else if (op == BREAK_KW OR op == CONTINUE_KW OR op == GOTO_KW) {
     /* Do nothing */
+  } else if (op == ':' || op == CASE_KW || op == DEFAULT_KW) {
+    mark_mutable_variables_statement(get_child(node, op == DEFAULT_KW ? 0 : 1));
   } else if (op == RETURN_KW) {
     if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
   } else if (op == '(') {
