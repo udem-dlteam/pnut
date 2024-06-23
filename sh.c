@@ -691,17 +691,17 @@ text restore_local_vars(int params_count) {
     if (variable_is_constant_param(local_var)) continue;
     local_var_pos += 1;
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    res = concatenate_strings_with(res, string_concat4(env_var_with_prefix(ident, true), wrap_str("=\"$"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("\";")), wrap_char(' '));
+    res = concatenate_strings_with(res, string_concat3(env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true)), wrap_str(", "));
   }
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
     local_var_pos += 1;
-    res = concatenate_strings_with(res, string_concat4(env_var_with_prefix(ident, true), wrap_str("=$"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_char(';')), wrap_char(' '));
+    res = concatenate_strings_with(res, string_concat3(env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true)), wrap_str(", "));
     counter -= 1;
   }
 
-  return string_concat3(wrap_str(": $((_tmp = $1)); "), res, wrap_str(" : $(($1 = _tmp))"));
+  return string_concat3(wrap_str(": $((_tmp = $1, "), res, wrap_str(", $1 = _tmp))"));
 }
 
 #else
