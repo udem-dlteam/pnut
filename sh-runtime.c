@@ -660,11 +660,11 @@ DEFINE_RUNTIME_FUN(_open)
 DEPENDS_ON(alloc)
 DEPENDS_ON(pack_string)
   putstr("__state_fd0=0;\n");
-  putstr("alloc 1000               # Allocate buffer\n");
-  putstr(": $(( _$__addr = 0 ))    # Init buffer to \"\"\n");
-  putstr(": __buffer_fd0 = __addr  # Save buffer address\n");
-  putstr(": __cursor_fd0 = 0       # Make buffer empty\n");
-  putstr(": __buflen_fd0 = 1000    # Init buffer length\n");
+  putstr("alloc 1000                    # Allocate buffer\n");
+  putstr(": $(( _$__addr = 0 ))         # Init buffer to \"\"\n");
+  putstr(": $((__buffer_fd0 = __addr))  # Save buffer address\n");
+  putstr(": $((__cursor_fd0 = 0))       # Make buffer empty\n");
+  putstr(": $((__buflen_fd0 = 1000))    # Init buffer length\n");
   putstr("__state_fd1=1\n");
   putstr("__state_fd2=1\n");
   putstr("__state_fd3=-1\n");
