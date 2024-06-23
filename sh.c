@@ -2249,7 +2249,7 @@ void prologue() {
   printf("set -e -u\n\n");
 
   #ifdef SUPPORT_ADDRESS_OF_OP
-  printf("defglo() { alloc 1; : $(($1 = __addr)) ; }\n\n");
+  printf("defglo() { _malloc 1; : $(($1 = __addr)) ; }\n");
   #endif
 }
 
