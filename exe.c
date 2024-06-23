@@ -236,6 +236,11 @@ void os_fclose();
 void os_fgetc();
 void os_allocate_memory(int size);
 
+void os_read();
+void os_write();
+void os_open();
+void os_close();
+
 void setup_proc_args();
 
 #define cgc int
@@ -252,6 +257,11 @@ int fclose_lbl;
 int fgetc_lbl;
 int malloc_lbl;
 int free_lbl;
+
+int read_lbl;
+int write_lbl;
+int open_lbl;
+int close_lbl;
 
 int cgc_fs = 0;
 // Function bindings that follows lexical scoping rules
@@ -1557,6 +1567,18 @@ void codegen_begin() {
   free_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, char_type);
 
+  read_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "_read"), read_lbl, int_type);
+
+  write_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "_write"), write_lbl, int_type);
+
+  open_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "_open"), open_lbl, int_type);
+
+  close_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "_close"), close_lbl, int_type);
+
   jump(setup_lbl);
 }
 
@@ -2076,9 +2098,10 @@ void codegen_end() {
   def_label(init_next_lbl);
   setup_proc_args(cgc_global_alloc);
   call(main_lbl);
-  os_exit();
+  os_exit(); //TODO: why is this needed? fallthrough should be sufficient
   push_reg(reg_X); // exit process with result of main
   push_reg(reg_X); // dummy return address (exit never needs it)
+
   // exit function
   def_label(exit_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
@@ -2123,6 +2146,36 @@ void codegen_end() {
   def_label(free_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   rt_free();
+  ret();
+
+  // _read function
+  def_label(_read_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
+  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  os_read();
+  ret();
+
+  // _write function
+  def_label(_write_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
+  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  os_write();
+  ret();
+
+  // _open function
+  def_label(_open_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
+  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  os_open();
+  ret();
+
+  // _close function
+  def_label(_close_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_close();
   ret();
 
   generate_exe();
