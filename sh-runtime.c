@@ -73,11 +73,7 @@ DEFINE_RUNTIME_FUN(local_vars)
   printf("__=0\n");
 #ifndef SH_SAVE_VARS_WITH_SET
   printf("__SP=0\n");
-#ifdef SH_INDIVIDUAL_LET
   printf("let() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
-#else
-  printf("let() { while [ $# -gt 0 ]; do : $((__SP += 1)) $((__$__SP=$1)) ; shift; done }\n");
-#endif
   printf("endlet() {\n");
   printf("  __ret=$1; : $((__tmp = $__ret)) # Save return value so it's not overwritten\n");
   printf("  while [ $# -ge 2 ]; do : $(($2 = __$__SP)) $((__SP -= 1)); shift; done\n");

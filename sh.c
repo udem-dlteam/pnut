@@ -719,11 +719,7 @@ text save_local_vars(int params_count) {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-#ifdef SH_INDIVIDUAL_LET
     res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
-#else
-    res = concatenate_strings_with(format_special_var(ident, true), res, wrap_char(' '));
-#endif
     counter -= 1;
   }
 
@@ -733,21 +729,13 @@ text save_local_vars(int params_count) {
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (!variable_is_constant_param(local_var)) {
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-#ifdef SH_INDIVIDUAL_LET
       res = concatenate_strings_with(string_concat(wrap_str("let "), env_var_with_prefix(ident, true)), res, wrap_str("; "));
-#else
-      res = concatenate_strings_with(env_var_with_prefix(ident, true), res, wrap_char(' '));
-#endif
     }
 
     env = get_child(env, 1);
   }
 
-#ifdef SH_INDIVIDUAL_LET
   return res;
-#else
-  return string_concat(wrap_str("let "), res);
-#endif
 }
 
 /*

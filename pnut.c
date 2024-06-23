@@ -21,7 +21,6 @@
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
-#define SH_INDIVIDUAL_LET
 #define SH_AVOID_PRINTF_USE
 #define SH_INLINE_PUTCHAR
 #define SH_INLINE_EXIT
