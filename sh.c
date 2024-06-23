@@ -1435,6 +1435,36 @@ text fun_call_params(ast params, int count) {
   return code_params;
 }
 
+// Workaround because #if defined(SH_AVOID_PRINTF_USE) || defined(SH_INLINE_PUTCHAR) doesn't work
+#ifdef SH_AVOID_PRINTF_USE
+#define INCLUDE_COMP_PUTCHAR_INLINE
+#endif
+
+#ifdef SH_INLINE_PUTCHAR
+#define INCLUDE_COMP_PUTCHAR_INLINE
+#endif
+
+#ifdef INCLUDE_COMP_PUTCHAR_INLINE
+text comp_putchar_inline(ast param) {
+  text res = comp_rvalue(param, RVALUE_CTX_BASE);
+  ast ident;
+
+  if (contains_side_effects) {
+    ident = fresh_ident();
+    append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
+    res = comp_lvalue(ident);
+  }
+
+  res =
+    string_concat3(
+      string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
+      string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
+      string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
+
+  return string_concat(wrap_str("printf \\\\"), res);
+}
+#endif
+
 #ifdef SH_AVOID_PRINTF_USE
 bool printf_uses_shell_format_specifiers(char* a) {
   // The supported format specifiers are those that are common between C and shell,
@@ -1472,34 +1502,36 @@ void handle_printf_call(char* format_str, ast params) {
   while (*format_str != '\0') {
     if (*format_str == '%') {
       format_str += 1;
-      if (*format_str != '%') {
-        if (*format_str == 'd' || *format_str == 'c' || *format_str == 'x') {
-          // Keep accumulating the format string
-          if (params == 0) fatal_error("Not enough parameters for printf");
-          params_count += 1;
-          params = get_child(params, 1);
-        } else if (*format_str == 's') {
-          // We can't pass strings to printf directly, they need to be unpacked first.
-          // We do that by calling the _print_pnut_str function.
+      if (*format_str == 'd' || *format_str == 'x') {
+        // Keep accumulating the format string
+        if (params == 0) fatal_error("Not enough parameters for printf");
+        params_count += 1;
+        params = get_child(params, 1);
+      } else if (*format_str == 's' || *format_str == 'c') {
+        // We can't pass strings to printf directly, they need to be unpacked first.
+        // We do that by calling the _print_pnut_str function.
 
-          // Generate the printf call for the format string up to this point.
-          if (format_start != format_str - 1) {
-            *(format_str - 1) = '\0'; // Null-terminate the format string
+        // Generate the printf call for the format string up to this point.
+        if (format_start != format_str - 1) {
+          *(format_str - 1) = '\0'; // Null-terminate the format string
 
-            append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
-            *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
-          }
+          append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
+          *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
+        }
 
+        if (*format_str == 's') {
           runtime_use_put_pstr = true;
           append_glo_decl(string_concat(wrap_str("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
-          format_start = format_str + 1; // skip the 's'
-          params = get_child(params, 1); // skip the string parameter
-          params_start = params;
         } else {
-          fatal_error("Unsupported format specifier");
+          append_glo_decl(comp_putchar_inline(get_child(params, 0)));
         }
+        gensym_ix = 0; // We generate multiple statements, and we want to reuse the same gensym names
+        format_start = format_str + 1; // skip the 's'
+        params = get_child(params, 1); // skip the string parameter
+        params_start = params;
+      } else if (*format_str != '%') { // Do nothing for %%
+        fatal_error("Unsupported format specifier");
       }
-
     }
 
     // Keep accumulating the format string
@@ -1533,19 +1565,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     }
 #ifdef SH_INLINE_PUTCHAR
     else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
-      res = comp_rvalue(params, RVALUE_CTX_BASE);
-      if (contains_side_effects) {
-        ident = fresh_ident();
-        append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
-        res = comp_lvalue(ident);
-      }
-      res =
-        string_concat3(
-          string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
-          string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
-          string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
-
-      return string_concat(wrap_str("printf \\\\"), res);
+      return comp_putchar_inline(params);
     }
 #endif
 #ifdef SH_INLINE_EXIT
