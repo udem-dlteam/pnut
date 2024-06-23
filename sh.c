@@ -517,11 +517,11 @@ void add_var_to_local_env(ast ident_tok, int position, int kind) {
     The var is not part of the environment, so we add it.
     Variables start as constant, and are marked as mutable by mark_mutable_variables_body.
   */
-  #ifdef OPTIMIZE_CONSTANT_PARAM
+#ifdef OPTIMIZE_CONSTANT_PARAM
   var = new_ast4(LOCAL_VAR, ident_tok, position, kind, true);
-  #else
+#else
   var = new_ast4(LOCAL_VAR, ident_tok, position, kind, false);
-  #endif
+#endif
   local_env = new_ast2(',', var, local_env);
   local_env_size += 1;
 }
@@ -706,12 +706,41 @@ text restore_local_vars(int params_count) {
 
 #else
 
+#ifdef SH_INITIALIZE_PARAMS_WITH_LET
+// Save the value of local variables to positional parameters
+text let_params(int params) {
+  ast ident;
+  ast local_var;
+  text res = 0;
+  int params_ix = 2;
+
+  runtime_use_local_vars = true;
+
+  while (params != 0) {
+    local_var = find_var_in_local_env(get_child(get_child(params, 0), 0));
+    if (!variable_is_constant_param(local_var)) {
+      ident = new_ast0(IDENTIFIER, get_child(get_child(params, 0), 0));
+      res = concatenate_strings_with(res, string_concat4(wrap_str("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str("; "));
+    }
+    params = get_child(params, 1);
+    params_ix += 1;
+  }
+
+  return res;
+}
+#endif
+
 text save_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
+#ifdef SH_INITIALIZE_PARAMS_WITH_LET
+  text let_fun = wrap_str("let_ ");
+#else
+  text let_fun = wrap_str("let ");
+#endif
 
   if (num_vars_to_save() == 0) return 0;
 
@@ -719,17 +748,21 @@ text save_local_vars(int params_count) {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
+    res = concatenate_strings_with(string_concat(let_fun, format_special_var(ident, true)), res, wrap_str("; "));
     counter -= 1;
   }
 
   while (env != 0) {
     local_var = get_child(env, 0);
 
+#ifdef SH_INITIALIZE_PARAMS_WITH_LET
+    if (local_var != -1 && get_child(local_var, 2) != KIND_PARAM) { // Skip params
+#else
     /* Constant function parameters are assigned to $1, $2, ... and don't need to be saved */
     if (!variable_is_constant_param(local_var)) {
+#endif
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-      res = concatenate_strings_with(string_concat(wrap_str("let "), env_var_with_prefix(ident, true)), res, wrap_str("; "));
+      res = concatenate_strings_with(string_concat(let_fun, env_var_with_prefix(ident, true)), res, wrap_str("; "));
     }
 
     env = get_child(env, 1);
@@ -1524,7 +1557,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   text res;
   ast ident;
 
-  #ifdef SH_AVOID_PRINTF_USE
+#ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
       || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
@@ -1559,7 +1592,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     }
 #endif
   }
-  #endif
+#endif
 
        if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
@@ -1954,7 +1987,7 @@ void comp_glo_fun_decl(ast node) {
   ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
   ast local_vars = get_child(local_vars_and_body, 0);
   ast body = get_child(local_vars_and_body, 1);
-  text comment = 0;
+  text trailing_txt = 0;
   int params_ix;
   ast decls;
   ast vars;
@@ -1974,24 +2007,31 @@ void comp_glo_fun_decl(ast node) {
   add_fun_params_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
 
-  #ifdef OPTIMIZE_CONSTANT_PARAM
+#ifdef OPTIMIZE_CONSTANT_PARAM
   mark_mutable_variables_body(body);
-  #endif
+#endif
 
-  /* Show the mapping between the function parameters and $1, $2, etc. */
-  params_ix = 2; /* Start at 2 because $1 is assigned to result location */
-  while (params != 0) {
-    var = get_child(params, 0);
-    comment = concatenate_strings_with(comment, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(params_ix)), wrap_str(", "));
-    params = get_child(params, 1);
-    params_ix += 1;
+#ifdef SH_INITIALIZE_PARAMS_WITH_LET
+  trailing_txt = let_params(params);
+  if (trailing_txt != 0) trailing_txt = string_concat(wrap_char(' '), trailing_txt);
+#endif
+
+  if (trailing_txt == 0) {
+    /* Show the mapping between the function parameters and $1, $2, etc. */
+    params_ix = 2; /* Start at 2 because $1 is assigned to result location */
+    while (params != 0) {
+      var = get_child(params, 0);
+      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str(": $"), wrap_int(params_ix)), wrap_str(", "));
+      params = get_child(params, 1);
+      params_ix += 1;
+    }
+    if (trailing_txt != 0) trailing_txt = string_concat(wrap_str(" # "), trailing_txt);
   }
-  if (comment != 0) comment = string_concat(wrap_str(" # "), comment);
 
   append_glo_decl(string_concat3(
     function_name(name),
     wrap_str("() {"),
-    comment
+    trailing_txt
   ));
 
   in_tail_position = true;
@@ -1999,6 +2039,7 @@ void comp_glo_fun_decl(ast node) {
 
   save_loc_vars_fixup = append_glo_decl_fixup(); /* Fixup is done after compiling body */
 
+#ifndef SH_INITIALIZE_PARAMS_WITH_LET
   /* Initialize parameters */
   params = get_child(node, 2); /* Reload params because params is now = 0 */
   params_ix = 2;
@@ -2013,6 +2054,7 @@ void comp_glo_fun_decl(ast node) {
     params = get_child(params, 1);
     params_ix += 1;
   }
+#endif
 
   /* Initialize local vars */
   while (local_vars != 0) {
@@ -2108,7 +2150,7 @@ void comp_glo_var_decl(ast node) {
       )
     );
   } else {
-    #ifdef SUPPORT_ADDRESS_OF_OP
+#ifdef SUPPORT_ADDRESS_OF_OP
     append_glo_decl(
       string_concat4(
         wrap_str("defglo "),
@@ -2117,9 +2159,9 @@ void comp_glo_var_decl(ast node) {
         comp_constant(init)
       )
     );
-    #else
+#else
     comp_assignment(new_ast0(IDENTIFIER, name), init);
-    #endif
+#endif
   }
 }
 
@@ -2252,9 +2294,9 @@ void comp_glo_decl(ast node) {
 void prologue() {
   printf("set -e -u\n\n");
 
-  #ifdef SUPPORT_ADDRESS_OF_OP
+#ifdef SUPPORT_ADDRESS_OF_OP
   printf("defglo() { _malloc 1; : $(($1 = __addr)) ; }\n");
-  #endif
+#endif
 }
 
 void epilogue() {
