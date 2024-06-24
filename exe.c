@@ -1568,16 +1568,16 @@ void codegen_begin() {
   cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, char_type);
 
   read_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "_read"), read_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, int_type);
 
   write_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "_write"), write_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, int_type);
 
   open_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "_open"), open_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, int_type);
 
   close_lbl = alloc_label();
-  cgc_add_global_fun(init_ident(IDENTIFIER, "_close"), close_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, int_type);
 
   jump(setup_lbl);
 }
@@ -2148,32 +2148,32 @@ void codegen_end() {
   rt_free();
   ret();
 
-  // _read function
-  def_label(_read_lbl);
+  // read function
+  def_label(read_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   mov_reg_mem(reg_Y, reg_SP, 2*word_size);
   mov_reg_mem(reg_Z, reg_SP, 3*word_size);
   os_read();
   ret();
 
-  // _write function
-  def_label(_write_lbl);
+  // write function
+  def_label(write_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   mov_reg_mem(reg_Y, reg_SP, 2*word_size);
   mov_reg_mem(reg_Z, reg_SP, 3*word_size);
   os_write();
   ret();
 
-  // _open function
-  def_label(_open_lbl);
+  // open function
+  def_label(open_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   mov_reg_mem(reg_Y, reg_SP, 2*word_size);
   mov_reg_mem(reg_Z, reg_SP, 3*word_size);
   os_open();
   ret();
 
-  // _close function
-  def_label(_close_lbl);
+  // close function
+  def_label(close_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_close();
   ret();
