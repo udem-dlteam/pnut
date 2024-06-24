@@ -1,6 +1,6 @@
 void simpleSwitch(){
 	int a = 2;
-    
+
 	switch (a) {
 		case 1:
 			putchar('A');
@@ -19,7 +19,7 @@ void simpleSwitch(){
 
 void complexSwitch(){
 	int a = 3;
-    
+
 	switch (a) {
 		case 1:
 			putchar('A');
@@ -34,15 +34,15 @@ void complexSwitch(){
 			putchar('D');
 			break;
 	}
-	
+
 	skip_default:
 	putchar('E');
-    
+
 }
 
 void complex2Switch(){
 	int a = 0;
-	
+
 	start:
 	switch (a) {
 		case 0:
@@ -60,7 +60,7 @@ void complex2Switch(){
 			putchar('D');
 			break;
 	}
-	
+
 	end:
 	putchar('E');
 
@@ -68,7 +68,7 @@ void complex2Switch(){
 
 void switchWhile(){
 	int i = 0;
-	
+
 	while (i < 5) {
 		switch (i) {
 			case 0:
@@ -89,7 +89,7 @@ void switchWhile(){
 		}
 		i++;
 	}
-	
+
 }
 
 int main() {

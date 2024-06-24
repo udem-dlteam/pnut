@@ -36,13 +36,13 @@ void loopGoto() {
 
 void loop2Goto(){
 	int i = 0;
-	
+
 	loop:
 	if (i >= 3) goto end;
 	putchar('X');
 	i++;
 	goto loop;
-	
+
 	end:
 	putchar('Y');
 }

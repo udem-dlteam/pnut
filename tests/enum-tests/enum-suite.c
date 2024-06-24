@@ -54,12 +54,12 @@ int main(){
 		putchar(c + 48);
 		putchar(10);
 	}
-	
+
 	if (day == MONDAY){
 		putstring("Day: ");
 		putstring("Garfield hates Mondays\n");
 	}
-	
+
 	putstring("Direction: ");
 	if(dir == NORTH) {
 		putstring("NORTH");
@@ -71,7 +71,7 @@ int main(){
 		putstring("WEST");
 	}
 	putchar(10);
-	
+
 	if (flag) {
 		putstring("Boolean: TRUE \n");
 	} else {

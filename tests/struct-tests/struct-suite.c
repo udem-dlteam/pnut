@@ -7,7 +7,7 @@ int test_basic_struct() {
 	struct Point p;
 	p.x = 10;
 	p.y = 20;
-	
+
 	if (p.x == 10 && p.y == 20) {
 		return 0; // success
 	} else {
@@ -24,7 +24,7 @@ int test_struct_initialization() {
 	struct Rectangle r;
 	r.width = 30;
 	r.height = 40;
-	
+
 	if (r.width == 30 && r.height == 40) {
 		return 0; // success
 	} else {
@@ -44,9 +44,9 @@ int calculateArea(struct Circle c) { // we assume pi = 3
 int test_structs_and_functions() {
 	struct Circle c;
 	c.radius = 5;
-	
+
 	int area = calculateArea(c);
-	
+
 	if (area == 75) {
 		return 0; // success
 	} else {
@@ -66,7 +66,7 @@ int test_nested_structs() {
 	s.top_left.y = 10;
 	s.bottom_right.x = 10;
 	s.bottom_right.y = 0;
-	
+
 	if (s.top_left.x == 0 && s.top_left.y == 10 && s.bottom_right.x == 10 && s.bottom_right.y == 0) {
 		return 0;
 	} else {
@@ -86,11 +86,11 @@ int test_array_of_structs() {
 	points[1].y = 4;
 	points[2].x = 5;
 	points[2].y = 6;
-	
+
 	if (points[0].x == 1 && points[0].y == 2 &&
 			points[1].x == 3 && points[1].y == 4 &&
 			points[2].x == 5 && points[2].y == 6) {
-		return 0; 
+		return 0;
 	} else {
 		return 1;
 	}
