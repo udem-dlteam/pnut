@@ -103,4 +103,4 @@ endlet() {
 _code=0; # Success exit code
 _main _code; exit $_code
 
-# string_pool_alloc=363 heap_alloc=1100 text_alloc=35
+# string_pool_alloc=385 heap_alloc=1116 max_text_alloc=1767 cumul_text_alloc=1791

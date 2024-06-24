@@ -34,4 +34,4 @@ endlet() {
 
 _main __
 
-# string_pool_alloc=353 heap_alloc=417 text_alloc=16
+# string_pool_alloc=375 heap_alloc=433 max_text_alloc=266 cumul_text_alloc=266

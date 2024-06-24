@@ -22,12 +22,12 @@ _main() {
 # Runtime library
 
 __stdin_buf=
-__stdin_line_ends_with_oef=0
+__stdin_line_ends_with_eof=0
 _getchar() {
   if [ -z "$__stdin_buf" ] ; then                   # need to get next line when buffer empty
-    if [ $__stdin_line_ends_with_oef -eq 1 ]; then  # EOF at end of line, return -1
+    if [ $__stdin_line_ends_with_eof -eq 1 ]; then  # EOF at end of line, return -1
       : $(($1 = -1))
-      __stdin_line_ends_with_oef=0                  # Reset EOF flag for next getchar call
+      __stdin_line_ends_with_eof=0                  # Reset EOF flag for next getchar call
       return
     fi
     IFS=                                            # don't split input
@@ -41,7 +41,7 @@ _getchar() {
         : $(($1 = -1))
         return
       else
-        __stdin_line_ends_with_oef=1
+        __stdin_line_ends_with_eof=1
       fi
     fi
   else
@@ -68,4 +68,4 @@ endlet() {
 
 _main __
 
-# string_pool_alloc=353 heap_alloc=437 text_alloc=16
+# string_pool_alloc=375 heap_alloc=453 max_text_alloc=360 cumul_text_alloc=360

@@ -52,4 +52,4 @@ endlet() {
 
 _main __
 
-# string_pool_alloc=371 heap_alloc=551 text_alloc=16
+# string_pool_alloc=393 heap_alloc=567 max_text_alloc=505 cumul_text_alloc=658

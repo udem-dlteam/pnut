@@ -13,4 +13,4 @@ _main() {
 _code=0; # Success exit code
 _main _code; exit $_code
 
-# string_pool_alloc=365 heap_alloc=349 text_alloc=35
+# string_pool_alloc=387 heap_alloc=365 max_text_alloc=45 cumul_text_alloc=45

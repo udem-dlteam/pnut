@@ -1,11 +1,31 @@
 set -e -u
 
+# /*
+#  * compile with:
+#  *
+#  *   $ ksh pnut.sh winterpi.c > winterpi.sh
+#  *
+#  * execute with:
+#  *
+#  *   $ ksh winterpi.sh
+#  */
 # /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
-# int dummy = 0;
-_dummy=0
+# int r[2801];
+__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
+
+alloc() {
+  : $((_$__ALLOC = $1)) # Save allocation size
+  : $((__ALLOC += 1))
+  __addr=$__ALLOC
+  : $((__ALLOC += $1))
+}
+
+defarr() { alloc $2; : $(( $1 = __addr )); }
+
+
+defarr _r 2801
 #################################### C code ####################################
 # int main() {
-#   int r[2801];
 #   int i;
 #   int k;
 #   int b;
@@ -29,21 +49,20 @@ _dummy=0
 #       d = d / b;
 #       i = i-1;
 #     }
-#     putchar(48 + (c + d / 10000) / 1000 % 10);
-#     putchar(48 + (c + d / 10000) / 100 % 10);
-#     putchar(48 + (c + d / 10000) / 10 % 10);
-#     putchar(48 + (c + d / 10000) % 10);
+#     putchar('0' + (c + d / 10000) / 1000 % 10);
+#     putchar('0' + (c + d / 10000) / 100 % 10);
+#     putchar('0' + (c + d / 10000) / 10 % 10);
+#     putchar('0' + (c + d / 10000) % 10);
 #     c = d % 10000;
 #     k = k - 14;
 #   }
-#   putchar(10);
+#   putchar('\n');
 #   return 0;
 # }
 ################################# End of C code ################################
-: $((c = d = b = k = i = r = 0))
+: $((c = d = b = k = i = 0))
 _main() {
-  let r; let i; let k; let b; let d; let c
-  r=0
+  let i; let k; let b; let d; let c
   i=0
   k=0
   b=0
@@ -51,34 +70,37 @@ _main() {
   c=0
   i=0
   while [ $i -lt 2800 ] ; do
-    : $(( _$((r+i)) = 2000 ))
+    : $(( _$((_r+i)) = 2000 ))
     i=$((i + 1))
   done
-  : $(( _$((r+i)) = 0 ))
+  : $(( _$((_r+i)) = 0 ))
   k=2800
   while [ $k -gt 0 ] ; do
     d=0
     i=$k
     while [ $i -gt 0 ] ; do
       d=$((d * i))
-      d=$((d + (_$((r+i)) * 10000)))
+      d=$((d + (_$((_r+i)) * 10000)))
       b=$(((2 * i) - 1))
-      : $(( _$((r+i)) = (d % b) ))
+      : $(( _$((_r+i)) = (d % b) ))
       d=$((d / b))
       i=$((i - 1))
     done
-    printf \\$(($((48 + (((c + (d / 10000)) / 1000) % 10)))/64))$(($((48 + (((c + (d / 10000)) / 1000) % 10)))/8%8))$(($((48 + (((c + (d / 10000)) / 1000) % 10)))%8))
-    printf \\$(($((48 + (((c + (d / 10000)) / 100) % 10)))/64))$(($((48 + (((c + (d / 10000)) / 100) % 10)))/8%8))$(($((48 + (((c + (d / 10000)) / 100) % 10)))%8))
-    printf \\$(($((48 + (((c + (d / 10000)) / 10) % 10)))/64))$(($((48 + (((c + (d / 10000)) / 10) % 10)))/8%8))$(($((48 + (((c + (d / 10000)) / 10) % 10)))%8))
-    printf \\$(($((48 + ((c + (d / 10000)) % 10)))/64))$(($((48 + ((c + (d / 10000)) % 10)))/8%8))$(($((48 + ((c + (d / 10000)) % 10)))%8))
+    printf \\$(($((__CH_0 + (((c + (d / 10000)) / 1000) % 10)))/64))$(($((__CH_0 + (((c + (d / 10000)) / 1000) % 10)))/8%8))$(($((__CH_0 + (((c + (d / 10000)) / 1000) % 10)))%8))
+    printf \\$(($((__CH_0 + (((c + (d / 10000)) / 100) % 10)))/64))$(($((__CH_0 + (((c + (d / 10000)) / 100) % 10)))/8%8))$(($((__CH_0 + (((c + (d / 10000)) / 100) % 10)))%8))
+    printf \\$(($((__CH_0 + (((c + (d / 10000)) / 10) % 10)))/64))$(($((__CH_0 + (((c + (d / 10000)) / 10) % 10)))/8%8))$(($((__CH_0 + (((c + (d / 10000)) / 10) % 10)))%8))
+    printf \\$(($((__CH_0 + ((c + (d / 10000)) % 10)))/64))$(($((__CH_0 + ((c + (d / 10000)) % 10)))/8%8))$(($((__CH_0 + ((c + (d / 10000)) % 10)))%8))
     c=$((d % 10000))
     k=$((k - 14))
   done
-  printf \\$((10/64))$((10/8%8))$((10%8))
+  printf \\$(($__CH_NEWLINE/64))$(($__CH_NEWLINE/8%8))$(($__CH_NEWLINE%8))
   : $(( $1 = 0 ))
-  endlet $1 c d b k i r
+  endlet $1 c d b k i
 }
 
+# Character constants
+readonly __CH_NEWLINE=10
+readonly __CH_0=48
 # Runtime library
 # Local variables
 __=0
@@ -93,4 +115,4 @@ endlet() {
 _code=0; # Success exit code
 _main _code; exit $_code
 
-# string_pool_alloc=369 heap_alloc=1139 text_alloc=35
+# string_pool_alloc=393 heap_alloc=1124 max_text_alloc=1827 cumul_text_alloc=1851
