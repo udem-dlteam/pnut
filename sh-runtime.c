@@ -758,10 +758,9 @@ DEPENDS_ON(char_to_int)
   putstr("    # Free buffer and reallocate a new one double the line size\n");
   putstr("    __buflen=$((__len * 2))\n");
   putstr("    _free __ $__buffer\n");
-  putstr("    _malloc __addr $__buflen\n");
-  putstr("    : $((__buffer_fd$__fd = __addr))\n");
+  putstr("    _malloc __buffer $__buflen\n");
+  putstr("    : $((__buffer_fd$__fd = __buffer))\n");
   putstr("    : $((__buflen_fd$__fd = __buflen))\n");
-  putstr("    __buffer=$__addr\n");
   putstr("  fi\n");
   putstr("  unpack_line \"$__temp_buf\" $__buffer $__ends_with_eof\n");
   putstr("}\n");
@@ -826,9 +825,9 @@ DEPENDS_ON(open)
   putstr("# The FILE structure contains the file descriptor.\n");
   putstr("_fopen() { # $2: File name, $3: Mode\n");
   putstr("  _open __fd $2 $((_$3 == 119)) 511\n");
-  putstr("  _malloc __addr 1        # Allocate FILE structure\n");
-  putstr("  : $((_$__addr = __fd))  # Save fd\n");
-  putstr("  : $(($1 = __addr))\n");
+  putstr("  _malloc __file 1        # Allocate FILE structure\n");
+  putstr("  : $((_$__file = __fd))  # Save fd\n");
+  putstr("  : $(($1 = __file))\n");
   putstr("}\n");
 END_RUNTIME_FUN(fopen)
 
