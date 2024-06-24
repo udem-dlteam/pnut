@@ -256,6 +256,7 @@ int characters_useds[16];       /* Characters used in string literals. Bitfield,
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
 bool main_returns;              /* If the main function returns a value */
+bool top_level_stmt = true;     /* If the current statement is at the top level */
 
 // Internal identifier node types. These
 int IDENTIFIER_INTERNAL = 600;
@@ -1077,6 +1078,21 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
+void comp_defstr(ast ident, int string_pool_str) {
+  if (top_level_stmt) {
+    // If defstr is used at the top level, it needs to be included beforehand
+    runtime_defstr();
+  } else {
+    runtime_use_defstr = true;
+  }
+
+  append_glo_decl(string_concat5( wrap_str("defstr ")
+                                , format_special_var(ident, false)
+                                , wrap_str(" \"")
+                                , escape_text(wrap_str_pool(string_pool_str), false)
+                                , wrap_char('\"')));
+}
+
 int RVALUE_CTX_BASE = 0;
 int RVALUE_CTX_ARITH_EXPANSION = 1; /* Like base context, except that we're already in $(( ... )) */
 int RVALUE_CTX_TEST = 2;
@@ -1340,12 +1356,7 @@ text comp_rvalue(ast node, int context) {
   fun_call_decl_start = glo_decl_ix;
 
   while (literals_inits != 0) {
-    runtime_use_defstr = true;
-    append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , format_special_var(get_child(get_child(literals_inits, 0), 0), false)
-                                  , wrap_str(" \"")
-                                  , escape_text(wrap_str_pool(get_child(get_child(literals_inits, 0), 1)), false)
-                                  , wrap_char('\"')));
+    comp_defstr(get_child(get_child(literals_inits, 0), 0), get_child(get_child(literals_inits, 0), 1));
     literals_inits = get_child(literals_inits, 1);
   }
 
@@ -1472,6 +1483,36 @@ text fun_call_params(ast params, int count) {
   return code_params;
 }
 
+// Workaround because #if defined(SH_AVOID_PRINTF_USE) || defined(SH_INLINE_PUTCHAR) doesn't work
+#ifdef SH_AVOID_PRINTF_USE
+#define INCLUDE_COMP_PUTCHAR_INLINE
+#endif
+
+#ifdef SH_INLINE_PUTCHAR
+#define INCLUDE_COMP_PUTCHAR_INLINE
+#endif
+
+#ifdef INCLUDE_COMP_PUTCHAR_INLINE
+text comp_putchar_inline(ast param) {
+  text res = comp_rvalue(param, RVALUE_CTX_BASE);
+  ast ident;
+
+  if (contains_side_effects) {
+    ident = fresh_ident();
+    append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
+    res = comp_lvalue(ident);
+  }
+
+  res =
+    string_concat3(
+      string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
+      string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
+      string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
+
+  return string_concat(wrap_str("printf \\\\"), res);
+}
+#endif
+
 #ifdef SH_AVOID_PRINTF_USE
 bool printf_uses_shell_format_specifiers(char* a) {
   // The supported format specifiers are those that are common between C and shell,
@@ -1509,34 +1550,36 @@ void handle_printf_call(char* format_str, ast params) {
   while (*format_str != '\0') {
     if (*format_str == '%') {
       format_str += 1;
-      if (*format_str != '%') {
-        if (*format_str == 'd' || *format_str == 'c' || *format_str == 'x') {
-          // Keep accumulating the format string
-          if (params == 0) fatal_error("Not enough parameters for printf");
-          params_count += 1;
-          params = get_child(params, 1);
-        } else if (*format_str == 's') {
-          // We can't pass strings to printf directly, they need to be unpacked first.
-          // We do that by calling the _print_pnut_str function.
+      if (*format_str == 'd' || *format_str == 'x') {
+        // Keep accumulating the format string
+        if (params == 0) fatal_error("Not enough parameters for printf");
+        params_count += 1;
+        params = get_child(params, 1);
+      } else if (*format_str == 's' || *format_str == 'c') {
+        // We can't pass strings to printf directly, they need to be unpacked first.
+        // We do that by calling the _print_pnut_str function.
 
-          // Generate the printf call for the format string up to this point.
-          if (format_start != format_str - 1) {
-            *(format_str - 1) = '\0'; // Null-terminate the format string
+        // Generate the printf call for the format string up to this point.
+        if (format_start != format_str - 1) {
+          *(format_str - 1) = '\0'; // Null-terminate the format string
 
-            append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
-            *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
-          }
+          append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
+          *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
+        }
 
+        if (*format_str == 's') {
           runtime_use_put_pstr = true;
           append_glo_decl(string_concat(wrap_str("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
-          format_start = format_str + 1; // skip the 's'
-          params = get_child(params, 1); // skip the string parameter
-          params_start = params;
         } else {
-          fatal_error("Unsupported format specifier");
+          append_glo_decl(comp_putchar_inline(get_child(params, 0)));
         }
+        gensym_ix = 0; // We generate multiple statements, and we want to reuse the same gensym names
+        format_start = format_str + 1; // skip the 's'
+        params = get_child(params, 1); // skip the string parameter
+        params_start = params;
+      } else if (*format_str != '%') { // Do nothing for %%
+        fatal_error("Unsupported format specifier");
       }
-
     }
 
     // Keep accumulating the format string
@@ -1570,19 +1613,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     }
 #ifdef SH_INLINE_PUTCHAR
     else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
-      res = comp_rvalue(params, RVALUE_CTX_BASE);
-      if (contains_side_effects) {
-        ident = fresh_ident();
-        append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
-        res = comp_lvalue(ident);
-      }
-      res =
-        string_concat3(
-          string_concat3(wrap_str("$(("), res, wrap_str("/64))")),
-          string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
-          string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
-
-      return string_concat(wrap_str("printf \\\\"), res);
+      return comp_putchar_inline(params);
     }
 #endif
 #ifdef SH_INLINE_EXIT
@@ -1927,8 +1958,13 @@ void mark_mutable_variables_statement(ast node) {
     if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
     if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
     if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
-  } else if (op == BREAK_KW OR op == CONTINUE_KW) {
+  } else if (op == SWITCH_KW) {
+    mark_mutable_variables_statement(get_child(node, 0));
+    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
+  } else if (op == BREAK_KW OR op == CONTINUE_KW OR op == GOTO_KW) {
     /* Do nothing */
+  } else if (op == ':' || op == CASE_KW || op == DEFAULT_KW) {
+    mark_mutable_variables_statement(get_child(node, op == DEFAULT_KW ? 0 : 1));
   } else if (op == RETURN_KW) {
     if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
   } else if (op == '(') {
@@ -1995,6 +2031,8 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == 0) return; // ignore forward declarations
 
+  top_level_stmt = false;
+  
   assert_vars_are_safe(params, true);
   assert_vars_are_safe(local_vars, true);
 
@@ -2102,12 +2140,7 @@ text comp_constant(ast node) {
   } else if (op == STRING) {
     runtime_use_defstr = true;
     new_ident = fresh_string_ident();
-    append_glo_decl(string_concat5( wrap_str("defstr ")
-                                  , format_special_var(new_ident, false)
-                                  , wrap_str(" \"")
-                                  , escape_text(wrap_str_pool(get_val(node)), false)
-                                  , wrap_char('\"')));
-
+    comp_defstr(new_ident, get_val(node));
     return format_special_var(new_ident, false);
   } else if ((op == '-') AND get_nb_children(node) == 1) {
     return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
@@ -2268,6 +2301,8 @@ void comp_glo_decl(ast node) {
   ast variable;
   int op = get_op(node);
   fun_gensym_ix = 0;
+
+  top_level_stmt = true;
 
   if (op == '=') { /* Assignments */
    comp_assignment(get_child(node, 0), get_child(node, 1));

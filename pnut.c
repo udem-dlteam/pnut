@@ -1720,6 +1720,22 @@ int parse_stars() {
   return stars;
 }
 
+int parse_stars_for_type(int type) {
+  int stars = parse_stars();
+
+  // We don't want to mutate types that are typedef'ed, so making a copy of the type obj
+  if (stars != 0) {
+    type = clone_ast(type);
+    set_val(type, stars);
+  }
+
+  return type;
+}
+
+int parse_type_with_stars() {
+  return parse_stars_for_type(parse_type());
+}
+
 int is_type_starter(int tok) {
   return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
       OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
@@ -1826,13 +1842,7 @@ ast parse_struct() {
     while (tok != '}') {
       if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
 
-      type = parse_type();
-      stars = parse_stars();
-
-      if (stars != 0) {
-        type = clone_ast(type);
-        set_val(type, stars);
-      }
+      type = parse_type_with_stars();
 
       if (tok != IDENTIFIER) {
         syntax_error("identifier expected");
@@ -1881,13 +1891,7 @@ ast parse_declaration() {
 
   if (is_type_starter(tok)) {
 
-    type = parse_type();
-    stars = parse_stars();
-
-    if (stars != 0) {
-      type = clone_ast(type);
-      set_val(type, stars);
-    }
+    type = parse_type_with_stars();
 
     name = val;
 
@@ -1962,13 +1966,7 @@ ast parse_definition(int local) {
 
     while (1) {
 
-      stars = parse_stars();
-
-      this_type = type;
-      if (stars != 0) {
-        this_type = clone_ast(type);
-        set_child(this_type, 0, stars);
-      }
+      this_type = parse_stars_for_type(type);
 
       name = val;
 
@@ -2058,7 +2056,7 @@ ast parse_definition(int local) {
     // identifiers as typedef'ed and have the typedef be scoped to the block
     // it was defined in (global or in function).
     get_tok();
-    type = parse_type();
+    type = parse_type_with_stars();
     if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
 
 #ifdef sh
@@ -2246,8 +2244,7 @@ ast parse_unary_expression() {
     get_tok();
     if (tok == '(') {
       get_tok();
-      result = clone_ast(parse_type());
-      set_val(result, parse_stars());
+      result = parse_type_with_stars();
       expect_tok(')');
     } else {
       result = parse_unary_expression();
@@ -2285,13 +2282,7 @@ ast parse_cast_expression() {
     get_tok();
 
     if (is_type_starter(tok)) {
-      type = parse_type();
-      stars = parse_stars();
-
-      if (stars != 0) {
-        type = clone_ast(type);
-        set_val(type, stars);
-      }
+      type = parse_type_with_stars();
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());
