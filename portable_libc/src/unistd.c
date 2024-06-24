@@ -1,25 +1,17 @@
 #include "include/unistd.h"
 #include "include/crt1.h"
 
-void exit(int status) {
-  _exit(status);
-}
+/* These are assumed to be builtin
 
-ssize_t read(int fd, void *buf, size_t count) {
-  return _read(fd, buf, count);
-}
+void exit(int status);
+ssize_t read(int fd, void *buf, size_t count);
+ssize_t write(int fd, void *buf, size_t count);
+int open(const char *pathname, int flags, mode_t mode);
+int close(int fd);
 
-ssize_t write(int fd, void *buf, size_t count) {
-  return _write(fd, buf, count);
-}
+*/
 
-int open(const char *pathname, int flags, mode_t mode) {
-  return _open(pathname, flags, mode);
-}
-
-int close(int fd) {
-  return _close(fd);
-}
+#ifdef PNUT_CC
 
 off_t lseek(int fd, off_t offset, int whence) {
   /*TODO*/
@@ -39,3 +31,5 @@ char *getcwd(char *buf, size_t size) {
   */
   return 0; /*TODO*/
 }
+
+#endif

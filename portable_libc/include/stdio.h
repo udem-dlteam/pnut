@@ -4,11 +4,7 @@
 #include "include/sys/types.h"
 #include "include/stdarg.h"
 
-#ifdef PNUT_CC
-
-typedef int FILE;
-
-#else
+#ifdef USE_STRUCT
 
 typedef struct {
   int fd;
@@ -17,6 +13,20 @@ typedef struct {
   size_t string_output_buf_size;
   size_t string_output_len;
 } FILE;
+
+#else
+
+typedef int FILE;
+
+#endif
+
+#ifdef PNUT_CC
+
+FILE *stdin;
+FILE *stdout;
+FILE *stderr;
+
+#else
 
 extern FILE *stdin;
 extern FILE *stdout;

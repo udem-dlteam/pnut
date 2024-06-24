@@ -21,10 +21,10 @@ int _get_fd(FILE *f) {
   } else if (f == _standard_files+2) {
     return 2;
   } else {
-#ifdef PNUT_CC
-    return *f;
-#else
+#ifdef USE_STRUCT
     return f->fd;
+#else
+    return *f;
 #endif
   }
 }
@@ -36,10 +36,10 @@ FILE *fopen(const char *pathname, const char *mode) {
 FILE *fdopen(int fd, const char *mode) {
   FILE *result = malloc(sizeof(FILE));
   if (result) {
-#ifdef PNUT_CC
-    *result = fd;
-#else
+#ifdef USE_STRUCT
     result->fd = fd;
+#else
+    *result = fd;
 #endif
   }
   return result;

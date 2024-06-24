@@ -520,15 +520,12 @@ int PRINTF_ID;
 int FOPEN_ID;
 int FCLOSE_ID;
 int FGETC_ID;
-
 int PUTSTR_ID;
 int PUTS_ID;
-
-int underscore_EXIT_ID;
-int underscore_READ_ID;
-int underscore_WRITE_ID;
-int underscore_OPEN_ID;
-int underscore_CLOSE_ID;
+int READ_ID;
+int WRITE_ID;
+int OPEN_ID;
+int CLOSE_ID;
 
 void get_tok_macro() {
   expand_macro = false;
@@ -862,15 +859,12 @@ void init_ident_table() {
   FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
   FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
   FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
-
   PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
   PUTS_ID    = init_ident(IDENTIFIER, "puts");
-
-  underscore_EXIT_ID   = init_ident(IDENTIFIER, "_exit");
-  underscore_READ_ID   = init_ident(IDENTIFIER, "_read");
-  underscore_WRITE_ID  = init_ident(IDENTIFIER, "_write");
-  underscore_OPEN_ID   = init_ident(IDENTIFIER, "_open");
-  underscore_CLOSE_ID  = init_ident(IDENTIFIER, "_close");
+  READ_ID    = init_ident(IDENTIFIER, "read");
+  WRITE_ID   = init_ident(IDENTIFIER, "write");
+  OPEN_ID    = init_ident(IDENTIFIER, "open");
+  CLOSE_ID   = init_ident(IDENTIFIER, "close");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
