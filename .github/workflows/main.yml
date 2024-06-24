@@ -39,3 +39,18 @@ jobs:
       - name: Run bootstrap x86
         run: |
           ./bootstrap-pnut-x86.sh
+
+  end-message: # This job will run after the test job is completed
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Tests finished
+        run: |
+          echo " ,-~~-.___."
+          echo " / |  '     \\         Pnut tests completed...."
+          echo "(  )         0"
+          echo " \\_/-, ,----'"
+          echo "    ====           //"
+          echo "   /  \\-'~;    /~~~(O)"
+          echo "  /  __/~|   /       |"
+          echo "=(  _____| (_________|   "
