@@ -6,7 +6,21 @@ on:
       - '**'  # Matches all branches
 
 jobs:
-  test:
+  x86-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:  # Checkout code from the branch that triggered the workflow
+          ref: ${{ github.ref }}
+
+      - name: Run x86 tests
+        run: |
+          chmod +x run-tests.sh
+          ./run-tests.sh -Di386 test
+          ./run-tests.sh -Di386 clean
+
+  shell-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -19,18 +33,19 @@ jobs:
           ref: ${{ github.ref }}
           shell: ${{ matrix.shells }}
 
-
-      - name: Run x86 tests
-        run: |
-          chmod +x run-tests.sh
-          ./run-tests.sh -Di386 test
-          ./run-tests.sh -Di386 clean
-
       - name: Run shell tests
         run: |
           chmod +x run-tests.sh
           ./run-tests.sh -Dsh test
           ./run-tests.sh -Dsh clean
+
+  bootstraps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:  # Checkout code from the branch that triggered the workflow
+          ref: ${{ github.ref }}
 
       - name: Run bootstrap shell
         run: |
@@ -42,7 +57,7 @@ jobs:
 
   end-message: # This job will run after the test job is completed
     runs-on: ubuntu-latest
-    needs: test
+    needs: [x86-test, shell-test, bootstraps]
     steps:
       - name: Tests finished
         run: |
