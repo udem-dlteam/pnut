@@ -1,4 +1,5 @@
 name: run-tests
+
 on:
   pull_request: # Should trigger on pull requests for all branches
     branches:
@@ -7,17 +8,34 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shells: [bash, ksh, dash, zsh]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
         with:  # Checkout code from the branch that triggered the workflow
           ref: ${{ github.ref }}
-        
-      - name: Run unit tests
+          shell: ${{ matrix.shells }}
+
+
+      - name: Run x86 tests
         run: |
           chmod +x run-tests.sh
           ./run-tests.sh -Di386 test
-          ./run-tests.sh -Dsh test
           ./run-tests.sh -Di386 clean
+
+      - name: Run shell tests
+        run: |
+          chmod +x run-tests.sh
+          ./run-tests.sh -Dsh test
           ./run-tests.sh -Dsh clean
+
+      - name: Run bootstrap shell
+        run: |
+          ./bootstrap-pnut.sh
+
+      - name: Run bootstrap x86
+        run: |
+          ./bootstrap-pnut-x86.sh
