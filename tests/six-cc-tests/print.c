@@ -1,3 +1,9 @@
+int chr = 65;
+
+int next_char() {
+  return chr++;
+}
+
 void main()
 {
   char * str;
@@ -18,6 +24,8 @@ void main()
   printf("_\n");
 
   printf("alphabet:\n%s\n", str);
+  printf("4 first letters of the alphabet with next_char:\n%c%c%c%c\n", next_char(), next_char(), next_char(), next_char());
+
   printf("4 first letters of the alphabet with .*s:\n%.*s\n", 4, str);
   printf("4 first letters of the alphabet with 0.4s:\n%0.4s\n", str);
   printf("Last 4 letters of the alphabet with padding:\n%26.s\n", "ABCDEFHIJKLMNOPQRSTUVWXYZ" + 20);
