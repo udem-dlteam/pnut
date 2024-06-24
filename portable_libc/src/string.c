@@ -1,20 +1,13 @@
-#ifdef PNUT_CC
-
 #include "include/sys/types.h"
-
-#else
-
-#include <sys/types.h>
-
-#endif
 
 void *memset(void *dest, int c, size_t n) {
 
   char *s = dest;
 
   while (n) {
-    *s++ = c;
-    n--;
+    *s = c;
+    ++s;
+    --n;
   }
 
   return dest;
@@ -26,8 +19,10 @@ void *memcpy(void *dest, const void *src, size_t n) {
   const char *s = src;
 
   while (n) {
-    *d++ = *s++;
-    n--;
+    *d = *s;
+    ++d;
+    ++s;
+    --n;
   }
 
   return dest;
@@ -40,12 +35,14 @@ void *memmove(void *dest, const void *src, size_t n) {
 
   if (d < s) {
     while (n) {
-      *d++ = *s++;
-      n--;
+      *d = *s;
+      ++d;
+      ++s;
+      --n;
     }
   } else {
     while (n) {
-      n--;
+      --n;
       d[n] = s[n];
     }
   }
@@ -59,9 +56,9 @@ int memcmp(const void *vl, const void *vr, size_t n) {
   const char *r=vr;
 
   while (n && *l == *r) {
-    n--;
-    l++;
-    r++;
+    --n;
+    ++l;
+    ++r;
   }
 
   return n ? (*l & 255) - (*r & 255) : 0;
@@ -71,7 +68,7 @@ size_t strlen(const char *s) {
 
   const char *end = s;
 
-  while (*end) end++;
+  while (*end) ++end;
 
   return end - s;
 }
@@ -81,7 +78,10 @@ char *strcpy(char *dest, const char *src) {
   char *d = dest;
   const char *s = src;
 
-  while ((*d++ = *s++)) ;
+  while ((*d = *s)) {
+    ++d;
+    ++s;
+  }
 
   return dest;
 }
@@ -95,7 +95,7 @@ char *strchr(const char *s, int c) {
 
   while (*s) {
     if (*s == c) return s;
-    s++;
+    ++s;
   }
 
   return c == 0 ? s : 0;
@@ -107,7 +107,7 @@ char *strrchr(const char *s, int c) {
 
   while (*s != 0) {
     if (*s == c) result = s;
-    s++;
+    ++s;
   }
 
   return c == 0 ? s : result;
@@ -116,8 +116,8 @@ char *strrchr(const char *s, int c) {
 int strcmp(const char *l, const char *r) {
 
   while (*l == *r && *l) {
-    l++;
-    r++;
+    ++l;
+    ++r;
   }
 
   return (*l & 255) - (*r & 255);

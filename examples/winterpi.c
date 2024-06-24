@@ -1,14 +1,21 @@
-#ifndef PNUT_CC
+/*
+ * compile with:
+ *
+ *   $ ksh pnut.sh winterpi.c > winterpi.sh
+ *
+ * execute with:
+ *
+ *   $ ksh winterpi.sh
+ */
+
 #include <stdio.h>
-#endif
 
 /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
 
-int dummy = 0;
+int r[2801];
 
 int main() {
 
-  int r[2801];
   int i;
   int k;
   int b;
@@ -41,16 +48,16 @@ int main() {
       i = i-1;
     }
 
-    putchar(48 + (c + d / 10000) / 1000 % 10);
-    putchar(48 + (c + d / 10000) / 100 % 10);
-    putchar(48 + (c + d / 10000) / 10 % 10);
-    putchar(48 + (c + d / 10000) % 10);
+    putchar('0' + (c + d / 10000) / 1000 % 10);
+    putchar('0' + (c + d / 10000) / 100 % 10);
+    putchar('0' + (c + d / 10000) / 10 % 10);
+    putchar('0' + (c + d / 10000) % 10);
     c = d % 10000;
 
     k = k - 14;
   }
 
-  putchar(10);
+  putchar('\n');
 
   return 0;
 }
