@@ -321,6 +321,13 @@ DEPENDS_ON(initialize_memory)
 #endif
 END_RUNTIME_FUN(defarr)
 
+#ifdef SUPPORT_ADDRESS_OF_OP
+DEFINE_RUNTIME_FUN(defglo)
+DEPENDS_ON(malloc)
+  printf("defglo() { _malloc $1 1 ; }\n");
+END_RUNTIME_FUN(defglo)
+#endif
+
 DEFINE_RUNTIME_FUN(free)
   putstr("_free() { # $1 = pointer to object to free\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");

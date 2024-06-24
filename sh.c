@@ -2032,7 +2032,7 @@ void comp_glo_fun_decl(ast node) {
   if (body == 0) return; // ignore forward declarations
 
   top_level_stmt = false;
-  
+
   assert_vars_are_safe(params, true);
   assert_vars_are_safe(local_vars, true);
 
@@ -2183,6 +2183,7 @@ void comp_glo_var_decl(ast node) {
     );
   } else {
 #ifdef SUPPORT_ADDRESS_OF_OP
+    runtime_defglo();
     append_glo_decl(
       string_concat4(
         wrap_str("defglo "),
@@ -2327,10 +2328,6 @@ void comp_glo_decl(ast node) {
 
 void prologue() {
   printf("set -e -u\n\n");
-
-#ifdef SUPPORT_ADDRESS_OF_OP
-  printf("defglo() { _malloc 1; : $(($1 = __addr)) ; }\n");
-#endif
 }
 
 void epilogue() {
