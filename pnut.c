@@ -21,7 +21,6 @@
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
-#define SH_INDIVIDUAL_LET
 #define SH_AVOID_PRINTF_USE
 #define SH_INLINE_PUTCHAR
 #define SH_INLINE_EXIT
@@ -29,6 +28,8 @@
 #define SH_INCLUDE_C_CODE_not
 // If we use the `set` command and positional parameters to simulate local vars
 #define SH_SAVE_VARS_WITH_SET_not
+// Have let commands initialize function parameters
+#define SH_INITIALIZE_PARAMS_WITH_LET
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
@@ -505,6 +506,7 @@ int INCLUDE_ID;
 int NOT_SUPPORTED_ID;
 
 // We want to recognize certain identifers without having to do expensive string comparisons
+int ARGV__ID;
 int ARGV_ID;
 int IFS_ID;
 int MAIN_ID;
@@ -518,10 +520,8 @@ int PRINTF_ID;
 int FOPEN_ID;
 int FCLOSE_ID;
 int FGETC_ID;
-
 int PUTSTR_ID;
 int PUTS_ID;
-
 int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
@@ -846,6 +846,7 @@ void init_ident_table() {
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
+  ARGV__ID = init_ident(IDENTIFIER, "argv_");
   IFS_ID  = init_ident(IDENTIFIER, "IFS");
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
@@ -858,10 +859,8 @@ void init_ident_table() {
   FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
   FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
   FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
-
   PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
   PUTS_ID    = init_ident(IDENTIFIER, "puts");
-
   READ_ID    = init_ident(IDENTIFIER, "read");
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
@@ -2752,7 +2751,7 @@ ast parse_compound_statement() {
 #include "debug.c"
 #endif
 
-int main(int argc, char **args) {
+int main(int argc, char **argv) {
 
   int i;
   ast decl;
@@ -2762,19 +2761,19 @@ int main(int argc, char **args) {
   init_pnut_macros();
 
   for (i = 1; i < argc; i += 1) {
-    if (args[i][0] == '-') {
-      if (args[i][1] == 'D') {
-        init_ident(MACRO, args[i] + 2);
+    if (argv[i][0] == '-') {
+      if (argv[i][1] == 'D') {
+        init_ident(MACRO, argv[i] + 2);
       } else {
         putstr("Option ");
-        putstr(args[i]);
+        putstr(argv[i]);
         putchar('\n');
         fatal_error("unknown option");
       }
     } else {
       // Options that don't start with '-' are file names
 #ifdef SUPPORT_INCLUDE
-      include_file(args[i]);
+      include_file(argv[i]);
 #else
       fatal_error("input file not supported. Pnut expects the input from stdin.");
 #endif
@@ -2783,7 +2782,7 @@ int main(int argc, char **args) {
 
 #ifdef SUPPORT_INCLUDE
   if (fp == 0) {
-    putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
+    putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
 #endif
