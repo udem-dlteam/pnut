@@ -1,12 +1,51 @@
-// Utility in C that reads a file and does nothing with it
+/*
+ * compile with:
+ *
+ *   $ ksh pnut.sh cat.c > cat.sh
+ *
+ * execute with:
+ *
+ *   $ ksh cat.sh FILE1 FILE2
+ */
 
-void main(int argc, char **argv) {
-  int fd;
-  int c;
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
 
-  fd = fopen(argv[1], "r");
+#define BUF_SIZE 1024
 
-  while ((c = fgetc(fd)) != -1) {
-    putchar(c);
+char buf[BUF_SIZE];
+
+void cat_fd(int fd) {
+  int n = BUF_SIZE;
+  while (n == BUF_SIZE) {
+    n = read(fd, buf, BUF_SIZE);
+    if (n < 0 || write(1, buf, n) != n) exit(1);
   }
+}
+
+void cat_file(char *filename) {
+  int fd = open(filename, 0);
+  if (fd < 0) exit(1);
+  cat_fd(fd);
+  close(fd);
+}
+
+int main(int argc, char **myargv) {
+
+  int i;
+
+  if (argc >= 2) {
+    for (i=1; i<argc; ++i) {
+      if (myargv[i][0] == '-' && myargv[i][1] == '\0') {
+        cat_fd(0);
+      } else {
+        cat_file(myargv[i]);
+      }
+    }
+  } else {
+    cat_fd(0);
+  }
+
+  return 0;
 }
