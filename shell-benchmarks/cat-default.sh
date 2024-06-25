@@ -36,6 +36,98 @@ _malloc() { # $2 = object size
   : $((__ALLOC += $2))
 }
 
+char_to_int() {
+  case $1 in
+    [0-9]) __c=$((48 + $1)) ;;
+    'a') __c=97 ;;
+    'b') __c=98 ;;
+    'c') __c=99 ;;
+    'd') __c=100 ;;
+    'e') __c=101 ;;
+    'f') __c=102 ;;
+    'g') __c=103 ;;
+    'h') __c=104 ;;
+    'i') __c=105 ;;
+    'j') __c=106 ;;
+    'k') __c=107 ;;
+    'l') __c=108 ;;
+    'm') __c=109 ;;
+    'n') __c=110 ;;
+    'o') __c=111 ;;
+    'p') __c=112 ;;
+    'q') __c=113 ;;
+    'r') __c=114 ;;
+    's') __c=115 ;;
+    't') __c=116 ;;
+    'u') __c=117 ;;
+    'v') __c=118 ;;
+    'w') __c=119 ;;
+    'x') __c=120 ;;
+    'y') __c=121 ;;
+    'z') __c=122 ;;
+    'A') __c=65 ;;
+    'B') __c=66 ;;
+    'C') __c=67 ;;
+    'D') __c=68 ;;
+    'E') __c=69 ;;
+    'F') __c=70 ;;
+    'G') __c=71 ;;
+    'H') __c=72 ;;
+    'I') __c=73 ;;
+    'J') __c=74 ;;
+    'K') __c=75 ;;
+    'L') __c=76 ;;
+    'M') __c=77 ;;
+    'N') __c=78 ;;
+    'O') __c=79 ;;
+    'P') __c=80 ;;
+    'Q') __c=81 ;;
+    'R') __c=82 ;;
+    'S') __c=83 ;;
+    'T') __c=84 ;;
+    'U') __c=85 ;;
+    'V') __c=86 ;;
+    'W') __c=87 ;;
+    'X') __c=88 ;;
+    'Y') __c=89 ;;
+    'Z') __c=90 ;;
+    ' ') __c=32 ;;
+    '!') __c=33 ;;
+    '"') __c=34 ;;
+    '#') __c=35 ;;
+    '$') __c=36 ;;
+    '%') __c=37 ;;
+    '&') __c=38 ;;
+    "'") __c=39 ;;
+    '(') __c=40 ;;
+    ')') __c=41 ;;
+    '*') __c=42 ;;
+    '+') __c=43 ;;
+    ',') __c=44 ;;
+    '-') __c=45 ;;
+    '.') __c=46 ;;
+    '/') __c=47 ;;
+    ':') __c=58 ;;
+    ';') __c=59 ;;
+    '<') __c=60 ;;
+    '=') __c=61 ;;
+    '>') __c=62 ;;
+    '?') __c=63 ;;
+    '@') __c=64 ;;
+    '[') __c=91 ;;
+    '\') __c=92 ;;
+    ']') __c=93 ;;
+    '^') __c=94 ;;
+    '_') __c=95 ;;
+    '`') __c=96 ;;
+    '{') __c=123 ;;
+    '|') __c=124 ;;
+    '}') __c=125 ;;
+    '~') __c=126 ;;
+    *)
+      __c=$(LC_CTYPE=C printf "%d" "'$1")
+  esac
+}
 
 unpack_escaped_string() {
   __buf="$1"
@@ -64,7 +156,7 @@ unpack_escaped_string() {
         __buf="${__buf#?}"               # remove the current char from $__buf
         ;;
       *)
-        __c=$(LC_CTYPE=C printf "%d" "'${__buf%"${__buf#?}"}")
+        char_to_int "${__buf%"${__buf#?}"}"
         __buf="${__buf#?}"                  # remove the current char from $__buf
         ;;
     esac
@@ -86,6 +178,100 @@ defstr() { # $1 = variable name, $2 = string
   set -u
 }
 
+int_to_char() {
+  case $1 in
+    48|49|50|51|52|53|54|55|56|57) __char=$(($1 - 48)) ;;
+    97)  __char="a" ;;
+    98)  __char="b" ;;
+    99)  __char="c" ;;
+    100) __char="d" ;;
+    101) __char="e" ;;
+    102) __char="f" ;;
+    103) __char="g" ;;
+    104) __char="h" ;;
+    105) __char="i" ;;
+    106) __char="j" ;;
+    107) __char="k" ;;
+    108) __char="l" ;;
+    109) __char="m" ;;
+    110) __char="n" ;;
+    111) __char="o" ;;
+    112) __char="p" ;;
+    113) __char="q" ;;
+    114) __char="r" ;;
+    115) __char="s" ;;
+    116) __char="t" ;;
+    117) __char="u" ;;
+    118) __char="v" ;;
+    119) __char="w" ;;
+    120) __char="x" ;;
+    121) __char="y" ;;
+    122) __char="z" ;;
+    65)  __char="A" ;;
+    66)  __char="B" ;;
+    67)  __char="C" ;;
+    68)  __char="D" ;;
+    69)  __char="E" ;;
+    70)  __char="F" ;;
+    71)  __char="G" ;;
+    72)  __char="H" ;;
+    73)  __char="I" ;;
+    74)  __char="J" ;;
+    75)  __char="K" ;;
+    76)  __char="L" ;;
+    77)  __char="M" ;;
+    78)  __char="N" ;;
+    79)  __char="O" ;;
+    80)  __char="P" ;;
+    81)  __char="Q" ;;
+    82)  __char="R" ;;
+    83)  __char="S" ;;
+    84)  __char="T" ;;
+    85)  __char="U" ;;
+    86)  __char="V" ;;
+    87)  __char="W" ;;
+    88)  __char="X" ;;
+    89)  __char="Y" ;;
+    90)  __char="Z" ;;
+    32)  __char=" " ;;
+    33)  __char="!" ;;
+    34)  __char="\"" ;;
+    35)  __char="#" ;;
+    36)  __char="$" ;;
+    37)  __char="%" ;;
+    38)  __char="&" ;;
+    39)  __char="'" ;;
+    40)  __char="(" ;;
+    41)  __char=")" ;;
+    42)  __char="*" ;;
+    43)  __char="+" ;;
+    44)  __char="," ;;
+    45)  __char="-" ;;
+    46)  __char="." ;;
+    47)  __char="/" ;;
+    58)  __char=":" ;;
+    59)  __char=";" ;;
+    60)  __char="<" ;;
+    61)  __char="=" ;;
+    62)  __char=">" ;;
+    63)  __char="?" ;;
+    64)  __char="@" ;;
+    91)  __char="[" ;;
+    92)  __char="\\" ;;
+    93)  __char="]" ;;
+    94)  __char="^" ;;
+    95)  __char="_" ;;
+    96)  __char="\`" ;;
+    123) __char="{" ;;
+    124) __char="|" ;;
+    125) __char="}" ;;
+    126) __char="~" ;;
+    10)  __char="\n" ;;
+    *)
+      echo "Invalid character code: $1" ; exit 1
+      __char=$(printf "\\$(printf "%o" "$1")") ;;
+  esac
+}
 
 # Convert a VM string reference to a Shell string.
 # $__res is set to the result, and $__len is set to the length of the string.
@@ -103,7 +289,7 @@ pack_string() {
     __len=$((__len + 1))
     case $__char in
       10) __res="$__res\n" ;; # 10 == '\n'
-      *)        __char=$(printf "\\$(printf "%o" "$__char")")
+      *)        int_to_char "$__char"
         __res="$__res$__char" ;;
     esac
   done
@@ -200,48 +386,33 @@ unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
   __ends_with_eof=$3
-  __fgetc_buf32=
-  __fgetc_buf64=
-  __fgetc_buf128=
-  __continue=1
-  while [ $__continue != 0 ] ; do
-    if [ -z "$__fgetc_buf128" ]; then
-      if [ ${#__fgetc_buf} -ge 128 ]; then
-        __temp=${__fgetc_buf#????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????}
-        __fgetc_buf128="${__fgetc_buf%"$__temp"}"
-        __fgetc_buf=$__temp
-      else
-        __fgetc_buf128=$__fgetc_buf
-        __fgetc_buf=
-      fi
-    fi
-    if [ -z "$__fgetc_buf64" ]; then
-      if [ ${#__fgetc_buf128} -ge 64 ]; then
-        __temp=${__fgetc_buf128#????????????????????????????????????????????????????????????????}
-        __fgetc_buf64="${__fgetc_buf128%"$__temp"}"
-        __fgetc_buf128=$__temp
-      else
-        __fgetc_buf64=$__fgetc_buf128
-        __fgetc_buf128=
-      fi
-    fi
-    if [ -z "$__fgetc_buf32" ]; then
-      if [ ${#__fgetc_buf64} -ge 32 ]; then
-        __temp=${__fgetc_buf64#????????????????????????????????}
-        __fgetc_buf32="${__fgetc_buf64%"$__temp"}"
-        __fgetc_buf64=$__temp
-      else
-        __fgetc_buf32=$__fgetc_buf64
-        __fgetc_buf64=
-        __continue=0
-      fi
-    fi
-    while [ ! -z "$__fgetc_buf32" ]; do
-      __c=$(LC_CTYPE=C printf "%d" "'${__fgetc_buf32%"${__fgetc_buf32#?}"}")
-      : $((_$__buffer = __c))
-      __fgetc_buf32=${__fgetc_buf32#?}  # Remove the first character
-      : $((__buffer += 1))              # Move to the next buffer position
-    done
+  while [ ! -z "$__fgetc_buf" ]; do
+    case "$__fgetc_buf" in
+      " "*) : $((_$__buffer = 32))  ;;
+      "e"*) : $((_$__buffer = 101)) ;;
+      "="*) : $((_$__buffer = 61))  ;;
+      "t"*) : $((_$__buffer = 116)) ;;
+      ";"*) : $((_$__buffer = 59))  ;;
+      "i"*) : $((_$__buffer = 105)) ;;
+      ")"*) : $((_$__buffer = 41))  ;;
+      "("*) : $((_$__buffer = 40))  ;;
+      "n"*) : $((_$__buffer = 110)) ;;
+      "s"*) : $((_$__buffer = 115)) ;;
+      "l"*) : $((_$__buffer = 108)) ;;
+      "+"*) : $((_$__buffer = 43))  ;;
+      "p"*) : $((_$__buffer = 112)) ;;
+      "a"*) : $((_$__buffer = 97))  ;;
+      "r"*) : $((_$__buffer = 114)) ;;
+      "f"*) : $((_$__buffer = 102)) ;;
+      "d"*) : $((_$__buffer = 100)) ;;
+      "*"*) : $((_$__buffer = 42))  ;;
+      *)
+        char_to_int "${__fgetc_buf%"${__fgetc_buf#?}"}"
+        : $((_$__buffer = __c))
+        ;;
+    esac
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buffer += 1))              # Move to the next buffer position
   done
 
   if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
@@ -309,7 +480,7 @@ unpack_string() {
   while [ -n "$__buf" ] ; do
     __char="${__buf%"${__buf#?}"}"   # remove all but first char
     __buf="${__buf#?}"               # remove the current char from $__buf
-    __c=$(LC_CTYPE=C printf "%d" "'$__char")
+    char_to_int "$__char"
     : $((_$__ptr = __c))
     : $((__ptr += 1))
   done
@@ -332,7 +503,7 @@ make_argv() {
 # Local variables
 __=0
 __SP=0
-let() { : $((__SP += 1)) $((__$__SP=$1)); } 
+let() { : $((__SP += 1)) $((__$__SP=$1)); }
 endlet() {
   __ret=$1; : $((__tmp = $__ret)) # Save return value so it's not overwritten
   while [ $# -ge 2 ]; do : $(($2 = __$__SP)) $((__SP -= 1)); shift; done
