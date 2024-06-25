@@ -62,7 +62,8 @@ void print_tok(int tok, int val) {
   else if (tok == LSHIFT_EQ)    putstr("<<=");
   else if (tok == LSHIFT)       putstr("<<");
   else if (tok == LT_EQ)        putstr("<=");
-  else if (tok == MINUS_EQ)     putstr("-=");
+  else if (tok == MINUS_EQ)     putstr(" -= "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_MINUS)  putstr("--");
   else if (tok == EXCL_EQ)      putstr("!=");
   else if (tok == PERCENT_EQ)   putstr("%=");
   else if (tok == PLUS_EQ)      putstr("+=");
@@ -72,9 +73,9 @@ void print_tok(int tok, int val) {
   else if (tok == STAR_EQ)      putstr("*=");
   else if (tok == HASH_HASH)    putstr("##");
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
-  else if (tok == MINUS_MINUS_PRE)  putstr("--");
+  else if (tok == MINUS_MINUS_PRE)  putstr(" -- "); // Adding spaces around -= so - is not interpreted as an option to printf
   else if (tok == PLUS_PLUS_POST)   putstr("++");
-  else if (tok == MINUS_MINUS_POST) putstr("--");
+  else if (tok == MINUS_MINUS_POST) putstr(" -- "); // Adding spaces around -= so - is not interpreted as an option to printf
 
   else if (tok == IDENTIFIER) {
     putstr(string_pool + heap[val+1]);
@@ -118,16 +119,16 @@ void show_ast(char* name, ast obj) {
   }
 }
 
-void show_struct(ast struct_type) {
-  ast members = get_child(canonicalize_type(struct_type), 2);
+// void show_struct(ast struct_type) {
+//   ast members = get_child(canonicalize_type(struct_type), 2);
 
-  char* name = string_pool + get_val(get_val(get_child(struct_type, 1)));
+//   char* name = string_pool + get_val(get_val(get_child(struct_type, 1)));
 
-  printf("##### Struct %s #####\n", name);
-  printf("sizeof(%s) = %d\n", name, struct_size(struct_type));
+//   printf("##### Struct %s #####\n", name);
+//   printf("sizeof(%s) = %d\n", name, struct_size(struct_type));
 
-  while (get_op(members) == ',') {
-    printf("%s = obj[%d]\n", string_pool + get_val(get_val(get_child(members, 0))), struct_member_offset(struct_type, get_child(members, 0)));
-    members = get_child(members, 2);
-  }
-}
+//   while (get_op(members) == ',') {
+//     printf("%s = obj[%d]\n", string_pool + get_val(get_val(get_child(members, 0))), struct_member_offset(struct_type, get_child(members, 0)));
+//     members = get_child(members, 2);
+//   }
+// }

@@ -17,7 +17,7 @@
 #define AVOID_AMPAMP_BARBAR_not
 
 // Use positional parameter directly for function parameters that are constants
-#define OPTIMIZE_CONSTANT_PARAM_not
+#define OPTIMIZE_CONSTANT_PARAM
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
@@ -2728,6 +2728,7 @@ ast parse_compound_statement() {
 // Select code generator
 
 #ifndef DEBUG_CPP
+#ifndef DEBUG_GETCHAR
 #ifdef sh
 #include "sh.c"
 #endif
@@ -2742,6 +2743,7 @@ ast parse_compound_statement() {
 
 #ifdef arm
 #include "arm.c"
+#endif
 #endif
 #endif
 
@@ -2788,12 +2790,18 @@ int main(int argc, char **argv) {
 #endif
 
 #ifndef DEBUG_CPP
+#ifndef DEBUG_GETCHAR
   codegen_begin();
+#endif
 #endif
 
   ch = '\n';
   get_tok();
 
+#ifdef DEBUG_GETCHAR
+  while (ch != EOF) {
+    get_ch();
+#else
   while (tok != EOF) {
 #ifdef DEBUG_CPP
     print_tok(tok, val);
@@ -2807,10 +2815,14 @@ int main(int argc, char **argv) {
     codegen_glo_decl(decl);
 
 #endif
+
+#endif
   }
 
 #ifndef DEBUG_CPP
+#ifndef DEBUG_GETCHAR
   codegen_end();
+#endif
 #endif
 
   return 0;
