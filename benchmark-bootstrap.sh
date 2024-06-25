@@ -48,7 +48,7 @@ PNUT_I386_COMPILED_BY_PNUT_I386_SH_MS=$(( `bash -c "time $SHELL_TO_TEST $TEMP_DI
 
 print_time $PNUT_I386_COMPILED_BY_PNUT_I386_SH_MS "for: $SHELL_TO_TEST pnut-i386-compiled-by-pnut-sh-sh.sh $PNUT_I386_OPTIONS pnut.c > pnut-i386-compiled-by-pnut-i386-sh.exe"
 
-chmod +x $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.exe
+chmod +x $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-sh.exe
 
 PNUT_I386_COMPILED_BY_PNUT_I386_EXE_MS=$(( `bash -c "time $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-sh.exe $PNUT_I386_OPTIONS pnut.c > $TEMP_DIR/pnut-i386-compiled-pnut-i386-exe.exe" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
 
