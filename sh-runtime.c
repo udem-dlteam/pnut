@@ -531,9 +531,9 @@ DEPENDS_ON(char_to_int)
   extract_first_char("", "__stdin_buf", "$1")
   putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
 #else
-  extract_line_head("    ", "__stdin_buf128", "__stdin_buf", ANY_STRING_128, "128", "")
-  extract_line_head("    ", "__stdin_buf64", "__stdin_buf128", ANY_STRING_64, "64", "")
-  extract_line_head("    ", "__stdin_buf32", "__stdin_buf64", ANY_STRING_32, "32", "        __stdin_end=1\n")
+  extract_line_head("  ", "__stdin_buf128", "__stdin_buf", ANY_STRING_128, "128", "")
+  extract_line_head("  ", "__stdin_buf64", "__stdin_buf128", ANY_STRING_64, "64", "")
+  extract_line_head("  ", "__stdin_buf32", "__stdin_buf64", ANY_STRING_32, "32", "        __stdin_end=1\n")
   extract_first_char("", "__stdin_buf32", "$1")
   putstr("  __stdin_buf32=${__stdin_buf32#?}  # Remove the first character\n");
 #endif
