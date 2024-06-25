@@ -481,12 +481,12 @@ END_RUNTIME_FUN(putchar)
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
-  putstr("__stdin_line_ends_with_eof=0\n");
+  putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
   putstr("_getchar() {\n");
-  putstr("  if [ -z \"$__stdin_buf\" ] ; then                   # need to get next line when buffer empty\n");
-  putstr("    if [ $__stdin_line_ends_with_eof -eq 1 ]; then  # EOF at end of line, return -1\n");
-  putstr("      : $(($1 = -1))\n");
-  putstr("      __stdin_line_ends_with_eof=0                  # Reset EOF flag for next getchar call\n");
+  putstr("  if [ -z \"$__stdin_buf\" ] ; then          # need to get next line when buffer empty\n");
+  putstr("    if [ $__stdin_line_ending -eq 1 ]; then  # Line is empty, return line ending\n");
+  putstr("      : $(($1 = __stdin_line_ending))\n");
+  putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
   putstr("    IFS=                                            # don't split input\n");
@@ -500,18 +500,13 @@ DEPENDS_ON(char_to_int)
   putstr("        : $(($1 = -1))\n");
   putstr("        return\n");
   putstr("      else\n");
-  putstr("        __stdin_line_ends_with_eof=1\n");
+  putstr("        __stdin_line_ending=-1\n");
   putstr("      fi\n");
-  putstr("    fi\n");
-  putstr("  else\n");
-  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
-  putstr("    if [ -z \"$__stdin_buf\" ] ; then                 # end of line if the buffer is now empty\n");
-  putstr("      : $(($1 = 10))\n");
-  putstr("      return\n");
   putstr("    fi\n");
   putstr("  fi\n");
   putstr("\n");
   extract_first_char("", "__stdin_buf", "$1")
+  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
   putstr("}\n");
 END_RUNTIME_FUN(getchar)
 
