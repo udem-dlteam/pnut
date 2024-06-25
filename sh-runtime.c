@@ -478,17 +478,40 @@ DEFINE_RUNTIME_FUN(putchar)
   putstr("}\n");
 END_RUNTIME_FUN(putchar)
 
+
+#define ANY_STRING_16  "????????????????"
+#define ANY_STRING_32  "????????????????????????????????"
+#define ANY_STRING_64  "????????????????????????????????????????????????????????????????"
+#define ANY_STRING_128 "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
+#define extract_line_head(prefix, small_buf, big_buf, pattern, len, when_empty) \
+  putstr(prefix "if [ -z \"$" small_buf "\" ]; then\n"); \
+  putstr(prefix "  if [ ${#" big_buf "} -ge " len " ]; then\n"); \
+  putstr(prefix "    __temp=${" big_buf "#" pattern "}\n"); \
+  putstr(prefix "    " small_buf "=\"${" big_buf "%\"$__temp\"}\"\n"); \
+  putstr(prefix "    " big_buf "=$__temp\n"); \
+  putstr(prefix "  else\n"); \
+  putstr(prefix "    " small_buf "=$" big_buf "\n"); \
+  putstr(prefix "    " big_buf "=\n"); \
+  putstr(when_empty); \
+  putstr(prefix "  fi\n"); \
+  putstr(prefix "fi\n"); \
+
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
+  putstr("__stdin_buf32=\n");
+  putstr("__stdin_buf64=\n");
+  putstr("__stdin_buf128=\n");
   putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
+  putstr("__stdin_end=1\n");
   putstr("_getchar() {\n");
-  putstr("  if [ -z \"$__stdin_buf\" ] ; then          # need to get next line when buffer empty\n");
+  putstr("  if [ -z \"$__stdin_buf32\" ] && [ $__stdin_end -eq 1 ] ; then          # need to get next line when buffer empty\n");
   putstr("    if [ $__stdin_line_ending -eq 1 ]; then  # Line is empty, return line ending\n");
   putstr("      : $(($1 = __stdin_line_ending))\n");
   putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
+  putstr("    __stdin_end=0\n");
   putstr("    IFS=                                            # don't split input\n");
   putstr("    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf\n");
   putstr("      if [ -z \"$__stdin_buf\" ] ; then               # an empty line implies a newline character\n");
@@ -504,9 +527,16 @@ DEPENDS_ON(char_to_int)
   putstr("      fi\n");
   putstr("    fi\n");
   putstr("  fi\n");
-  putstr("\n");
+#ifdef OPTIMIZE_LONG_LINES
   extract_first_char("", "__stdin_buf", "$1")
   putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
+#else
+  extract_line_head("    ", "__stdin_buf128", "__stdin_buf", ANY_STRING_128, "128", "")
+  extract_line_head("    ", "__stdin_buf64", "__stdin_buf128", ANY_STRING_64, "64", "")
+  extract_line_head("    ", "__stdin_buf32", "__stdin_buf64", ANY_STRING_32, "32", "        __stdin_end=1\n")
+  extract_first_char("", "__stdin_buf32", "$1")
+  putstr("  __stdin_buf32=${__stdin_buf32#?}  # Remove the first character\n");
+#endif
   putstr("}\n");
 END_RUNTIME_FUN(getchar)
 
@@ -713,17 +743,6 @@ DEPENDS_ON(pack_string)
   putstr("}\n");
 END_RUNTIME_FUN(open)
 
-
-#define ANY_STRING_16  "????????????????"
-#define ANY_STRING_32  "????????????????????????????????"
-#define ANY_STRING_64  "????????????????????????????????????????????????????????????????"
-#define ANY_STRING_128 "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
-#define unpack_line_aux2(prefix, elif_or_else, pattern) \
-  putstr(prefix elif_or_else"\n"); \
-  putstr(prefix "  __temp=${__fgetc_buf#" pattern "}\n"); \
-  putstr(prefix "  __small_buffer=\"${__fgetc_buf%\"$__temp\"}\"\n"); \
-  putstr(prefix "  __fgetc_buf=$__temp\n");
-
 DEFINE_RUNTIME_FUN(read_byte)
 DEPENDS_ON(malloc)
 DEPENDS_ON(free)
@@ -733,20 +752,26 @@ DEPENDS_ON(char_to_int)
   putstr("  __fgetc_buf=$1\n");
   putstr("  __buffer=$2\n");
   putstr("  __ends_with_eof=$3\n");
+#ifdef OPTIMIZE_LONG_LINES
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
-  putstr("    if [ \"${#__fgetc_buf}\" -lt 16 ]; then\n");
-  putstr("      __small_buffer=\"$__fgetc_buf\"\n");
-  putstr("      __fgetc_buf=\n");
-  unpack_line_aux2("    ", "elif [ \"${#__fgetc_buf}\" -lt 32 ]; then", ANY_STRING_16)
-  unpack_line_aux2("    ", "elif [ \"${#__fgetc_buf}\" -lt 64 ]; then", ANY_STRING_32)
-  unpack_line_aux2("    ", "elif [ \"${#__fgetc_buf}\" -lt 128 ]; then", ANY_STRING_64)
-  unpack_line_aux2("    ", "else", ANY_STRING_128)
-  putstr("    fi\n");
-  putstr("    while [ ! -z \"$__small_buffer\" ]; do\n");
-  extract_first_char("    ", "__small_buffer", "_$__buffer")
-  putstr("      __small_buffer=${__small_buffer#?}  # Remove the first character\n");
-  putstr("      : $((__buffer += 1))                # Move to the next buffer position\n");
+  extract_first_char("  ", "__fgetc_buf", "_$__buffer")
+  putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
+  putstr("    : $((__buffer += 1))              # Move to the next buffer position\n");
+#else
+  putstr("  __fgetc_buf32=\n");
+  putstr("  __fgetc_buf64=\n");
+  putstr("  __fgetc_buf128=\n");
+  putstr("  __continue=1\n");
+  putstr("  while [ $__continue != 0 ] ; do\n");
+  extract_line_head("    ", "__fgetc_buf128", "__fgetc_buf",   ANY_STRING_128, "128", "")
+  extract_line_head("    ", "__fgetc_buf64", "__fgetc_buf128", ANY_STRING_64,  "64", "")
+  extract_line_head("    ", "__fgetc_buf32", "__fgetc_buf64",  ANY_STRING_32,  "32", "        __continue=0\n")
+  putstr("    while [ ! -z \"$__fgetc_buf32\" ]; do\n");
+  extract_first_char("    ", "__fgetc_buf32", "_$__buffer")
+  putstr("      __fgetc_buf32=${__fgetc_buf32#?}  # Remove the first character\n");
+  putstr("      : $((__buffer += 1))              # Move to the next buffer position\n");
   putstr("    done\n");
+#endif
   putstr("  done\n");
   putstr("\n");
   putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
