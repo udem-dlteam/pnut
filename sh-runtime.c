@@ -804,7 +804,7 @@ END_RUNTIME_FUN(read_byte)
 DEFINE_RUNTIME_FUN(read)
 DEPENDS_ON(read_byte)
 DEPENDS_ON(open)
-  putstr("_read() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+  putstr("_read() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    read_byte __byte $__fd\n");
