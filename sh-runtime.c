@@ -486,11 +486,11 @@ END_RUNTIME_FUN(putchar)
 #define extract_line_head(prefix, small_buf, big_buf, pattern, len, when_empty) \
   putstr(prefix "if [ -z \"$" small_buf "\" ]; then\n"); \
   putstr(prefix "  if [ ${#" big_buf "} -ge " len " ]; then\n"); \
-  putstr(prefix "    __temp=${" big_buf "#" pattern "}\n"); \
+  putstr(prefix "    __temp=\"${" big_buf "#" pattern "}\"\n"); \
   putstr(prefix "    " small_buf "=\"${" big_buf "%\"$__temp\"}\"\n"); \
-  putstr(prefix "    " big_buf "=$__temp\n"); \
+  putstr(prefix "    " big_buf "=\"$__temp\"\n"); \
   putstr(prefix "  else\n"); \
-  putstr(prefix "    " small_buf "=$" big_buf "\n"); \
+  putstr(prefix "    " small_buf "=\"$" big_buf "\"\n"); \
   putstr(prefix "    " big_buf "=\n"); \
   putstr(when_empty); \
   putstr(prefix "  fi\n"); \
@@ -533,7 +533,7 @@ DEPENDS_ON(char_to_int)
 #else
   extract_line_head("  ", "__stdin_buf128", "__stdin_buf", ANY_STRING_128, "128", "")
   extract_line_head("  ", "__stdin_buf64", "__stdin_buf128", ANY_STRING_64, "64", "")
-  extract_line_head("  ", "__stdin_buf32", "__stdin_buf64", ANY_STRING_32, "32", "        __stdin_end=1\n")
+  extract_line_head("  ", "__stdin_buf32", "__stdin_buf64", ANY_STRING_32, "32", "      __stdin_end=1\n")
   extract_first_char("", "__stdin_buf32", "$1")
   putstr("  __stdin_buf32=${__stdin_buf32#?}  # Remove the first character\n");
 #endif
