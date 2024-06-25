@@ -2353,8 +2353,8 @@ void epilogue() {
   }
 
   if (main_returns) {
-    printf("_code=0; # Success exit code\n");
-    print_text(string_concat3(wrap_str("_main _code"), main_args, wrap_str("; exit $_code\n")));
+    printf("__code=0; # Success exit code\n");
+    print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
   } else {
     print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
   }
