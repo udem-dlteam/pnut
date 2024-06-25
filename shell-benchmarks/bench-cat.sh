@@ -9,7 +9,7 @@ fast_bench_with() { # $1: shell, $2: length
 }
 
 lengths="1000 5000 10000"
-shells="dash bash zsh"
+shells="ksh dash bash zsh"
 
 for len in $lengths; do
   for s in $shells; do
