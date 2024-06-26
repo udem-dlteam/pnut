@@ -137,10 +137,13 @@ test() {
 
     if [ $failed -ne 0 ]; then
         echo "Failed tests:"
-        for test in "${failed_tests[@]}"; do            
+        for test in "${failed_tests[@]}"; do
             echo "-   $test"
         done
+        return 1
     fi
+
+    return 0
 }
 
 # Determine action to perform

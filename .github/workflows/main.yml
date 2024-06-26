@@ -6,77 +6,69 @@ on:
       - '**'  # Matches all branches
 
 jobs:
-  x86-test:
+  setup:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:  # Checkout code from the branch that triggered the workflow
-          ref: ${{ github.ref }}
+
+      - name: Install required shells
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ksh zsh dash mksh yash busybox-static
+
+  x86-test:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
 
       - name: Run x86 tests
         run: |
+          set -e
           chmod +x run-tests.sh
-          ./run-tests.sh -Di386 test
-          ./run-tests.sh -Di386 clean
+          ./run-tests.sh -Di386 test || exit 1
+          ./run-tests.sh -Di386 clean || true
 
   shell-test:
     runs-on: ubuntu-latest
+    needs: setup
     strategy:
       matrix:
-        shells: [bash, ksh, dash, zsh]
+        shells: [bash, ksh, dash, zsh, ash, yash, mksh]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:  # Checkout code from the branch that triggered the workflow
-          ref: ${{ github.ref }}
-          shell: ${{ matrix.shells }}
 
-      - name: Run shell tests
+      - name: Run shell tests with ${{ matrix.shells }}
+        shell: ${{ matrix.shells }}
         run: |
+          set -e
           chmod +x run-tests.sh
-          ./run-tests.sh -Dsh test
-          ./run-tests.sh -Dsh clean
+          ./run-tests.sh -Dsh test || exit 1
+          ./run-tests.sh -Dsh clean || true
 
   bootstraps:
     runs-on: ubuntu-latest
+    needs: setup
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        with:  # Checkout code from the branch that triggered the workflow
-          ref: ${{ github.ref }}
 
-      - name: Run bootstrap shell
+      - name: Run bootstrap shell with all shells
         run: |
-          ./bootstrap-pnut.sh
-
+          set -e
+          chmod +x bootstrap-pnut.sh
+          ./bootstrap-pnut.sh TEST_ALL_SHELLS || exit 1
       - name: Run bootstrap x86
         run: |
-          ./bootstrap-pnut-x86.sh
+          set -e
+          chmod +x bootstrap-pnut-x86.sh
+          ./bootstrap-pnut-x86.sh || exit 1
 
-  # benchmarks:
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       shells: [bash, ksh, dash, zsh, ash, yash]
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v2
-  #       with:  # Checkout code from the branch that triggered the workflow
-  #         ref: ${{ github.ref }}
-  #         shell: ${{ matrix.shells }}
-  #     - name: Run benchmarks
-  #       run: |
-  #         chmod +x benchmark.sh
-  #         ./benchmark.sh ${{ matrix.shells }}
-  #     - name: Upload benchmark results
-  #       uses: actions/upload-artifact@v2
-  #       with:
-  #         name: benchmark-results-${{ matrix.shells }} # Name of the artifact
-  #         path: benchmark_results_${{ matrix.shells }}.tex # Upload the benchmark results
-
-  end-message: # This job will run after the test job is completed
+  success-message:
     runs-on: ubuntu-latest
     needs: [x86-test, shell-test, bootstraps]
     steps:
