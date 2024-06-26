@@ -1,6 +1,6 @@
-struct LinkedList { 
-  int val; 
-  struct LinkedList *next; 
+struct LinkedList {
+  int val;
+  struct LinkedList *next;
 };
 
 void putnumber(int n) {

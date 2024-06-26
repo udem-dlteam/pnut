@@ -14,7 +14,7 @@ void main()
 
   while (p * 10 <= n){
     p = p * 10;
-  } 
+  }
 
   while (p > 0) {
     digit = n / p;
