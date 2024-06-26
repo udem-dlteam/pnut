@@ -478,17 +478,37 @@ DEFINE_RUNTIME_FUN(putchar)
   putstr("}\n");
 END_RUNTIME_FUN(putchar)
 
+#define ANY_STRING_16   "????????????????"
+#define ANY_STRING_256  "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
+
+#define extract_line_head(prefix, small_buf, big_buf, pattern, len, when_empty) \
+  putstr(prefix "if [ -z \"$" small_buf "\" ]; then\n"); \
+  putstr(prefix "  if [ ${#" big_buf "} -ge " len " ]; then\n"); \
+  putstr(prefix "    __temp=\"${" big_buf "#" pattern "}\"\n"); \
+  putstr(prefix "    " small_buf "=\"${" big_buf "%\"$__temp\"}\"\n"); \
+  putstr(prefix "    " big_buf "=\"$__temp\"\n"); \
+  putstr(prefix "  else\n"); \
+  putstr(prefix "    " small_buf "=\"$" big_buf "\"\n"); \
+  putstr(prefix "    " big_buf "=\n"); \
+  putstr(when_empty); \
+  putstr(prefix "  fi\n"); \
+  putstr(prefix "fi\n");
+
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
-  putstr("__stdin_line_ends_with_eof=0\n");
+  putstr("__stdin_buf16=\n");
+  putstr("__stdin_buf256=\n");
+  putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
+  putstr("__stdin_end=1\n");
   putstr("_getchar() {\n");
-  putstr("  if [ -z \"$__stdin_buf\" ] ; then                   # need to get next line when buffer empty\n");
-  putstr("    if [ $__stdin_line_ends_with_eof -eq 1 ]; then  # EOF at end of line, return -1\n");
-  putstr("      : $(($1 = -1))\n");
-  putstr("      __stdin_line_ends_with_eof=0                  # Reset EOF flag for next getchar call\n");
+  putstr("  if [ -z \"$__stdin_buf16\" ] && [ $__stdin_end -eq 1 ] ; then          # need to get next line when buffer empty\n");
+  putstr("    if [ $__stdin_line_ending -eq 1 ]; then  # Line is empty, return line ending\n");
+  putstr("      : $(($1 = __stdin_line_ending))\n");
+  putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
+  putstr("    __stdin_end=0\n");
   putstr("    IFS=                                            # don't split input\n");
   putstr("    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf\n");
   putstr("      if [ -z \"$__stdin_buf\" ] ; then               # an empty line implies a newline character\n");
@@ -500,18 +520,19 @@ DEPENDS_ON(char_to_int)
   putstr("        : $(($1 = -1))\n");
   putstr("        return\n");
   putstr("      else\n");
-  putstr("        __stdin_line_ends_with_eof=1\n");
+  putstr("        __stdin_line_ending=-1\n");
   putstr("      fi\n");
   putstr("    fi\n");
-  putstr("  else\n");
-  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
-  putstr("    if [ -z \"$__stdin_buf\" ] ; then                 # end of line if the buffer is now empty\n");
-  putstr("      : $(($1 = 10))\n");
-  putstr("      return\n");
-  putstr("    fi\n");
   putstr("  fi\n");
-  putstr("\n");
+#ifndef OPTIMIZE_LONG_LINES
   extract_first_char("", "__stdin_buf", "$1")
+  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
+#else
+  extract_line_head("  ", "__stdin_buf256", "__stdin_buf", ANY_STRING_256, "256", "")
+  extract_line_head("  ", "__stdin_buf16", "__stdin_buf256", ANY_STRING_16, "16", "      __stdin_end=1\n")
+  extract_first_char("", "__stdin_buf16", "$1")
+  putstr("  __stdin_buf16=${__stdin_buf16#?}  # Remove the first character\n");
+#endif
   putstr("}\n");
 END_RUNTIME_FUN(getchar)
 
@@ -727,10 +748,24 @@ DEPENDS_ON(char_to_int)
   putstr("  __fgetc_buf=$1\n");
   putstr("  __buffer=$2\n");
   putstr("  __ends_with_eof=$3\n");
+#ifndef OPTIMIZE_LONG_LINES
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
   extract_first_char("  ", "__fgetc_buf", "_$__buffer")
   putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
   putstr("    : $((__buffer += 1))              # Move to the next buffer position\n");
+#else
+  putstr("  __fgetc_buf16=\n");
+  putstr("  __stdin_buf256=\n");
+  putstr("  __continue=1\n");
+  putstr("  while [ $__continue != 0 ] ; do\n");
+  extract_line_head("    ", "__stdin_buf256", "__fgetc_buf",  ANY_STRING_256, "256", "")
+  extract_line_head("    ", "__fgetc_buf16", "__stdin_buf256",  ANY_STRING_16,  "16", "        __continue=0\n")
+  putstr("    while [ ! -z \"$__fgetc_buf16\" ]; do\n");
+  extract_first_char("    ", "__fgetc_buf16", "_$__buffer")
+  putstr("      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character\n");
+  putstr("      : $((__buffer += 1))              # Move to the next buffer position\n");
+  putstr("    done\n");
+#endif
   putstr("  done\n");
   putstr("\n");
   putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
@@ -788,7 +823,7 @@ END_RUNTIME_FUN(read_byte)
 DEFINE_RUNTIME_FUN(read)
 DEPENDS_ON(read_byte)
 DEPENDS_ON(open)
-  putstr("_read() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+  putstr("_read() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    read_byte __byte $__fd\n");

@@ -692,17 +692,17 @@ text restore_local_vars(int params_count) {
     if (variable_is_constant_param(local_var)) continue;
     local_var_pos += 1;
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    res = concatenate_strings_with(res, string_concat3(env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true)), wrap_str(", "));
+    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("))")), wrap_char(' '));
   }
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
     local_var_pos += 1;
-    res = concatenate_strings_with(res, string_concat3(env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true)), wrap_str(", "));
+    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("))")), wrap_char(' '));
     counter -= 1;
   }
 
-  return string_concat3(wrap_str(": $((_tmp = $1, "), res, wrap_str(", $1 = _tmp))"));
+  return string_concat3(wrap_str(": $((__tmp = $1)) "), res, wrap_str(" $(($1 = __tmp))"));
 }
 
 #else
@@ -2353,8 +2353,8 @@ void epilogue() {
   }
 
   if (main_returns) {
-    printf("_code=0; # Success exit code\n");
-    print_text(string_concat3(wrap_str("_main _code"), main_args, wrap_str("; exit $_code\n")));
+    printf("__code=0; # Success exit code\n");
+    print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
   } else {
     print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
   }
