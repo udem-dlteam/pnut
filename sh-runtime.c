@@ -22,7 +22,7 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #endif
 
 #ifdef RT_COMPACT
-#define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$(printf \"%o\" \"" int_var "\")\")\n");
+#define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$((" int_var "/64))$((" int_var "/8%8))$((" int_var "%8))\")\n");
 #else
 #define call_int_to_char(prefix, int_var) putstr(prefix "int_to_char \"" int_var "\"\n");
 #endif
