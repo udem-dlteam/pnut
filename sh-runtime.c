@@ -335,7 +335,7 @@ DEFINE_RUNTIME_FUN(free)
   putstr("_free() { # $2 = object to free\n");
 #ifdef RT_FREE_UNSETS_VARS
   putstr("  __ptr=$(($2 - 1))          # Start of object\n");
-  putstr("  __end=$((__ptr + _$__ptr)) # End of object \n");
+  putstr("  __end=$((__ptr + _$__ptr)) # End of object\n");
   putstr("  while [ $__ptr -lt $__end ]; do\n");
   putstr("    unset \"_$__ptr\"\n");
   putstr("    : $((__ptr += 1))\n");
@@ -351,12 +351,13 @@ DEPENDS_ON(malloc)
 DEPENDS_ON(char_to_int)
   putstr("# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.\n");
   putstr("unpack_string() {\n");
-  putstr("  __buf=\"$1\"\n");
-  putstr("  _malloc __addr $((${#__buf} + 1))\n");
+  putstr("  __str=\"$1\"\n");
+  putstr("  _malloc __addr $((${#__str} + 1))\n");
   putstr("  __ptr=$__addr\n");
-  putstr("  while [ -n \"$__buf\" ] ; do\n");
-  putstr("    __char=\"${__buf%\"${__buf#?}\"}\"   # remove all but first char\n");
-  putstr("    __buf=\"${__buf#?}\"               # remove the current char from $__buf\n");
+  putstr("  while [ -n \"$__str\" ] ; do\n");
+  putstr("    __tail=\"${__str#?}\"         # Remove first char from string\n");
+  putstr("    __char=\"${__str%\"$__tail\"}\" # Remove all but first char\n");
+  putstr("    __str=\"$__tail\"\n");
   call_char_to_int("    ", "$__char")
   putstr("    : $((_$__ptr = __c))\n");
   putstr("    : $((__ptr += 1))\n");
