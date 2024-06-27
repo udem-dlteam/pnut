@@ -2321,7 +2321,7 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
-  printf("set -e -u\n\n");
+  printf("set -e\n\n");
 }
 
 void epilogue() {
