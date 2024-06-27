@@ -105,11 +105,18 @@ jobs:
           set -e
           chmod +x bootstrap-pnut.sh
           ./bootstrap-pnut.sh TEST_ALL_SHELLS || exit 1
+
       - name: Run bootstrap x86
         run: |
           set -e
           chmod +x bootstrap-pnut-x86.sh
           ./bootstrap-pnut-x86.sh || exit 1
+
+      - name: Run bootstrap x86 with shell
+        run: |
+          set -e
+          chmod +x bootstrap-pnut-x86.sh
+          ./bootstrap-pnut-x86.sh WITH_SHELL || exit 1
 
   success-message:
     runs-on: ubuntu-latest
