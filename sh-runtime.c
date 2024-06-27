@@ -74,16 +74,22 @@ DEFINE_RUNTIME_FUN(local_vars)
 #ifndef SH_SAVE_VARS_WITH_SET
   printf("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  printf("let() { : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
-  printf("  : $(($1=${2-0}))                       # Init\n");
+  printf("let() { # $1: variable name, $2: value (optional) \n");
+  printf("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
+  printf("  : $(($1=$2+0))                   # Init\n");
   printf("}\n");
 #else
   printf("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
 #endif
-  printf("endlet() {\n");
-  printf("  __ret=$1; : $((__tmp = $__ret)) # Save return value so it's not overwritten\n");
-  printf("  while [ $# -ge 2 ]; do : $(($2 = __$__SP)) $((__SP -= 1)); shift; done\n");
-  printf("  : $(($__ret=__tmp))\n");
+  printf("endlet() { # $1: return variable\n");
+  printf("           # $2...: function local variables\n");
+  printf("  __ret=$1 # Don't overwrite return value\n");
+  printf("  : $((__tmp = $__ret))\n");
+  printf("  while [ $# -ge 2 ]; do\n");
+  printf("    : $(($2 = __$__SP)) $((__SP -= 1)); # Pop\n");
+  printf("    shift;\n");
+  printf("  done\n");
+  printf("  : $(($__ret=__tmp))   # Restore return value\n");
   printf("}\n");
 #endif
 END_RUNTIME_FUN(local_vars)
