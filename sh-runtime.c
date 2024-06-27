@@ -848,7 +848,7 @@ END_RUNTIME_FUN(read)
 
 DEFINE_RUNTIME_FUN(write)
 DEPENDS_ON(open)
-  putstr("_write() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+  putstr("_write() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    : $((__byte = _$((__buf+__i))))\n");
