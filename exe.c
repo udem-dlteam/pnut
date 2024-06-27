@@ -1506,7 +1506,7 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 1)); // value when true
       jump(lbl2);
       def_label(lbl1);
-      grow_fs(-1); // here, the child#1 is not evaluated, so we adjust the stack
+      grow_fs(-1); // here, the child#1 is not on the stack, so we adjust it
       codegen_rvalue(get_child(node, 2)); // value when false
       grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
       def_label(lbl2);

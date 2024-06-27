@@ -859,9 +859,8 @@ DEPENDS_ON(open)
   putstr("}\n");
 END_RUNTIME_FUN(write)
 
-// exec $fd<&- does not work as expected, and we don't want to use eval so we
-// instead have a case statement that calls the appropriate exec command to open
-// and close file descriptors.
+// exec $fd<&- does not work as expected so we instead have a case statement
+// that calls the appropriate exec command to open and close file descriptors.
 DEFINE_RUNTIME_FUN(fopen)
 DEPENDS_ON(malloc)
 DEPENDS_ON(open)
