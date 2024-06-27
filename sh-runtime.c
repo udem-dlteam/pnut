@@ -74,10 +74,11 @@ DEFINE_RUNTIME_FUN(local_vars)
 #ifndef SH_SAVE_VARS_WITH_SET
   printf("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  printf("let() { : $((__SP += 1)) $((__$__SP=$1)) $(($1=$2)) ; } \n");
-  printf("let_() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
+  printf("let() { : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
+  printf("  : $(($1=${2-0}))                       # Init\n");
+  printf("}\n");
 #else
-  printf("let() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
+  printf("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
 #endif
   printf("endlet() {\n");
   printf("  __ret=$1; : $((__tmp = $__ret)) # Save return value so it's not overwritten\n");

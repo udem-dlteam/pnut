@@ -737,11 +737,6 @@ text save_local_vars(int params_count) {
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
-#ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  text let_fun = wrap_str("let_ ");
-#else
-  text let_fun = wrap_str("let ");
-#endif
 
   if (num_vars_to_save() == 0) return 0;
 
@@ -749,7 +744,7 @@ text save_local_vars(int params_count) {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(string_concat(let_fun, format_special_var(ident, true)), res, wrap_str("; "));
+    res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
     counter -= 1;
   }
 
@@ -763,7 +758,7 @@ text save_local_vars(int params_count) {
     if (!variable_is_constant_param(local_var)) {
 #endif
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-      res = concatenate_strings_with(string_concat(let_fun, env_var_with_prefix(ident, true)), res, wrap_str("; "));
+      res = concatenate_strings_with(string_concat(wrap_str("let "), env_var_with_prefix(ident, true)), res, wrap_str("; "));
     }
 
     env = get_child(env, 1);
