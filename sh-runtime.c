@@ -292,10 +292,12 @@ DEFINE_RUNTIME_FUN(malloc)
 #ifdef RT_FREE_UNSETS_VARS
   // When free isn't a no-op, we need to tag all objects with their size
   putstr("  : $((_$__ALLOC = $2)) # Track object size\n");
-  putstr("  : $((__ALLOC += 1))\n");
-#endif
+  putstr("  : $(($1 = $__ALLOC + 1))\n");
+  putstr("  : $((__ALLOC += $2 + 1))\n");
+#else
   putstr("  : $(($1 = $__ALLOC))\n");
   putstr("  : $((__ALLOC += $2))\n");
+#endif
   putstr("}\n");
 END_RUNTIME_FUN(malloc)
 
@@ -329,17 +331,16 @@ END_RUNTIME_FUN(defglo)
 #endif
 
 DEFINE_RUNTIME_FUN(free)
-  putstr("_free() { # $1 = pointer to object to free\n");
-  putstr("  : $(($1 = 0)); shift # Return 0\n");
+  putstr("_free() { # $2 = object to free\n");
 #ifdef RT_FREE_UNSETS_VARS
-  putstr("  __ptr=$1\n");
-  putstr("  __size=$((_$((__ptr - 1)))) # Get size of allocation\n");
-  putstr("  while [ $__size -gt 0 ]; do\n");
+  putstr("  __ptr=$(($2 - 1))          # Start of object\n");
+  putstr("  __end=$((__ptr + _$__ptr)) # End of object \n");
+  putstr("  while [ $__ptr -lt $__end ]; do\n");
   putstr("    unset \"_$__ptr\"\n");
   putstr("    : $((__ptr += 1))\n");
-  putstr("    : $((__size -= 1))\n");
   putstr("  done\n");
 #endif
+  putstr("  : $(($1 = 0))              # Return 0\n");
   putstr("}\n");
 END_RUNTIME_FUN(free)
 
