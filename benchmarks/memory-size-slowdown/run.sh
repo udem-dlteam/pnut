@@ -1,6 +1,10 @@
 set -e
 
 DIR="benchmarks/memory-size-slowdown"
+COMP_DIR="$DIR/compiled"
+
+# Create the compiled directory if it doesn't exist
+mkdir -p $COMP_DIR
 
 print_time()
 {
@@ -11,11 +15,11 @@ print_time()
 with_size() {
   # shell=$1
   env_size=$2
-  gcc -E -P -DARR_SIZE=$env_size $DIR/memory-size-slowdown.c > $DIR/memory-size-slowdown-$env_size.c
+  gcc -E -P -DARR_SIZE=$env_size $DIR/memory-size-slowdown.c > $COMP_DIR/memory-size-slowdown-$env_size.c
 
-  ./benchmarks/pnut-sh.exe $DIR/memory-size-slowdown-$env_size.c > $DIR/memory-size-slowdown-$env_size.sh
+  ./benchmarks/pnut-sh.exe $COMP_DIR/memory-size-slowdown-$env_size.c > $COMP_DIR/memory-size-slowdown-$env_size.sh
 
-  TIME_MS=$(( `bash -c "time $1 $DIR/memory-size-slowdown-$env_size.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+  TIME_MS=$(( `bash -c "time $1 $COMP_DIR/memory-size-slowdown-$env_size.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
   print_time $TIME_MS "for: $1 with $env_size"
 }
 
