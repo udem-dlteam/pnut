@@ -17,7 +17,7 @@
 #define AVOID_AMPAMP_BARBAR_not
 
 // Use positional parameter directly for function parameters that are constants
-#define OPTIMIZE_CONSTANT_PARAM
+#define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
