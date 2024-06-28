@@ -1163,11 +1163,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     if (op == INTEGER) {
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(node)));
     } else if (op == CHARACTER) {
+#ifdef SH_INLINE_CHAR_LITERAL
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
+#else
       if (context == RVALUE_CTX_ARITH_EXPANSION) {
         return character_ident(get_val(node));
       } else {
         return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
       }
+#endif
     } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }

@@ -30,6 +30,8 @@
 #define SH_SAVE_VARS_WITH_SET_not
 // Have let commands initialize function parameters
 #define SH_INITIALIZE_PARAMS_WITH_LET
+// Inline ascii code of character literal
+#define SH_INLINE_CHAR_LITERAL_not
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
@@ -2755,8 +2757,10 @@ ast parse_compound_statement() {
 
 int main(int argc, char **argv) {
 
+
   int i;
   ast decl;
+  char* test = "\a\b\f\n\r\t\v\\\'\"";
 
   init_ident_table();
 
