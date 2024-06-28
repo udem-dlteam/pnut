@@ -21,7 +21,9 @@
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
+#ifndef SH_AVOID_PRINTF_USE_NOT
 #define SH_AVOID_PRINTF_USE
+#endif
 #define SH_INLINE_PUTCHAR
 #define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
