@@ -2096,11 +2096,14 @@ void comp_glo_fun_decl(ast node) {
     while(vars != 0) {
       var = get_child(vars, 0); /* Single VAR_DECL */
       /* TODO: Replace with ternary expression? */
-      if (get_child(var, 2) == 0) {
-        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0));
-      } else {
+      if (get_child(var, 2) != 0) {
         comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2));
       }
+#ifdef INITIALIZE_LOCAL_VARS_WITH_ZERO
+      else {
+        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0));
+      }
+#endif
       vars = get_child(vars, 1); /* Next VAR_DECL */
     }
     local_vars = get_child(local_vars, 1);
