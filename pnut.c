@@ -26,10 +26,14 @@
 #define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
 #define SH_INCLUDE_C_CODE_not
-// If we use the `set` command and positional parameters to simulate local vars
-#define SH_SAVE_VARS_WITH_SET_not
 // Have let commands initialize function parameters
+#ifndef SH_SAVE_VARS_WITH_SET
 #define SH_INITIALIZE_PARAMS_WITH_LET
+#endif
+// If we use the `set` command and positional parameters to simulate local vars
+#ifndef SH_INITIALIZE_PARAMS_WITH_LET
+#define SH_SAVE_VARS_WITH_SET
+#endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
 
