@@ -3,11 +3,24 @@
 # Define the top-level benchmark directory
 BENCHMARK_DIR="benchmarks"
 
-echo "Benchmarking all scripts in $BENCHMARK_DIR"
+# Clean up function for benchmark results in each benchmark directory
+cleanup_results() {
+    # Find all benchmark-results directories in the benchmarks directory and its subdirectories
+    find "$BENCHMARK_DIR" -name "benchmark-results" | while read -r RESULTS_DIR; do
+        echo "Cleaning up $RESULTS_DIR"
+        rm -rf "$RESULTS_DIR"
+    done
+}
 
-# Run compile-pnut.sh script
-echo "Running compile-pnut.sh"
-./benchmarks/compile-pnut.sh
+# Determine if cleanup is needed
+if [ "$1" == "cleanup" ]; then
+    echo "Cleaning up benchmark results"
+    cleanup_results
+    exit 0
+fi
+
+
+echo "Benchmarking all scripts in $BENCHMARK_DIR"
 
 # Find all run.sh files in the benchmarks directory and its subdirectories
 find "$BENCHMARK_DIR" -name "run.sh" | while read -r RUN_SCRIPT; do
