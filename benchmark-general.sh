@@ -10,6 +10,11 @@ cleanup_results() {
         echo "Cleaning up $RESULTS_DIR"
         rm -rf "$RESULTS_DIR"
     done
+    # Find all compiled directories in the benchmarks directory and its subdirectories
+    find "$BENCHMARK_DIR" -name "compiled" | while read -r COMP_DIR; do
+        echo "Cleaning up $COMP_DIR"
+        rm -rf "$COMP_DIR"
+    done
 }
 
 # Determine if cleanup is needed
