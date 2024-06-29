@@ -1,6 +1,6 @@
 
 // Define the number of queens
-// #define QUEENS 4
+// #define queens 4
 
 int nqueens(int i, int diag1, int diag2, int cols, int col) {
     int free;
@@ -21,7 +21,7 @@ int nqueens(int i, int diag1, int diag2, int cols, int col) {
 }
 
 int main() {
-    int n = QUEENS;
+    int n = queens;
     printf("%d-queens problem has %d solutions\n", n, nqueens(n, -1, -1, (1 << n) - 1, 1));
     return 0;
 }

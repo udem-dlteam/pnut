@@ -21,10 +21,10 @@ with_size() {
   ./benchmarks/pnut-sh.exe -D$option $COMP_DIR/fib-$env_size.c > $COMP_DIR/fib-$env_size-$option.sh
 
   TIME_MS=$(( `bash -c "time $shell $COMP_DIR/fib-$env_size-$option.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  print_time $TIME_MS "for: $shell with $env_size and $option"
+  print_time $TIME_MS "for: $shell with SIZE=$env_size and $option"
 }
 
-sizes="100 500 1000 5000 10000 50000 100000"
+N="30 50 100 500 1000 5000 10000"
 shells="ksh dash bash yash zsh"
 options="RT_COMPACT OPTIMIZE_LONG_LINES SH_AVOID_PRINTF_USE SH_SAVE_VARS_WITH_SET OPTIMIZE_CONSTANT_PARAM"
 
@@ -32,9 +32,9 @@ options="RT_COMPACT OPTIMIZE_LONG_LINES SH_AVOID_PRINTF_USE SH_SAVE_VARS_WITH_SE
 ./benchmarks/compile-pnut.sh -DDRT_NO_INIT_GLOBALS
 
 for shell in $shells; do
-  for size in $sizes; do
+  for n in $N; do
     for option in $options; do
-      with_size "$shell" $size $option
+      with_size "$shell" $n $option
     done
   done
 done

@@ -26,10 +26,10 @@ with_size() {
   len=$2
 
   TIME_MS=$(( `bash -c "time $shell $COMP_DIR/cat-base.sh $INPUT_DIR/input-$len.txt" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  print_time $TIME_MS "for: $shell base with file size $len"
+  print_time $TIME_MS "for: $shell with file size $len and base"
 
   TIME_MS=$(( `bash -c "time $shell $COMP_DIR/cat-optimized.sh $INPUT_DIR/input-$len.txt" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  print_time $TIME_MS "for: $shell optimized with file size $len"
+  print_time $TIME_MS "for: $shell with FILESIZE=$len and optimized"
 }
 
 lengths="1000 2000 5000 10000 20000"

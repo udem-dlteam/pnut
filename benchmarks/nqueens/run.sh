@@ -24,7 +24,7 @@ with_size() {
   print_time $TIME_MS "for: $shell with QUEENS=$env_size and $option"
 }
 
-sizes="4 8 10 12"
+QUEENS="4 8 10 12"
 shells="ksh dash bash yash zsh"
 options="RT_COMPACT OPTIMIZE_LONG_LINES SH_AVOID_PRINTF_USE SH_SAVE_VARS_WITH_SET OPTIMIZE_CONSTANT_PARAM"
 
@@ -32,9 +32,9 @@ options="RT_COMPACT OPTIMIZE_LONG_LINES SH_AVOID_PRINTF_USE SH_SAVE_VARS_WITH_SE
 ./benchmarks/compile-pnut.sh -DDRT_NO_INIT_GLOBALS
 
 for shell in $shells; do
-  for size in $sizes; do
+  for queens in $QUEENS; do
     for option in $options; do
-      with_size "$shell" $size $option
+      with_size "$shell" $queens $option
     done
   done
 done

@@ -1,5 +1,5 @@
 // Fibonacci sequence calculation
-// #define N 30
+// #define n 30
 
 int fib(int n) {
     if (n <= 1) {
@@ -9,5 +9,5 @@ int fib(int n) {
 }
 
 void main() {
-    int result = fib(N);
+    int result = fib(n);
 }

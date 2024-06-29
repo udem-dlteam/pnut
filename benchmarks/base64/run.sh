@@ -30,7 +30,7 @@ with_size() {
   ./benchmarks/pnut-sh.exe -D$option $COMP_DIR/base64-$len.c > $COMP_DIR/base64-$len-$option.sh
 
   TIME_MS=$(( `bash -c "time $shell $COMP_DIR/base64-$len-$option.sh < $INPUT_DIR/input-$len.txt" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  print_time $TIME_MS "for: $shell with BUF_SIZE=$len and $option"
+  print_time $TIME_MS "for: $shell with BUFFSIZE=$len and $option"
 }
 
 sizes="1024 4096 8192 16384 32768"

@@ -21,7 +21,7 @@ with_size() {
   ./benchmarks/pnut-sh.exe -D$option $COMP_DIR/tak-$env_size.c > $COMP_DIR/tak-$env_size-$option.sh
 
   TIME_MS=$(( `bash -c "time $shell $COMP_DIR/tak-$env_size-$option.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  print_time $TIME_MS "for: $shell with $env_size and $option"
+  print_time $TIME_MS "for: $shell with SIZE=$env_size and $option"
 }
 
 sizes="1000 5000 10000 50000 100000 500000 1000000"
