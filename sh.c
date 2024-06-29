@@ -650,18 +650,12 @@ text save_local_vars(int params_count) {
 
   runtime_use_local_vars = true;
 
-  while (params_count > 0) {
-    ident = new_ast0(IDENTIFIER_DOLLAR, params_count);
-    res = concatenate_strings_with(format_special_var(ident, false), res, wrap_char(' '));
-    params_count -= 1;
-  }
-
   while (env != 0) {
     local_var = get_child(env, 0);
     env = get_child(env, 1);
     if (variable_is_constant_param(local_var)) continue;
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+    res = concatenate_strings_with(string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), res, wrap_char(' '));
   }
 
   while (counter > 0) {
@@ -670,7 +664,7 @@ text save_local_vars(int params_count) {
     counter -= 1;
   }
 
-  return string_concat(wrap_str("set "), res);
+  return string_concat(wrap_str("set $@ "), res);
 }
 
 // Restore the previous value of local variables from positional parameters
@@ -678,9 +672,13 @@ text restore_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
-  int local_var_pos = params_count;
+  // Position of the saved local vars, starting from 0
+  int local_var_pos = 0;
   text res = 0;
   int counter = fun_gensym_ix;
+  // Number of non-constant variables in the environment.
+  // Used to account for traversal of local env in reverse order.
+  int env_non_cst_size = 0;
 
   if (num_vars_to_save() == 0) return 0;
 
@@ -689,16 +687,25 @@ text restore_local_vars(int params_count) {
   while (env != 0) {
     local_var = get_child(env, 0);
     env = get_child(env, 1);
+    if(variable_is_constant_param(local_var)) continue;
+    env_non_cst_size += 1;
+  }
+
+  env = local_env;
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    env = get_child(env, 1);
     if (variable_is_constant_param(local_var)) continue;
-    local_var_pos += 1;
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("))")), wrap_char(' '));
+    res = concatenate_strings_with(string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + env_non_cst_size - local_var_pos), true), wrap_str("))")), res, wrap_char(' '));
+    local_var_pos += 1;
   }
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + local_var_pos + 1), true), wrap_str("))")), wrap_char(' '));
     local_var_pos += 1;
-    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("))")), wrap_char(' '));
     counter -= 1;
   }
 
