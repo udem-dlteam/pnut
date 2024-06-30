@@ -11,6 +11,10 @@ int fib(int n) {
 
 void main() {
   int n;
-  n = fib(20);
-  printf("fib(20) = %d\n", n);
+  int i;
+  while (i < 15) {
+    n = fib(i);
+    printf("fib(%d) = %d\n", i, n);
+    ++i;
+  }
 }
