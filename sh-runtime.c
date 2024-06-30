@@ -361,12 +361,17 @@ DEPENDS_ON(char_to_int)
   putstr("  _malloc __addr $((${#__str} + 1))\n");
   putstr("  __ptr=$__addr\n");
   putstr("  while [ -n \"$__str\" ] ; do\n");
-  putstr("    __tail=\"${__str#?}\"         # Remove first char from string\n");
-  putstr("    __char=\"${__str%\"$__tail\"}\" # Remove all but first char\n");
-  putstr("    __str=\"$__tail\"\n");
+  putstr("    # Remove first char from string\n");
+  putstr("    __tail=\"${__str#?}\"\n");
+  putstr("    # Remove all but first char\n");
+  putstr("    __char=\"${__str%\"$__tail\"}\"\n");
+  putstr("    # Convert char to ASCII\n");
   call_char_to_int("    ", "$__char")
+  putstr("    # Write character to memory\n");
   putstr("    : $((_$__ptr = __c))\n");
+  putstr("    # Continue with rest of string\n");
   putstr("    : $((__ptr += 1))\n");
+  putstr("    __str=\"$__tail\"\n");
   putstr("  done\n");
   putstr("  : $((_$__ptr = 0))\n");
   putstr("}\n");
