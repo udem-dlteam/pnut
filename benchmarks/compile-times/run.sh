@@ -36,7 +36,7 @@ gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -Os pnut.c
 
 chmod +x $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
 
-programs="empty hello fib sha256sum"
+programs="empty hello fib cat cp wc sha256sum"
 shells="ksh dash bash yash zsh gcc pnut"
 
 for prog in $programs; do
