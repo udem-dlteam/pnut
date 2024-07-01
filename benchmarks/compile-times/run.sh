@@ -29,8 +29,8 @@ compile() {
 
 PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
 PNUT_x86_OPTIONS="-DSUPPORT_INCLUDE -Di386"
-gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -Os pnut.c
-gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -Os pnut.c
+gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c
+gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 ./$COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut.sh
 ./$COMP_DIR/pnut-exe.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
 
