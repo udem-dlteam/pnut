@@ -44,6 +44,7 @@
 #define RT_NO_INIT_GLOBALS_not
 #define RT_COMPACT_not
 #define RT_INLINE_PUTCHAR
+#define RT_USE_LOOKUP_TABLE
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
