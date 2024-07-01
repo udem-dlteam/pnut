@@ -1117,8 +1117,8 @@ text with_prefixed_side_effects(ast test_side_effects, text code) {
 // Return true if the operator is associative.
 // Associative operators can be chained without parentheses.
 bool is_associative_operator(int op) {
-  return op == '+' | op == '*' | op == '&' | op == '|' | op == '^'
-      |  op == EQ_EQ | op == AMP_AMP | op == BAR_BAR;
+  return (op == '+')   | (op == '*')     | (op == '&')    | (op == '|')    | (op == '^')
+      |  (op == EQ_EQ) | (op == AMP_AMP) | (op == BAR_BAR);
 }
 
 /*
@@ -1600,7 +1600,6 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast params = get_child(node, 1);
   int name_id = get_val(name);
   text res;
-  ast ident;
 
 #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {

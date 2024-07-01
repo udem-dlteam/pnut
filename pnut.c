@@ -1827,7 +1827,6 @@ ast parse_struct() {
   ast type;
   ast result = 0;
   ast tail;
-  int stars;
 
   expect_tok(STRUCT_KW);
 
@@ -1851,6 +1850,9 @@ ast parse_struct() {
       if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
 
       type = parse_type_with_stars();
+
+      if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+        syntax_error("variable with void type");
 
       if (tok != IDENTIFIER) {
         syntax_error("identifier expected");
@@ -1893,7 +1895,6 @@ ast parse_union() {
 ast parse_declaration() {
 
   ast type;
-  int stars;
   int name;
   ast result = 0;
 
@@ -1905,7 +1906,7 @@ ast parse_declaration() {
 
     expect_tok(IDENTIFIER);
 
-    if ((stars == 0) AND (get_op(type) == VOID_KW))
+    if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
       syntax_error("variable with void type");
     /*
     if (tok == '[')
@@ -1950,7 +1951,6 @@ int parse_declaration_list() {
 ast parse_definition(int local) {
 
   ast type;
-  int stars;
   ast init;
   int name;
   ast params;
@@ -2004,7 +2004,7 @@ ast parse_definition(int local) {
 
       } else {
 
-        if ((stars == 0) AND (get_op(type) == VOID_KW)) {
+        if ((get_val(this_type) == 0) AND (get_op(this_type) == VOID_KW)) {
           syntax_error("variable with void type");
         }
 
@@ -2267,11 +2267,9 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
-  int parens = 0;
   int tokens = 0;
   ast result;
   ast type;
-  int stars;
 
   if (tok == '(') {
     // Ideally, we'd parse as many ( as needed, but then we would have to
@@ -2291,6 +2289,9 @@ ast parse_cast_expression() {
 
     if (is_type_starter(tok)) {
       type = parse_type_with_stars();
+
+      if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+        syntax_error("variable with void type");
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());
@@ -2766,7 +2767,6 @@ int main(int argc, char **argv) {
 
   int i;
   ast decl;
-  char* test = "\a\b\f\n\r\t\v\\\'\"";
 
   init_ident_table();
 
