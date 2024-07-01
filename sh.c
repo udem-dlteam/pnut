@@ -30,7 +30,6 @@ enum TEXT_NODES {
   TEXT_ESCAPED
 };
 
-#ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
 
 text comp_lvalue_address(ast node);
@@ -42,7 +41,6 @@ void comp_statement(ast node, int else_if);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 
-#endif
 
 /*
   Because concatenating strings is very expensive and a common operation, we
