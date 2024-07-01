@@ -69,28 +69,28 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 // Local variables
 
 DEFINE_RUNTIME_FUN(local_vars)
-  printf("# Local variables\n");
-  printf("__=0\n");
+  putstr("# Local variables\n");
+  putstr("__=0\n");
 #ifndef SH_SAVE_VARS_WITH_SET
-  printf("__SP=0\n");
+  putstr("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  printf("let() { # $1: variable name, $2: value (optional) \n");
-  printf("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
-  printf("  : $(($1=$2+0))                   # Init\n");
-  printf("}\n");
+  putstr("let() { # $1: variable name, $2: value (optional) \n");
+  putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
+  putstr("  : $(($1=$2+0))                   # Init\n");
+  putstr("}\n");
 #else
-  printf("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
+  putstr("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
 #endif
-  printf("endlet() { # $1: return variable\n");
-  printf("           # $2...: function local variables\n");
-  printf("  __ret=$1 # Don't overwrite return value\n");
-  printf("  : $((__tmp = $__ret))\n");
-  printf("  while [ $# -ge 2 ]; do\n");
-  printf("    : $(($2 = __$__SP)) $((__SP -= 1)); # Pop\n");
-  printf("    shift;\n");
-  printf("  done\n");
-  printf("  : $(($__ret=__tmp))   # Restore return value\n");
-  printf("}\n");
+  putstr("endlet() { # $1: return variable\n");
+  putstr("           # $2...: function local variables\n");
+  putstr("  __ret=$1 # Don't overwrite return value\n");
+  putstr("  : $((__tmp = $__ret))\n");
+  putstr("  while [ $# -ge 2 ]; do\n");
+  putstr("    : $(($2 = __$__SP)) $((__SP -= 1)); # Pop\n");
+  putstr("    shift;\n");
+  putstr("  done\n");
+  putstr("  : $(($__ret=__tmp))   # Restore return value\n");
+  putstr("}\n");
 #endif
 END_RUNTIME_FUN(local_vars)
 
@@ -323,17 +323,17 @@ END_RUNTIME_FUN(initialize_memory)
 DEFINE_RUNTIME_FUN(defarr)
 DEPENDS_ON(malloc)
 #ifdef RT_NO_INIT_GLOBALS
-  printf("defarr() { _malloc $1 $2; }\n");
+  putstr("defarr() { _malloc $1 $2; }\n");
 #else
 DEPENDS_ON(initialize_memory)
-  printf("defarr() { _malloc $1 $2; ; initialize_memory $(($1)) $2; }\n");
+  putstr("defarr() { _malloc $1 $2; ; initialize_memory $(($1)) $2; }\n");
 #endif
 END_RUNTIME_FUN(defarr)
 
 #ifdef SUPPORT_ADDRESS_OF_OP
 DEFINE_RUNTIME_FUN(defglo)
 DEPENDS_ON(malloc)
-  printf("defglo() { _malloc $1 1 ; }\n");
+  putstr("defglo() { _malloc $1 1 ; }\n");
 END_RUNTIME_FUN(defglo)
 #endif
 

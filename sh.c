@@ -3,15 +3,15 @@
 #include "sh-runtime.c"
 
 void print_string_char(int c) {
-  if (c == 7) printf("\\a");
-  else if (c == 8) printf("\\b");
-  else if (c == 12) printf("\\f");
-  else if (c == 10) printf("\\n");
-  else if (c == 13) printf("\\r");
-  else if (c == 9) printf("\\t");
-  else if (c == 11) printf("\\v");
-  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) printf("\\%c", c);
-  else if ((c < 32) OR (c > 126)) printf("\\%d%d%d", c>>6, (c>>3)&7, c&7);
+  if (c == 7)       putstr("\\a");
+  else if (c == 8)  putstr("\\b");
+  else if (c == 12) putstr("\\f");
+  else if (c == 10) putstr("\\n");
+  else if (c == 13) putstr("\\r");
+  else if (c == 9)  putstr("\\t");
+  else if (c == 11) putstr("\\v");
+  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) { putstr("\\"); putchar(c); }
+  else if ((c < 32) OR (c > 126)) { putstr("\\"); putint(c>>6); putint((c>>3)&7); putint(c&7); }
   else putchar(c);
 }
 
@@ -192,7 +192,7 @@ void print_escaped_text(text t, bool for_printf) {
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
-    printf("%d", text_pool[t + 1]);
+    putint(text_pool[t + 1]);
   } else if ( text_pool[t] == TEXT_FROM_POOL) {
     print_escaped_string(string_pool + text_pool[t + 1], for_printf);
   } else if (text_pool[t] == TEXT_ESCAPED) {
@@ -221,9 +221,9 @@ void print_text(text t) {
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
-    printf("%d", text_pool[t + 1]);
+    putint(text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_FROM_POOL) {
-    printf("%s", string_pool + text_pool[t + 1]);
+    putstr(string_pool + text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_ESCAPED) {
     print_escaped_text(text_pool[t + 1], text_pool[t + 2]);
   } else {
@@ -473,28 +473,6 @@ ast fresh_ident() {
 ast fresh_string_ident() {
   string_counter += 1;
   return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter - 1));
-}
-
-/* TODO: Remove this eventually or move to debug module */
-void print_local_env() {
-  ast env = local_env;
-  ast var;
-  ast ident;
-  int pos;
-  int kind;
-  int constant;
-
-  printf("##### Local environment #####\n");
-  while (env != 0) {
-    var = get_child(env, 0);
-    ident = get_child(var, 0);
-    pos = get_child(var, 1);
-    kind = get_child(var, 2);
-    constant = get_child(var, 3);
-
-    printf("# Ident[%d] %d = %s. kind = %d, constant = %d\n", pos, ident, string_pool + get_val(ident), kind, constant);
-    env = get_child(env, 1);
-  }
 }
 
 /*
@@ -2329,7 +2307,7 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
-  printf("set -e\n\n");
+  putstr("set -e\n\n");
 }
 
 void epilogue() {
@@ -2338,28 +2316,28 @@ void epilogue() {
   text main_args = 0;
 
   if (any_character_used) {
-    printf("# Character constants\n");
+    putstr("# Character constants\n");
     for(c = 0; c < 256; c += 1) {
       if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
-        printf("readonly ");
+        putstr("readonly ");
         print_text(character_ident(c));
-        printf("=%d\n", c);
+        putchar('='); putint(c); putchar('\n');
       }
     }
   }
 
-  printf("# Runtime library\n");
+  putstr("# Runtime library\n");
   produce_runtime();
 
   if (runtime_use_make_argv) {
-    printf("# Setup argc, argv\n");
-    printf("__argc_for_main=$(($# + 1))\n");
-    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+    putstr("# Setup argc, argv\n");
+    putstr("__argc_for_main=$(($# + 1))\n");
+    putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
     main_args = wrap_str(" $__argc_for_main $__argv_for_main");
   }
 
   if (main_returns) {
-    printf("__code=0; # Success exit code\n");
+    putstr("__code=0; # Success exit code\n");
     print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
   } else {
     print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
@@ -2420,5 +2398,7 @@ void codegen_glo_decl(ast decl) {
 
 void codegen_end() {
   epilogue();
+#ifdef PRINT_MEMORY_STATS
   printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
+#endif
 }
