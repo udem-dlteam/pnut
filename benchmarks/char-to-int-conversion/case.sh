@@ -1,107 +1,103 @@
-char_to_int() {
-  case $1 in
-    "0") char_to_int_code=48 ;;
-    "1") char_to_int_code=49 ;;
-    "2") char_to_int_code=50 ;;
-    "3") char_to_int_code=51 ;;
-    "4") char_to_int_code=52 ;;
-    "5") char_to_int_code=53 ;;
-    "6") char_to_int_code=54 ;;
-    "7") char_to_int_code=55 ;;
-    "8") char_to_int_code=56 ;;
-    "9") char_to_int_code=57 ;;
-    "a") char_to_int_code=97 ;;
-    "b") char_to_int_code=98 ;;
-    "c") char_to_int_code=99 ;;
-    "d") char_to_int_code=100 ;;
-    "e") char_to_int_code=101 ;;
-    "f") char_to_int_code=102 ;;
-    "g") char_to_int_code=103 ;;
-    "h") char_to_int_code=104 ;;
-    "i") char_to_int_code=105 ;;
-    "j") char_to_int_code=106 ;;
-    "k") char_to_int_code=107 ;;
-    "l") char_to_int_code=108 ;;
-    "m") char_to_int_code=109 ;;
-    "n") char_to_int_code=110 ;;
-    "o") char_to_int_code=111 ;;
-    "p") char_to_int_code=112 ;;
-    "q") char_to_int_code=113 ;;
-    "r") char_to_int_code=114 ;;
-    "s") char_to_int_code=115 ;;
-    "t") char_to_int_code=116 ;;
-    "u") char_to_int_code=117 ;;
-    "v") char_to_int_code=118 ;;
-    "w") char_to_int_code=119 ;;
-    "x") char_to_int_code=120 ;;
-    "y") char_to_int_code=121 ;;
-    "z") char_to_int_code=122 ;;
-    "A") char_to_int_code=65 ;;
-    "B") char_to_int_code=66 ;;
-    "C") char_to_int_code=67 ;;
-    "D") char_to_int_code=68 ;;
-    "E") char_to_int_code=69 ;;
-    "F") char_to_int_code=70 ;;
-    "G") char_to_int_code=71 ;;
-    "H") char_to_int_code=72 ;;
-    "I") char_to_int_code=73 ;;
-    "J") char_to_int_code=74 ;;
-    "K") char_to_int_code=75 ;;
-    "L") char_to_int_code=76 ;;
-    "M") char_to_int_code=77 ;;
-    "N") char_to_int_code=78 ;;
-    "O") char_to_int_code=79 ;;
-    "P") char_to_int_code=80 ;;
-    "Q") char_to_int_code=81 ;;
-    "R") char_to_int_code=82 ;;
-    "S") char_to_int_code=83 ;;
-    "T") char_to_int_code=84 ;;
-    "U") char_to_int_code=85 ;;
-    "V") char_to_int_code=86 ;;
-    "W") char_to_int_code=87 ;;
-    "X") char_to_int_code=88 ;;
-    "Y") char_to_int_code=89 ;;
-    "Z") char_to_int_code=90 ;;
-    " ") char_to_int_code=32 ;;
-    "!") char_to_int_code=33 ;;
-    "\"") char_to_int_code=34 ;;
-    "#") char_to_int_code=35 ;;
-    "$") char_to_int_code=36 ;;
-    "%") char_to_int_code=37 ;;
-    "\&") char_to_int_code=38 ;;
-    "'") char_to_int_code=39 ;;
-    "(") char_to_int_code=40 ;;
-    ")") char_to_int_code=41 ;;
-    "\*") char_to_int_code=42 ;;
-    "+") char_to_int_code=43 ;;
-    ",") char_to_int_code=44 ;;
-    "-") char_to_int_code=45 ;;
-    ".") char_to_int_code=46 ;;
-    "/") char_to_int_code=47 ;;
-    ":") char_to_int_code=58 ;;
-    ";") char_to_int_code=59 ;;
-    "<") char_to_int_code=60 ;;
-    "=") char_to_int_code=61 ;;
-    ">") char_to_int_code=62 ;;
-    "?") char_to_int_code=63 ;;
-    "@") char_to_int_code=64 ;;
-    "[") char_to_int_code=91 ;;
-    "\\") char_to_int_code=92 ;;
-    "]") char_to_int_code=93 ;;
-    "^") char_to_int_code=94 ;;
-    "_") char_to_int_code=95 ;;
-    "\`") char_to_int_code=96 ;;
-    "{") char_to_int_code=123 ;;
-    "|") char_to_int_code=124 ;;
-    "}") char_to_int_code=125 ;;
-    "~") char_to_int_code=126 ;;
-    *)   char_to_int_code=$(LC_CTYPE=C printf "%d" "'$1") ;;
-  esac
-}
-
 decode_chars() {
   while [ $# -gt 0 ]; do
-    char_to_int $1
+    case $1 in
+      "0") code=48 ;;
+      "1") code=49 ;;
+      "2") code=50 ;;
+      "3") code=51 ;;
+      "4") code=52 ;;
+      "5") code=53 ;;
+      "6") code=54 ;;
+      "7") code=55 ;;
+      "8") code=56 ;;
+      "9") code=57 ;;
+      "a") code=97 ;;
+      "b") code=98 ;;
+      "c") code=99 ;;
+      "d") code=100 ;;
+      "e") code=101 ;;
+      "f") code=102 ;;
+      "g") code=103 ;;
+      "h") code=104 ;;
+      "i") code=105 ;;
+      "j") code=106 ;;
+      "k") code=107 ;;
+      "l") code=108 ;;
+      "m") code=109 ;;
+      "n") code=110 ;;
+      "o") code=111 ;;
+      "p") code=112 ;;
+      "q") code=113 ;;
+      "r") code=114 ;;
+      "s") code=115 ;;
+      "t") code=116 ;;
+      "u") code=117 ;;
+      "v") code=118 ;;
+      "w") code=119 ;;
+      "x") code=120 ;;
+      "y") code=121 ;;
+      "z") code=122 ;;
+      "A") code=65 ;;
+      "B") code=66 ;;
+      "C") code=67 ;;
+      "D") code=68 ;;
+      "E") code=69 ;;
+      "F") code=70 ;;
+      "G") code=71 ;;
+      "H") code=72 ;;
+      "I") code=73 ;;
+      "J") code=74 ;;
+      "K") code=75 ;;
+      "L") code=76 ;;
+      "M") code=77 ;;
+      "N") code=78 ;;
+      "O") code=79 ;;
+      "P") code=80 ;;
+      "Q") code=81 ;;
+      "R") code=82 ;;
+      "S") code=83 ;;
+      "T") code=84 ;;
+      "U") code=85 ;;
+      "V") code=86 ;;
+      "W") code=87 ;;
+      "X") code=88 ;;
+      "Y") code=89 ;;
+      "Z") code=90 ;;
+      " ") code=32 ;;
+      "!") code=33 ;;
+      "\"") code=34 ;;
+      "#") code=35 ;;
+      "$") code=36 ;;
+      "%") code=37 ;;
+      "\&") code=38 ;;
+      "'") code=39 ;;
+      "(") code=40 ;;
+      ")") code=41 ;;
+      "\*") code=42 ;;
+      "+") code=43 ;;
+      ",") code=44 ;;
+      "-") code=45 ;;
+      ".") code=46 ;;
+      "/") code=47 ;;
+      ":") code=58 ;;
+      ";") code=59 ;;
+      "<") code=60 ;;
+      "=") code=61 ;;
+      ">") code=62 ;;
+      "?") code=63 ;;
+      "@") code=64 ;;
+      "[") code=91 ;;
+      "\\") code=92 ;;
+      "]") code=93 ;;
+      "^") code=94 ;;
+      "_") code=95 ;;
+      "\`") code=96 ;;
+      "{") code=123 ;;
+      "|") code=124 ;;
+      "}") code=125 ;;
+      "~") code=126 ;;
+      *)   code=$(LC_CTYPE=C printf "%d" "'$1") ;;
+    esac
     shift
   done
 }
@@ -123,6 +119,6 @@ done
 
 i=0
 while [ $i -lt $iterations ]; do
-  decode_chars "a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m" "n" "o" "p" "q" "r" "s" "t" "u" "v" "w" "x" "y" "z" "A" "B" "C" "D" "E" "F" "G" "H" "I" "J" "K" "L" "M" "N" "O" "P" "Q" "R" "S" "T" "U" "V" "W" "X" "Y" "Z" "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" " " "!" "#" "$" "%" "&" "(" ")" "*" "+" "," "-" "." "/" ":" ";" "<" "=" ">" "?" "@" "[" "]" "^" "_" "`" "{" "|" "}" "~"
+decode_chars 'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h' 'i' 'j' 'k' 'l' 'm' 'n' 'o' 'p' 'q' 'r' 's' 't' 'u' 'v' 'w' 'x' 'y' 'z' 'A' 'B' 'C' 'D' 'E' 'F' 'G' 'H' 'I' 'J' 'K' 'L' 'M' 'N' 'O' 'P' 'Q' 'R' 'S' 'T' 'U' 'V' 'W' 'X' 'Y' 'Z' '0' '1' '2' '3' '4' '5' '6' '7' '8' '9' ' ' '!' '#' '$' '%' '&' '(' ')' '*' '+' ',' '-' '.' '/' ':' ';' '<' '=' '>' '?' '@' '[' ']' '^' '_' '{' '|' '}' '~'
   i=$((i+1))
 done
