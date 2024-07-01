@@ -385,7 +385,7 @@ ast find_var_in_local_env(ast ident_tok) {
 text format_special_var(ast ident, ast prefixed_with_dollar) {
   int op = get_op(ident);
   if (op == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str("__g"), get_val(ident));
+    return string_concat(wrap_str("__t"), get_val(ident));
   } else if (op == IDENTIFIER_STRING) {
     return string_concat(wrap_str("__str_"), get_val(ident));
   } else if (op == IDENTIFIER_DOLLAR) {
