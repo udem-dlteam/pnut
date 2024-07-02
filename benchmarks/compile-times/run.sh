@@ -1,4 +1,4 @@
-set -e
+set -e -u
 
 DIR="benchmarks/compile-times"
 COMP_DIR="$DIR/compiled"
@@ -35,7 +35,18 @@ run() {
   name="${name%.*}"
   options="${3-}"
 
-  TIME_MS=$(( `bash -c "time $1 $COMP_DIR/$name-with-gcc.sh $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+  if [ $1 = "gcc" ]; then
+    executable="$COMP_DIR/$name-gcc.exe"
+    gcc -o "$executable" -O3 $2
+    TIME_MS=$(( `bash -c "time ./$executable $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+  elif [ $1 = "pnut" ]; then
+    executable="$COMP_DIR/$name-pnut.exe"
+    ./$COMP_DIR/pnut-exe.exe $2 > $executable
+    chmod +x $executable
+    TIME_MS=$(( `bash -c "time ./$executable $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+  else
+    TIME_MS=$(( `bash -c "time $1 $COMP_DIR/$name-with-gcc.sh $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+  fi
   print_time $TIME_MS "for: $1 with $name on $options"
 }
 
@@ -50,35 +61,35 @@ chmod +x $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
 
 # Generate 64k file
 i=0
-rm "$COMP_DIR/file-64k"
+rm -f "$COMP_DIR/file-64k"
 while [ $i -lt 128 ] ; do
   printf "%s\n" "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123" >> $COMP_DIR/file-64k;
   : $(( i += 1 ))
 done;
 
 programs="examples/empty.c examples/hello.c examples/fib.c examples/cat.c examples/cp.c examples/wc.c examples/sha256sum.c"
-shells="ksh dash bash yash zsh gcc pnut"
+runners="ksh dash bash yash zsh gcc pnut"
 
 for prog in $programs; do
-  for shell in $shells; do
-    compile "$shell" $prog
+  for run_with in $runners; do
+    compile "$run_with" $prog
   done
 done
 
-shells="ksh dash bash yash zsh gcc pnut"
+runners="ksh dash bash yash zsh gcc pnut"
 
-for shell in $shells; do
-  compile "$shell" "pnut.c" "-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh" "pnut-sh"
+for run_with in $runners; do
+  compile "$run_with" "pnut.c" "-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh" "pnut-sh"
 done
 
-for shell in $shells; do
-  compile "$shell" "pnut.c" "-DSUPPORT_INCLUDE -Di386" "pnut-exe"
+for run_with in $runners; do
+  compile "$run_with" "pnut.c" "-DSUPPORT_INCLUDE -Di386" "pnut-exe"
 done
 
 programs="examples/empty.c examples/hello.c examples/fib.c examples/cat.c examples/cp.c examples/wc.c examples/sha256sum.c"
-shells="ksh dash bash yash zsh"
+runners="ksh dash bash yash zsh gcc pnut"
 
-run_program_options() { # $1 = program, $2 = shell
+run_program_options() { # $1 = program, $2 = runner
   case $1 in
     "examples/cat.c")       echo "$COMP_DIR/file-64k" ;;
     "examples/cp.c")        echo "$COMP_DIR/file-64k $COMP_DIR/file-64k-out-$2" ;;
@@ -89,7 +100,7 @@ run_program_options() { # $1 = program, $2 = shell
 }
 
 for prog in $programs; do
-  for shell in $shells; do
-    run "$shell" $prog $(run_program_options $prog $shell)
+  for runner in $runners; do
+    run "$runner" $prog $(run_program_options $prog $runner)
   done
 done
