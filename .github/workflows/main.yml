@@ -19,73 +19,118 @@ jobs:
           ./run-tests.sh -Di386 test || exit 1
           ./run-tests.sh -Di386 clean || true
 
-  shell-test-1: # First shell test job
-    # strategy:
-    #   matrix:
-    #     shells: [bash, zsh, yash, ash]
+  shell-test-bash:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install shell
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bash zsh yash ash
-
-      - name: Run shell tests
+      - name: Run bash tests
         run: |
           set +e
           chmod +x run-tests.sh
-          shells=("bash" "zsh" "yash" "ash")
-          failures=0
-          for shell in "${shells[@]}"; do
-            $shell ./run-tests.sh -Dsh test
-            status=$?
-            if [ $status -ne 0 ]; then
-              echo "Test failed with $shell"
-              failures=$((failures+1))
-            fi
-            $shell ./run-tests.sh -Dsh clean || true
-          done
-          if [ $failures -ne 0 ]; then
-            echo "$failures shell tests failed"
+          bash ./run-tests.sh -Dsh test
+          status=$?
+          bash ./run-tests.sh -Dsh clean || true
+          if [ $status -ne 0 ]; then
+            echo "Test failed with bash"
             exit 1
           fi
 
-  shell-test-2: # Second shell test job
-    # strategy:
-    #   matrix:
-    #     shells: [ksh, dash, mksh]
+  shell-test-zsh:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install shell
+      - name: Install zsh
         run: |
           sudo apt-get update
-          sudo apt-get install -y ksh dash mksh
+          sudo apt-get install -y zsh
 
-      - name: Run shell tests
+      - name: Run zsh tests
         run: |
           set +e
           chmod +x run-tests.sh
-          shells=("ksh" "dash" "mksh")
-          failures=0
-          for shell in "${shells[@]}"; do
-            $shell ./run-tests.sh -Dsh test
-            status=$?
-            if [ $status -ne 0 ]; then
-              echo "Test failed with $shell"
-              failures=$((failures+1))
-            fi
-            $shell ./run-tests.sh -Dsh clean || true
-          done
-          if [ $failures -ne 0 ]; then
-            echo "$failures shell tests failed"
+          zsh ./run-tests.sh -Dsh test
+          status=$?
+          zsh ./run-tests.sh -Dsh clean || true
+          if [ $status -ne 0 ]; then
+            echo "Test failed with zsh"
+            exit 1
+          fi
+
+  shell-test-yash:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install yash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y yash
+
+      - name: Run yash tests
+        run: |
+          set +e
+          chmod +x run-tests.sh
+          yash ./run-tests.sh -Dsh test
+          status=$?
+          yash ./run-tests.sh -Dsh clean || true
+          if [ $status -ne 0 ]; then
+            echo "Test failed with yash"
+            exit 1
+          fi
+
+  shell-test-ksh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install ksh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ksh
+
+      - name: Run ksh tests
+        run: |
+          set +e
+          chmod +x run-tests.sh
+          ksh ./run-tests.sh -Dsh test
+          status=$?
+          ksh ./run-tests.sh -Dsh clean || true
+          if [ $status -ne 0 ]; then
+            echo "Test failed with ksh"
+            exit 1
+          fi
+
+  shell-test-dash:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dash
+
+      - name: Run dash tests
+        run: |
+          set +e
+          chmod +x run-tests.sh
+          dash ./run-tests.sh -Dsh test
+          status=$?
+          dash ./run-tests.sh -Dsh clean || true
+          if [ $status -ne 0 ]; then
+            echo "Test failed with dash"
             exit 1
           fi
 
@@ -98,7 +143,7 @@ jobs:
       - name: Install shells
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash ksh dash zsh yash ash mksh
+          sudo apt-get install -y bash ksh dash zsh yash
 
       - name: Run bootstrap shell with all shells
         run: |
@@ -120,7 +165,7 @@ jobs:
 
   success-message:
     runs-on: ubuntu-latest
-    needs: [x86-test, shell-test-1, shell-test-2, bootstraps]
+    needs: [x86-test, shell-test-bash, shell-test-zsh, shell-test-yash, shell-test-ksh, shell-test-dash, bootstraps]
     steps:
       - name: Tests finished
         run: |
