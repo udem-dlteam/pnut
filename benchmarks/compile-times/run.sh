@@ -1,4 +1,4 @@
-set -e -u
+set -e
 
 DIR="benchmarks/compile-times"
 COMP_DIR="$DIR/compiled"
@@ -14,14 +14,18 @@ print_time()
 
 compile() {
   # shell=$1
-  file="examples/$2.c"
+  file=$2
+  name=$(basename $2)
+  name="${name%.*}"
+  options="${3-}"
+  output_name=${4-$name}
 
   if [ $1 = "gcc" ]; then
-    TIME_MS=$(( `bash -c "time $COMP_DIR/pnut-sh-base.exe $file > $COMP_DIR/$2-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+    TIME_MS=$(( `bash -c "time $COMP_DIR/pnut-sh-base.exe $file $options > $COMP_DIR/$output_name-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
   elif [ $1 = "pnut" ]; then
-    TIME_MS=$(( `bash -c "time $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe $file > $COMP_DIR/$2-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+    TIME_MS=$(( `bash -c "time $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe $file $options > $COMP_DIR/$output_name-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
   else
-    TIME_MS=$(( `bash -c "time $1 $COMP_DIR/pnut.sh $file > $COMP_DIR/$2-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
+    TIME_MS=$(( `bash -c "time $1 $COMP_DIR/pnut.sh $file $options > $COMP_DIR/$output_name-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
   fi
   print_time $TIME_MS "for: $1 with $file"
   # exit 1
@@ -36,11 +40,21 @@ gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 
 chmod +x $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
 
-programs="empty hello fib cat cp wc sha256sum"
+programs="examples/empty.c examples/hello.c examples/fib.c examples/cat.c examples/cp.c examples/wc.c examples/sha256sum.c"
 shells="ksh dash bash yash zsh gcc pnut"
 
 for prog in $programs; do
   for shell in $shells; do
     compile "$shell" $prog
   done
+done
+
+shells="ksh dash bash yash zsh gcc pnut"
+
+for shell in $shells; do
+  compile "$shell" "pnut.c" "-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh" "pnut-sh"
+done
+
+for shell in $shells; do
+  compile "$shell" "pnut.c" "-DSUPPORT_INCLUDE -Di386" "pnut-exe"
 done
