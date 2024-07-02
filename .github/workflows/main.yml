@@ -134,7 +134,7 @@ jobs:
             exit 1
           fi
 
-  bootstraps:
+  bootstrap-shell:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -143,29 +143,52 @@ jobs:
       - name: Install shells
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash ksh dash zsh yash
+          sudo apt-get install -y bash ksh dash zsh yash mksh
 
       - name: Run bootstrap shell with all shells
         run: |
           set -e
           chmod +x bootstrap-pnut.sh
-          ./bootstrap-pnut.sh TEST_ALL_SHELLS || exit 1
+          ./bootstrap-pnut.sh TEST_ALL_SHELLS
+          if [ $? -ne 0 ]; then
+            echo "Bootstrap with all shells failed"
+            exit 1
+          fi
+
+  bootstrap-x86:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install shells
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bash ksh dash zsh yash mksh
 
       - name: Run bootstrap x86
         run: |
           set -e
           chmod +x bootstrap-pnut-x86.sh
-          ./bootstrap-pnut-x86.sh || exit 1
+          ./bootstrap-pnut-x86.sh
+          if [ $? -ne 0 ]; then
+            echo "Bootstrap x86 failed"
+            exit 1
+          fi
 
       - name: Run bootstrap x86 with shell
         run: |
           set -e
           chmod +x bootstrap-pnut-x86.sh
-          ./bootstrap-pnut-x86.sh WITH_SHELL || exit 1
+          ./bootstrap-pnut-x86.sh WITH_SHELL
+          if [ $? -ne 0 ]; then
+            echo "Bootstrap x86 with shell failed"
+            exit 1
+          fi
 
   success-message:
     runs-on: ubuntu-latest
-    needs: [x86-test, shell-test-bash, shell-test-zsh, shell-test-yash, shell-test-ksh, shell-test-dash, bootstraps]
+    needs: [x86-test, shell-test-bash, shell-test-zsh, shell-test-yash, shell-test-ksh, shell-test-dash, bootstrap-shell, bootstrap-x86]
     steps:
       - name: Tests finished
         run: |
