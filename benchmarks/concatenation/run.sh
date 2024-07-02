@@ -14,10 +14,11 @@ print_time()
   printf "%s %s\n" "$((ms/1000)).$((ms/100%10))$((ms/10%10))$((ms%10))s" "$2"
 }
 
-# Generate input files of different sizes
+# Generate input files of different sizes with a seed
 generate_input_files() {
+  seed=$1
   for len in $lengths; do
-    base64 /dev/urandom | head -c $len > "$INPUT_DIR/input-$len.txt"
+    openssl enc -aes-256-ctr -pass pass:"$seed" -nosalt </dev/zero 2>/dev/null | head -c $len > "$INPUT_DIR/input-$len.txt"
   done
 }
 
@@ -36,7 +37,8 @@ lengths="1000 2000 5000 10000 20000"
 shells="dash bash yash zsh ksh"
 
 # Generate input files
-generate_input_files
+seed=12345
+generate_input_files $seed
 
 # Compile pnut with
 PNUT_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"

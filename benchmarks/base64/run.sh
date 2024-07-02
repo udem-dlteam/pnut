@@ -13,10 +13,11 @@ print_time() {
   printf "%s %s\n" "$((ms/1000)).$((ms/100%10))$((ms/10%10))$((ms%10))s" "$2"
 }
 
-# Generate input files of different sizes
+# Generate input files of different sizes with a seed
 generate_input_files() {
-  for len in $sizes; do
-    base64 /dev/urandom | head -c $len > "$INPUT_DIR/input-$len.txt"
+  seed=$1
+  for len in $lengths; do
+    openssl enc -aes-256-ctr -pass pass:"$seed" -nosalt </dev/zero 2>/dev/null | head -c $len > "$INPUT_DIR/input-$len.txt"
   done
 }
 
@@ -38,7 +39,8 @@ shells="ksh dash bash yash zsh"
 options="RT_COMPACT OPTIMIZE_LONG_LINES SH_AVOID_PRINTF_USE SH_SAVE_VARS_WITH_SET OPTIMIZE_CONSTANT_PARAM"
 
 # Generate input files
-generate_input_files
+seed=12345
+generate_input_files $seed
 
 # Compile pnut with different options
 ./benchmarks/compile-pnut.sh -DDRT_NO_INIT_GLOBALS
