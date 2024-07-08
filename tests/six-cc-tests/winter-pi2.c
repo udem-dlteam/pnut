@@ -23,13 +23,11 @@ int main() {
   int i = 0;
   newline = identity(10, 2, 3);
 
-  
   while (i < 2800) {
     r[i] = 2000;
     i = i + 1;
   }
   r[i] = 0;
-
 
   while (k > 0) {
 

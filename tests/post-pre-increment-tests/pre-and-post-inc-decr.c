@@ -3,7 +3,7 @@ int test1() {
   int x = 5;
   int y = ++x;
   // Expected: x == 6, y == 6
-  
+
   if(x == 6 && y == 6){
     return 0;
   }else{

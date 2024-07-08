@@ -9,7 +9,7 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int)); // Dynamically allocate memory for digits
-  
+
   if (digits == 0) {
     putstring("Memory allocation failed\n");
     return;
@@ -31,7 +31,7 @@ void putnumber(int n) {
     putchar(digits[i] + 48);
     i--;
   }
-  
+
   free(digits); // Free allocated memory
 }
 

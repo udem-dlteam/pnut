@@ -22,7 +22,7 @@ int string_sum(char * s) {
     sum += *s;
     s = s + 1;
   }
-  
+
   return sum;
 }
 
