@@ -129,12 +129,12 @@ void init_heap() {
 
 void copy() {
   obj o = *scan;
+  obj *ptr, field0, copy;
   // we sometime reference rib that are allocated in BSS,
   // we do not want to copy those
   if (IS_RIB(o)) {
-    obj *ptr = (long*)RIB(o);
-    obj field0 = ptr[0];
-    obj copy;
+    ptr = (long*)RIB(o);
+    field0 = ptr[0];
 
     if (field0 == GC_COPIED_OBJ) {
       copy = ptr[1]; // copied, get new address
@@ -156,7 +156,7 @@ void gc() {
 #ifdef DEBUG_GC
   obj *from_space = (alloc_limit == heap_mid) ? heap_bot : heap_mid;
 
-  size_t objc = alloc - from_space;
+  long objc = alloc - from_space;
   printf("\t--GC %zu -> ", objc);
 #endif
 
