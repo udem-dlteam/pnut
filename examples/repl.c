@@ -6,6 +6,8 @@
  * Author : Léonard Oest O'leary (leo-ard)
  */
 
+// Need to be compiled without the OPTIMIZE_CONSTANT_PARAM flag of pnut
+
 #ifndef PNUT_CC
 #include <stdio.h>
 #include <stdlib.h>
@@ -106,16 +108,16 @@ obj *alloc_limit;
 obj *scan;
 
 void init_heap() {
-  
-  heap_start = malloc(sizeof(obj) * (SPACE_SZ << 1));
+
+  heap_start = malloc(sizeof(long) * ((100000 * 3) << 1));
 
   if (!heap_start) {
-    exit(EXIT_NO_MEMORY);
+    exit(7);
   }
 
-  alloc = heap_bot;
-  alloc_limit = heap_mid;
-  stack = NUM_0;
+  alloc = ((obj *)(heap_start));
+  alloc_limit = (((obj *)(heap_start)) + ((100000 * 3)));
+  stack = (((((obj)(0)) << 1) | 1));
 }
 
 // NULL is a pointer (0) but would represent NULL
