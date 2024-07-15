@@ -522,12 +522,18 @@ void get_ch() {
 
 #ifdef SUPPORT_INCLUDE
 void include_file(char *file_name) {
+  // Save the current file position so we can return to it after the included file is done
+  if (include_stack != 0) {
+    include_stack->line_number = line_number;
+    include_stack->column_number = column_number;
+  }
+
   fp = fopen(file_name, "r");
   include_stack2 = malloc(sizeof(struct IncludeStack));
   include_stack2->next = include_stack;
   include_stack2->filename = file_name;
-  include_stack2->line_number = line_number;
-  include_stack2->column_number = column_number;
+  include_stack2->line_number = 1;
+  include_stack2->column_number = 0;
   include_stack2->fp = fp;
   include_stack = include_stack2;
   line_number = 1;
