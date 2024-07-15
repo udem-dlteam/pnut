@@ -23,14 +23,15 @@
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
-#define SH_INDIVIDUAL_LET
 #define SH_AVOID_PRINTF_USE
 #define SH_INLINE_PUTCHAR
 #define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
 #define SH_INCLUDE_C_CODE_not
 // If we use the `set` command and positional parameters to simulate local vars
-#define SH_SAVE_VARS_WITH_SET
+#define SH_SAVE_VARS_WITH_SET_not
+// Have let commands initialize function parameters
+#define SH_INITIALIZE_PARAMS_WITH_LET
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
@@ -555,6 +556,7 @@ int INCLUDE_ID;
 int NOT_SUPPORTED_ID;
 
 // We want to recognize certain identifers without having to do expensive string comparisons
+int ARGV__ID;
 int ARGV_ID;
 int IFS_ID;
 int MAIN_ID;
@@ -568,9 +570,12 @@ int PRINTF_ID;
 int FOPEN_ID;
 int FCLOSE_ID;
 int FGETC_ID;
-
 int PUTSTR_ID;
 int PUTS_ID;
+int READ_ID;
+int WRITE_ID;
+int OPEN_ID;
+int CLOSE_ID;
 
 void get_tok_macro() {
   expand_macro = false;
@@ -891,6 +896,7 @@ void init_ident_table() {
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
+  ARGV__ID = init_ident(IDENTIFIER, "argv_");
   IFS_ID  = init_ident(IDENTIFIER, "IFS");
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
@@ -903,9 +909,12 @@ void init_ident_table() {
   FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
   FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
   FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
-
-  PUTSTR_ID = init_ident(IDENTIFIER, "putstr");
-  PUTS_ID = init_ident(IDENTIFIER, "puts");
+  PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
+  PUTS_ID    = init_ident(IDENTIFIER, "puts");
+  READ_ID    = init_ident(IDENTIFIER, "read");
+  WRITE_ID   = init_ident(IDENTIFIER, "write");
+  OPEN_ID    = init_ident(IDENTIFIER, "open");
+  CLOSE_ID   = init_ident(IDENTIFIER, "close");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
@@ -1771,6 +1780,22 @@ int parse_stars() {
   return stars;
 }
 
+int parse_stars_for_type(int type) {
+  int stars = parse_stars();
+
+  // We don't want to mutate types that are typedef'ed, so making a copy of the type obj
+  if (stars != 0) {
+    type = clone_ast(type);
+    set_val(type, stars);
+  }
+
+  return type;
+}
+
+int parse_type_with_stars() {
+  return parse_stars_for_type(parse_type());
+}
+
 int is_type_starter(int tok) {
   return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
       OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
@@ -1877,13 +1902,7 @@ ast parse_struct() {
     while (tok != '}') {
       if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
 
-      type = parse_type();
-      stars = parse_stars();
-
-      if (stars != 0) {
-        type = clone_ast(type);
-        set_val(type, stars);
-      }
+      type = parse_type_with_stars();
 
       if (tok != IDENTIFIER) {
         syntax_error("identifier expected");
@@ -1932,13 +1951,7 @@ ast parse_declaration() {
 
   if (is_type_starter(tok)) {
 
-    type = parse_type();
-    stars = parse_stars();
-
-    if (stars != 0) {
-      type = clone_ast(type);
-      set_val(type, stars);
-    }
+    type = parse_type_with_stars();
 
     name = val;
 
@@ -2013,13 +2026,7 @@ ast parse_definition(int local) {
 
     while (1) {
 
-      stars = parse_stars();
-
-      this_type = type;
-      if (stars != 0) {
-        this_type = clone_ast(type);
-        set_child(this_type, 0, stars);
-      }
+      this_type = parse_stars_for_type(type);
 
       name = val;
 
@@ -2109,7 +2116,7 @@ ast parse_definition(int local) {
     // identifiers as typedef'ed and have the typedef be scoped to the block
     // it was defined in (global or in function).
     get_tok();
-    type = parse_type();
+    type = parse_type_with_stars();
     if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
 
 #ifdef sh
@@ -2297,8 +2304,7 @@ ast parse_unary_expression() {
     get_tok();
     if (tok == '(') {
       get_tok();
-      result = clone_ast(parse_type());
-      set_val(result, parse_stars());
+      result = parse_type_with_stars();
       expect_tok(')');
     } else {
       result = parse_unary_expression();
@@ -2336,13 +2342,7 @@ ast parse_cast_expression() {
     get_tok();
 
     if (is_type_starter(tok)) {
-      type = parse_type();
-      stars = parse_stars();
-
-      if (stars != 0) {
-        type = clone_ast(type);
-        set_val(type, stars);
-      }
+      type = parse_type_with_stars();
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());
@@ -2788,6 +2788,7 @@ ast parse_compound_statement() {
 // Select code generator
 
 #ifndef DEBUG_CPP
+#ifndef DEBUG_GETCHAR
 #ifdef sh
 #include "sh.c"
 #endif
@@ -2804,6 +2805,7 @@ ast parse_compound_statement() {
 #include "arm.c"
 #endif
 #endif
+#endif
 
 //-----------------------------------------------------------------------------
 
@@ -2811,7 +2813,7 @@ ast parse_compound_statement() {
 #include "debug.c"
 #endif
 
-int main(int argc, char **args) {
+int main(int argc, char **argv) {
 
   int i;
   ast decl;
@@ -2821,19 +2823,19 @@ int main(int argc, char **args) {
   init_pnut_macros();
 
   for (i = 1; i < argc; i += 1) {
-    if (args[i][0] == '-') {
-      if (args[i][1] == 'D') {
-        init_ident(MACRO, args[i] + 2);
+    if (argv[i][0] == '-') {
+      if (argv[i][1] == 'D') {
+        init_ident(MACRO, argv[i] + 2);
       } else {
         putstr("Option ");
-        putstr(args[i]);
+        putstr(argv[i]);
         putchar('\n');
         fatal_error("unknown option");
       }
     } else {
       // Options that don't start with '-' are file names
 #ifdef SUPPORT_INCLUDE
-      include_file(args[i]);
+      include_file(argv[i]);
 #else
       fatal_error("input file not supported. Pnut expects the input from stdin.");
 #endif
@@ -2842,18 +2844,24 @@ int main(int argc, char **args) {
 
 #ifdef SUPPORT_INCLUDE
   if (fp == 0) {
-    putstr("Usage: "); putstr(args[0]); putstr(" <filename>\n");
+    putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
 #endif
 
 #ifndef DEBUG_CPP
+#ifndef DEBUG_GETCHAR
   codegen_begin();
+#endif
 #endif
 
   ch = '\n';
   get_tok();
 
+#ifdef DEBUG_GETCHAR
+  while (ch != EOF) {
+    get_ch();
+#else
   while (tok != EOF) {
 #ifdef DEBUG_CPP
     print_tok(tok, val);
@@ -2867,10 +2875,14 @@ int main(int argc, char **args) {
     codegen_glo_decl(decl);
 
 #endif
+
+#endif
   }
 
 #ifndef DEBUG_CPP
+#ifndef DEBUG_GETCHAR
   codegen_end();
+#endif
 #endif
 
   return 0;

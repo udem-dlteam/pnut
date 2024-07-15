@@ -1,12 +1,4 @@
-#ifdef PNUT_CC
-
 #include "include/sys/types.h"
-
-#else
-
-#include <sys/types.h>
-
-#endif
 
 void *memset(void *dest, int c, size_t n) {
 

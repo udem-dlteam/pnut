@@ -1,3 +1,4 @@
+#include "src/ctype.c"
 #include "src/string.c"
 #include "src/stdlib.c"
 #include "src/stdio.c"

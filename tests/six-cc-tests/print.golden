@@ -1,0 +1,18 @@
+42
+Beau velo
+Beau velo (%s) bleu
+Beau velo (%s) bleu rouge
+ALLO
+Allo in hex: 0x41 0x4c 0x4c 0x4f
+_
+alphabet:
+ABCDEFHIJKLMNOPQRSTUVWXYZ
+4 first letters of the alphabet with next_char:
+ABCD
+4 first letters of the alphabet with .*s:
+ABCD
+4 first letters of the alphabet with 0.4s:
+ABCD
+Last 4 letters of the alphabet with padding:
+                     VWXYZ
+The alphabet twice: ABCDEFHIJKLMNOPQRSTUVWXYZ ABCDEFHIJKLMNOPQRSTUVWXYZ

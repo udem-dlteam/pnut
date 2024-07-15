@@ -3,11 +3,13 @@
 
 #ifdef PNUT_CC
 
-#define size_t int
-#define off_t int
+typedef int ssize_t;
+typedef int size_t;
+typedef int off_t;
 
 #else
 
+typedef long ssize_t;
 typedef unsigned long size_t;
 typedef long long off_t;
 

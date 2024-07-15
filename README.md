@@ -4,6 +4,36 @@ A self-compiling C compiler written in C generating human-readable POSIX shell s
 
 Pnut aims to supports a large enough subset of C99 to compile TCC.
 
+## Examples
+
+The [examples](examples/) directory contains a few example. Here's fib.c:
+
+```C
+int fib(int n) {
+  if (n < 2) {
+    return n;
+  } else {
+    return fib(n - 1) + fib(n - 2);
+  }
+}
+```
+
+```shell
+: $((__g2 = __g1 = n = 0))
+_fib() { # n: $2
+  let n; let __g1; let __g2
+  n=$2
+  if [ $n -lt 2 ] ; then
+    : $(( $1 = n ))
+  else
+    _fib __g1 $((n - 1))
+    _fib __g2 $((n - 2))
+    : $(( $1 = (__g1 + __g2) ))
+  fi
+  endlet $1 __g2 __g1 n
+}
+```
+
 ## Pnut bootstrap
 
 Pnut can be bootstrapped using an existing C compiler such as GCC. Once the

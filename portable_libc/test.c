@@ -21,7 +21,7 @@ int comp(int code) {
 char buf[12];
 jmp_buf jbuf;
 
-int main() {
+int main(int argc, char **myargv) {
 
   int failed = 0;
   void *vp;
@@ -101,7 +101,7 @@ int main() {
   if (fprintf(stdout, "hello %d\n", -123) != 11 ||
       snprintf(buf, 12, "%03x", 42) != 3 ||
       buf[0] != '0' || buf[1] != '2' || buf[2] != 'a' || buf[3] != 0 ||
-      snprintf(buf, 12, "%d", -2147483648) != 11 ||
+      snprintf(buf, 12, "%d", -2147483647-1) != 11 ||
       buf[0] != '-' || buf[1] != '2' || buf[2] != '1' || buf[3] != '4' ||
       buf[4] != '7' || buf[5] != '4' || buf[6] != '8' || buf[7] != '3' ||
       buf[8] != '6' || buf[9] != '4' || buf[10] != '8' || buf[11] != 0)
@@ -110,6 +110,11 @@ int main() {
 
   if (setjmp(jbuf) != 0)
     failed = 12;
+
+
+  if (argc != 2 ||
+      strcmp(myargv[1], "abcdef") != 0)
+    failed = 13;
 
 
   return failed;

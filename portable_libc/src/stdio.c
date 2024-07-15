@@ -3,24 +3,29 @@
 #include "include/stdlib.h"
 #include "include/unistd.h"
 
-FILE _stdin_FILE;
-FILE _stdout_FILE;
-FILE _stderr_FILE;
-FILE _string_FILE;
+FILE _standard_files[4];
 
-FILE *stdin = &_stdin_FILE;
-FILE *stdout = &_stdout_FILE;
-FILE *stderr = &_stderr_FILE;
+FILE *stdin = _standard_files+0;
+FILE *stdout = _standard_files+1;
+FILE *stderr = _standard_files+2;
+
+char *_string_output_buf;
+size_t _string_output_buf_size;
+size_t _string_output_len;
 
 int _get_fd(FILE *f) {
-  if (f == &_stdin_FILE) {
+  if (f == _standard_files+0) {
     return 0;
-  } else if (f == &_stdout_FILE) {
+  } else if (f == _standard_files+1) {
     return 1;
-  } else if (f == &_stderr_FILE) {
+  } else if (f == _standard_files+2) {
     return 2;
   } else {
+#ifdef USE_STRUCT
     return f->fd;
+#else
+    return *f;
+#endif
   }
 }
 
@@ -31,7 +36,11 @@ FILE *fopen(const char *pathname, const char *mode) {
 FILE *fdopen(int fd, const char *mode) {
   FILE *result = malloc(sizeof(FILE));
   if (result) {
+#ifdef USE_STRUCT
     result->fd = fd;
+#else
+    *result = fd;
+#endif
   }
   return result;
 }
@@ -40,16 +49,18 @@ int fclose(FILE *stream) {
   return 0; /*TODO*/
 }
 
+char _output_buf[1];
+
 int fputc(int c, FILE *stream) {
   int fd = _get_fd(stream);
   if (fd == -1) {
-    if (stream->string_output_len+1 < stream->string_output_buf_size) {
-      stream->string_output_buf[stream->string_output_len] = c;
-      ++stream->string_output_len;
+    if (_string_output_len+1 < _string_output_buf_size) {
+      _string_output_buf[_string_output_len] = c;
+      ++_string_output_len;
     }
   } else {
-    stream->buf[0] = c;
-    write(fd, stream->buf, 1);
+    _output_buf[0] = c;
+    write(fd, _output_buf, 1);
   }
   return c;
 }
@@ -87,24 +98,24 @@ int puts(const char *s) {
 
 #define SIZEOF_NUM_BUF 100
 char _num_buf[SIZEOF_NUM_BUF];
-char *_digits = "0123456789abcdef";
 
 char *_int_to_str(int n, int base, int width, int force_0, int force_plus) {
 
   char *out = _num_buf + SIZEOF_NUM_BUF;
   int neg = n < 0;
   int has_sign = neg || force_plus;
+  char *digits = "0123456789abcdef";
 
   if (!neg) n = -n;
 
   *--out = 0;
 
   while (n <= -base) {
-    *--out = _digits[-(n % base)];
+    *--out = digits[-(n % base)];
     n /= base;
   }
 
-  *--out = _digits[-(n % base)];
+  *--out = digits[-(n % base)];
 
   if (width >= SIZEOF_NUM_BUF) width = SIZEOF_NUM_BUF-1;
 
@@ -148,22 +159,15 @@ int vfprintf(FILE *stream, const char *format, va_list ap) {
       while (c == 'l' || c == 'L') {
         c = *format++;
       }
-      switch (c) {
-      case 'c':
+      if (c == 'c') {
         fputc(va_arg(ap, int), stream);
         result += 1;
-        break;
-      case 'd':
-      case 'u':
-      case 'o':
-      case 'x':
+      } else if (c == 'd' || c == 'u' || c == 'o' || c == 'x') {
         base = c == 'x' ? 16 : c == 'o' ? 8 : 10;
         result += _fputstr(_int_to_str(va_arg(ap, int), base, width, force_0, 0), stream);
-        break;
-      case 's':
+      } else if (c == 's') {
         result += _fputstr(va_arg(ap, char*), stream);
-        break;
-      default:
+      } else {
         fputc('?', stream);
         fputc('?', stream);
         fputc('?', stream);
@@ -183,7 +187,7 @@ int fprintf(FILE *stream, const char *format VAR_ARGS) {
   va_list ap;
   int result;
 
-  va_start (ap, format);
+  va_start(ap, format);
   result = vfprintf(stream, format, ap);
   va_end(ap);
 
@@ -195,7 +199,7 @@ int printf(const char *format VAR_ARGS) {
   va_list ap;
   int result;
 
-  va_start (ap, format);
+  va_start(ap, format);
   result = vfprintf(stdout, format, ap);
   va_end(ap);
 
@@ -206,12 +210,12 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap) {
 
   int result;
 
-  _string_FILE.fd = -1;
-  _string_FILE.string_output_buf = str;
-  _string_FILE.string_output_buf_size = size;
-  _string_FILE.string_output_len = 0;
-  result = vfprintf(&_string_FILE, format, ap);
-  _string_FILE.string_output_buf[_string_FILE.string_output_len] = 0; /* null terminate string */
+  _standard_files[3] = -1; /* mark as string FILE */
+  _string_output_buf = str;
+  _string_output_buf_size = size;
+  _string_output_len = 0;
+  result = vfprintf(_standard_files+3, format, ap);
+  _string_output_buf[_string_output_len] = 0; /* null terminate string */
 
   return result;
 }
@@ -221,7 +225,7 @@ int snprintf(char *str, size_t size, const char *format VAR_ARGS) {
   va_list ap;
   int result;
 
-  va_start (ap, format);
+  va_start(ap, format);
   result = vsnprintf(str, size, format, ap);
   va_end(ap);
 
@@ -233,7 +237,7 @@ int sprintf(char *str, const char *format VAR_ARGS) {
   va_list ap;
   int result;
 
-  va_start (ap, format);
+  va_start(ap, format);
   result = vsnprintf(str, 999999999, format, ap);
   va_end(ap);
 
