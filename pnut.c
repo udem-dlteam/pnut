@@ -56,9 +56,9 @@ typedef int FILE;
 
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
 int line_number = 1;
-int column_number = 1;
+int column_number = 0;
 int last_tok_line_number = 1;
-int last_tok_column_number = 1;
+int last_tok_column_number = 0;
 
 struct IncludeStack {
   char *filename;
@@ -502,7 +502,7 @@ void get_ch() {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   else if (ch == '\n') {
     line_number += 1;
-    column_number = 1;
+    column_number = 0;
   } else {
     column_number += 1;
   }
@@ -512,7 +512,7 @@ void get_ch() {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   if (ch == '\n') {
     line_number += 1;
-    column_number = 1;
+    column_number = 0;
   } else {
     column_number += 1;
   }
