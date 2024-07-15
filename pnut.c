@@ -60,17 +60,18 @@ int line_number = 1;
 int column_number = 0;
 int last_tok_line_number = 1;
 int last_tok_column_number = 0;
-
-struct IncludeStack {
-  char *filename;
-  FILE* fp;
-  int line_number;
-  int column_number;
-  struct IncludeStack *next;
-};
 #endif
 
 #ifdef SUPPORT_INCLUDE
+struct IncludeStack {
+  FILE* fp;
+  struct IncludeStack *next;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  char *filename;
+  int line_number;
+  int column_number;
+#endif
+};
 struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
 #endif
@@ -192,7 +193,10 @@ void fatal_error(char *msg) {
 
 void syntax_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  putstr(include_stack->filename); putchar(':'); putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+#ifdef SUPPORT_INCLUDE
+  putstr(include_stack->filename); putchar(':');
+#endif
+  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
   putstr("  syntax error: "); putstr(msg); putchar('\n');
 #else
   putstr("syntax error: "); putstr(msg); putchar('\n');
@@ -489,8 +493,10 @@ void get_ch() {
       include_stack2 = include_stack;
       include_stack = include_stack->next;
       fp = include_stack->fp;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
       line_number = include_stack->line_number;
       column_number = include_stack->column_number;
+#endif
       free(include_stack2);
       get_ch();
     }
@@ -523,22 +529,23 @@ void get_ch() {
 
 #ifdef SUPPORT_INCLUDE
 void include_file(char *file_name) {
+  fp = fopen(file_name, "r");
+  include_stack2 = malloc(sizeof(struct IncludeStack));
+  include_stack2->next = include_stack;
+  include_stack2->fp = fp;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  include_stack2->filename = file_name;
+  include_stack2->line_number = 1;
+  include_stack2->column_number = 0;
   // Save the current file position so we can return to it after the included file is done
   if (include_stack != 0) {
     include_stack->line_number = line_number;
     include_stack->column_number = column_number;
   }
-
-  fp = fopen(file_name, "r");
-  include_stack2 = malloc(sizeof(struct IncludeStack));
-  include_stack2->next = include_stack;
-  include_stack2->filename = file_name;
-  include_stack2->line_number = 1;
-  include_stack2->column_number = 0;
-  include_stack2->fp = fp;
-  include_stack = include_stack2;
   line_number = 1;
   column_number = 1;
+#endif
+  include_stack = include_stack2;
 }
 #endif
 
