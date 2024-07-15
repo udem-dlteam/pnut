@@ -191,13 +191,8 @@ void fatal_error(char *msg) {
 
 void syntax_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (last_tok_column_number == 1) {
-    last_tok_line_number -= 1;
-    last_tok_column_number = -1; // Indicate last column with -1
-  }
-  putstr(include_stack->filename); putchar(' '); putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-  putstr("syntax error on line "); putint(last_tok_line_number); putstr(", column "); putint(last_tok_column_number); putchar('\n');
-  putstr(msg); putchar('\n');
+  putstr(include_stack->filename); putchar(':'); putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+  putstr("  syntax error: "); putstr(msg); putchar('\n');
 #else
   putstr("syntax error: "); putstr(msg); putchar('\n');
 #endif
