@@ -603,12 +603,12 @@ int cgc_lookup_enum_value(int ident, int env) {
 
 // A pointer type is either an array type or a type with at least one star
 bool is_pointer_type(ast type) {
-  return (get_op(type) == '[') | (get_val(type) != 0);
+  return (get_op(type) == '[') | (type_stars(type) != 0);
 }
 
 // An aggregate type is either an array type or a struct/union type (that's not a reference)
 bool is_aggregate_type(ast type) {
-  if ( ((get_op(type) == STRUCT_KW || get_op(type) == UNION_KW) && get_val(type) == 0)
+  if ( ((get_op(type) == STRUCT_KW || get_op(type) == UNION_KW) && type_stars(type) == 0)
     || get_op(type) == '[') {
     return true;
   } else {
@@ -773,7 +773,7 @@ ast struct_member(ast struct_type, ast member_ident) {
 int ref_type_width(ast type) {
   if (get_op(type) == '[') {
     return type_width_ast(get_child(type, 1), false, false); // size of inner type
-  } else if (get_val(type) == 1) { // pointer *
+  } else if (type_stars(type) == 1) { // pointer *
     return type_width(type, 0, false, false); // size of inner type
   } else {
     return word_size;
@@ -839,7 +839,7 @@ ast value_type(ast node) {
         return get_child(left_type, 1);
       } else if (get_val(left_type) != 0) { // Pointer type
         left_type = clone_ast(left_type);
-        set_val(left_type, get_val(left_type) - 1); // one less indirection
+        set_stars(left_type, get_stars(left_type) - 1); // one less indirection
         return left_type;
       } else {
         putstr("left_type="); putint(left_type); putchar('\n');
@@ -849,11 +849,11 @@ ast value_type(ast node) {
     } else if (op == '&') {
       left_type = value_type(get_child(node, 0));
       if (get_op(left_type) == '[') {
-        left_type = clone_ast(get_child(left_type, 1)); // Inner type
-        set_val(left_type, get_val(left_type) + 1); // Increment star by 2, to account for the [ we just removed
+        left_type = clone_ast(get_child(left_type, 1)); // Extract inner type
+        set_stars(left_type, get_stars(left_type) + 2); // Increment star by 2, to account for the [ we just removed
       } else {
         left_type = clone_ast(left_type);
-        set_val(left_type, get_val(left_type) + 1); // Increment star by 1
+        set_stars(left_type, get_stars(left_type) + 1); // Increment star by 1
       }
       return left_type;
     } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS OR op == MINUS_MINUS_POST OR op == PLUS_PLUS_POST OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE) {
@@ -888,15 +888,15 @@ ast value_type(ast node) {
 
       if (get_op(left_type) == '[') { // Array
         return get_child(left_type, 1); // array inner type
-      } else if (get_val(left_type) != 0) { // Pointer
+      } else if (type_stars(left_type) != 0) { // Pointer
         left_type = clone_ast(left_type);
-        set_val(left_type, get_val(left_type) - 1); // one less indirection
+        set_stars(left_type, get_stars(left_type) - 1); // one less indirection
         return left_type;
       } else if (get_op(right_type) == '[') { // Array, but with the operands flipped (i.e. 0[arr] instead of arr[0])
         return get_child(right_type, 1); // array inner type
-      } else if (get_val(right_type) != 0) {
+      } else if (type_stars(right_type) != 0) {
         right_type = clone_ast(right_type);
-        set_val(right_type, get_val(right_type) - 1); // one less indirection
+        set_stars(right_type, get_stars(right_type) - 1); // one less indirection
         return right_type;
       } else {
         putstr("left_type="); putint(left_type); putchar('\n');
@@ -921,7 +921,7 @@ ast value_type(ast node) {
       }
     } else if (op == '.') {
       left_type = value_type(get_child(node, 0));
-      if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 0) {
+      if (get_op(left_type) == STRUCT_KW AND type_stars(left_type) == 0) {
         return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: . operator on non-struct pointer type");
@@ -930,7 +930,7 @@ ast value_type(ast node) {
     } else if (op == ARROW) {
       // Same as '.', but left_type must be a pointer
       left_type = value_type(get_child(node, 0));
-      if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 1) {
+      if (get_op(left_type) == STRUCT_KW AND type_stars(left_type) == 1) {
         return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
@@ -1063,7 +1063,7 @@ int codegen_param(ast param) {
   int type = value_type(param);
   int left_width;
 
-  if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+  if (get_op(type) == STRUCT_KW AND type_stars(type) == 0) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
@@ -1187,7 +1187,7 @@ int codegen_lvalue(ast node) {
       lvalue_width = ref_type_width(type);
     } else if (op == '.') {
       type = value_type(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+      if (get_op(type) == STRUCT_KW && type_stars(type) == 0) {
         codegen_lvalue(get_child(node, 0));
         pop_reg(reg_X);
         add_reg_imm(reg_X, struct_member_offset(type, get_child(node, 1)));
@@ -1200,7 +1200,7 @@ int codegen_lvalue(ast node) {
     } else if (op == ARROW) {
       // Same as '.', but type must be a pointer
       type = value_type(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 1) {
+      if (get_op(type) == STRUCT_KW && type_stars(type) == 1) {
         codegen_rvalue(get_child(node, 0));
         pop_reg(reg_X);
         add_reg_imm(reg_X, struct_member_offset(type, get_child(node, 1)));
@@ -1284,8 +1284,8 @@ void codegen_rvalue(ast node) {
         // local arrays are allocated on the stack, so no need to dereference
         // same thing for non-pointer structs and unions.
         if (get_op(heap[binding+5]) != '['
-          && (get_op(heap[binding+5]) != STRUCT_KW || get_val(heap[binding+5]) != 0)
-          && (get_op(heap[binding+5]) != UNION_KW || get_val(heap[binding+5]) != 0)) {
+          && (get_op(heap[binding+5]) != STRUCT_KW || type_stars(heap[binding+5]) != 0)
+          && (get_op(heap[binding+5]) != UNION_KW || type_stars(heap[binding+5]) != 0)) {
           mov_reg_mem(reg_X, reg_X, 0);
         }
         push_reg(reg_X);
@@ -1297,8 +1297,8 @@ void codegen_rvalue(ast node) {
           // global arrays are allocated on the stack, so no need to dereference
           // same thing for non-pointer structs and unions.
           if (get_op(heap[binding+5]) != '['
-            && (get_op(heap[binding+5]) != STRUCT_KW || get_val(heap[binding+5]) != 0)
-            && (get_op(heap[binding+5]) != UNION_KW || get_val(heap[binding+5]) != 0)) {
+            && (get_op(heap[binding+5]) != STRUCT_KW || type_stars(heap[binding+5]) != 0)
+            && (get_op(heap[binding+5]) != UNION_KW || type_stars(heap[binding+5]) != 0)) {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
@@ -1411,7 +1411,7 @@ void codegen_rvalue(ast node) {
     } else if (op == '=') {
       type1 = value_type(get_child(node, 0));
       left_width = codegen_lvalue(get_child(node, 0));
-      if (get_op(type1) == STRUCT_KW && get_val(type1) == 0) {
+      if (get_op(type1) == STRUCT_KW && type_stars(type1) == 0) {
         // Struct assignment, we copy the struct.
         codegen_lvalue(get_child(node, 1));
         pop_reg(reg_X);
@@ -1459,7 +1459,7 @@ void codegen_rvalue(ast node) {
       codegen_call(node);
     } else if (op == '.') {
       type1 = value_type(get_child(node, 0));
-      if (get_op(type1) == STRUCT_KW && get_val(type1) == 0) {
+      if (get_op(type1) == STRUCT_KW && type_stars(type1) == 0) {
         type2 = get_child(struct_member(type1, get_child(node, 1)), 1);
         codegen_lvalue(get_child(node, 0));
         pop_reg(reg_Y);
@@ -1474,7 +1474,7 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == ARROW) {
       type1 = value_type(get_child(node, 0));
-      if (get_op(type1) == STRUCT_KW && get_val(type1) == 1) {
+      if (get_op(type1) == STRUCT_KW && type_stars(type1) == 1) {
         type2 = get_child(struct_member(type1, get_child(node, 1)), 1);
         codegen_rvalue(get_child(node, 0));
         pop_reg(reg_Y);
@@ -1703,7 +1703,7 @@ void codegen_body(ast node) {
             size = type_width_ast(type, true, true);  // size in bytes (word aligned)
             grow_stack_bytes(size);
             size /= word_size; // size in words
-          } else if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+          } else if (get_op(type) == STRUCT_KW && type_stars(type) == 0) {
             size = struct_size(type); // size in bytes (word aligned)
             grow_stack_bytes(size);
             size /= word_size; // size in words
@@ -1981,7 +1981,7 @@ void codegen_glo_fun_decl(ast node) {
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
-  if (get_op(fun_type) == STRUCT_KW && get_val(fun_type) == 0) {
+  if (get_op(fun_type) == STRUCT_KW && type_stars(fun_type) == 0) {
     fatal_error("add_params: returning structs from function not supported");
   } else if (get_op(fun_type) == '[') {
     fatal_error("add_params: returning arrays from function not supported");

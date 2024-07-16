@@ -39,7 +39,6 @@ text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
 void comp_body(ast node);
 void comp_statement(ast node, int else_if);
-void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 
 #endif
@@ -507,7 +506,7 @@ A variable is a LOCAL_VAR node with 4 children:
   3. Kind of variable (function param or local var)
   4. Constant: if the variable is never assigned to
 */
-void add_var_to_local_env(ast ident_tok, int position, int kind) {
+void add_var_to_local_env(ast ident_tok, ast type, int position, int kind) {
   ast var;
   /* Check if the variable is not in env. This should always do nothing */
   if (find_var_in_local_env(ident_tok) != -1) {
@@ -516,13 +515,9 @@ void add_var_to_local_env(ast ident_tok, int position, int kind) {
 
   /*
     The var is not part of the environment, so we add it.
-    Variables start as constant, and are marked as mutable by mark_mutable_variables_body.
+    We track const variables as those can be optimized in certain cases.
   */
-#ifdef OPTIMIZE_CONSTANT_PARAM
-  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, true);
-#else
-  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, false);
-#endif
+  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, type_is_const(type));
   local_env = new_ast2(',', var, local_env);
   local_env_size += 1;
 }
@@ -536,7 +531,7 @@ void add_vars_to_local_env(ast lst, int position, int kind) {
     variables = get_child(decls, 0); /* List of variables */
     while(variables != 0){ /* Loop through the list of variables */
       variable = get_child(variables, 0); /* Variable node */
-      add_var_to_local_env(get_child(variable, 0), position, kind);
+      add_var_to_local_env(get_child(variable, 0), get_child(variable, 1), position, kind);
       variables = get_child(variables, 1);
       position += 1; /* Increment position */
     }
@@ -545,20 +540,15 @@ void add_vars_to_local_env(ast lst, int position, int kind) {
 }
 
 void add_fun_params_to_local_env(ast lst, int position, int kind) {
-  ast decl;
+  ast decl, type;
+  int ident;
   while (lst != 0) {
     decl = get_child(lst, 0);
-    add_var_to_local_env(get_child(decl, 0), position, kind);
+    ident = get_child(decl, 0);
+    type = get_child(decl, 1);
+    add_var_to_local_env(ident, type, position, kind);
     lst = get_child(lst, 1);
     position += 1;
-  }
-}
-
-void mark_variable_as_mutable(ast ident) {
-  ast var;
-  if (get_op(ident) == IDENTIFIER) {
-    var = find_var_in_local_env(get_val(ident));
-    if (var != -1) { set_child(var, 3, false); }
   }
 }
 
@@ -599,7 +589,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { /* Helper function for 
 
   // Local variables don't correspond to memory locations, and can't store
   // more than 1 number/pointer.
-  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0))) {
+  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND type_stars(type) == 0))) {
     printf("%s ", name);
     fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
   }
@@ -1231,7 +1221,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
        || get_op(get_child(node, 0)) == VOID_KW
        || get_op(get_child(node, 0)) == ENUM_KW
        || (( get_op(get_child(node, 0)) == STRUCT_KW || get_op(get_child(node, 0)) == UNION_KW)
-          && get_child(get_child(node, 0), 0) >= 1)) { // If it's a pointer
+          && type_stars(get_child(node, 0)) >= 1)) { // If it's a pointer
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
       } else if (get_op(get_child(node, 0)) == STRUCT_KW) {
         return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)), outer_op, op);
@@ -1937,80 +1927,6 @@ ast get_leading_var_declarations(ast node) {
   return new_ast2(',', result, node);
 }
 
-#ifdef OPTIMIZE_CONSTANT_PARAM
-void mark_mutable_variables_statement(ast node) {
-  int op = get_op(node);
-  ast params;
-
-  if (op == IF_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
-    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
-  } else if (op == WHILE_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
-  } else if (op == FOR_KW) {
-    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
-    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
-    if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
-  } else if (op == SWITCH_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == BREAK_KW OR op == CONTINUE_KW OR op == GOTO_KW) {
-    /* Do nothing */
-  } else if (op == ':' || op == CASE_KW || op == DEFAULT_KW) {
-    mark_mutable_variables_statement(get_child(node, op == DEFAULT_KW ? 0 : 1));
-  } else if (op == RETURN_KW) {
-    if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
-  } else if (op == '(') {
-    params = get_child(node, 1);
-
-    if (params != 0) { /* Check if not an empty list */
-      if (get_op(params) == ',') {
-        while (get_op(params) == ',') {
-          mark_mutable_variables_statement(get_child(params, 0));
-          params = get_child(params, 1);
-        }
-      } else { /* params is the first argument, not wrapped in a cons cell */
-        mark_mutable_variables_statement(params);
-      }
-    }
-  } else if (op == '{') { /* six.compound */
-    mark_mutable_variables_body(node);
-  } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
-    /* Do nothing */
-  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_PLUS_POST OR op == MINUS_MINUS_POST
-         OR op == PLUS_EQ OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
-         OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ OR op == SIZEOF_KW) {
-    mark_variable_as_mutable(get_child(node, 0));
-    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if ((op == '~') OR (op == '!')
-      OR (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ)
-      OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') OR (op == AMP_AMP) OR (op == BAR_BAR) OR (op == '.') OR (op == ARROW) OR (op == CAST)) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == '?') {
-    mark_mutable_variables_statement(get_child(node, 0));
-    mark_mutable_variables_statement(get_child(node, 1));
-    mark_mutable_variables_statement(get_child(node, 2));
-  } else {
-    printf("op=%d %c\n", op, op);
-    fatal_error("mark_mutable_variables_statement: unknown statement");
-  }
-}
-
-void mark_mutable_variables_body(ast node) {
-  if (node != 0) {
-    while (get_op(node) == '{') {
-      mark_mutable_variables_statement(get_child(node, 0));
-      node = get_child(node, 1);
-    }
-  }
-}
-#endif
-
 void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
   ast fun_type = get_child(node, 1);
@@ -2039,10 +1955,6 @@ void comp_glo_fun_decl(ast node) {
 
   add_fun_params_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
-
-#ifdef OPTIMIZE_CONSTANT_PARAM
-  mark_mutable_variables_body(body);
-#endif
 
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
   trailing_txt = let_params(params);
@@ -2164,8 +2076,8 @@ void comp_glo_var_decl(ast node) {
   // Arrays of structs and struct value types are not supported for now.
   // When we have type information on the local and global variables, we'll
   // be able to generate the correct code for these cases.
-  if ((get_op(type) == '[' && get_op(get_child(type, 1)) == STRUCT_KW && get_val(get_child(type, 1)) == 0)
-    || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
+  if ((get_op(type) == '[' && get_op(get_child(type, 1)) == STRUCT_KW && type_stars(get_child(type, 1)) == 0)
+    || (get_op(type) == STRUCT_KW AND type_stars(type) == 0)) {
     printf("%s ", string_pool + get_val(name));
     fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
   }
@@ -2261,7 +2173,7 @@ void comp_struct(ast ident, ast members) {
     // Arrays and struct value types are not supported for now.
     // When we have type information on the local and global variables, we'll
     // be able to generate the correct code for these cases.
-    if (get_op(field_type) == '[' || (get_op(field_type) == STRUCT_KW && get_val(field_type) == 0)) {
+    if (get_op(field_type) == '[' || (get_op(field_type) == STRUCT_KW && type_stars(field_type) == 0)) {
       fatal_error("Nested structures not supported by shell backend. Use a reference type instead.");
     } else {
       set_val(offset, get_val(offset) - 1);

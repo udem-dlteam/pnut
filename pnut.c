@@ -19,7 +19,6 @@
 #define AVOID_AMPAMP_BARBAR_not
 
 // Use positional parameter directly for function parameters that are constants
-#define OPTIMIZE_CONSTANT_PARAM
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
@@ -1728,9 +1727,31 @@ ast parse_struct();
 ast parse_union();
 #endif
 
+#define STARS       0xFF
+#define CONST_TYPE  0x100
+#define STATIC_TYPE 0x200
+
+void set_stars(ast type, int stars) {
+  if (stars > STARS) syntax_error("too many stars");
+  set_val(type, (get_val(type) & ~STARS) | stars);
+}
+
+int type_stars(ast type) {
+  return get_val(type) & STARS;
+}
+
+bool type_is_const(ast type) {
+  return get_val(type) & CONST_TYPE;
+}
+
+bool type_is_static(ast type) {
+  return get_val(type) & STATIC_TYPE;
+}
+
 ast parse_type() {
 
   int type_kw = 0;
+  int specifier = 0;
 
   while (1) {
     if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
@@ -1747,8 +1768,14 @@ ast parse_type() {
       if (type_kw != 0) syntax_error("inconsistent type");
       type_kw = VOID_KW;
       get_tok();
+    } else if (tok == STATIC_KW) {
+      if (specifier & STATIC_KW) syntax_error("duplicate static specifier");
+      specifier |= STATIC_KW;
+      get_tok();
     } else if (tok == CONST_KW) {
-      get_tok(); // ignore const
+      if (specifier & CONST_TYPE) syntax_error("duplicate const specifier");
+      specifier |= CONST_TYPE;
+      get_tok();
     } else if (tok == ENUM_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
       return parse_enum();
@@ -1772,7 +1799,7 @@ ast parse_type() {
     syntax_error("type expected");
   }
 
-  return new_ast0(type_kw, 0);
+  return new_ast0(type_kw, specifier);
 }
 
 int parse_stars() {
@@ -1793,7 +1820,7 @@ int parse_stars_for_type(int type) {
   // We don't want to mutate types that are typedef'ed, so making a copy of the type obj
   if (stars != 0) {
     type = clone_ast(type);
-    set_val(type, stars);
+    set_stars(type, stars);
   }
 
   return type;
