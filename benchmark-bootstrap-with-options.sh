@@ -1,15 +1,3 @@
-DIR="benchmarks/long-lines"
-COMP_DIR="$DIR/compiled"
-
-# Create the compiled directory if it doesn't exist
-mkdir -p $COMP_DIR
-
-print_time()
-{
-  ms=$1
-  printf "%s %s\n" "$((ms/1000)).$((ms/100%10))$((ms/10%10))$((ms%10))s" "$2"
-}
-
 shells="ksh dash bash yash zsh"
 
 with_options() {

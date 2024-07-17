@@ -10,7 +10,7 @@ int fib(int n) {
 
 void main() {
   int n;
-  int i;
+  int i = 0;
   while (i < 20) {
     n = fib(i);
     printf("fib(%d) = %d\n", i, n);

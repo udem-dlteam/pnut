@@ -15,8 +15,7 @@ print_time()
 compile() {
   # shell=$1
   file=$2
-  name=$(basename $2)
-  name="${name%.*}"
+  name=$(basename $2 ".c")
   options="${3-}"
   output_name=${4-$name}
 
@@ -27,27 +26,7 @@ compile() {
   else
     TIME_MS=$(( `bash -c "time $1 $COMP_DIR/pnut.sh $file $options > $COMP_DIR/$output_name-with-$1.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
   fi
-  print_time $TIME_MS "for: $1 with $file"
-}
-
-run() {
-  name=$(basename $2)
-  name="${name%.*}"
-  options="${3-}"
-
-  if [ $1 = "gcc" ]; then
-    executable="$COMP_DIR/$name-gcc.exe"
-    gcc -o "$executable" -O3 $2
-    TIME_MS=$(( `bash -c "time ./$executable $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  elif [ $1 = "pnut" ]; then
-    executable="$COMP_DIR/$name-pnut.exe"
-    ./$COMP_DIR/pnut-exe.exe $2 > $executable
-    chmod +x $executable
-    TIME_MS=$(( `bash -c "time ./$executable $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  else
-    TIME_MS=$(( `bash -c "time $1 $COMP_DIR/$name-with-gcc.sh $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  fi
-  print_time $TIME_MS "for: $1 with $name on $options"
+  print_time $TIME_MS "for: $1 with $file $(sha256sum $COMP_DIR/$output_name-with-$1.sh | cut -d' ' -f1)"
 }
 
 PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
@@ -59,14 +38,6 @@ gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 
 chmod +x $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
 
-# Generate 64k file
-i=0
-rm -f "$COMP_DIR/file-64k"
-while [ $i -lt 128 ] ; do
-  printf "%s\n" "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&()*+,-./:;<=>?@[]^_{|}~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123" >> $COMP_DIR/file-64k;
-  : $(( i += 1 ))
-done;
-
 programs="examples/empty.c examples/hello.c examples/fib.c examples/cat.c examples/cp.c examples/wc.c examples/sha256sum.c"
 runners="ksh dash bash yash zsh gcc pnut"
 
@@ -76,31 +47,12 @@ for prog in $programs; do
   done
 done
 
-runners="ksh dash bash yash zsh gcc pnut"
-
+# Compile pnut-sh.c using pnut-sh on different shells/compilers
 for run_with in $runners; do
   compile "$run_with" "pnut.c" "-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh" "pnut-sh"
 done
 
+# Compile pnut-exe.c using pnut-sh on different shells/compilers
 for run_with in $runners; do
   compile "$run_with" "pnut.c" "-DSUPPORT_INCLUDE -Di386" "pnut-exe"
-done
-
-programs="examples/empty.c examples/hello.c examples/fib.c examples/cat.c examples/cp.c examples/wc.c examples/sha256sum.c"
-runners="ksh dash bash yash zsh gcc pnut"
-
-run_program_options() { # $1 = program, $2 = runner
-  case $1 in
-    "examples/cat.c")       echo "$COMP_DIR/file-64k" ;;
-    "examples/cp.c")        echo "$COMP_DIR/file-64k $COMP_DIR/file-64k-out-$2" ;;
-    "examples/wc.c")        echo "$COMP_DIR/file-64k" ;;
-    "examples/sha256sum.c") echo "$COMP_DIR/file-64k" ;;
-    *)                      echo "" ;;
-  esac
-}
-
-for prog in $programs; do
-  for runner in $runners; do
-    run "$runner" $prog $(run_program_options $prog $runner)
-  done
 done

@@ -1,3 +1,11 @@
+#! /bin/sh
+# Evaluate the performance of encoding a character to an integer.
+# Conclusion:
+# The results vary depending of the number of variables in the environment.
+# When the environment is empty, a lookup table is faster than a case statement.
+# When the environment is not empty (with 100000 variables initialized), a case statement 2 is faster than a lookup table.
+# In all cases, using printf is at least 4x as slow as the other methods.
+
 DIR="benchmarks/char-to-int-conversion"
 
 print_time()
