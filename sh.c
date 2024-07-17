@@ -3,15 +3,15 @@
 #include "sh-runtime.c"
 
 void print_string_char(int c) {
-  if (c == 7) printf("\\a");
-  else if (c == 8) printf("\\b");
-  else if (c == 12) printf("\\f");
-  else if (c == 10) printf("\\n");
-  else if (c == 13) printf("\\r");
-  else if (c == 9) printf("\\t");
-  else if (c == 11) printf("\\v");
-  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) printf("\\%c", c);
-  else if ((c < 32) OR (c > 126)) printf("\\%d%d%d", c>>6, (c>>3)&7, c&7);
+  if (c == 7)       putstr("\\a");
+  else if (c == 8)  putstr("\\b");
+  else if (c == 12) putstr("\\f");
+  else if (c == 10) putstr("\\n");
+  else if (c == 13) putstr("\\r");
+  else if (c == 9)  putstr("\\t");
+  else if (c == 11) putstr("\\v");
+  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) { putstr("\\"); putchar(c); }
+  else if ((c < 32) OR (c > 126)) { putstr("\\"); putint(c>>6); putint((c>>3)&7); putint(c&7); }
   else putchar(c);
 }
 
@@ -30,7 +30,6 @@ enum TEXT_NODES {
   TEXT_ESCAPED
 };
 
-#ifndef PNUT_CC
 /* Place prototype of mutually recursive functions here */
 
 text comp_lvalue_address(ast node);
@@ -42,7 +41,6 @@ void comp_statement(ast node, int else_if);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 
-#endif
 
 /*
   Because concatenating strings is very expensive and a common operation, we
@@ -194,7 +192,7 @@ void print_escaped_text(text t, bool for_printf) {
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
-    printf("%d", text_pool[t + 1]);
+    putint(text_pool[t + 1]);
   } else if ( text_pool[t] == TEXT_FROM_POOL) {
     print_escaped_string(string_pool + text_pool[t + 1], for_printf);
   } else if (text_pool[t] == TEXT_ESCAPED) {
@@ -223,9 +221,9 @@ void print_text(text t) {
       i += 1;
     }
   } else if (text_pool[t] == TEXT_INTEGER) {
-    printf("%d", text_pool[t + 1]);
+    putint(text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_FROM_POOL) {
-    printf("%s", string_pool + text_pool[t + 1]);
+    putstr(string_pool + text_pool[t + 1]);
   } else if (text_pool[t] == TEXT_ESCAPED) {
     print_escaped_text(text_pool[t + 1], text_pool[t + 2]);
   } else {
@@ -387,7 +385,7 @@ ast find_var_in_local_env(ast ident_tok) {
 text format_special_var(ast ident, ast prefixed_with_dollar) {
   int op = get_op(ident);
   if (op == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str("__g"), get_val(ident));
+    return string_concat(wrap_str("__t"), get_val(ident));
   } else if (op == IDENTIFIER_STRING) {
     return string_concat(wrap_str("__str_"), get_val(ident));
   } else if (op == IDENTIFIER_DOLLAR) {
@@ -475,28 +473,6 @@ ast fresh_ident() {
 ast fresh_string_ident() {
   string_counter += 1;
   return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter - 1));
-}
-
-/* TODO: Remove this eventually or move to debug module */
-void print_local_env() {
-  ast env = local_env;
-  ast var;
-  ast ident;
-  int pos;
-  int kind;
-  int constant;
-
-  printf("##### Local environment #####\n");
-  while (env != 0) {
-    var = get_child(env, 0);
-    ident = get_child(var, 0);
-    pos = get_child(var, 1);
-    kind = get_child(var, 2);
-    constant = get_child(var, 3);
-
-    printf("# Ident[%d] %d = %s. kind = %d, constant = %d\n", pos, ident, string_pool + get_val(ident), kind, constant);
-    env = get_child(env, 1);
-  }
 }
 
 /*
@@ -650,18 +626,12 @@ text save_local_vars(int params_count) {
 
   runtime_use_local_vars = true;
 
-  while (params_count > 0) {
-    ident = new_ast0(IDENTIFIER_DOLLAR, params_count);
-    res = concatenate_strings_with(format_special_var(ident, false), res, wrap_char(' '));
-    params_count -= 1;
-  }
-
   while (env != 0) {
     local_var = get_child(env, 0);
     env = get_child(env, 1);
     if (variable_is_constant_param(local_var)) continue;
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+    res = concatenate_strings_with(string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), res, wrap_char(' '));
   }
 
   while (counter > 0) {
@@ -670,7 +640,7 @@ text save_local_vars(int params_count) {
     counter -= 1;
   }
 
-  return string_concat(wrap_str("set "), res);
+  return string_concat(wrap_str("set $@ "), res);
 }
 
 // Restore the previous value of local variables from positional parameters
@@ -678,9 +648,13 @@ text restore_local_vars(int params_count) {
   ast env = local_env;
   ast local_var;
   ast ident;
-  int local_var_pos = params_count;
+  // Position of the saved local vars, starting from 0
+  int local_var_pos = 0;
   text res = 0;
   int counter = fun_gensym_ix;
+  // Number of non-constant variables in the environment.
+  // Used to account for traversal of local env in reverse order.
+  int env_non_cst_size = 0;
 
   if (num_vars_to_save() == 0) return 0;
 
@@ -689,16 +663,25 @@ text restore_local_vars(int params_count) {
   while (env != 0) {
     local_var = get_child(env, 0);
     env = get_child(env, 1);
+    if(variable_is_constant_param(local_var)) continue;
+    env_non_cst_size += 1;
+  }
+
+  env = local_env;
+
+  while (env != 0) {
+    local_var = get_child(env, 0);
+    env = get_child(env, 1);
     if (variable_is_constant_param(local_var)) continue;
-    local_var_pos += 1;
     ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("))")), wrap_char(' '));
+    res = concatenate_strings_with(string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + env_non_cst_size - local_var_pos), true), wrap_str("))")), res, wrap_char(' '));
+    local_var_pos += 1;
   }
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + local_var_pos + 1), true), wrap_str("))")), wrap_char(' '));
     local_var_pos += 1;
-    res = concatenate_strings_with(res, string_concat5(wrap_str("$(("), env_var_with_prefix(ident, true), wrap_str(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, local_var_pos), true), wrap_str("))")), wrap_char(' '));
     counter -= 1;
   }
 
@@ -737,11 +720,6 @@ text save_local_vars(int params_count) {
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
-#ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  text let_fun = wrap_str("let_ ");
-#else
-  text let_fun = wrap_str("let ");
-#endif
 
   if (num_vars_to_save() == 0) return 0;
 
@@ -749,7 +727,7 @@ text save_local_vars(int params_count) {
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
-    res = concatenate_strings_with(string_concat(let_fun, format_special_var(ident, true)), res, wrap_str("; "));
+    res = concatenate_strings_with(string_concat(wrap_str("let "), format_special_var(ident, true)), res, wrap_str("; "));
     counter -= 1;
   }
 
@@ -763,7 +741,7 @@ text save_local_vars(int params_count) {
     if (!variable_is_constant_param(local_var)) {
 #endif
       ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
-      res = concatenate_strings_with(string_concat(let_fun, env_var_with_prefix(ident, true)), res, wrap_str("; "));
+      res = concatenate_strings_with(string_concat(wrap_str("let "), env_var_with_prefix(ident, true)), res, wrap_str("; "));
     }
 
     env = get_child(env, 1);
@@ -1115,8 +1093,8 @@ text with_prefixed_side_effects(ast test_side_effects, text code) {
 // Return true if the operator is associative.
 // Associative operators can be chained without parentheses.
 bool is_associative_operator(int op) {
-  return op == '+' | op == '*' | op == '&' | op == '|' | op == '^'
-      |  op == EQ_EQ | op == AMP_AMP | op == BAR_BAR;
+  return (op == '+')   | (op == '*')     | (op == '&')    | (op == '|')    | (op == '^')
+      |  (op == EQ_EQ) | (op == AMP_AMP) | (op == BAR_BAR);
 }
 
 /*
@@ -1168,11 +1146,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     if (op == INTEGER) {
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(node)));
     } else if (op == CHARACTER) {
+#ifdef SH_INLINE_CHAR_LITERAL
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
+#else
       if (context == RVALUE_CTX_ARITH_EXPANSION) {
         return character_ident(get_val(node));
       } else {
         return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
       }
+#endif
     } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
@@ -1594,7 +1576,6 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast params = get_child(node, 1);
   int name_id = get_val(name);
   text res;
-  ast ident;
 
 #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
@@ -2326,7 +2307,7 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
-  printf("set -e -u\n\n");
+  putstr("set -e\n\n");
 }
 
 void epilogue() {
@@ -2335,28 +2316,28 @@ void epilogue() {
   text main_args = 0;
 
   if (any_character_used) {
-    printf("# Character constants\n");
+    putstr("# Character constants\n");
     for(c = 0; c < 256; c += 1) {
       if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
-        printf("readonly ");
+        putstr("readonly ");
         print_text(character_ident(c));
-        printf("=%d\n", c);
+        putchar('='); putint(c); putchar('\n');
       }
     }
   }
 
-  printf("# Runtime library\n");
+  putstr("# Runtime library\n");
   produce_runtime();
 
   if (runtime_use_make_argv) {
-    printf("# Setup argc, argv\n");
-    printf("__argc_for_main=$(($# + 1))\n");
-    printf("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+    putstr("# Setup argc, argv\n");
+    putstr("__argc_for_main=$(($# + 1))\n");
+    putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
     main_args = wrap_str(" $__argc_for_main $__argv_for_main");
   }
 
   if (main_returns) {
-    printf("__code=0; # Success exit code\n");
+    putstr("__code=0; # Success exit code\n");
     print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
   } else {
     print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
@@ -2417,5 +2398,7 @@ void codegen_glo_decl(ast decl) {
 
 void codegen_end() {
   epilogue();
+#ifdef PRINT_MEMORY_STATS
   printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
+#endif
 }

@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 int fib(int n) {
   if (n < 2) {
     return n;
@@ -8,6 +10,10 @@ int fib(int n) {
 
 void main() {
   int n;
-  n = fib(20);
-  printf("fib(20) = %d\n", n);
+  int i = 0;
+  while (i < 20) {
+    n = fib(i);
+    printf("fib(%d) = %d\n", i, n);
+    ++i;
+  }
 }

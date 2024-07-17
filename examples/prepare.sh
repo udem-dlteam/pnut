@@ -1,5 +1,10 @@
 #! /bin/sh
 
+DIR="examples/"
+COMP_DIR="$DIR/compiled"
+
+mkdir -p $COMP_DIR
+
 echo "Compiling examples"
 
 PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -DRT_COMPACT -Dsh -DSH_INCLUDE_C_CODE"
@@ -10,5 +15,5 @@ gcc -o pnut-sh.exe $PNUT_SH_OPTIONS pnut.c
 for file in $(find examples -type f -name "*.c" | sort); do
   filename=$(basename $file .c);
   echo "Compiling $filename"
-  ./pnut-sh.exe $file > examples/$filename.sh
+  ./pnut-sh.exe $file > $COMP_DIR/$filename.sh
 done

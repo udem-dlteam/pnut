@@ -1,6 +1,7 @@
 #!/bin/sh
 
-SHELL_TO_TEST="$1"
+SHELL_TO_TEST="$1" shift
+PNUT_SH_OPTIONS_EXTRA="$@" # Left over arguments are passed to pnut.sh
 
 if [ "$SHELL_TO_TEST" = "" ] ; then
   echo "usage: $0 <shell_to_test>"
@@ -8,11 +9,12 @@ if [ "$SHELL_TO_TEST" = "" ] ; then
 fi
 
 TEMP_DIR="bootstrap-results"
-PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh $PNUT_SH_OPTIONS_EXTRA"
 PNUT_I386_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Di386"
 
 echo "PLATFORM: `uname -a`"
 echo "SHELL: $SHELL_TO_TEST"
+echo "PNUT_SH_OPTIONS_EXTRA: $PNUT_SH_OPTIONS_EXTRA"
 
 print_time()
 {
@@ -38,6 +40,7 @@ print_time $PNUT_SH_COMPILED_BY_PNUT_SH_SH_MS "for: $SHELL_TO_TEST pnut-sh.sh $P
 
 if ! diff $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh $TEMP_DIR/pnut-sh.sh > /dev/null ; then
   echo "*** pnut-sh-compiled-by-pnut-sh-sh.sh != pnut-sh.sh"
+  exit 1
 fi
 
 PNUT_I386_COMPILED_BY_PNUT_SH_SH_MS=$(( `bash -c "time $SHELL_TO_TEST $TEMP_DIR/pnut-sh.sh $PNUT_I386_OPTIONS pnut.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))

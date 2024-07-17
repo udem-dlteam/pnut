@@ -19,25 +19,34 @@
 #define AVOID_AMPAMP_BARBAR_not
 
 // Use positional parameter directly for function parameters that are constants
-#define OPTIMIZE_CONSTANT_PARAM
+#define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Shell backend codegen options
+#ifndef SH_AVOID_PRINTF_USE_NOT
 #define SH_AVOID_PRINTF_USE
+#endif
 #define SH_INLINE_PUTCHAR
 #define SH_INLINE_EXIT
 // Specifies if we include the C code along with the generated shell code
 #define SH_INCLUDE_C_CODE_not
-// If we use the `set` command and positional parameters to simulate local vars
-#define SH_SAVE_VARS_WITH_SET_not
 // Have let commands initialize function parameters
+#ifndef SH_SAVE_VARS_WITH_SET
 #define SH_INITIALIZE_PARAMS_WITH_LET
+#endif
+// If we use the `set` command and positional parameters to simulate local vars
+#ifndef SH_INITIALIZE_PARAMS_WITH_LET
+#define SH_SAVE_VARS_WITH_SET
+#endif
+// Inline ascii code of character literal
+#define SH_INLINE_CHAR_LITERAL_not
 
 // Options to parameterize the shell runtime library
 #define RT_FREE_UNSETS_VARS
 #define RT_NO_INIT_GLOBALS_not
 #define RT_COMPACT_not
 #define RT_INLINE_PUTCHAR
+#define RT_USE_LOOKUP_TABLE
 
 #ifdef AVOID_AMPAMP_BARBAR
 #define AND &
@@ -1886,7 +1895,6 @@ ast parse_struct() {
   ast type;
   ast result = 0;
   ast tail;
-  int stars;
 
   expect_tok(STRUCT_KW);
 
@@ -1910,6 +1918,9 @@ ast parse_struct() {
       if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
 
       type = parse_type_with_stars();
+
+      if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+        syntax_error("variable with void type");
 
       if (tok != IDENTIFIER) {
         syntax_error("identifier expected");
@@ -1952,7 +1963,6 @@ ast parse_union() {
 ast parse_declaration() {
 
   ast type;
-  int stars;
   int name;
   ast result = 0;
 
@@ -1964,7 +1974,7 @@ ast parse_declaration() {
 
     expect_tok(IDENTIFIER);
 
-    if ((stars == 0) AND (get_op(type) == VOID_KW))
+    if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
       syntax_error("variable with void type");
     /*
     if (tok == '[')
@@ -2009,7 +2019,6 @@ int parse_declaration_list() {
 ast parse_definition(int local) {
 
   ast type;
-  int stars;
   ast init;
   int name;
   ast params;
@@ -2063,7 +2072,7 @@ ast parse_definition(int local) {
 
       } else {
 
-        if ((stars == 0) AND (get_op(type) == VOID_KW)) {
+        if ((get_val(this_type) == 0) AND (get_op(this_type) == VOID_KW)) {
           syntax_error("variable with void type");
         }
 
@@ -2326,11 +2335,9 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
-  int parens = 0;
   int tokens = 0;
   ast result;
   ast type;
-  int stars;
 
   if (tok == '(') {
     // Ideally, we'd parse as many ( as needed, but then we would have to
@@ -2350,6 +2357,9 @@ ast parse_cast_expression() {
 
     if (is_type_starter(tok)) {
       type = parse_type_with_stars();
+
+      if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+        syntax_error("variable with void type");
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());
@@ -2821,6 +2831,7 @@ ast parse_compound_statement() {
 #endif
 
 int main(int argc, char **argv) {
+
 
   int i;
   ast decl;

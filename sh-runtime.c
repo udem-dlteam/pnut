@@ -22,7 +22,7 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #endif
 
 #ifdef RT_COMPACT
-#define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$(printf \"%o\" \"" int_var "\")\")\n");
+#define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$((" int_var "/64))$((" int_var "/8%8))$((" int_var "%8))\")\n");
 #else
 #define call_int_to_char(prefix, int_var) putstr(prefix "int_to_char \"" int_var "\"\n");
 #endif
@@ -69,21 +69,28 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 // Local variables
 
 DEFINE_RUNTIME_FUN(local_vars)
-  printf("# Local variables\n");
-  printf("__=0\n");
+  putstr("# Local variables\n");
+  putstr("__=0\n");
 #ifndef SH_SAVE_VARS_WITH_SET
-  printf("__SP=0\n");
+  putstr("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  printf("let() { : $((__SP += 1)) $((__$__SP=$1)) $(($1=$2)) ; } \n");
-  printf("let_() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
+  putstr("let() { # $1: variable name, $2: value (optional) \n");
+  putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
+  putstr("  : $(($1=$2+0))                   # Init\n");
+  putstr("}\n");
 #else
-  printf("let() { : $((__SP += 1)) $((__$__SP=$1)); } \n");
+  putstr("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
 #endif
-  printf("endlet() {\n");
-  printf("  __ret=$1; : $((__tmp = $__ret)) # Save return value so it's not overwritten\n");
-  printf("  while [ $# -ge 2 ]; do : $(($2 = __$__SP)) $((__SP -= 1)); shift; done\n");
-  printf("  : $(($__ret=__tmp))\n");
-  printf("}\n");
+  putstr("endlet() { # $1: return variable\n");
+  putstr("           # $2...: function local variables\n");
+  putstr("  __ret=$1 # Don't overwrite return value\n");
+  putstr("  : $((__tmp = $__ret))\n");
+  putstr("  while [ $# -ge 2 ]; do\n");
+  putstr("    : $(($2 = __$__SP)) $((__SP -= 1)); # Pop\n");
+  putstr("    shift;\n");
+  putstr("  done\n");
+  putstr("  : $(($__ret=__tmp))   # Restore return value\n");
+  putstr("}\n");
 #endif
 END_RUNTIME_FUN(local_vars)
 
@@ -190,6 +197,74 @@ END_RUNTIME_FUN(int_to_char)
 
 DEFINE_RUNTIME_FUN(char_to_int)
 #ifndef RT_COMPACT
+#ifdef RT_USE_LOOKUP_TABLE
+  putstr("__c2i_0=48\n");
+  putstr("__c2i_1=49\n");
+  putstr("__c2i_2=50\n");
+  putstr("__c2i_3=51\n");
+  putstr("__c2i_4=52\n");
+  putstr("__c2i_5=53\n");
+  putstr("__c2i_6=54\n");
+  putstr("__c2i_7=55\n");
+  putstr("__c2i_8=56\n");
+  putstr("__c2i_9=57\n");
+  putstr("__c2i_a=97\n");
+  putstr("__c2i_b=98\n");
+  putstr("__c2i_c=99\n");
+  putstr("__c2i_d=100\n");
+  putstr("__c2i_e=101\n");
+  putstr("__c2i_f=102\n");
+  putstr("__c2i_g=103\n");
+  putstr("__c2i_h=104\n");
+  putstr("__c2i_i=105\n");
+  putstr("__c2i_j=106\n");
+  putstr("__c2i_k=107\n");
+  putstr("__c2i_l=108\n");
+  putstr("__c2i_m=109\n");
+  putstr("__c2i_n=110\n");
+  putstr("__c2i_o=111\n");
+  putstr("__c2i_p=112\n");
+  putstr("__c2i_q=113\n");
+  putstr("__c2i_r=114\n");
+  putstr("__c2i_s=115\n");
+  putstr("__c2i_t=116\n");
+  putstr("__c2i_u=117\n");
+  putstr("__c2i_v=118\n");
+  putstr("__c2i_w=119\n");
+  putstr("__c2i_x=120\n");
+  putstr("__c2i_y=121\n");
+  putstr("__c2i_z=122\n");
+  putstr("__c2i_A=65\n");
+  putstr("__c2i_B=66\n");
+  putstr("__c2i_C=67\n");
+  putstr("__c2i_D=68\n");
+  putstr("__c2i_E=69\n");
+  putstr("__c2i_F=70\n");
+  putstr("__c2i_G=71\n");
+  putstr("__c2i_H=72\n");
+  putstr("__c2i_I=73\n");
+  putstr("__c2i_J=74\n");
+  putstr("__c2i_K=75\n");
+  putstr("__c2i_L=76\n");
+  putstr("__c2i_M=77\n");
+  putstr("__c2i_N=78\n");
+  putstr("__c2i_O=79\n");
+  putstr("__c2i_P=80\n");
+  putstr("__c2i_Q=81\n");
+  putstr("__c2i_R=82\n");
+  putstr("__c2i_S=83\n");
+  putstr("__c2i_T=84\n");
+  putstr("__c2i_U=85\n");
+  putstr("__c2i_V=86\n");
+  putstr("__c2i_W=87\n");
+  putstr("__c2i_X=88\n");
+  putstr("__c2i_Y=89\n");
+  putstr("__c2i_Z=90\n");
+
+  putstr("char_to_int() {\n");
+  putstr("  case $1 in\n");
+  putstr("    [a-zA-Z0-9]) __c=$((__c2i_$1)) ;;\n");
+#else
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
   putstr("    [0-9]) __c=$((48 + $1)) ;;\n");
@@ -245,6 +320,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
   putstr("    'X') __c=88 ;;\n");
   putstr("    'Y') __c=89 ;;\n");
   putstr("    'Z') __c=90 ;;\n");
+#endif
   putstr("    ' ') __c=32 ;;\n");
   putstr("    '!') __c=33 ;;\n");
   putstr("    '\"') __c=34 ;;\n");
@@ -292,10 +368,12 @@ DEFINE_RUNTIME_FUN(malloc)
 #ifdef RT_FREE_UNSETS_VARS
   // When free isn't a no-op, we need to tag all objects with their size
   putstr("  : $((_$__ALLOC = $2)) # Track object size\n");
-  putstr("  : $((__ALLOC += 1))\n");
-#endif
+  putstr("  : $(($1 = $__ALLOC + 1))\n");
+  putstr("  : $((__ALLOC += $2 + 1))\n");
+#else
   putstr("  : $(($1 = $__ALLOC))\n");
   putstr("  : $((__ALLOC += $2))\n");
+#endif
   putstr("}\n");
 END_RUNTIME_FUN(malloc)
 
@@ -314,32 +392,31 @@ END_RUNTIME_FUN(initialize_memory)
 DEFINE_RUNTIME_FUN(defarr)
 DEPENDS_ON(malloc)
 #ifdef RT_NO_INIT_GLOBALS
-  printf("defarr() { _malloc $1 $2; }\n");
+  putstr("defarr() { _malloc $1 $2; }\n");
 #else
 DEPENDS_ON(initialize_memory)
-  printf("defarr() { _malloc $1 $2; ; initialize_memory $(($1)) $2; }\n");
+  putstr("defarr() { _malloc $1 $2; ; initialize_memory $(($1)) $2; }\n");
 #endif
 END_RUNTIME_FUN(defarr)
 
 #ifdef SUPPORT_ADDRESS_OF_OP
 DEFINE_RUNTIME_FUN(defglo)
 DEPENDS_ON(malloc)
-  printf("defglo() { _malloc $1 1 ; }\n");
+  putstr("defglo() { _malloc $1 1 ; }\n");
 END_RUNTIME_FUN(defglo)
 #endif
 
 DEFINE_RUNTIME_FUN(free)
-  putstr("_free() { # $1 = pointer to object to free\n");
-  putstr("  : $(($1 = 0)); shift # Return 0\n");
+  putstr("_free() { # $2 = object to free\n");
 #ifdef RT_FREE_UNSETS_VARS
-  putstr("  __ptr=$1\n");
-  putstr("  __size=$((_$((__ptr - 1)))) # Get size of allocation\n");
-  putstr("  while [ $__size -gt 0 ]; do\n");
+  putstr("  __ptr=$(($2 - 1))          # Start of object\n");
+  putstr("  __end=$((__ptr + _$__ptr)) # End of object\n");
+  putstr("  while [ $__ptr -lt $__end ]; do\n");
   putstr("    unset \"_$__ptr\"\n");
   putstr("    : $((__ptr += 1))\n");
-  putstr("    : $((__size -= 1))\n");
   putstr("  done\n");
 #endif
+  putstr("  : $(($1 = 0))              # Return 0\n");
   putstr("}\n");
 END_RUNTIME_FUN(free)
 
@@ -349,15 +426,21 @@ DEPENDS_ON(malloc)
 DEPENDS_ON(char_to_int)
   putstr("# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.\n");
   putstr("unpack_string() {\n");
-  putstr("  __buf=\"$1\"\n");
-  putstr("  _malloc __addr $((${#__buf} + 1))\n");
+  putstr("  __str=\"$1\"\n");
+  putstr("  _malloc __addr $((${#__str} + 1))\n");
   putstr("  __ptr=$__addr\n");
-  putstr("  while [ -n \"$__buf\" ] ; do\n");
-  putstr("    __char=\"${__buf%\"${__buf#?}\"}\"   # remove all but first char\n");
-  putstr("    __buf=\"${__buf#?}\"               # remove the current char from $__buf\n");
+  putstr("  while [ -n \"$__str\" ] ; do\n");
+  putstr("    # Remove first char from string\n");
+  putstr("    __tail=\"${__str#?}\"\n");
+  putstr("    # Remove all but first char\n");
+  putstr("    __char=\"${__str%\"$__tail\"}\"\n");
+  putstr("    # Convert char to ASCII\n");
   call_char_to_int("    ", "$__char")
+  putstr("    # Write character to memory\n");
   putstr("    : $((_$__ptr = __c))\n");
+  putstr("    # Continue with rest of string\n");
   putstr("    : $((__ptr += 1))\n");
+  putstr("    __str=\"$__tail\"\n");
   putstr("  done\n");
   putstr("  : $((_$__ptr = 0))\n");
   putstr("}\n");
@@ -455,12 +538,12 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("# If the variable is already defined, this function does nothing.\n");
   putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
   putstr("defstr() { # $1 = variable name, $2 = string\n");
-  putstr("  set +u # Necessary to allow the variable to be empty\n");
+  // putstr("  set +u # Necessary to allow the variable to be empty\n");
   putstr("  if [ $(($1)) -eq 0 ]; then\n");
   putstr("    unpack_escaped_string \"$2\"\n");
   putstr("    : $(($1 = __addr))\n");
   putstr("  fi\n");
-  putstr("  set -u\n");
+  // putstr("  set -u\n");
   putstr("}\n");
 END_RUNTIME_FUN(defstr)
 
@@ -839,7 +922,7 @@ END_RUNTIME_FUN(read)
 
 DEFINE_RUNTIME_FUN(write)
 DEPENDS_ON(open)
-  putstr("_write() { : $((__fd = $2, __buf = $3, __count = $4))\n");
+  putstr("_write() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    : $((__byte = _$((__buf+__i))))\n");
@@ -850,9 +933,8 @@ DEPENDS_ON(open)
   putstr("}\n");
 END_RUNTIME_FUN(write)
 
-// exec $fd<&- does not work as expected, and we don't want to use eval so we
-// instead have a case statement that calls the appropriate exec command to open
-// and close file descriptors.
+// exec $fd<&- does not work as expected so we instead have a case statement
+// that calls the appropriate exec command to open and close file descriptors.
 DEFINE_RUNTIME_FUN(fopen)
 DEPENDS_ON(malloc)
 DEPENDS_ON(open)
