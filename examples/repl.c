@@ -581,10 +581,8 @@ void show_stack(){
 #endif
 
 void run() {
-#define ADVANCE_PC()                                                           \
-  do {                                                                         \
-    pc = TAG(pc);                                                              \
-  } while (0)
+  int i;
+
   while (1) {
     num instr = NUM(CAR(pc));
     switch (instr) {
@@ -597,121 +595,89 @@ void run() {
     case INSTR_AP: // call or jump
     {
       bool jump = TAG(pc) == NUM_0;
-#ifdef DEBUG_I_CALL
-      printf(jump ? "--- jump " : "--- call ");
-      show_operand(CDR(pc));
-      show_stack();
-      PRINTLN();
-#endif
       obj proc = get_opnd(CDR(pc));
       while (1) {
-#define code CAR(proc)
-          if (IS_NUM(code)) {
-            pop();
-            proc=prim(NUM(code));
+        if (IS_NUM(CAR(proc))) {
+          pop();
+          proc=prim(NUM(CAR(proc)));
 
-            if (IS_RIB(proc)) continue;
+          if (IS_RIB(proc)) continue;
 
-            if (jump) {
-              // jump
-              pc = get_cont();
-              CDR(stack) = CAR(pc);
-            }
-            pc = TAG(pc);
-          } else {
-            num nargs = NUM(pop());
-            obj s2 = TAG_RIB(alloc_rib(NUM_0, proc, PAIR_TAG));
-            proc = CDR(s2);
-            CAR(pc) = CAR(proc); // save the proc from the mighty gc
-
-
-            num nparams_vari = NUM(CAR(code));
-            num nparams = nparams_vari >> 1;
-            num vari = nparams_vari&1;
-            if (vari ? nparams > nargs : nparams != nargs) {
-                printf("*** Unexpected number of arguments nargs: %ld nparams: %ld vari: %ld\n", nargs, nparams, vari);
-                exit(1);
-            }
-            nargs-=nparams;
-            if (vari){
-                obj rest = NIL;
-                for(int i = 0; i < nargs; ++i){
-                    rest = TAG_RIB(alloc_rib(pop(), rest, s2));
-                    s2 = TAG(rest);
-                    TAG(rest) = PAIR_TAG;
-                }
-                s2 = TAG_RIB(alloc_rib(rest, s2, PAIR_TAG));
-            }
-            for (int i = 0; i < nparams; ++i) {
-              s2 = TAG_RIB(alloc_rib(pop(), s2, PAIR_TAG));
-            }
-
-            nparams = nparams + vari;
-            obj c2 = TAG_RIB(list_tail(RIB(s2), nparams));
-
-            if (jump) {
-              obj k = get_cont();
-              CAR(c2) = CAR(k);
-              TAG(c2) = TAG(k);
-            } else {
-              CAR(c2) = stack;
-              TAG(c2) = TAG(pc);
-            }
-
-            stack = s2;
-
-            obj new_pc = CAR(pc);
-            CAR(pc) = TAG_NUM(instr);
-            pc = TAG(new_pc);
+          if (jump) {
+            // jump
+            pc = get_cont();
+            CDR(stack) = CAR(pc);
           }
-          break;
+          pc = TAG(pc);
+        } else {
+          num nargs = NUM(pop());
+          obj s2 = TAG_RIB(alloc_rib(NUM_0, proc, PAIR_TAG));
+          proc = CDR(s2);
+          CAR(pc) = CAR(proc); // save the proc from the mighty gc
+
+
+          num nparams_vari = NUM(CAR(CAR(proc)));
+          num nparams = nparams_vari >> 1;
+          num vari = nparams_vari&1;
+          if (vari ? nparams > nargs : nparams != nargs) {
+            printf("*** Unexpected number of arguments nargs: %ld nparams: %ld vari: %ld\n", nargs, nparams, vari);
+            exit(1);
+          }
+          nargs-=nparams;
+          if (vari){
+            obj rest = NIL;
+            for(i = 0; i < nargs; ++i){
+              rest = TAG_RIB(alloc_rib(pop(), rest, s2));
+              s2 = TAG(rest);
+              TAG(rest) = PAIR_TAG;
+            }
+            s2 = TAG_RIB(alloc_rib(rest, s2, PAIR_TAG));
+          }
+          for (i = 0; i < nparams; ++i) {
+            s2 = TAG_RIB(alloc_rib(pop(), s2, PAIR_TAG));
+          }
+
+          nparams = nparams + vari;
+          obj c2 = TAG_RIB(list_tail(RIB(s2), nparams));
+
+          if (jump) {
+            obj k = get_cont();
+            CAR(c2) = CAR(k);
+            TAG(c2) = TAG(k);
+          } else {
+            CAR(c2) = stack;
+            TAG(c2) = TAG(pc);
+          }
+
+          stack = s2;
+
+          obj new_pc = CAR(pc);
+          CAR(pc) = TAG_NUM(instr);
+          pc = TAG(new_pc);
+        }
+        break;
       }
       break;
     }
-#undef code
     case INSTR_SET: { // set
-#ifdef DEBUG_I_CALL
-      printf("--- set ");
-      show_operand(CDR(pc));
-      show_stack();
-      PRINTLN();
-#endif
       obj x = CAR(stack);
       ((IS_NUM(CDR(pc))) ? list_tail(RIB(stack), NUM(CDR(pc))) : RIB(CDR(pc)))
           ->field0 = x;
       stack = CDR(stack);
-      ADVANCE_PC();
+      pc = TAG(pc);                                                              \
       break;
     }
     case INSTR_GET: { // get
-#ifdef DEBUG_I_CALL
-      printf("--- get ");
-      show_operand(CDR(pc));
-      show_stack();
-      PRINTLN();
-#endif
       push2(get_opnd(CDR(pc)), PAIR_TAG);
-      ADVANCE_PC();
+    pc = TAG(pc);                                                              \
       break;
     }
     case INSTR_CONST: { // const
-#ifdef DEBUG_I_CALL
-      printf("--- const ");
-      show_operand(CDR(pc));
-      show_stack();
-      PRINTLN();
-#endif
       push2(CDR(pc), PAIR_TAG);
-      ADVANCE_PC();
+    pc = TAG(pc);                                                              \
       break;
     }
     case INSTR_IF: { // if
-#ifdef DEBUG_I_CALL
-      printf("--- if");
-      show_stack();
-      PRINTLN();
-#endif
-
       obj p = pop();
       if (p != FALSE) {
         pc = CDR(pc);
@@ -722,7 +688,6 @@ void run() {
     }
     }
   }
-#undef ADVANCE_PC
 }
 
 struct rib *symbol_ref(num n) { return RIB(list_ref(RIB(symbol_table), n)); }
