@@ -11,6 +11,8 @@
 #ifndef PNUT_CC
 #include <stdio.h>
 #include <stdlib.h>
+#else
+typedef long FILE;
 #endif
 
 //#define DEBUG_GC true
