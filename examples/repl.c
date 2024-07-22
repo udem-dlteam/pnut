@@ -759,11 +759,12 @@ void init_weights(){
 
 void decode() {
   obj n;
-  int d;
-  int op;
+  int d, op;
+  num x;
+  struct rib *c;
 
   while (1) {
-    num x = get_code();
+    x = get_code();
     n = x;
     op = -1;
 
@@ -780,10 +781,19 @@ void decode() {
       }
 
       if (n >= d) {
-        n = (n == d) ? TAG_NUM(get_int(0))
-                     : TAG_RIB(symbol_ref(get_int(n - d - 1)));
+        if (n == d){
+          n = TAG_NUM(get_int(0));
+        }
+        else{
+          n = TAG_RIB(symbol_ref(get_int(n - d - 1)));
+        }
       } else {
-        n = (op < 3) ? TAG_RIB(symbol_ref(n)) : TAG_NUM(n);
+        if (op < 3){
+          n = TAG_RIB(symbol_ref(n));
+        }
+        else{
+          n = TAG_NUM(n);
+        }
       }
 
       if (op > 4) {
@@ -800,7 +810,7 @@ void decode() {
       }
     }
 
-    struct rib *c = alloc_rib(TAG_NUM(op), n, 0);
+    c = alloc_rib(TAG_NUM(op), n, 0);
     c->field2 = TOS;
     TOS = TAG_RIB(c);
   }
