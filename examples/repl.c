@@ -127,8 +127,7 @@ void init_heap() {
 // as the broken heart value
 #define GC_COPIED_OBJ ((obj)NULL)
 
-void copy() {
-  obj o = *scan;
+obj copy(obj o) {
   obj *ptr, field0, copy;
   // we sometime reference rib that are allocated in BSS,
   // we do not want to copy those
@@ -147,9 +146,9 @@ void copy() {
       ptr[-1] = copy; // set forward ptr. Since it points to TAG, ptr[-1]
                       // rewrites the CDR
     }
-    *scan = copy; // overwrite to new address.
+    return copy;
   }
-  scan++;
+  return o;
 }
 
 void gc() {
@@ -167,21 +166,25 @@ void gc() {
   alloc = to_space;
 
   // root: stack
-  scan = &stack;
-  copy();
+  stack = copy(stack);
+  //scan = &stack;
+  //copy();
 
   // root: pc
-  scan = &pc;
-  copy();
+  pc = copy(pc);
+  //scan = &pc;
+  //copy();
 
   // root: false
-  scan = &FALSE;
-  copy();
+  FALSE = copy(FALSE);
+  //scan = &FALSE;
+  //copy();
 
   // scan the to_space to pull all live references
   scan = to_space;
   while (scan != alloc) {
-    copy(); // use scan pointer
+    *scan = copy(*scan); // use scan pointer
+    scan++;
   }
 
 #ifdef DEBUG_GC
