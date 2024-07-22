@@ -585,6 +585,7 @@ void run() {
   num instr, nargs, nparams_vari, nparams, vari;
   bool jump;
   obj proc, s2, c2, k, new_pc, rest, p, x;
+  struct rib* opnd;
 
   while (1) {
     instr = NUM(CAR(pc));
@@ -658,8 +659,13 @@ void run() {
     }
     else if(instr == INSTR_SET){
       x = CAR(stack);
-      ((IS_NUM(CDR(pc))) ? list_tail(RIB(stack), NUM(CDR(pc))) : RIB(CDR(pc)))
-          ->field0 = x;
+      if (IS_NUM(CDR(pc))){
+        opnd = RIB(list_tail(RIB(stack), NUM(CDR(pc))));
+      }
+      else{
+        opnd = RIB(CDR(pc));
+      }
+      opnd->field0 = x;
       stack = CDR(stack);
       pc = TAG(pc);                                                              \
     }
