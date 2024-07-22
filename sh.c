@@ -699,6 +699,8 @@ text let_params(int params) {
   text res = 0;
   int params_ix = 2;
 
+  if (num_vars_to_save() == 0) return 0;
+
   runtime_use_local_vars = true;
 
   while (params != 0) {
