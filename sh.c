@@ -1996,17 +1996,18 @@ void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
   ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
-  ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
-  ast local_vars = get_child(local_vars_and_body, 0);
-  ast body = get_child(local_vars_and_body, 1);
+  ast body = get_child(node, 3);
+  ast local_vars_and_body, local_vars;
   text trailing_txt = 0;
   int params_ix;
-  ast decls;
-  ast vars;
-  ast var;
+  ast decls, vars, var;
   int save_loc_vars_fixup;
 
-  if (body == 0) return; // ignore forward declarations
+  if (body == -1) return; // ignore forward declarations
+
+  local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
+  local_vars = get_child(local_vars_and_body, 0);
+  body = get_child(local_vars_and_body, 1);
 
   top_level_stmt = false;
 
@@ -2090,7 +2091,11 @@ void comp_glo_fun_decl(ast node) {
     local_vars = get_child(local_vars, 1);
   }
 
-  comp_body(body);
+  if (body == 0) {
+    append_glo_decl(wrap_str(":")); // Empty function
+  } else {
+    comp_body(body);
+  }
 
   append_glo_decl(restore_local_vars(params_ix - 1));
 

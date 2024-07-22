@@ -2061,8 +2061,8 @@ ast parse_definition(int local) {
         expect_tok(')');
 
         if (tok == ';') {
-          /* forward declaration */
-          body = 0;
+          /* forward declaration. Body == -1 */
+          body = -1;
           get_tok();
         } else {
           body = parse_compound_statement();

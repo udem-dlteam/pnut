@@ -1995,7 +1995,7 @@ void codegen_glo_fun_decl(ast node) {
     binding = cgc_globals;
   }
 
-  if (body != 0) {
+  if (body > 0) { // 0 is empty body, -1 is forward declaration
 
     lbl = heap[binding+4];
 
