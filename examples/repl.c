@@ -374,8 +374,10 @@ case 2:
 {
   PRIM2();
   FILE* file = (FILE*) ((long) y ^ 1);
-  char buffer[1] = {(char) NUM(x)};
-  int success = fwrite(buffer, 1, 1, file);
+  char buffer[1];
+  int success;
+  buffer[0] = (char) NUM(x);
+  success = fwrite(buffer, 1, 1, file);
   if (success != 1) {
   perror("Cannot write to file.");
   }
@@ -426,8 +428,8 @@ case 7:
 case 8:
 {
      PRIM2();
-     TEMP1 = x; // save x for the gc 
      int num_args = 0;
+     TEMP1 = x; // save x for the gc 
      obj arg = TAG_RIB(y);
      while (arg != NIL) {
         push2(arg, PAIR_TAG); // make sure the arg doesn't get GC'd
