@@ -819,10 +819,11 @@ void decode() {
 }
 
 void setup_stack() {
+  obj first;
   push2(NUM_0, PAIR_TAG);
   push2(NUM_0, PAIR_TAG);
 
-  obj first = CDR(stack);
+  first = CDR(stack);
   CDR(stack) = NUM_0;
   TAG(stack) = first;
 
