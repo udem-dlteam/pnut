@@ -1,5 +1,5 @@
 /*
- * A R4RS repl compiled with the Ribbit Scheme Compiler 
+ * A R4RS repl compiled with the Ribbit Scheme Compiler
  *
  * For more details about ribbit, see the repository: https://github.com/udem-dlteam/ribbit
  *
@@ -288,8 +288,8 @@ struct rib *inst_tail(struct rib *lst, num i){
   return lst;
 }
 
-obj list_ref(struct rib *lst, num i) { 
-  return list_tail(lst, i)->field0; 
+obj list_ref(struct rib *lst, num i) {
+  return list_tail(lst, i)->field0;
 }
 
 obj get_opnd(obj o) {
@@ -315,7 +315,7 @@ obj get_cont() {
 
 #define TRUE (CAR(FALSE))
 #define NIL (CDR(FALSE))
-// Temp values that can be used to shield 
+// Temp values that can be used to shield
 //  pointers from the evil GC
 #define TEMP1 CAR(TRUE)
 #define TEMP2 CDR(TRUE)
@@ -338,7 +338,7 @@ char* scm2str(obj s) {
     return str;
 }
 
-obj bool2scm(bool x) { 
+obj bool2scm(bool x) {
   if (x){
     return CAR(FALSE);
   }
@@ -360,7 +360,7 @@ obj prim(int no) {
     CDR(new_rib) = y;
     TAG(new_rib) = z;
     push2(new_rib, PAIR_TAG);
-  } 
+  }
   else if (no == 1)
   {
     PRIM1();
@@ -417,7 +417,7 @@ obj prim(int no) {
   {
     PRIM2();
     num_args = 0;
-    TEMP1 = x; // save x for the gc 
+    TEMP1 = x; // save x for the gc
     arg = TAG_RIB(y);
     while (arg != NIL) {
       push2(arg, PAIR_TAG); // make sure the arg doesn't get GC'd
@@ -427,52 +427,52 @@ obj prim(int no) {
       num_args++;
     }
     push2(TAG_NUM(num_args), PAIR_TAG);
-    x = TEMP1; // retrive x from possibly GC'd 
+    x = TEMP1; // retrive x from possibly GC'd
     return TAG_RIB(x);
   }
   else if(no == 9)
   {
     PRIM1();
     push2(x, PAIR_TAG);
-  } 
+  }
   else if(no == 10)
   {
     pop();
-  } 
+  }
   else if(no == 11)
   {
     x = pop();
     pop();
     push2(x, PAIR_TAG);
-  } 
+  }
   else if(no == 12)
   {
     x = CAR(TOS);
     y = CDR(stack);
     TOS = TAG_RIB(alloc_rib(x, y, CLOSURE_TAG));
-  } 
+  }
   else if(no == 13)
   {
     PRIM1();
     push2(bool2scm(IS_RIB(x)), PAIR_TAG);
-  } 
+  }
   else if(no == 14)
   {
     PRIM1();
     push2(CAR(x), PAIR_TAG);
-  } 
+  }
   else if(no == 15)
   {
     PRIM1();
     push2(CDR(x), PAIR_TAG);
-  } 
+  }
   else if(no == 16)
   {
     PRIM1();
     push2(TAG(x), PAIR_TAG);
-  } 
+  }
   else if(no == 17)
-  { 
+  {
     PRIM2();
     push2(CAR(x) = y, PAIR_TAG);
   }
@@ -663,15 +663,15 @@ void run() {
       }
       opnd->field0 = x;
       stack = CDR(stack);
-      pc = TAG(pc);                                                              \
+      pc = TAG(pc);
     }
     else if (instr == INSTR_GET){
       push2(get_opnd(CDR(pc)), PAIR_TAG);
-      pc = TAG(pc);                                                              \
+      pc = TAG(pc);
     }
     else if (instr == INSTR_CONST){
       push2(CDR(pc), PAIR_TAG);
-      pc = TAG(pc);                                                              \
+      pc = TAG(pc);
     }
     else if (instr == INSTR_IF) { // if
       p = pop();
