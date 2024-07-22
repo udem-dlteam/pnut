@@ -63,12 +63,12 @@ obj *alloc_limit;
 #define TAG_RIB(c_ptr) (((obj)(c_ptr)))
 #define TAG_NUM(num) ((((obj)(num)) << 1) | 1)
 
-#define PRIM1() obj x = pop()
+#define PRIM1() x = pop()
 #define PRIM2()                                                                \
-  obj y = pop();                                                               \
+  y = pop();                                                               \
   PRIM1()
 #define PRIM3()                                                                \
-  obj z = pop();                                                               \
+  z = pop();                                                               \
   PRIM2()
 
 #define CAR(x) RIB(x)->field0
@@ -352,210 +352,183 @@ obj bool2scm(bool x) {
 }
 
 obj prim(int no) {
-  switch (no) { case 0:
-  {
-    obj new_rib = TAG_RIB(alloc_rib(NUM_0, NUM_0, NUM_0));
+  obj x, y, z, new_rib, arg;
+  FILE* file;
+  char* buffer = malloc(1);
+  int success, bytes_read, num_args;
+  char* filename;
+  if (no == 0){
+    new_rib = TAG_RIB(alloc_rib(NUM_0, NUM_0, NUM_0));
     PRIM3();
     CAR(new_rib) = x;
     CDR(new_rib) = y;
     TAG(new_rib) = z;
     push2(new_rib, PAIR_TAG);
-    break;
-    
   } 
-case 1:
-{
-  PRIM1();
-  FILE* file = (FILE*) ((long) x ^ 1);
-  fclose(file);
-  break;
+  else if (no == 1)
+  {
+    PRIM1();
+    file = (FILE*) ((long) x ^ 1);
+    fclose(file);
   }
-case 2:
-{
-  PRIM2();
-  FILE* file = (FILE*) ((long) y ^ 1);
-  char buffer[1];
-  int success;
-  buffer[0] = (char) NUM(x);
-  success = fwrite(buffer, 1, 1, file);
-  if (success != 1) {
-  perror("Cannot write to file.");
+  else if (no == 2)
+  {
+    PRIM2();
+    file = (FILE*) ((long) y ^ 1);
+    buffer[0] = (char) NUM(x);
+    success = fwrite(buffer, 1, 1, file);
+    if (success != 1) {
+      perror("Cannot write to file.");
+    }
+    fflush(file);
+    push2(TRUE, PAIR_TAG);
   }
-  fflush(file);
-  push2(TRUE, PAIR_TAG);
-  break;
+  else if (no == 3)
+  {
+    PRIM1();
+    file = (FILE*) ((long) x ^ 1);
+    bytes_read = fread(buffer, 1, 1, file);
+    if (!bytes_read) push2(NIL, PAIR_TAG);
+    else push2(TAG_NUM(buffer[0]), PAIR_TAG);
   }
-case 3:
-{
-  PRIM1();
-  FILE* file = (FILE*) ((long) x ^ 1);
-  char buffer[1];
-  int bytes_read = fread(buffer, 1, 1, file);
-  if (!bytes_read) push2(NIL, PAIR_TAG);
-  else push2(TAG_NUM(buffer[0]), PAIR_TAG);
-  break;
+  else if (no == 4)
+  {
+    PRIM1();
+    filename = scm2str(x);
+    file = fopen(filename, "w");
+    push2((long) file | 1, PAIR_TAG);
+    free((void *) filename);
   }
-case 4:
-{
-  PRIM1();
-  char* filename = scm2str(x);
-  FILE* file = fopen(filename, "w");
-  push2((long) file | 1, PAIR_TAG);
-  free((void *) filename);
-  break;
+  else if(no == 5)
+  {
+    PRIM1();
+    filename = scm2str(x);
+    file = fopen(filename, "r");
+    push2(file ? (long) file | 1 : FALSE, PAIR_TAG);
+    free((void*) filename);
   }
-case 5:
-{
-  PRIM1();
-  char* filename = scm2str(x);
-  FILE* file = fopen(filename, "r");
-  push2(file ? (long) file | 1 : FALSE, PAIR_TAG);
-  free((void*) filename);
-  break;
+  else if(no == 6)
+  {
+    file = fdopen(1, "w");
+    push2((long) file | 1, PAIR_TAG);
   }
-case 6:
-{
-  FILE* file = fdopen(1, "w");
-  push2((long) file | 1, PAIR_TAG);
-  break;
+  else if(no == 7)
+  {
+    file = fdopen(0, "r");
+    push2((long) file | 1, PAIR_TAG);
   }
-case 7:
-{
-  FILE* file = fdopen(0, "r");
-  push2((long) file | 1, PAIR_TAG);
-  break;
+  else if(no == 8)
+  {
+    PRIM2();
+    num_args = 0;
+    TEMP1 = x; // save x for the gc 
+    arg = TAG_RIB(y);
+    while (arg != NIL) {
+      push2(arg, PAIR_TAG); // make sure the arg doesn't get GC'd
+      arg = CAR(stack);
+      CAR(stack) = CAR(arg);
+      arg = TAG_RIB(CDR(arg));
+      num_args++;
+    }
+    push2(TAG_NUM(num_args), PAIR_TAG);
+    x = TEMP1; // retrive x from possibly GC'd 
+    return TAG_RIB(x);
   }
-case 8:
-{
-     PRIM2();
-     int num_args = 0;
-     TEMP1 = x; // save x for the gc 
-     obj arg = TAG_RIB(y);
-     while (arg != NIL) {
-        push2(arg, PAIR_TAG); // make sure the arg doesn't get GC'd
-        arg = CAR(stack);
-        CAR(stack) = CAR(arg);
-        arg = TAG_RIB(CDR(arg));
-        num_args++;
-     }
-     push2(TAG_NUM(num_args), PAIR_TAG);
-     x = TEMP1; // retrive x from possibly GC'd 
-     return TAG_RIB(x);
-     }
-case 9:
+  else if(no == 9)
   {
     PRIM1();
     push2(x, PAIR_TAG);
-    break;
   } 
-case 10:
+  else if(no == 10)
   {
     pop();
-    break;
   } 
-case 11:
+  else if(no == 11)
   {
-    obj x = pop();
+    x = pop();
     pop();
     push2(x, PAIR_TAG);
-    break;
   } 
-case 12:
+  else if(no == 12)
   {
-    obj x = CAR(TOS);
-    obj y = CDR(stack);
+    x = CAR(TOS);
+    y = CDR(stack);
     TOS = TAG_RIB(alloc_rib(x, y, CLOSURE_TAG));
-    break;
   } 
-case 13:
+  else if(no == 13)
   {
     PRIM1();
     push2(bool2scm(IS_RIB(x)), PAIR_TAG);
-    break;
   } 
-case 14:
+  else if(no == 14)
   {
     PRIM1();
     push2(CAR(x), PAIR_TAG);
-    break;
   } 
-case 15:
+  else if(no == 15)
   {
     PRIM1();
     push2(CDR(x), PAIR_TAG);
-    break;
   } 
-case 16:
+  else if(no == 16)
   {
     PRIM1();
     push2(TAG(x), PAIR_TAG);
-    break;
   } 
-case 17:
+  else if(no == 17)
   { 
     PRIM2();
     push2(CAR(x) = y, PAIR_TAG);
-    break;
   }
-case 18:
+  else if(no == 18)
   {
     PRIM2();
     push2(CDR(x) = y, PAIR_TAG);
-    break;
   }
-case 19:
+  else if(no == 19)
   {
     PRIM2();
     push2(TAG(x) = y, PAIR_TAG);
-    break;
   }
-case 20:
+  else if(no == 20)
   {
     PRIM2();
     push2(bool2scm(x == y), PAIR_TAG);
-    break;
   }
-case 21:
+  else if(no == 21)
   {
     PRIM2();
     push2(bool2scm(NUM(x) < NUM(y)), PAIR_TAG);
-    break;
   }
-case 22:
+  else if(no == 22)
   {
     PRIM2();
     push2(x + y - 1, PAIR_TAG);
-    break;
   }
-case 23:
+  else if(no == 23)
   {
     PRIM2();
     push2(x - y + 1, PAIR_TAG);
-    break;
   }
-case 24:
+  else if(no == 24)
   {
     PRIM2();
     push2(TAG_NUM((NUM(x) * NUM(y))), PAIR_TAG);
-    break;
   }
-case 25:
+  else if(no == 25)
   {
     PRIM2();
     push2(TAG_NUM((NUM(x) / NUM(y))), PAIR_TAG);
-    break;
   }
-case 26:
+  else if(no == 26)
   {
     PRIM1();
     exit(NUM(x));
-    break;
   }
-
-  default: {
+  else{
     exit(EXIT_ILLEGAL_INSTR);
   }
-  }
+  free(buffer);
   return TAG_NUM(0);
 }
 
