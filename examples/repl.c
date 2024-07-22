@@ -111,7 +111,12 @@ obj *scan;
 
 void init_heap() {
 
-  heap_start = malloc(sizeof(long) * ((100000 * 3) << 1));
+  heap_start = malloc(sizeof(long) * (((100000 * 3) << 1) + 1));
+
+  // make sure heap_start is even (for pnut)
+  if (((long)heap_start) & 1 == 1) {
+    heap_start++;
+  }
 
   if (!heap_start) {
     exit(7);
@@ -211,6 +216,7 @@ void push2(obj car, obj tag) {
   *alloc++ = tag;
 
   stack = TAG_RIB((struct rib *)(alloc - RIB_NB_FIELDS));
+  alloc++; // make sure a rib is always aligned (for pnut)
 
   if (alloc == alloc_limit) {
     gc();
