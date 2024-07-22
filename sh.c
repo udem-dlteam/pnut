@@ -1255,7 +1255,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
       }
     } else if (op == CAST) { // Casts are no-op
-      return comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      return comp_rvalue_go(get_child(node, 1), context, 0, op);
     } else if (op == AMP_AMP OR op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
