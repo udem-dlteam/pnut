@@ -275,21 +275,17 @@ num get_int(num n) {
 }
 
 struct rib *list_tail(struct rib *lst, num i) {
-  if (i == 0){
-    return lst;
+  while (i--) {
+    lst = RIB(lst->field1);
   }
-  else{
-    return list_tail(RIB(lst->field1), i - 1);
-  }
+  return lst;
 }
 
 struct rib *inst_tail(struct rib *lst, num i){
-  if (i == 0){
-    return lst;
+  while (i--) {
+    lst = RIB(lst->field2);
   }
-  else{
-    return inst_tail(RIB(lst->field2), i - 1);
-  }
+  return lst;
 }
 
 obj list_ref(struct rib *lst, num i) { 
@@ -619,7 +615,7 @@ void run() {
           nparams = nparams_vari >> 1;
           vari = nparams_vari&1;
           if (vari ? nparams > nargs : nparams != nargs) {
-            printf("*** Unexpected number of arguments nargs: %ld nparams: %ld vari: %ld\n", nargs, nparams, vari);
+            printf("*** Unexpected number of arguments nargs: %d nparams: %d vari: %d\n", nargs, nparams, vari);
             exit(1);
           }
           nargs-=nparams;
