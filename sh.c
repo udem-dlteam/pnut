@@ -253,7 +253,8 @@ int string_counter = 0;         /* Counter for string literals */
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
-bool main_returns;              /* If the main function returns a value */
+bool main_defined = false;      /* If the main function is defined */
+bool main_returns = false;      /* If the main function returns a value */
 bool top_level_stmt = true;     /* If the current statement is at the top level */
 
 // Internal identifier node types. These
@@ -2014,10 +2015,14 @@ void comp_glo_fun_decl(ast node) {
   assert_vars_are_safe(params, true);
   assert_vars_are_safe(local_vars, true);
 
-  // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
-  if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
-  // Check if main returns an exit code.
-  if (name == MAIN_ID && get_op(fun_type) != VOID_KW) main_returns = true;
+  // If the function is main
+  if (name == MAIN_ID) {
+    main_defined = true;
+    // If main has parameters. If so, we'll prepare the argc/argv values in the prologue.
+    if (params != 0) runtime_use_make_argv = true;
+    // Check if main returns an exit code.
+    if (get_op(fun_type) != VOID_KW) main_returns = true;
+  }
 
   add_fun_params_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
@@ -2334,18 +2339,20 @@ void epilogue() {
   putstr("# Runtime library\n");
   produce_runtime();
 
-  if (runtime_use_make_argv) {
-    putstr("# Setup argc, argv\n");
-    putstr("__argc_for_main=$(($# + 1))\n");
-    putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
-    main_args = wrap_str(" $__argc_for_main $__argv_for_main");
-  }
+  if (main_defined) {
+    if (runtime_use_make_argv) {
+      putstr("# Setup argc, argv\n");
+      putstr("__argc_for_main=$(($# + 1))\n");
+      putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+      main_args = wrap_str(" $__argc_for_main $__argv_for_main");
+    }
 
-  if (main_returns) {
-    putstr("__code=0; # Success exit code\n");
-    print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
-  } else {
-    print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
+    if (main_returns) {
+      putstr("__code=0; # Success exit code\n");
+      print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
+    } else {
+      print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
+    }
   }
 }
 
