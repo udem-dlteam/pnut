@@ -582,20 +582,18 @@ void show_stack(){
 
 void run() {
   int i;
+  num instr, nargs, nparams_vari, nparams, vari;
+  bool jump;
+  obj proc, s2, c2, k, new_pc, rest, p, x;
 
   while (1) {
-    num instr = NUM(CAR(pc));
-    switch (instr) {
-    default: { // error
-      exit(EXIT_ILLEGAL_INSTR);
-    }
-    case INSTR_HALT: { // halt
+    instr = NUM(CAR(pc));
+    if (instr == INSTR_HALT) {
       exit(0);
     }
-    case INSTR_AP: // call or jump
-    {
-      bool jump = TAG(pc) == NUM_0;
-      obj proc = get_opnd(CDR(pc));
+    else if(instr == INSTR_AP) {
+      jump = TAG(pc) == NUM_0;
+      proc = get_opnd(CDR(pc));
       while (1) {
         if (IS_NUM(CAR(proc))) {
           pop();
@@ -610,22 +608,22 @@ void run() {
           }
           pc = TAG(pc);
         } else {
-          num nargs = NUM(pop());
-          obj s2 = TAG_RIB(alloc_rib(NUM_0, proc, PAIR_TAG));
+          nargs = NUM(pop());
+          s2 = TAG_RIB(alloc_rib(NUM_0, proc, PAIR_TAG));
           proc = CDR(s2);
           CAR(pc) = CAR(proc); // save the proc from the mighty gc
 
 
-          num nparams_vari = NUM(CAR(CAR(proc)));
-          num nparams = nparams_vari >> 1;
-          num vari = nparams_vari&1;
+          nparams_vari = NUM(CAR(CAR(proc)));
+          nparams = nparams_vari >> 1;
+          vari = nparams_vari&1;
           if (vari ? nparams > nargs : nparams != nargs) {
             printf("*** Unexpected number of arguments nargs: %ld nparams: %ld vari: %ld\n", nargs, nparams, vari);
             exit(1);
           }
           nargs-=nparams;
           if (vari){
-            obj rest = NIL;
+            rest = NIL;
             for(i = 0; i < nargs; ++i){
               rest = TAG_RIB(alloc_rib(pop(), rest, s2));
               s2 = TAG(rest);
@@ -638,10 +636,10 @@ void run() {
           }
 
           nparams = nparams + vari;
-          obj c2 = TAG_RIB(list_tail(RIB(s2), nparams));
+          c2 = TAG_RIB(list_tail(RIB(s2), nparams));
 
           if (jump) {
-            obj k = get_cont();
+            k = get_cont();
             CAR(c2) = CAR(k);
             TAG(c2) = TAG(k);
           } else {
@@ -651,41 +649,38 @@ void run() {
 
           stack = s2;
 
-          obj new_pc = CAR(pc);
+          new_pc = CAR(pc);
           CAR(pc) = TAG_NUM(instr);
           pc = TAG(new_pc);
         }
         break;
       }
-      break;
     }
-    case INSTR_SET: { // set
-      obj x = CAR(stack);
+    else if(instr == INSTR_SET){
+      x = CAR(stack);
       ((IS_NUM(CDR(pc))) ? list_tail(RIB(stack), NUM(CDR(pc))) : RIB(CDR(pc)))
           ->field0 = x;
       stack = CDR(stack);
       pc = TAG(pc);                                                              \
-      break;
     }
-    case INSTR_GET: { // get
+    else if (instr == INSTR_GET){
       push2(get_opnd(CDR(pc)), PAIR_TAG);
-    pc = TAG(pc);                                                              \
-      break;
+      pc = TAG(pc);                                                              \
     }
-    case INSTR_CONST: { // const
+    else if (instr == INSTR_CONST){
       push2(CDR(pc), PAIR_TAG);
-    pc = TAG(pc);                                                              \
-      break;
+      pc = TAG(pc);                                                              \
     }
-    case INSTR_IF: { // if
-      obj p = pop();
+    else if (instr == INSTR_IF) { // if
+      p = pop();
       if (p != FALSE) {
         pc = CDR(pc);
       } else {
         pc = TAG(pc);
       }
-      break;
     }
+    else{
+      exit(EXIT_ILLEGAL_INSTR);
     }
   }
 }
