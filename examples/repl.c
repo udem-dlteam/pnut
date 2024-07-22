@@ -694,7 +694,7 @@ void run() {
 struct rib *symbol_ref(num n) { return RIB(list_ref(RIB(symbol_table), n)); }
 
 obj lst_length(obj list) {
-  size_t l = 0;
+  long l = 0;
 
   while (IS_RIB(list) && NUM(TAG(list)) == 0) {
     ++l;
@@ -713,16 +713,18 @@ struct rib *create_sym(obj name) {
 
 void build_sym_table() {
   num n = get_int(0);
+  obj accum;
+  char c;
 
   while (n > 0) {
     n--;
     symbol_table = TAG_RIB(create_sym(NIL));
   }
 
-  obj accum = NIL;
+  accum = NIL;
 
   while (1) {
-    char c = get_byte();
+    c = get_byte();
 
     if (c == 44) {
       symbol_table = TAG_RIB(create_sym(accum));
@@ -744,10 +746,18 @@ void set_global(obj c) {
   symbol_table = CDR(symbol_table);
 }
 
+//int weights[6] = {20, 30, 0, 10, 11, 4};
+int weights[6];
+void init_weights(){
+  weights[0] = 20;
+  weights[1] = 30;
+  weights[2] = 0;
+  weights[3] = 10;
+  weights[4] = 11;
+  weights[5] = 4;
+}
 
 void decode() {
-  int weights[6] = {20, 30, 0, 10, 11, 4};
-
   obj n;
   int d;
   int op;
@@ -813,6 +823,7 @@ void setup_stack() {
 
 
 void init() {
+  init_weights();
   init_heap();
 
   FALSE = TAG_RIB(alloc_rib(TAG_RIB(alloc_rib(NUM_0, NUM_0, SINGLETON_TAG)),
