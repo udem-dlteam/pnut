@@ -2,6 +2,28 @@
 
 #include "sh-runtime.c"
 
+void handle_shell_include() {
+  FILE* shell_include_fp;
+  char c;
+  get_tok();
+  if (tok == STRING) {
+    // Include the shell code from the file
+    shell_include_fp = fopen(string_pool + val, "r");
+    // Include pack_string and unpack_string functions
+    // since they will likely be used in the included file
+    runtime_use_pack_string = true;
+    runtime_use_unpack_string = true;
+    while ((c = fgetc(shell_include_fp)) != EOF) {
+      putchar(c);
+    }
+    putchar('\n');
+    fclose(shell_include_fp);
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("expected string to #include_shell directive");
+  }
+}
+
 void print_string_char(int c) {
   if (c == 7)       putstr("\\a");
   else if (c == 8)  putstr("\\b");
@@ -889,7 +911,6 @@ text character_ident(int c) {
     else { fatal_error("Unknown character"); return 0; }
   }
 }
-
 
 ast replaced_fun_calls = 0;
 ast replaced_fun_calls_tail = 0;

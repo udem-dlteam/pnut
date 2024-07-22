@@ -568,6 +568,7 @@ int ENDIF_ID;
 int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
+int INCLUDE_SHELL_ID;
 
 int NOT_SUPPORTED_ID;
 
@@ -744,6 +745,10 @@ void handle_include() {
 #endif
 }
 
+#ifdef sh
+void handle_shell_include();
+#endif
+
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
 #ifdef SH_INCLUDE_C_CODE
@@ -783,7 +788,14 @@ void handle_preprocessor_directive() {
   } else if (ifdef_mask) {
     if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       handle_include();
-    } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
+    }
+#ifdef sh
+    else if (tok == IDENTIFIER AND val == INCLUDE_SHELL_ID) {
+      // Not standard C, but serves to mix existing shell code with compiled C code
+      handle_shell_include();
+    }
+#endif
+    else if (tok == IDENTIFIER AND val == UNDEF_ID) {
       get_tok_macro();
       if (tok == MACRO) {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
@@ -910,6 +922,7 @@ void init_ident_table() {
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+  INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
   ARGV__ID = init_ident(IDENTIFIER, "argv_");
@@ -2498,7 +2511,6 @@ ast parse_exclusive_OR_expression() {
   return result;
 }
 
-
 ast parse_inclusive_OR_expression() {
 
   ast result = parse_exclusive_OR_expression();
@@ -2514,7 +2526,6 @@ ast parse_inclusive_OR_expression() {
 
   return result;
 }
-
 
 ast parse_logical_AND_expression() {
 
