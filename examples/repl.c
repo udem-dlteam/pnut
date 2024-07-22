@@ -161,8 +161,8 @@ void gc() {
 #endif
 
   // swap
-  obj *to_space = (alloc_limit == heap_mid) ? heap_mid : heap_bot;
-  alloc_limit = to_space + SPACE_SZ;
+  obj *to_space = (alloc_limit == (((obj *)(heap_start)) + ((100000 * 3)))) ? (((obj *)(heap_start)) + ((100000 * 3))) : ((obj *)(heap_start));
+  alloc_limit = to_space + (100000 * 3);
 
   alloc = to_space;
 
