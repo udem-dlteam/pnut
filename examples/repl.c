@@ -40,7 +40,7 @@ typedef long num;
 
 
 // a rib obj
-#define RIB_NB_FIELDS 3
+#define RIB_NB_FIELDS 4
 
 
 struct rib {
@@ -51,13 +51,11 @@ struct rib {
 
 
 // GC constants
-struct rib *heap_start;
-obj *alloc_limit;
-#define MAX_NB_OBJS 100000 // 48000 is minimum for bootstrap
-#define SPACE_SZ (MAX_NB_OBJS * RIB_NB_FIELDS)
-#define heap_bot ((obj *)(heap_start))
-#define heap_mid (heap_bot + (SPACE_SZ))
-#define heap_top (heap_bot + (SPACE_SZ << 1))
+const long max_nb_objs = 100000;
+const long rib_nb_fields = 4;
+const long space_size = (max_nb_objs * rib_nb_fields);
+obj *heap_start, *heap_mid, *heap_end;
+
 // end GC constants
 
 #define EXIT_ILLEGAL_INSTR 6
@@ -119,7 +117,7 @@ obj *scan;
 
 void init_heap() {
 
-  heap_start = malloc(sizeof(long) * (((100000 * 3) << 1) + 1));
+  heap_start = malloc(sizeof(long) * (space_size + 1));
 
   // make sure heap_start is even (for pnut)
   if (((long)heap_start) & 1 == 1) {
@@ -130,8 +128,10 @@ void init_heap() {
     exit(7);
   }
 
+  heap_mid = heap_start + (space_size >> 1);
+  heap_end = heap_start + space_size;
   alloc = ((obj *)(heap_start));
-  alloc_limit = (((obj *)(heap_start)) + ((100000 * 3)));
+  alloc_limit = heap_mid;
   stack = (((((obj)(0)) << 1) | 1));
 }
 
@@ -158,6 +158,8 @@ obj copy(obj o) {
       *alloc++ = field0;
       *alloc++ = *ptr++; // ptr points to TAG
       *alloc++ = *ptr;
+      *alloc++ = NUM_0; // empty slot for alignment (pnut)
+
       ptr[-1] = copy; // set forward ptr. Since it points to TAG, ptr[-1]
                       // rewrites the CDR
     }
@@ -175,25 +177,27 @@ void gc() {
 #endif
 
   // swap
-  obj *to_space = (alloc_limit == (((obj *)(heap_start)) + ((100000 * 3)))) ? (((obj *)(heap_start)) + ((100000 * 3))) : ((obj *)(heap_start));
-  alloc_limit = to_space + (100000 * 3);
+  // swap to_space and from_space
+  obj* to_space;
+  if (alloc_limit == heap_mid){
+    to_space = heap_mid;
+    alloc_limit = heap_end;
+  }
+  else{
+    to_space = heap_start;
+    alloc_limit = heap_mid;
+  }
 
   alloc = to_space;
 
   // root: stack
   stack = copy(stack);
-  //scan = &stack;
-  //copy();
 
   // root: pc
   pc = copy(pc);
-  //scan = &pc;
-  //copy();
 
   // root: false
   FALSE = copy(FALSE);
-  //scan = &FALSE;
-  //copy();
 
   // scan the to_space to pull all live references
   scan = to_space;
@@ -222,9 +226,9 @@ void push2(obj car, obj tag) {
   *alloc++ = car;
   *alloc++ = stack;
   *alloc++ = tag;
+  *alloc++ = NUM_0; // make sure a rib is always aligned (for pnut)
 
   stack = TAG_RIB((struct rib *)(alloc - RIB_NB_FIELDS));
-  alloc++; // make sure a rib is always aligned (for pnut)
 
   if (alloc == alloc_limit) {
     gc();
