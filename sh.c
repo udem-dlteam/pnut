@@ -2342,6 +2342,7 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
+  putstr("#!/bin/sh\n");
   putstr("set -e -u\n\n");
 }
 
