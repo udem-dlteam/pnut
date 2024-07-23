@@ -579,8 +579,10 @@ END_RUNTIME_FUN(putchar)
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
+#ifdef OPTIMIZE_LONG_LINES
   putstr("__stdin_buf16=\n");
   putstr("__stdin_buf256=\n");
+#endif
   putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
   putstr("__stdin_end=1\n");
   putstr("_getchar() {\n");
