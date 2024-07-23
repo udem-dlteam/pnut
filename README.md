@@ -1,8 +1,8 @@
 # Pnut: A Self-Compiling C Transpiler Targeting Human-Readable POSIX Shell
 
 Pnut compiles a reasonnably large subset of C99 to human-readable POSIX shell
-scripts. It can be used to write portable shell scripts without having to write
-shell.
+scripts. It can be used to generate portable shell scripts without having to
+write shell.
 
 It's main uses are:
 
