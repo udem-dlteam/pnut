@@ -66,6 +66,22 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define extract_first_char(prefix, buf_var, res_var) extract_first_char_fast(prefix, buf_var, res_var)
 #endif
 
+#define ANY_STRING_16   "????????????????"
+#define ANY_STRING_256  "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
+
+#define extract_line_head(prefix, small_buf, big_buf, pattern, len, when_empty) \
+  putstr(prefix "if [ -z \"$" small_buf "\" ]; then\n"); \
+  putstr(prefix "  if [ ${#" big_buf "} -ge " len " ]; then\n"); \
+  putstr(prefix "    __temp=\"${" big_buf "#" pattern "}\"\n"); \
+  putstr(prefix "    " small_buf "=\"${" big_buf "%\"$__temp\"}\"\n"); \
+  putstr(prefix "    " big_buf "=\"$__temp\"\n"); \
+  putstr(prefix "  else\n"); \
+  putstr(prefix "    " small_buf "=\"$" big_buf "\"\n"); \
+  putstr(prefix "    " big_buf "=\n"); \
+  putstr(when_empty); \
+  putstr(prefix "  fi\n"); \
+  putstr(prefix "fi\n");
+
 // Local variables
 
 DEFINE_RUNTIME_FUN(local_vars)
@@ -395,7 +411,7 @@ DEPENDS_ON(malloc)
   putstr("defarr() { _malloc $1 $2; }\n");
 #else
 DEPENDS_ON(initialize_memory)
-  putstr("defarr() { _malloc $1 $2; ; initialize_memory $(($1)) $2; }\n");
+  printf("defarr() { _malloc $1 $2; initialize_memory $(($1)) $2; }\n");
 #endif
 END_RUNTIME_FUN(defarr)
 
@@ -429,6 +445,19 @@ DEPENDS_ON(char_to_int)
   putstr("  __str=\"$2\"\n");
   putstr("  _malloc $1 $((${#__str} + 1))\n");
   putstr("  __ptr=$(($1))\n");
+#ifdef OPTIMIZE_LONG_LINES
+  putstr("  __us_buf16=\n");
+  putstr("  __us_buf256=\n");
+  putstr("  while [ ! -z \"$__str\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
+  extract_line_head("  ", "__us_buf256", "__str", ANY_STRING_256, "256", "")
+  extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
+  putstr("    while [ ! -z \"$__us_buf16\" ]; do\n");
+  extract_first_char("    ", "__us_buf16", "_$__ptr")
+  putstr("      __us_buf16=${__us_buf16#?}  # Remove the first character\n");
+  putstr("      : $((__ptr += 1))           # Move to the next buffer position\n");
+  putstr("    done\n");
+  putstr("  done\n");
+#else
   putstr("  while [ -n \"$__str\" ] ; do\n");
   putstr("    # Remove first char from string\n");
   putstr("    __tail=\"${__str#?}\"\n");
@@ -442,6 +471,7 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((__ptr += 1))\n");
   putstr("    __str=\"$__tail\"\n");
   putstr("  done\n");
+#endif
   putstr("  : $((_$__ptr = 0))\n");
   putstr("}\n");
 END_RUNTIME_FUN(unpack_string)
@@ -462,6 +492,33 @@ DEPENDS_ON(unpack_string)
   putstr("}\n");
 END_RUNTIME_FUN(make_argv)
 
+#define handle_escaped_chars(prefix, buf_var, res_var) \
+  putstr(prefix "case \"$" buf_var "\" in\n"); \
+  putstr(prefix "  '\\'*)\n"); \
+  putstr(prefix "    " buf_var "=\"${" buf_var "#?}\" # Remove the current char from $" buf_var "\n"); \
+  putstr(prefix "    case \"$" buf_var "\" in\n"); \
+  putstr(prefix "      'a'*) " res_var "=7 ;;\n"); \
+  putstr(prefix "      'b'*) " res_var "=8 ;;\n"); \
+  putstr(prefix "      'f'*) " res_var "=12 ;;\n"); \
+  putstr(prefix "      'n'*) " res_var "=10 ;;\n"); \
+  putstr(prefix "      'r'*) " res_var "=13 ;;\n"); \
+  putstr(prefix "      't'*) " res_var "=9 ;;\n"); \
+  putstr(prefix "      'v'*) " res_var "=11 ;;\n"); \
+  putstr(prefix "      '\\'*) " res_var "=92 ;;\n"); \
+  putstr(prefix "      '\"'*) " res_var "=34 ;;\n"); \
+  putstr(prefix "      \"'\"*) " res_var "=39 ;;\n"); \
+  putstr(prefix "      '?'*) " res_var "=63 ;;\n"); \
+  putstr(prefix "      '$'*) " res_var "=36 ;; # Not in C, used to escape variable expansion between double quotes\n"); \
+  putstr(prefix "      *) echo \"invalid escape in string: $" buf_var "\"; exit 1 ;;\n"); \
+  putstr(prefix "    esac\n"); \
+  putstr(prefix "    " buf_var "=\"${" buf_var "#?}\" # Remove the current char from $" buf_var "\n"); \
+  putstr(prefix "    ;;\n"); \
+  putstr(prefix "  *)\n"); \
+  call_char_to_int(prefix "    ", "${" buf_var "%\"${" buf_var "#?}\"}") \
+  putstr(prefix "    " buf_var "=\"${" buf_var "#?}\" # Remove the current char from $" buf_var "\n"); \
+  putstr(prefix "    ;;\n"); \
+  putstr(prefix "esac\n");
+
 // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences
 DEFINE_RUNTIME_FUN(unpack_escaped_string)
 DEPENDS_ON(malloc)
@@ -471,35 +528,25 @@ DEPENDS_ON(char_to_int)
   putstr("  # Allocates enough space for all characters, assuming that no character is escaped\n");
   putstr("  _malloc __addr $((${#__buf} + 1))\n");
   putstr("  __ptr=$__addr\n");
+#ifdef OPTIMIZE_LONG_LINES
+  putstr("  __us_buf16=\n");
+  putstr("  __us_buf256=\n");
+  putstr("  while [ ! -z \"$__buf\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
+  extract_line_head("    ", "__us_buf256", "__buf", ANY_STRING_256, "256", "")
+  extract_line_head("    ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
+  putstr("    while [ ! -z \"$__us_buf16\" ]; do\n");
+  handle_escaped_chars("      ", "__us_buf16", "__c")
+  putstr("    : $((_$__ptr = __c))\n");
+  putstr("    : $((__ptr += 1))\n");
+  putstr("    done\n");
+  putstr("  done\n");
+#else
   putstr("  while [ -n \"$__buf\" ] ; do\n");
-  putstr("    case \"$__buf\" in\n");
-  putstr("      '\\'*)\n");
-  putstr("        __buf=\"${__buf#?}\"               # remove the current char from $__buf\n");
-  putstr("        case \"$__buf\" in\n");
-  putstr("          'a'*) __c=7 ;;\n");
-  putstr("          'b'*) __c=8 ;;\n");
-  putstr("          'f'*) __c=12 ;;\n");
-  putstr("          'n'*) __c=10 ;;\n");
-  putstr("          'r'*) __c=13 ;;\n");
-  putstr("          't'*) __c=9 ;;\n");
-  putstr("          'v'*) __c=11 ;;\n");
-  putstr("          '\\'*) __c=92 ;;\n");
-  putstr("          '\"'*) __c=34 ;;\n");
-  putstr("          \"'\"*) __c=39 ;;\n");
-  putstr("          '?'*) __c=63 ;;\n");
-  putstr("          '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes\n");
-  putstr("          *) echo \"invalid escape in string: $__char\"; exit 1 ;;\n");
-  putstr("        esac\n");
-  putstr("        __buf=\"${__buf#?}\"               # remove the current char from $__buf\n");
-  putstr("        ;;\n");
-  putstr("      *)\n");
-  call_char_to_int("        ", "${__buf%\"${__buf#?}\"}")
-  putstr("        __buf=\"${__buf#?}\"                  # remove the current char from $__buf\n");
-  putstr("        ;;\n");
-  putstr("    esac\n");
+  handle_escaped_chars("    ", "__buf", "__c")
   putstr("    : $((_$__ptr = __c))\n");
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
+#endif
   putstr("  : $((_$__ptr = 0))\n");
   putstr("}\n");
 END_RUNTIME_FUN(unpack_escaped_string)
@@ -558,22 +605,6 @@ DEFINE_RUNTIME_FUN(putchar)
   putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
 END_RUNTIME_FUN(putchar)
-
-#define ANY_STRING_16   "????????????????"
-#define ANY_STRING_256  "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
-
-#define extract_line_head(prefix, small_buf, big_buf, pattern, len, when_empty) \
-  putstr(prefix "if [ -z \"$" small_buf "\" ]; then\n"); \
-  putstr(prefix "  if [ ${#" big_buf "} -ge " len " ]; then\n"); \
-  putstr(prefix "    __temp=\"${" big_buf "#" pattern "}\"\n"); \
-  putstr(prefix "    " small_buf "=\"${" big_buf "%\"$__temp\"}\"\n"); \
-  putstr(prefix "    " big_buf "=\"$__temp\"\n"); \
-  putstr(prefix "  else\n"); \
-  putstr(prefix "    " small_buf "=\"$" big_buf "\"\n"); \
-  putstr(prefix "    " big_buf "=\n"); \
-  putstr(when_empty); \
-  putstr(prefix "  fi\n"); \
-  putstr(prefix "fi\n");
 
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
