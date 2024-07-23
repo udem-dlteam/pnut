@@ -424,11 +424,11 @@ END_RUNTIME_FUN(free)
 DEFINE_RUNTIME_FUN(unpack_string)
 DEPENDS_ON(malloc)
 DEPENDS_ON(char_to_int)
-  putstr("# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.\n");
+  putstr("# Convert a Shell string to a C string\n");
   putstr("unpack_string() {\n");
-  putstr("  __str=\"$1\"\n");
-  putstr("  _malloc __addr $((${#__str} + 1))\n");
-  putstr("  __ptr=$__addr\n");
+  putstr("  __str=\"$2\"\n");
+  putstr("  _malloc $1 $((${#__str} + 1))\n");
+  putstr("  __ptr=$(($1))\n");
   putstr("  while [ -n \"$__str\" ] ; do\n");
   putstr("    # Remove first char from string\n");
   putstr("    __tail=\"${__str#?}\"\n");
@@ -446,18 +446,16 @@ DEPENDS_ON(char_to_int)
   putstr("}\n");
 END_RUNTIME_FUN(unpack_string)
 
-// argv
 DEFINE_RUNTIME_FUN(make_argv)
 DEPENDS_ON(malloc)
 DEPENDS_ON(unpack_string)
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
   putstr("  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.\n");
-  putstr("  __argv_ptr=$__argv     # __ptr is used by unpack_string\n");
+  putstr("  __argv_ptr=$__argv\n");
   putstr("\n");
   putstr("  while [ $# -ge 1 ]; do\n");
-  putstr("    unpack_string \"$1\"\n");
-  putstr("    : $((_$__argv_ptr = $__addr))\n");
+  putstr("    unpack_string _$__argv_ptr \"$1\"\n");
   putstr("    : $((__argv_ptr += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
@@ -508,16 +506,17 @@ END_RUNTIME_FUN(unpack_escaped_string)
 
 DEFINE_RUNTIME_FUN(pack_string)
 DEPENDS_ON(int_to_char)
-  putstr("# Convert a VM string reference to a Shell string.\n");
+  putstr("# Convert a pointer to a C string to a Shell string.\n");
   putstr("# $__res is set to the result, and $__len is set to the length of the string.\n");
-  putstr("pack_string() {\n");
-  putstr("  __addr=$1; shift\n");
+  putstr("pack_string() { # $2 = string address, $3 = end of string delimiter (default to \0), $4 = max length (default to 100000000)\n");
+  putstr("  __return_loc=$1;\n");
+  putstr("  __addr=$2; \n");
   putstr("  __max_len=100000000\n");
   putstr("  __delim=0\n");
   putstr("  __len=0\n");
   putstr("  __res=\"\"\n");
-  putstr("  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter\n");
-  putstr("  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length\n");
+  putstr("  if [ $# -ge 3 ] ; then __delim=$3   ; shift ; fi # Optional end of string delimiter\n");
+  putstr("  if [ $# -ge 3 ] ; then __max_len=$3 ; shift ; fi # Optional max length\n");
   putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
   putstr("    __char=$((_$__addr))\n");
   putstr("    __addr=$((__addr + 1))\n");
@@ -792,7 +791,7 @@ DEPENDS_ON(pack_string)
   putstr("    : $((__cursor_fd$__fd = 0))         # Make buffer empty\n");
   putstr("    : $((__buflen_fd$__fd = 1000))      # Init buffer length\n");
   putstr("    : $((__state_fd$__fd = $3))         # Mark the fd as opened\n");
-  putstr("    pack_string $2\n");
+  putstr("    pack_string __res $2\n");
   putstr("    if [ $3 = 0 ] ; then\n");
   putstr("      case $__fd in\n");
   putstr("        0) exec 0< $__res ;; 1) exec 1< $__res ;; 2) exec 2< $__res ;;\n");
@@ -1004,4 +1003,6 @@ void produce_runtime() {
   if (runtime_use_close)      runtime_close();
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
+  if (runtime_use_pack_string) runtime_pack_string();
+  if (runtime_use_unpack_string) runtime_unpack_string();
 }
