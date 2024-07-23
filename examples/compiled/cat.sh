@@ -71,167 +71,17 @@ _free() { # $2 = object to free
   : $(($1 = 0))              # Return 0
 }
 
-__c2i_0=48
-__c2i_1=49
-__c2i_2=50
-__c2i_3=51
-__c2i_4=52
-__c2i_5=53
-__c2i_6=54
-__c2i_7=55
-__c2i_8=56
-__c2i_9=57
-__c2i_a=97
-__c2i_b=98
-__c2i_c=99
-__c2i_d=100
-__c2i_e=101
-__c2i_f=102
-__c2i_g=103
-__c2i_h=104
-__c2i_i=105
-__c2i_j=106
-__c2i_k=107
-__c2i_l=108
-__c2i_m=109
-__c2i_n=110
-__c2i_o=111
-__c2i_p=112
-__c2i_q=113
-__c2i_r=114
-__c2i_s=115
-__c2i_t=116
-__c2i_u=117
-__c2i_v=118
-__c2i_w=119
-__c2i_x=120
-__c2i_y=121
-__c2i_z=122
-__c2i_A=65
-__c2i_B=66
-__c2i_C=67
-__c2i_D=68
-__c2i_E=69
-__c2i_F=70
-__c2i_G=71
-__c2i_H=72
-__c2i_I=73
-__c2i_J=74
-__c2i_K=75
-__c2i_L=76
-__c2i_M=77
-__c2i_N=78
-__c2i_O=79
-__c2i_P=80
-__c2i_Q=81
-__c2i_R=82
-__c2i_S=83
-__c2i_T=84
-__c2i_U=85
-__c2i_V=86
-__c2i_W=87
-__c2i_X=88
-__c2i_Y=89
-__c2i_Z=90
-char_to_int() {
-  case $1 in
-    [a-zA-Z0-9]) __c=$((__c2i_$1)) ;;
-    ' ') __c=32 ;;
-    '!') __c=33 ;;
-    '"') __c=34 ;;
-    '#') __c=35 ;;
-    '$') __c=36 ;;
-    '%') __c=37 ;;
-    '&') __c=38 ;;
-    "'") __c=39 ;;
-    '(') __c=40 ;;
-    ')') __c=41 ;;
-    '*') __c=42 ;;
-    '+') __c=43 ;;
-    ',') __c=44 ;;
-    '-') __c=45 ;;
-    '.') __c=46 ;;
-    '/') __c=47 ;;
-    ':') __c=58 ;;
-    ';') __c=59 ;;
-    '<') __c=60 ;;
-    '=') __c=61 ;;
-    '>') __c=62 ;;
-    '?') __c=63 ;;
-    '@') __c=64 ;;
-    '[') __c=91 ;;
-    '\') __c=92 ;;
-    ']') __c=93 ;;
-    '^') __c=94 ;;
-    '_') __c=95 ;;
-    '`') __c=96 ;;
-    '{') __c=123 ;;
-    '|') __c=124 ;;
-    '}') __c=125 ;;
-    '~') __c=126 ;;
-    *)
-      __c=$(LC_CTYPE=C printf "%d" "'$1")
-  esac
-}
 
 # Unpack a Shell string into an appropriately sized buffer
 unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
   __ends_with_eof=$3
-  __fgetc_buf16=
-  __stdin_buf256=
-  __continue=1
-  while [ $__continue != 0 ] ; do
-    if [ -z "$__stdin_buf256" ]; then
-      if [ ${#__fgetc_buf} -ge 256 ]; then
-        __temp="${__fgetc_buf#????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????}"
-        __stdin_buf256="${__fgetc_buf%"$__temp"}"
-        __fgetc_buf="$__temp"
-      else
-        __stdin_buf256="$__fgetc_buf"
-        __fgetc_buf=
-      fi
-    fi
-    if [ -z "$__fgetc_buf16" ]; then
-      if [ ${#__stdin_buf256} -ge 16 ]; then
-        __temp="${__stdin_buf256#????????????????}"
-        __fgetc_buf16="${__stdin_buf256%"$__temp"}"
-        __stdin_buf256="$__temp"
-      else
-        __fgetc_buf16="$__stdin_buf256"
-        __stdin_buf256=
-        __continue=0
-      fi
-    fi
-    while [ ! -z "$__fgetc_buf16" ]; do
-      case "$__fgetc_buf16" in
-        " "*) : $((_$__buffer = 32))  ;;
-        "e"*) : $((_$__buffer = 101)) ;;
-        "="*) : $((_$__buffer = 61))  ;;
-        "t"*) : $((_$__buffer = 116)) ;;
-        ";"*) : $((_$__buffer = 59))  ;;
-        "i"*) : $((_$__buffer = 105)) ;;
-        ")"*) : $((_$__buffer = 41))  ;;
-        "("*) : $((_$__buffer = 40))  ;;
-        "n"*) : $((_$__buffer = 110)) ;;
-        "s"*) : $((_$__buffer = 115)) ;;
-        "l"*) : $((_$__buffer = 108)) ;;
-        "+"*) : $((_$__buffer = 43))  ;;
-        "p"*) : $((_$__buffer = 112)) ;;
-        "a"*) : $((_$__buffer = 97))  ;;
-        "r"*) : $((_$__buffer = 114)) ;;
-        "f"*) : $((_$__buffer = 102)) ;;
-        "d"*) : $((_$__buffer = 100)) ;;
-        "*"*) : $((_$__buffer = 42))  ;;
-        *)
-          char_to_int "${__fgetc_buf16%"${__fgetc_buf16#?}"}"
-          : $((_$__buffer = __c))
-          ;;
-      esac
-      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character
-      : $((__buffer += 1))              # Move to the next buffer position
-    done
+  while [ ! -z "$__fgetc_buf" ]; do
+    __c=$(LC_CTYPE=C printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}")
+    : $((_$__buffer = __c))
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buffer += 1))              # Move to the next buffer position
   done
 
   if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
@@ -285,100 +135,6 @@ read_byte() { # $2: fd
   : $((__cursor_fd$__fd = __cursor + 1))  # Increment cursor
 }
 
-int_to_char() {
-  case $1 in
-    48|49|50|51|52|53|54|55|56|57) __char=$(($1 - 48)) ;;
-    97)  __char="a" ;;
-    98)  __char="b" ;;
-    99)  __char="c" ;;
-    100) __char="d" ;;
-    101) __char="e" ;;
-    102) __char="f" ;;
-    103) __char="g" ;;
-    104) __char="h" ;;
-    105) __char="i" ;;
-    106) __char="j" ;;
-    107) __char="k" ;;
-    108) __char="l" ;;
-    109) __char="m" ;;
-    110) __char="n" ;;
-    111) __char="o" ;;
-    112) __char="p" ;;
-    113) __char="q" ;;
-    114) __char="r" ;;
-    115) __char="s" ;;
-    116) __char="t" ;;
-    117) __char="u" ;;
-    118) __char="v" ;;
-    119) __char="w" ;;
-    120) __char="x" ;;
-    121) __char="y" ;;
-    122) __char="z" ;;
-    65)  __char="A" ;;
-    66)  __char="B" ;;
-    67)  __char="C" ;;
-    68)  __char="D" ;;
-    69)  __char="E" ;;
-    70)  __char="F" ;;
-    71)  __char="G" ;;
-    72)  __char="H" ;;
-    73)  __char="I" ;;
-    74)  __char="J" ;;
-    75)  __char="K" ;;
-    76)  __char="L" ;;
-    77)  __char="M" ;;
-    78)  __char="N" ;;
-    79)  __char="O" ;;
-    80)  __char="P" ;;
-    81)  __char="Q" ;;
-    82)  __char="R" ;;
-    83)  __char="S" ;;
-    84)  __char="T" ;;
-    85)  __char="U" ;;
-    86)  __char="V" ;;
-    87)  __char="W" ;;
-    88)  __char="X" ;;
-    89)  __char="Y" ;;
-    90)  __char="Z" ;;
-    32)  __char=" " ;;
-    33)  __char="!" ;;
-    34)  __char="\"" ;;
-    35)  __char="#" ;;
-    36)  __char="$" ;;
-    37)  __char="%" ;;
-    38)  __char="&" ;;
-    39)  __char="'" ;;
-    40)  __char="(" ;;
-    41)  __char=")" ;;
-    42)  __char="*" ;;
-    43)  __char="+" ;;
-    44)  __char="," ;;
-    45)  __char="-" ;;
-    46)  __char="." ;;
-    47)  __char="/" ;;
-    58)  __char=":" ;;
-    59)  __char=";" ;;
-    60)  __char="<" ;;
-    61)  __char="=" ;;
-    62)  __char=">" ;;
-    63)  __char="?" ;;
-    64)  __char="@" ;;
-    91)  __char="[" ;;
-    92)  __char="\\" ;;
-    93)  __char="]" ;;
-    94)  __char="^" ;;
-    95)  __char="_" ;;
-    96)  __char="\`" ;;
-    123) __char="{" ;;
-    124) __char="|" ;;
-    125) __char="}" ;;
-    126) __char="~" ;;
-    10)  __char="\n" ;;
-    *)
-      echo "Invalid character code: $1" ; exit 1
-      __char=$(printf "\\$(printf "%o" "$1")") ;;
-  esac
-}
 
 # Convert a pointer to a C string to a Shell string.
 # $__res is set to the result, and $__len is set to the length of the string.
@@ -396,7 +152,7 @@ pack_string() { # $1 = string address, $2 = end of string delimiter (default to 
     __len=$((__len + 1))
     case $__char in
       10) __res="$__res\n" ;; # 10 == '\n'
-      *)        int_to_char "$__char"
+      *)        __char=$(printf "\\$(($__char/64))$(($__char/8%8))$(($__char%8))")
         __res="$__res$__char" ;;
     esac
   done
@@ -516,7 +272,7 @@ unpack_string() {
     # Remove all but first char
     __char="${__str%"$__tail"}"
     # Convert char to ASCII
-    char_to_int "$__char"
+    __c=$(LC_CTYPE=C printf "%d" "'$__char")
     # Write character to memory
     : $((_$__ptr = __c))
     # Continue with rest of string
