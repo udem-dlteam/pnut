@@ -578,26 +578,32 @@ END_RUNTIME_FUN(putchar)
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
+  putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
 #ifdef OPTIMIZE_LONG_LINES
   putstr("__stdin_buf16=\n");
   putstr("__stdin_buf256=\n");
-#endif
-  putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
   putstr("__stdin_end=1\n");
   putstr("_getchar() {\n");
   putstr("  if [ -z \"$__stdin_buf16\" ] && [ $__stdin_end -eq 1 ] ; then          # need to get next line when buffer empty\n");
-  putstr("    if [ $__stdin_line_ending -eq 1 ]; then  # Line is empty, return line ending\n");
+#else
+  putstr("_getchar() {\n");
+  putstr("  if [ -z \"$__stdin_buf\" ]; then          # need to get next line when buffer empty\n");
+#endif
+  putstr("    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending\n");
   putstr("      : $(($1 = __stdin_line_ending))\n");
   putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
+#ifdef OPTIMIZE_LONG_LINES
   putstr("    __stdin_end=0\n");
+#endif
   putstr("    IFS=                                            # don't split input\n");
   putstr("    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf\n");
   putstr("      if [ -z \"$__stdin_buf\" ] ; then               # an empty line implies a newline character\n");
   putstr("        : $(($1 = 10))                              # next getchar call will read next line\n");
   putstr("        return\n");
   putstr("      fi\n");
+  putstr("      __stdin_line_ending=10\n");
   putstr("    else\n");
   putstr("      if [ -z \"$__stdin_buf\" ] ; then               # EOF reached when read fails\n");
   putstr("        : $(($1 = -1))\n");
@@ -607,14 +613,14 @@ DEPENDS_ON(char_to_int)
   putstr("      fi\n");
   putstr("    fi\n");
   putstr("  fi\n");
-#ifndef OPTIMIZE_LONG_LINES
-  extract_first_char("", "__stdin_buf", "$1")
-  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
-#else
+#ifdef OPTIMIZE_LONG_LINES
   extract_line_head("  ", "__stdin_buf256", "__stdin_buf", ANY_STRING_256, "256", "")
   extract_line_head("  ", "__stdin_buf16", "__stdin_buf256", ANY_STRING_16, "16", "      __stdin_end=1\n")
   extract_first_char("", "__stdin_buf16", "$1")
   putstr("  __stdin_buf16=${__stdin_buf16#?}  # Remove the first character\n");
+#else
+  extract_first_char("", "__stdin_buf", "$1")
+  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
 #endif
   putstr("}\n");
 END_RUNTIME_FUN(getchar)

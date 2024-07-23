@@ -51,7 +51,8 @@
 # array.
 unpack_lines() {
   ___i=1 # Account for null delimiter
-  IFS=
+  IFS="
+"
   for ___line in $2; do
     : $((___i += 1))
   done
