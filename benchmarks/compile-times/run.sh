@@ -29,8 +29,8 @@ compile() {
   print_time $TIME_MS "for: $1 with $file $(sha256sum $COMP_DIR/$output_name-with-$1.sh | cut -d' ' -f1)"
 }
 
-PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
-PNUT_x86_OPTIONS="-DSUPPORT_INCLUDE -Di386"
+PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_x86_OPTIONS="-Di386"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c
 gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 ./$COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut.sh
@@ -49,10 +49,10 @@ done
 
 # Compile pnut-sh.c using pnut-sh on different shells/compilers
 for run_with in $runners; do
-  compile "$run_with" "pnut.c" "-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh" "pnut-sh"
+  compile "$run_with" "pnut.c" "-DRT_NO_INIT_GLOBALS -Dsh" "pnut-sh"
 done
 
 # Compile pnut-exe.c using pnut-sh on different shells/compilers
 for run_with in $runners; do
-  compile "$run_with" "pnut.c" "-DSUPPORT_INCLUDE -Di386" "pnut-exe"
+  compile "$run_with" "pnut.c" "-Di386" "pnut-exe"
 done

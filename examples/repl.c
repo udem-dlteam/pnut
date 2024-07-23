@@ -1,3 +1,4 @@
+// pnut-options: -DSH_SAVE_VARS_WITH_SET
 /*
  * A R4RS repl compiled with the Ribbit Scheme Compiler. This C file includes
  * a bytecode interpreter for the Ribbit Virtual Machine (RVM) and a garbage collector.

@@ -1,5 +1,10 @@
-// wc utility in C. Read from stdin and count lines, words, and characters.
+/*
+ * wc-stdin.c: Read from stdin and count lines, words, and characters.
+ *
+ * Usage: ./wc-stdin.sh < input
+ */
 
+// is_word_separator can also be defined as a macro to speed up the program.
 // #define is_word_separator(c) ((c) == ' ' || (c) == '\n' || (c) == '\t')
 
 int is_word_separator(char c) {

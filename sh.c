@@ -2,6 +2,28 @@
 
 #include "sh-runtime.c"
 
+void handle_shell_include() {
+  FILE* shell_include_fp;
+  char c;
+  get_tok();
+  if (tok == STRING) {
+    // Include the shell code from the file
+    shell_include_fp = fopen(string_pool + val, "r");
+    // Include pack_string and unpack_string functions
+    // since they will likely be used in the included file
+    runtime_use_pack_string = true;
+    runtime_use_unpack_string = true;
+    while ((c = fgetc(shell_include_fp)) != EOF) {
+      putchar(c);
+    }
+    putchar('\n');
+    fclose(shell_include_fp);
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("expected string to #include_shell directive");
+  }
+}
+
 void print_string_char(int c) {
   if (c == 7)       putstr("\\a");
   else if (c == 8)  putstr("\\b");
@@ -253,7 +275,8 @@ int string_counter = 0;         /* Counter for string literals */
 int characters_useds[16];       /* Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total */
 bool any_character_used = false; /* If any character is used */
 ast rest_loc_var_fixups = 0;    /* rest_loc_vars call to fixup after compiling a function */
-bool main_returns;              /* If the main function returns a value */
+bool main_defined = false;      /* If the main function is defined */
+bool main_returns = false;      /* If the main function returns a value */
 bool top_level_stmt = true;     /* If the current statement is at the top level */
 
 // Internal identifier node types. These
@@ -698,6 +721,8 @@ text let_params(int params) {
   text res = 0;
   int params_ix = 2;
 
+  if (num_vars_to_save() == 0) return 0;
+
   runtime_use_local_vars = true;
 
   while (params != 0) {
@@ -886,7 +911,6 @@ text character_ident(int c) {
     else { fatal_error("Unknown character"); return 0; }
   }
 }
-
 
 ast replaced_fun_calls = 0;
 ast replaced_fun_calls_tail = 0;
@@ -1472,13 +1496,15 @@ text fun_call_params(ast params, int count) {
 
 #ifdef INCLUDE_COMP_PUTCHAR_INLINE
 text comp_putchar_inline(ast param) {
-  text res = comp_rvalue(param, RVALUE_CTX_BASE);
+  text res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
   ast ident;
 
   if (contains_side_effects) {
     ident = fresh_ident();
     append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
     res = comp_lvalue(ident);
+  } else if (get_op(param) != IDENTIFIER) {
+    res = string_concat3(wrap_char('('), res, wrap_char(')'));
   }
 
   res =
@@ -1996,27 +2022,32 @@ void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
   ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
-  ast local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
-  ast local_vars = get_child(local_vars_and_body, 0);
-  ast body = get_child(local_vars_and_body, 1);
+  ast body = get_child(node, 3);
+  ast local_vars_and_body, local_vars;
   text trailing_txt = 0;
   int params_ix;
-  ast decls;
-  ast vars;
-  ast var;
+  ast decls, vars, var;
   int save_loc_vars_fixup;
 
-  if (body == 0) return; // ignore forward declarations
+  if (body == -1) return; // ignore forward declarations
+
+  local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
+  local_vars = get_child(local_vars_and_body, 0);
+  body = get_child(local_vars_and_body, 1);
 
   top_level_stmt = false;
 
   assert_vars_are_safe(params, true);
   assert_vars_are_safe(local_vars, true);
 
-  // Check if the function is main and has parameters. If so, we'll prepare the argv array in the prologue.
-  if (name == MAIN_ID && params != 0) runtime_use_make_argv = true;
-  // Check if main returns an exit code.
-  if (name == MAIN_ID && get_op(fun_type) != VOID_KW) main_returns = true;
+  // If the function is main
+  if (name == MAIN_ID) {
+    main_defined = true;
+    // If main has parameters. If so, we'll prepare the argc/argv values in the prologue.
+    if (params != 0) runtime_use_make_argv = true;
+    // Check if main returns an exit code.
+    if (get_op(fun_type) != VOID_KW) main_returns = true;
+  }
 
   add_fun_params_to_local_env(params, 2, KIND_PARAM); /* Start position at 2 because 1 is taken by result_loc */
   add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
@@ -2090,7 +2121,11 @@ void comp_glo_fun_decl(ast node) {
     local_vars = get_child(local_vars, 1);
   }
 
-  comp_body(body);
+  if (body == 0) {
+    append_glo_decl(wrap_str(":")); // Empty function
+  } else {
+    comp_body(body);
+  }
 
   append_glo_decl(restore_local_vars(params_ix - 1));
 
@@ -2307,7 +2342,8 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
-  putstr("set -e\n\n");
+  putstr("#!/bin/sh\n");
+  putstr("set -e -u\n\n");
 }
 
 void epilogue() {
@@ -2329,18 +2365,20 @@ void epilogue() {
   putstr("# Runtime library\n");
   produce_runtime();
 
-  if (runtime_use_make_argv) {
-    putstr("# Setup argc, argv\n");
-    putstr("__argc_for_main=$(($# + 1))\n");
-    putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
-    main_args = wrap_str(" $__argc_for_main $__argv_for_main");
-  }
+  if (main_defined) {
+    if (runtime_use_make_argv) {
+      putstr("# Setup argc, argv\n");
+      putstr("__argc_for_main=$(($# + 1))\n");
+      putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+      main_args = wrap_str(" $__argc_for_main $__argv_for_main");
+    }
 
-  if (main_returns) {
-    putstr("__code=0; # Success exit code\n");
-    print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
-  } else {
-    print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
+    if (main_returns) {
+      putstr("__code=0; # Success exit code\n");
+      print_text(string_concat3(wrap_str("_main __code"), main_args, wrap_str("; exit $__code\n")));
+    } else {
+      print_text(string_concat3(wrap_str("_main __"), main_args, wrap_char('\n')));
+    }
   }
 }
 

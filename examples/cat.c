@@ -1,11 +1,8 @@
 /*
- * compile with:
+ * cat.c: Output the contents of files passed as arguments or stdin
  *
- *   $ ksh pnut.sh cat.c > cat.sh
- *
- * execute with:
- *
- *   $ ksh cat.sh FILE1 FILE2
+ * Usage: ./cat.sh <files>
+ *        ./cat.sh < input
  */
 
 #include <fcntl.h>

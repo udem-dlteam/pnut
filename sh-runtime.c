@@ -92,7 +92,7 @@ DEFINE_RUNTIME_FUN(local_vars)
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
   putstr("let() { # $1: variable name, $2: value (optional) \n");
   putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
-  putstr("  : $(($1=$2+0))                   # Init\n");
+  putstr("  : $(($1=${2-0}))                 # Init\n");
   putstr("}\n");
 #else
   putstr("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
@@ -440,11 +440,11 @@ END_RUNTIME_FUN(free)
 DEFINE_RUNTIME_FUN(unpack_string)
 DEPENDS_ON(malloc)
 DEPENDS_ON(char_to_int)
-  putstr("# Push a Shell string to the VM heap. Returns a reference to the string in $__addr.\n");
+  putstr("# Convert a Shell string to a C string\n");
   putstr("unpack_string() {\n");
-  putstr("  __str=\"$1\"\n");
-  putstr("  _malloc __addr $((${#__str} + 1))\n");
-  putstr("  __ptr=$__addr\n");
+  putstr("  __str=\"$2\"\n");
+  putstr("  _malloc $1 $((${#__str} + 1))\n");
+  putstr("  __ptr=$(($1))\n");
 #ifdef OPTIMIZE_LONG_LINES
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");
@@ -476,18 +476,16 @@ DEPENDS_ON(char_to_int)
   putstr("}\n");
 END_RUNTIME_FUN(unpack_string)
 
-// argv
 DEFINE_RUNTIME_FUN(make_argv)
 DEPENDS_ON(malloc)
 DEPENDS_ON(unpack_string)
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
   putstr("  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.\n");
-  putstr("  __argv_ptr=$__argv     # __ptr is used by unpack_string\n");
+  putstr("  __argv_ptr=$__argv\n");
   putstr("\n");
   putstr("  while [ $# -ge 1 ]; do\n");
-  putstr("    unpack_string \"$1\"\n");
-  putstr("    : $((_$__argv_ptr = $__addr))\n");
+  putstr("    unpack_string _$__argv_ptr \"$1\"\n");
   putstr("    : $((__argv_ptr += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
@@ -555,16 +553,16 @@ END_RUNTIME_FUN(unpack_escaped_string)
 
 DEFINE_RUNTIME_FUN(pack_string)
 DEPENDS_ON(int_to_char)
-  putstr("# Convert a VM string reference to a Shell string.\n");
+  putstr("# Convert a pointer to a C string to a Shell string.\n");
   putstr("# $__res is set to the result, and $__len is set to the length of the string.\n");
-  putstr("pack_string() {\n");
-  putstr("  __addr=$1; shift\n");
+  putstr("pack_string() { # $1 = string address, $2 = end of string delimiter (default to null), $3 = max length (default to 100000000) \n");
+  putstr("  __addr=$1; \n");
   putstr("  __max_len=100000000\n");
   putstr("  __delim=0\n");
   putstr("  __len=0\n");
   putstr("  __res=\"\"\n");
-  putstr("  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter\n");
-  putstr("  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length\n");
+  putstr("  if [ $# -ge 2 ] ; then __delim=$2   ; fi # Optional end of string delimiter\n");
+  putstr("  if [ $# -ge 3 ] ; then __max_len=$3 ; fi # Optional max length\n");
   putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
   putstr("    __char=$((_$__addr))\n");
   putstr("    __addr=$((__addr + 1))\n");
@@ -585,12 +583,12 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("# If the variable is already defined, this function does nothing.\n");
   putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
   putstr("defstr() { # $1 = variable name, $2 = string\n");
-  // putstr("  set +u # Necessary to allow the variable to be empty\n");
+  putstr("  set +u # Necessary to allow the variable to be empty\n");
   putstr("  if [ $(($1)) -eq 0 ]; then\n");
   putstr("    unpack_escaped_string \"$2\"\n");
   putstr("    : $(($1 = __addr))\n");
   putstr("  fi\n");
-  // putstr("  set -u\n");
+  putstr("  set -u\n");
   putstr("}\n");
 END_RUNTIME_FUN(defstr)
 
@@ -611,24 +609,32 @@ END_RUNTIME_FUN(putchar)
 DEFINE_RUNTIME_FUN(getchar)
 DEPENDS_ON(char_to_int)
   putstr("__stdin_buf=\n");
+  putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
+#ifdef OPTIMIZE_LONG_LINES
   putstr("__stdin_buf16=\n");
   putstr("__stdin_buf256=\n");
-  putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
   putstr("__stdin_end=1\n");
   putstr("_getchar() {\n");
   putstr("  if [ -z \"$__stdin_buf16\" ] && [ $__stdin_end -eq 1 ] ; then          # need to get next line when buffer empty\n");
-  putstr("    if [ $__stdin_line_ending -eq 1 ]; then  # Line is empty, return line ending\n");
+#else
+  putstr("_getchar() {\n");
+  putstr("  if [ -z \"$__stdin_buf\" ]; then          # need to get next line when buffer empty\n");
+#endif
+  putstr("    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending\n");
   putstr("      : $(($1 = __stdin_line_ending))\n");
   putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
+#ifdef OPTIMIZE_LONG_LINES
   putstr("    __stdin_end=0\n");
+#endif
   putstr("    IFS=                                            # don't split input\n");
   putstr("    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf\n");
   putstr("      if [ -z \"$__stdin_buf\" ] ; then               # an empty line implies a newline character\n");
   putstr("        : $(($1 = 10))                              # next getchar call will read next line\n");
   putstr("        return\n");
   putstr("      fi\n");
+  putstr("      __stdin_line_ending=10\n");
   putstr("    else\n");
   putstr("      if [ -z \"$__stdin_buf\" ] ; then               # EOF reached when read fails\n");
   putstr("        : $(($1 = -1))\n");
@@ -638,14 +644,14 @@ DEPENDS_ON(char_to_int)
   putstr("      fi\n");
   putstr("    fi\n");
   putstr("  fi\n");
-#ifndef OPTIMIZE_LONG_LINES
-  extract_first_char("", "__stdin_buf", "$1")
-  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
-#else
+#ifdef OPTIMIZE_LONG_LINES
   extract_line_head("  ", "__stdin_buf256", "__stdin_buf", ANY_STRING_256, "256", "")
   extract_line_head("  ", "__stdin_buf16", "__stdin_buf256", ANY_STRING_16, "16", "      __stdin_end=1\n")
   extract_first_char("", "__stdin_buf16", "$1")
   putstr("  __stdin_buf16=${__stdin_buf16#?}  # Remove the first character\n");
+#else
+  extract_first_char("", "__stdin_buf", "$1")
+  putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
 #endif
   putstr("}\n");
 END_RUNTIME_FUN(getchar)
@@ -1035,4 +1041,6 @@ void produce_runtime() {
   if (runtime_use_close)      runtime_close();
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
+  if (runtime_use_pack_string) runtime_pack_string();
+  if (runtime_use_unpack_string) runtime_unpack_string();
 }

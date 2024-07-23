@@ -10,13 +10,15 @@
 #define false 0
 #define EOF (-1)
 
-// At the moment of adding this compile option, the x86 runtime library doesn't
-// support fopen and fgetc, meaning that #include directives can't be used.
-#define SUPPORT_INCLUDE_not
-
+#ifdef RELEASE_PNUT_SH
+#define sh
+#define RT_NO_INIT_GLOBALS
 #define INCLUDE_LINE_NUMBER_ON_ERROR
+#define NICE_ERR_MSG
+#define OPTIMIZE_LONG_LINES
+#endif
 
-#define AVOID_AMPAMP_BARBAR_not
+#define SUPPORT_INCLUDE
 
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
@@ -36,7 +38,9 @@
 #endif
 // If we use the `set` command and positional parameters to simulate local vars
 #ifndef SH_INITIALIZE_PARAMS_WITH_LET
+#ifndef SH_SAVE_VARS_WITH_SET
 #define SH_SAVE_VARS_WITH_SET
+#endif
 #endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
@@ -48,13 +52,13 @@
 #define RT_INLINE_PUTCHAR
 #define RT_USE_LOOKUP_TABLE
 
-#ifdef AVOID_AMPAMP_BARBAR
-#define AND &
-#define OR |
-#else
+// Make sure we don't use the long line optimization when RT_COMPACT is on
+#ifdef RT_COMPACT
+#undef OPTIMIZE_LONG_LINES
+#endif
+
 #define AND &&
 #define OR ||
-#endif
 
 typedef int bool;
 
@@ -568,6 +572,7 @@ int ENDIF_ID;
 int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
+int INCLUDE_SHELL_ID;
 
 int NOT_SUPPORTED_ID;
 
@@ -744,6 +749,10 @@ void handle_include() {
 #endif
 }
 
+#ifdef sh
+void handle_shell_include();
+#endif
+
 void handle_preprocessor_directive() {
   bool prev_ifdef_mask = ifdef_mask;
 #ifdef SH_INCLUDE_C_CODE
@@ -783,7 +792,14 @@ void handle_preprocessor_directive() {
   } else if (ifdef_mask) {
     if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       handle_include();
-    } else if (tok == IDENTIFIER AND val == UNDEF_ID) {
+    }
+#ifdef sh
+    else if (tok == IDENTIFIER AND val == INCLUDE_SHELL_ID) {
+      // Not standard C, but serves to mix existing shell code with compiled C code
+      handle_shell_include();
+    }
+#endif
+    else if (tok == IDENTIFIER AND val == UNDEF_ID) {
       get_tok_macro();
       if (tok == MACRO) {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
@@ -910,6 +926,7 @@ void init_ident_table() {
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+  INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
   ARGV__ID = init_ident(IDENTIFIER, "argv_");
@@ -1718,10 +1735,19 @@ ast clone_ast(ast orig) {
   return ast_result;
 }
 
+#ifdef NICE_ERR_MSG
+#include "debug.c"
+#endif
+
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
-    putstr("expected_tok="); putint(expected_tok);
-    putstr(" tok="); putint(tok); putchar('\n');
+#ifdef NICE_ERR_MSG
+    putstr("expected tok="); print_tok_type(expected_tok);
+    putstr("\ncurrent tok="); print_tok_type(tok); putchar('\n');
+#else
+    putstr("expected tok="); putint(expected_tok);
+    putstr("\ncurrent tok="); putint(tok); putchar('\n');
+#endif
     syntax_error("unexpected token");
   }
   get_tok();
@@ -2061,8 +2087,8 @@ ast parse_definition(int local) {
         expect_tok(')');
 
         if (tok == ';') {
-          /* forward declaration */
-          body = 0;
+          /* forward declaration. Body == -1 */
+          body = -1;
           get_tok();
         } else {
           body = parse_compound_statement();
@@ -2498,7 +2524,6 @@ ast parse_exclusive_OR_expression() {
   return result;
 }
 
-
 ast parse_inclusive_OR_expression() {
 
   ast result = parse_exclusive_OR_expression();
@@ -2514,7 +2539,6 @@ ast parse_inclusive_OR_expression() {
 
   return result;
 }
-
 
 ast parse_logical_AND_expression() {
 
