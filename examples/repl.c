@@ -1,5 +1,5 @@
 /*
- * A R4RS repl compiled with the Ribbit Scheme Compiler. This C file includes 
+ * A R4RS repl compiled with the Ribbit Scheme Compiler. This C file includes
  * a bytecode interpreter for the Ribbit Virtual Machine (RVM) and a garbage collector.
  *
  * For more details about ribbit, see the repository: https://github.com/udem-dlteam/ribbit
@@ -11,9 +11,9 @@
 //  https://github.com/udem-dlteam/ribbit/tree/7360c7d78bd12eef5d2bb1fa54e851e78b121a33/src/tests/01-r4rs
 
 // To run the repl efficiently using pnut compile it using :
-//  
+//
 //  $ gcc -Dsh -DSUPPORT_INCLUDE -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_LONG_LINES pnut.c -o pnut-sh.exe
-// 
+//
 // Then compile this file using pnut :
 //
 //  $ ./pnut-sh.exe repl.c > repl.sh
@@ -536,7 +536,7 @@ obj prim(int no) {
   else if(no == 25) // (##quotient x y) - integer division
   {
     PRIM2();
-    // To avoid division by zero bug with ksh : 
+    // To avoid division by zero bug with ksh :
     //   https://github.com/ksh93/ksh/issues/770
     if (NUM(y) < 0){
       push2(TAG_NUM(-(NUM(x) / -NUM(y))), PAIR_TAG);
