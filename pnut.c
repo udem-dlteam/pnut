@@ -1731,10 +1731,19 @@ ast clone_ast(ast orig) {
   return ast_result;
 }
 
+#ifdef NICE_ERR_MSG
+#include "debug.c"
+#endif
+
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
-    putstr("expected_tok="); putint(expected_tok);
-    putstr(" tok="); putint(tok); putchar('\n');
+#ifdef NICE_ERR_MSG
+    putstr("expected tok="); print_tok_type(expected_tok);
+    putstr("\ncurrent tok="); print_tok_type(tok); putchar('\n');
+#else
+    putstr("expected tok="); putint(expected_tok);
+    putstr("\ncurrent tok="); putint(tok); putchar('\n');
+#endif
     syntax_error("unexpected token");
   }
   get_tok();
