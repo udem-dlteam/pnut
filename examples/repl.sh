@@ -189,17 +189,16 @@ readonly __field0=0
 readonly __field1=1
 readonly __field2=2
 readonly __sizeof__rib=3
+_stack=$(((0 << 1) | 1))
+_pc=$(((0 << 1) | 1))
+_FALSE=$(((0 << 1) | 1))
+_symbol_table=$(((0 << 1) | 1))
 _max_nb_objs=100000
 _rib_nb_fields=4
 _space_size=$((_max_nb_objs * _rib_nb_fields))
 _heap_start=0
 _heap_mid=0
 _heap_end=0
-_stack=$(((0 << 1) | 1))
-_pc=$(((0 << 1) | 1))
-_FALSE=$(((0 << 1) | 1))
-_symbol_table=$(((0 << 1) | 1))
-_pos=0
 _alloc=0
 _alloc_limit=0
 _scan=0
@@ -322,33 +321,6 @@ _alloc_rib2() { # car: $2, cdr: $3, tag: $4
   : $((__tmp = $1)) $((car = $5)) $((cdr = $6)) $((tag = $7)) $((old_stack = $8)) $((allocated = $9)) $(($1 = __tmp))
 }
 
-_get_byte() {
-  : $(($1 = _$((_input + (_pos += 1) - 1))))
-}
-
-: $((__t1 = x = 0))
-_get_code() {
-  set $@ $x $__t1
-  _get_byte __t1 
-  x=$((__t1 - 35))
-  : $(($1 = (x < 0) ? 57: x))
-  : $((__tmp = $1)) $((x = $2)) $((__t1 = $3)) $(($1 = __tmp))
-}
-
-: $((x = n = 0))
-_get_int() { # n: $2
-  set $@ $n $x
-  n=$2
-  _get_code x 
-  : $((n *= (92 / 2)))
-  if [ $x -lt $((92 / 2)) ] ; then
-    : $(($1 = n + x))
-  else
-    _get_int $1 $(((n + x) - (92 / 2)))
-  fi
-  : $((__tmp = $1)) $((n = $3)) $((x = $4)) $(($1 = __tmp))
-}
-
 : $((i = lst = 0))
 _list_tail() { # lst: $2, i: $3
   set $@ $lst $i
@@ -406,6 +378,185 @@ _get_cont() {
   done
   : $(($1 = s))
   : $((__tmp = $1)) $((s = $2)) $(($1 = __tmp))
+}
+
+: $((l = list = 0))
+_lst_length() { # list: $2
+  set $@ $list $l
+  list=$2
+  l=0
+  while [ $((!(list & 1))) != 0 ] && [ $((_$((list + __field2)) >> 1)) = 0 ] ; do
+    : $((l += 1))
+    list=$((_$((list + __field1))))
+  done
+  : $(($1 = (l << 1) | 1))
+  : $((__tmp = $1)) $((list = $3)) $((l = $4)) $(($1 = __tmp))
+}
+
+_pos=0
+_get_byte() {
+  : $(($1 = _$((_input + (_pos += 1) - 1))))
+}
+
+: $((__t1 = x = 0))
+_get_code() {
+  set $@ $x $__t1
+  _get_byte __t1 
+  x=$((__t1 - 35))
+  : $(($1 = (x < 0) ? 57: x))
+  : $((__tmp = $1)) $((x = $2)) $((__t1 = $3)) $(($1 = __tmp))
+}
+
+: $((x = n = 0))
+_get_int() { # n: $2
+  set $@ $n $x
+  n=$2
+  _get_code x 
+  : $((n *= (92 / 2)))
+  if [ $x -lt $((92 / 2)) ] ; then
+    : $(($1 = n + x))
+  else
+    _get_int $1 $(((n + x) - (92 / 2)))
+  fi
+  : $((__tmp = $1)) $((n = $3)) $((x = $4)) $(($1 = __tmp))
+}
+
+: $((__t1 = n = 0))
+_symbol_ref() { # n: $2
+  set $@ $n $__t1
+  n=$2
+  _list_ref __t1 $_symbol_table $n
+  : $(($1 = __t1))
+  : $((__tmp = $1)) $((n = $3)) $((__t1 = $4)) $(($1 = __tmp))
+}
+
+: $((__t2 = __t1 = root = sym = list = name = 0))
+_create_sym() { # name: $2
+  set $@ $name $list $sym $root $__t1 $__t2
+  name=$2
+  _lst_length __t2 $name
+  _alloc_rib list $name $__t2 $(((3 << 1) | 1))
+  _alloc_rib sym $_FALSE $list $(((2 << 1) | 1))
+  _alloc_rib root $sym $_symbol_table $(((0 << 1) | 1))
+  : $(($1 = root))
+  : $((__tmp = $1)) $((name = $3)) $((list = $4)) $((sym = $5)) $((root = $6)) $((__t1 = $7)) $((__t2 = $8)) $(($1 = __tmp))
+}
+
+: $((__t1 = c = accum = n = 0))
+_build_sym_table() {
+  set $@ $n $accum $c $__t1
+  _get_int n 0
+  while [ $n -gt 0 ] ; do
+    : $(((n -= 1) + 1))
+    _create_sym __t1 $((_$((_FALSE + __field1))))
+    _symbol_table=$__t1
+  done
+  accum=$((_$((_FALSE + __field1))))
+  while [ 1 != 0 ] ; do
+    _get_byte c 
+    if [ $c = 44 ] ; then
+      _create_sym __t1 $accum
+      _symbol_table=$__t1
+      accum=$((_$((_FALSE + __field1))))
+      continue
+    fi
+    if [ $c = 59 ] ; then
+      break
+    fi
+    _alloc_rib __t1 $(((c << 1) | 1)) $accum $(((0 << 1) | 1))
+    accum=$__t1
+  done
+  _create_sym __t1 $accum
+  _symbol_table=$__t1
+  : $((__tmp = $1)) $((n = $2)) $((accum = $3)) $((c = $4)) $((__t1 = $5)) $(($1 = __tmp))
+}
+
+: $((c = 0))
+_set_global() { # c: $2
+  set $@ $c
+  c=$2
+  : $((_$((_$((_symbol_table + __field0)) + __field0)) = c))
+  _symbol_table=$((_$((_symbol_table + __field1))))
+  : $((__tmp = $1)) $((c = $3)) $(($1 = __tmp))
+}
+
+# Initialize the memory to 0
+initialize_memory() { # $1 = address, $2 = length
+  __ix=$1
+  __last=$(($1 + $2))
+  while [ $__ix -lt $__last ]; do
+    : $((_$__ix=0))
+    : $((__ix += 1))
+  done
+}
+
+defarr() { _malloc $1 $2; initialize_memory $(($1)) $2; }
+
+defarr _weights 6
+_init_weights() {
+  : $((_$((_weights + 0)) = 20))
+  : $((_$((_weights + 1)) = 30))
+  : $((_$((_weights + 2)) = 0))
+  : $((_$((_weights + 3)) = 10))
+  : $((_$((_weights + 4)) = 11))
+  : $((_$((_weights + 5)) = 4))
+}
+
+: $((__t3 = __t2 = __t1 = c = x = op = d = n = 0))
+_decode() {
+  set $@ $n $d $op $x $c $__t1 $__t2 $__t3
+  while [ 1 != 0 ] ; do
+    _get_code x 
+    n=$x
+    op=-1
+    while [ $n -gt $((2 + (d = _$((_weights + (op += 1)))))) ] ; do
+      : $((n -= (d + 3)))
+    done
+    if [ $x -gt 90 ] ; then
+      op=4
+      _pop n 
+    else
+      if [ $((!op)) != 0 ] ; then
+        _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
+      fi
+      if [ $n -ge $d ] ; then
+        if [ $n = $d ] ; then
+          _get_int __t1 0
+          n=$(((__t1 << 1) | 1))
+        else
+          _get_int __t2 $(((n - d) - 1))
+          _symbol_ref __t1 $__t2
+          n=$__t1
+        fi
+      else
+        if [ $op -lt 3 ] ; then
+          _symbol_ref __t1 $n
+          n=$__t1
+        else
+          n=$(((n << 1) | 1))
+        fi
+      fi
+      if [ $op -gt 4 ] ; then
+        _pop __t3 
+        _alloc_rib2 __t2 $n $(((0 << 1) | 1)) $__t3
+        _alloc_rib __t1 $__t2 $((_$((_FALSE + __field1)))) $(((1 << 1) | 1))
+        n=$__t1
+        if [ $_stack = $(((0 << 1) | 1)) ] ; then
+          break
+        fi
+        op=3
+      elif [ $op -gt 0 ] ; then
+        : $(((op -= 1) + 1))
+      else
+        op=0
+      fi
+    fi
+    _alloc_rib c $(((op << 1) | 1)) $n 0
+    : $((_$((c + __field2)) = _$((_stack + __field0))))
+    : $((_$((_stack + __field0)) = c))
+  done
+  _pc=$((_$((_$((n + __field0)) + __field2))))
+  : $((__tmp = $1)) $((n = $2)) $((d = $3)) $((op = $4)) $((x = $5)) $((c = $6)) $((__t1 = $7)) $((__t2 = $8)) $((__t3 = $9)) $(($1 = __tmp))
 }
 
 : $((str = current = length = i = s = 0))
@@ -703,157 +854,6 @@ _run() {
     fi
   done
   : $((__tmp = $1)) $((i = $2)) $((instr = $3)) $((nargs = $4)) $((nparams_vari = $5)) $((nparams = $6)) $((vari = $7)) $((jump = $8)) $((proc = $9)) $((s2 = ${10})) $((c2 = ${11})) $((k = ${12})) $((new_pc = ${13})) $((rest = ${14})) $((p = ${15})) $((x = ${16})) $((opnd = ${17})) $((__t1 = ${18})) $((__t2 = ${19})) $(($1 = __tmp))
-}
-
-: $((__t1 = n = 0))
-_symbol_ref() { # n: $2
-  set $@ $n $__t1
-  n=$2
-  _list_ref __t1 $_symbol_table $n
-  : $(($1 = __t1))
-  : $((__tmp = $1)) $((n = $3)) $((__t1 = $4)) $(($1 = __tmp))
-}
-
-: $((l = list = 0))
-_lst_length() { # list: $2
-  set $@ $list $l
-  list=$2
-  l=0
-  while [ $((!(list & 1))) != 0 ] && [ $((_$((list + __field2)) >> 1)) = 0 ] ; do
-    : $((l += 1))
-    list=$((_$((list + __field1))))
-  done
-  : $(($1 = (l << 1) | 1))
-  : $((__tmp = $1)) $((list = $3)) $((l = $4)) $(($1 = __tmp))
-}
-
-: $((__t1 = root = sym = list = name = 0))
-_create_sym() { # name: $2
-  set $@ $name $list $sym $root $__t1
-  name=$2
-  _lst_length __t1 $name
-  _alloc_rib list $name $__t1 $(((3 << 1) | 1))
-  _alloc_rib sym $_FALSE $list $(((2 << 1) | 1))
-  _alloc_rib root $sym $_symbol_table $(((0 << 1) | 1))
-  : $(($1 = root))
-  : $((__tmp = $1)) $((name = $3)) $((list = $4)) $((sym = $5)) $((root = $6)) $((__t1 = $7)) $(($1 = __tmp))
-}
-
-: $((__t1 = c = accum = n = 0))
-_build_sym_table() {
-  set $@ $n $accum $c $__t1
-  _get_int n 0
-  while [ $n -gt 0 ] ; do
-    : $(((n -= 1) + 1))
-    _create_sym __t1 $((_$((_FALSE + __field1))))
-    _symbol_table=$__t1
-  done
-  accum=$((_$((_FALSE + __field1))))
-  while [ 1 != 0 ] ; do
-    _get_byte c 
-    if [ $c = 44 ] ; then
-      _create_sym __t1 $accum
-      _symbol_table=$__t1
-      accum=$((_$((_FALSE + __field1))))
-      continue
-    fi
-    if [ $c = 59 ] ; then
-      break
-    fi
-    _alloc_rib __t1 $(((c << 1) | 1)) $accum $(((0 << 1) | 1))
-    accum=$__t1
-  done
-  _create_sym __t1 $accum
-  _symbol_table=$__t1
-  : $((__tmp = $1)) $((n = $2)) $((accum = $3)) $((c = $4)) $((__t1 = $5)) $(($1 = __tmp))
-}
-
-: $((c = 0))
-_set_global() { # c: $2
-  set $@ $c
-  c=$2
-  : $((_$((_$((_symbol_table + __field0)) + __field0)) = c))
-  _symbol_table=$((_$((_symbol_table + __field1))))
-  : $((__tmp = $1)) $((c = $3)) $(($1 = __tmp))
-}
-
-# Initialize the memory to 0
-initialize_memory() { # $1 = address, $2 = length
-  __ix=$1
-  __last=$(($1 + $2))
-  while [ $__ix -lt $__last ]; do
-    : $((_$__ix=0))
-    : $((__ix += 1))
-  done
-}
-
-defarr() { _malloc $1 $2; initialize_memory $(($1)) $2; }
-
-defarr _weights 6
-_init_weights() {
-  : $((_$((_weights + 0)) = 20))
-  : $((_$((_weights + 1)) = 30))
-  : $((_$((_weights + 2)) = 0))
-  : $((_$((_weights + 3)) = 10))
-  : $((_$((_weights + 4)) = 11))
-  : $((_$((_weights + 5)) = 4))
-}
-
-: $((__t3 = __t2 = __t1 = c = x = op = d = n = 0))
-_decode() {
-  set $@ $n $d $op $x $c $__t1 $__t2 $__t3
-  while [ 1 != 0 ] ; do
-    _get_code x 
-    n=$x
-    op=-1
-    while [ $n -gt $((2 + (d = _$((_weights + (op += 1)))))) ] ; do
-      : $((n -= (d + 3)))
-    done
-    if [ $x -gt 90 ] ; then
-      op=4
-      _pop n 
-    else
-      if [ $((!op)) != 0 ] ; then
-        _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
-      fi
-      if [ $n -ge $d ] ; then
-        if [ $n = $d ] ; then
-          _get_int __t1 0
-          n=$(((__t1 << 1) | 1))
-        else
-          _get_int __t2 $(((n - d) - 1))
-          _symbol_ref __t1 $__t2
-          n=$__t1
-        fi
-      else
-        if [ $op -lt 3 ] ; then
-          _symbol_ref __t1 $n
-          n=$__t1
-        else
-          n=$(((n << 1) | 1))
-        fi
-      fi
-      if [ $op -gt 4 ] ; then
-        _pop __t3 
-        _alloc_rib2 __t2 $n $(((0 << 1) | 1)) $__t3
-        _alloc_rib __t1 $__t2 $((_$((_FALSE + __field1)))) $(((1 << 1) | 1))
-        n=$__t1
-        if [ $_stack = $(((0 << 1) | 1)) ] ; then
-          break
-        fi
-        op=3
-      elif [ $op -gt 0 ] ; then
-        : $(((op -= 1) + 1))
-      else
-        op=0
-      fi
-    fi
-    _alloc_rib c $(((op << 1) | 1)) $n 0
-    : $((_$((c + __field2)) = _$((_stack + __field0))))
-    : $((_$((_stack + __field0)) = c))
-  done
-  _pc=$((_$((_$((n + __field0)) + __field2))))
-  : $((__tmp = $1)) $((n = $2)) $((d = $3)) $((op = $4)) $((x = $5)) $((c = $6)) $((__t1 = $7)) $((__t2 = $8)) $((__t3 = $9)) $(($1 = __tmp))
 }
 
 : $((first = 0))
