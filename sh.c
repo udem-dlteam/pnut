@@ -1496,13 +1496,15 @@ text fun_call_params(ast params, int count) {
 
 #ifdef INCLUDE_COMP_PUTCHAR_INLINE
 text comp_putchar_inline(ast param) {
-  text res = comp_rvalue(param, RVALUE_CTX_BASE);
+  text res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
   ast ident;
 
   if (contains_side_effects) {
     ident = fresh_ident();
     append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
     res = comp_lvalue(ident);
+  } else if (get_op(param) != IDENTIFIER) {
+    res = string_concat3(wrap_char('('), res, wrap_char(')'));
   }
 
   res =
