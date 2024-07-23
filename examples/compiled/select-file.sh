@@ -54,7 +54,8 @@ set -e -u
 # array.
 unpack_lines() {
   ___i=1 # Account for null delimiter
-  IFS=
+  IFS="
+"
   for ___line in $2; do
     : $((___i += 1))
   done
@@ -136,38 +137,67 @@ _print_array() { let arr $2
   let i
   i=0
   while [ $((_$((arr + i)))) != 0 ] ; do
+    printf "%d: " $i
     _put_pstr __ $((_$((arr + i))))
     printf "\n" 
-    : $(((i += 1) - 1))
+    : $((i += 1))
   done
   endlet $1 i arr
 }
 
-: $((__t1 = 0))
+: $((i = arr = 0))
+_array_len() { let arr $2
+  let i
+  i=0
+  while [ $((_$((arr + i)))) != 0 ] ; do
+    : $((i += 1))
+  done
+  : $(($1 = i))
+  endlet $1 i arr
+}
+
+: $((c = n = 0))
+_read_int() {
+  let n; let c
+  n=0
+  while [ 1 != 0 ] ; do
+    _getchar c 
+    if [ $c -ge $__0__ ] && [ $c -le $__9__ ] ; then
+      n=$((((10 * n) + c) - __0__))
+    else
+      break
+    fi
+  done
+  : $(($1 = n))
+  endlet $1 c n
+}
+
+: $((__t1 = len = ix = files = 0))
 _main() {
-  let __t1
-  _ls __t1 
-  _print_array __ $__t1
-  printf "pwd: " 
+  let files; let ix; let len; let __t1
+  printf "Files in current directory (" 
   _pwd __t1 
   _put_pstr __ $__t1
-  printf "\n" 
-  defstr __str_0 "examples/shell-call.c"
-  _cat __ $__str_0
-  defstr __str_1 "examples/fib.c"
-  _cat __ $__str_1
-  endlet $1 __t1
+  printf ")\n" 
+  _ls files 
+  _array_len len $files
+  _print_array __ $files
+  while [ 1 != 0 ] ; do
+    printf "Select a file to print: "
+    _read_int ix 
+    if [ 0 -le $ix ] && [ $ix -lt $len ] ; then
+      break
+    fi
+    printf "Invalid index.\n"
+  done
+  _cat __ $((_$((files + ix))))
+  endlet $1 __t1 len ix files
 }
 
+# Character constants
+readonly __0__=48
+readonly __9__=57
 # Runtime library
-__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
-
-_malloc() { # $2 = object size
-  : $((_$__ALLOC = $2)) # Track object size
-  : $(($1 = $__ALLOC + 1))
-  : $((__ALLOC += $2 + 1))
-}
-
 __c2i_0=48
 __c2i_1=49
 __c2i_2=50
@@ -271,53 +301,81 @@ char_to_int() {
   esac
 }
 
-unpack_escaped_string() {
-  __buf="$1"
-  # Allocates enough space for all characters, assuming that no character is escaped
-  _malloc __addr $((${#__buf} + 1))
-  __ptr=$__addr
-  while [ -n "$__buf" ] ; do
-    case "$__buf" in
-      '\'*)
-        __buf="${__buf#?}"               # remove the current char from $__buf
-        case "$__buf" in
-          'a'*) __c=7 ;;
-          'b'*) __c=8 ;;
-          'f'*) __c=12 ;;
-          'n'*) __c=10 ;;
-          'r'*) __c=13 ;;
-          't'*) __c=9 ;;
-          'v'*) __c=11 ;;
-          '\'*) __c=92 ;;
-          '"'*) __c=34 ;;
-          "'"*) __c=39 ;;
-          '?'*) __c=63 ;;
-          '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes
-          *) echo "invalid escape in string: $__char"; exit 1 ;;
-        esac
-        __buf="${__buf#?}"               # remove the current char from $__buf
-        ;;
-      *)
-        char_to_int "${__buf%"${__buf#?}"}"
-        __buf="${__buf#?}"                  # remove the current char from $__buf
-        ;;
-    esac
-    : $((_$__ptr = __c))
-    : $((__ptr += 1))
-  done
-  : $((_$__ptr = 0))
-}
-
-# Define a string, and return a reference to it in the varible taken as argument.
-# If the variable is already defined, this function does nothing.
-# Note that it's up to the caller to ensure that no 2 strings share the same variable.
-defstr() { # $1 = variable name, $2 = string
-  set +u # Necessary to allow the variable to be empty
-  if [ $(($1)) -eq 0 ]; then
-    unpack_escaped_string "$2"
-    : $(($1 = __addr))
+__stdin_buf=
+__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
+__stdin_buf16=
+__stdin_buf256=
+__stdin_end=1
+_getchar() {
+  if [ -z "$__stdin_buf16" ] && [ $__stdin_end -eq 1 ] ; then          # need to get next line when buffer empty
+    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending
+      : $(($1 = __stdin_line_ending))
+      __stdin_line_ending=0                  # Reset line ending for next getchar call
+      return
+    fi
+    __stdin_end=0
+    IFS=                                            # don't split input
+    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
+      if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
+        : $(($1 = 10))                              # next getchar call will read next line
+        return
+      fi
+      __stdin_line_ending=10
+    else
+      if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
+        : $(($1 = -1))
+        return
+      else
+        __stdin_line_ending=-1
+      fi
+    fi
   fi
-  set -u
+  if [ -z "$__stdin_buf256" ]; then
+    if [ ${#__stdin_buf} -ge 256 ]; then
+      __temp="${__stdin_buf#????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????}"
+      __stdin_buf256="${__stdin_buf%"$__temp"}"
+      __stdin_buf="$__temp"
+    else
+      __stdin_buf256="$__stdin_buf"
+      __stdin_buf=
+    fi
+  fi
+  if [ -z "$__stdin_buf16" ]; then
+    if [ ${#__stdin_buf256} -ge 16 ]; then
+      __temp="${__stdin_buf256#????????????????}"
+      __stdin_buf16="${__stdin_buf256%"$__temp"}"
+      __stdin_buf256="$__temp"
+    else
+      __stdin_buf16="$__stdin_buf256"
+      __stdin_buf256=
+      __stdin_end=1
+    fi
+  fi
+  case "$__stdin_buf16" in
+    " "*) : $(($1 = 32))  ;;
+    "e"*) : $(($1 = 101)) ;;
+    "="*) : $(($1 = 61))  ;;
+    "t"*) : $(($1 = 116)) ;;
+    ";"*) : $(($1 = 59))  ;;
+    "i"*) : $(($1 = 105)) ;;
+    ")"*) : $(($1 = 41))  ;;
+    "("*) : $(($1 = 40))  ;;
+    "n"*) : $(($1 = 110)) ;;
+    "s"*) : $(($1 = 115)) ;;
+    "l"*) : $(($1 = 108)) ;;
+    "+"*) : $(($1 = 43))  ;;
+    "p"*) : $(($1 = 112)) ;;
+    "a"*) : $(($1 = 97))  ;;
+    "r"*) : $(($1 = 114)) ;;
+    "f"*) : $(($1 = 102)) ;;
+    "d"*) : $(($1 = 100)) ;;
+    "*"*) : $(($1 = 42))  ;;
+    *)
+      char_to_int "${__stdin_buf16%"${__stdin_buf16#?}"}"
+      : $(($1 = __c))
+      ;;
+  esac
+  __stdin_buf16=${__stdin_buf16#?}  # Remove the first character
 }
 
 _put_pstr() {
@@ -462,6 +520,14 @@ pack_string() { # $1 = string address, $2 = end of string delimiter (default to 
         __res="$__res$__char" ;;
     esac
   done
+}
+
+__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
+
+_malloc() { # $2 = object size
+  : $((_$__ALLOC = $2)) # Track object size
+  : $(($1 = $__ALLOC + 1))
+  : $((__ALLOC += $2 + 1))
 }
 
 # Convert a Shell string to a C string

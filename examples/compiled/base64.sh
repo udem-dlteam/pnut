@@ -268,13 +268,13 @@ readonly __EQ__=61
 readonly __d__=100
 # Runtime library
 __stdin_buf=
+__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
 __stdin_buf16=
 __stdin_buf256=
-__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
 __stdin_end=1
 _getchar() {
   if [ -z "$__stdin_buf16" ] && [ $__stdin_end -eq 1 ] ; then          # need to get next line when buffer empty
-    if [ $__stdin_line_ending -eq 1 ]; then  # Line is empty, return line ending
+    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending
       : $(($1 = __stdin_line_ending))
       __stdin_line_ending=0                  # Reset line ending for next getchar call
       return
@@ -286,6 +286,7 @@ _getchar() {
         : $(($1 = 10))                              # next getchar call will read next line
         return
       fi
+      __stdin_line_ending=10
     else
       if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
         : $(($1 = -1))
