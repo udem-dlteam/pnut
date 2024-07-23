@@ -508,15 +508,14 @@ DEFINE_RUNTIME_FUN(pack_string)
 DEPENDS_ON(int_to_char)
   putstr("# Convert a pointer to a C string to a Shell string.\n");
   putstr("# $__res is set to the result, and $__len is set to the length of the string.\n");
-  putstr("pack_string() { # $2 = string address, $3 = end of string delimiter (default to \0), $4 = max length (default to 100000000)\n");
-  putstr("  __return_loc=$1;\n");
-  putstr("  __addr=$2; \n");
+  putstr("pack_string() { # $1 = string address, $2 = end of string delimiter (default to null), $3 = max length (default to 100000000) \n");
+  putstr("  __addr=$1; \n");
   putstr("  __max_len=100000000\n");
   putstr("  __delim=0\n");
   putstr("  __len=0\n");
   putstr("  __res=\"\"\n");
-  putstr("  if [ $# -ge 3 ] ; then __delim=$3   ; shift ; fi # Optional end of string delimiter\n");
-  putstr("  if [ $# -ge 3 ] ; then __max_len=$3 ; shift ; fi # Optional max length\n");
+  putstr("  if [ $# -ge 2 ] ; then __delim=$2   ; fi # Optional end of string delimiter\n");
+  putstr("  if [ $# -ge 3 ] ; then __max_len=$3 ; fi # Optional max length\n");
   putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
   putstr("    __char=$((_$__addr))\n");
   putstr("    __addr=$((__addr + 1))\n");
@@ -793,7 +792,7 @@ DEPENDS_ON(pack_string)
   putstr("    : $((__cursor_fd$__fd = 0))         # Make buffer empty\n");
   putstr("    : $((__buflen_fd$__fd = 1000))      # Init buffer length\n");
   putstr("    : $((__state_fd$__fd = $3))         # Mark the fd as opened\n");
-  putstr("    pack_string __res $2\n");
+  putstr("    pack_string $2\n");
   putstr("    if [ $3 = 0 ] ; then\n");
   putstr("      case $__fd in\n");
   putstr("        0) exec 0< $__res ;; 1) exec 1< $__res ;; 2) exec 2< $__res ;;\n");

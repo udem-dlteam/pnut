@@ -382,14 +382,14 @@ int_to_char() {
 
 # Convert a pointer to a C string to a Shell string.
 # $__res is set to the result, and $__len is set to the length of the string.
-pack_string() { # $2 = string address, $3 = end of string delimiter (default to   __return_loc=$1;
-  __addr=$2; 
+pack_string() { # $1 = string address, $2 = end of string delimiter (default to null), $3 = max length (default to 100000000) 
+  __addr=$1; 
   __max_len=100000000
   __delim=0
   __len=0
   __res=""
-  if [ $# -ge 3 ] ; then __delim=$3   ; shift ; fi # Optional end of string delimiter
-  if [ $# -ge 3 ] ; then __max_len=$3 ; shift ; fi # Optional max length
+  if [ $# -ge 2 ] ; then __delim=$2   ; fi # Optional end of string delimiter
+  if [ $# -ge 3 ] ; then __max_len=$3 ; fi # Optional max length
   while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do
     __char=$((_$__addr))
     __addr=$((__addr + 1))
@@ -439,7 +439,7 @@ _open() { # $2: filename, $3: flags, $4: mode
     : $((__cursor_fd$__fd = 0))         # Make buffer empty
     : $((__buflen_fd$__fd = 1000))      # Init buffer length
     : $((__state_fd$__fd = $3))         # Mark the fd as opened
-    pack_string __res $2
+    pack_string $2
     if [ $3 = 0 ] ; then
       case $__fd in
         0) exec 0< $__res ;; 1) exec 1< $__res ;; 2) exec 2< $__res ;;
