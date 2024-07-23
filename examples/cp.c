@@ -1,4 +1,8 @@
-// cp utility in C. Copies the content of the first file to the second file.
+/*
+ * cp.c: Copy the contents of one file to another
+ *
+ * Usage: ./cp.sh <source> <destination>
+ */
 
 #include <stdio.h>
 #include <stdlib.h>

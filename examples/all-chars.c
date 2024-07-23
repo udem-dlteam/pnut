@@ -1,4 +1,8 @@
-// print all characters
+/*
+ * all-chars.c: Print all non-extended ASCII characters.
+ *
+ * Usage: ./all-chars.sh
+ */
 
 void main() {
   char c = 0;

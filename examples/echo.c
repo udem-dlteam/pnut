@@ -1,8 +1,13 @@
-// echo program
+/*
+ * echo.c: Output the arguments passed to it
+ *
+ * Usage: ./echo.sh <args>
+ */
 
-void main() {
-  char c;
-  while ((c = getchar()) != -1) {
-    putchar(c);
+void main(int argc, char **argv) {
+  int i;
+  for (i=1; i < argc; ++i) {
+    printf("%s ", argv[i]);
   }
+  printf("\n");
 }

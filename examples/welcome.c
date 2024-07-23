@@ -1,4 +1,8 @@
-// ask the user to type their name
+/*
+ * welcome.c: Ask the user for their name and say hello.
+ *
+ * Usage: ./welcome.sh
+ */
 
 void main() {
   char name[100];

@@ -1,45 +1,69 @@
 #!/bin/sh
 set -e -u
 
-: $((__t1 = c = 0))
-_main() {
-  let c; let __t1
-  while _getchar __t1 ; [ $((c = __t1)) != -1 ] ; do
-    printf \\$((c/64))$((c/8%8))$((c%8))
+: $((i = argv_ = argc = 0))
+_main() { let argc $2; let argv_ $3
+  let i
+  i=1
+  while [ $i -lt $argc ] ; do
+    _put_pstr __ $((_$((argv_ + i))))
+    printf " " 
+    : $((i += 1))
   done
-  endlet $1 __t1 c
+  printf "\n"
+  endlet $1 i argv_ argc
 }
 
 # Runtime library
+_put_pstr() {
+  : $(($1 = 0)); shift # Return 0
+  __addr=$1; shift
+  while [ $((_$__addr)) != 0 ]; do
+    printf \\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))
+    : $((__addr += 1))
+  done
+}
 
-__stdin_buf=
-__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
-_getchar() {
-  if [ -z "$__stdin_buf" ]; then          # need to get next line when buffer empty
-    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending
-      : $(($1 = __stdin_line_ending))
-      __stdin_line_ending=0                  # Reset line ending for next getchar call
-      return
-    fi
-    IFS=                                            # don't split input
-    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
-      if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
-        : $(($1 = 10))                              # next getchar call will read next line
-        return
-      fi
-      __stdin_line_ending=10
-    else
-      if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
-        : $(($1 = -1))
-        return
-      else
-        __stdin_line_ending=-1
-      fi
-    fi
-  fi
-  __c=$(LC_CTYPE=C printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}")
-  : $(($1 = __c))
-    __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
+__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
+
+_malloc() { # $2 = object size
+  : $((_$__ALLOC = $2)) # Track object size
+  : $(($1 = $__ALLOC + 1))
+  : $((__ALLOC += $2 + 1))
+}
+
+
+# Convert a Shell string to a C string
+unpack_string() {
+  __str="$2"
+  _malloc $1 $((${#__str} + 1))
+  __ptr=$(($1))
+  while [ -n "$__str" ] ; do
+    # Remove first char from string
+    __tail="${__str#?}"
+    # Remove all but first char
+    __char="${__str%"$__tail"}"
+    # Convert char to ASCII
+    __c=$(LC_CTYPE=C printf "%d" "'$__char")
+    # Write character to memory
+    : $((_$__ptr = __c))
+    # Continue with rest of string
+    : $((__ptr += 1))
+    __str="$__tail"
+  done
+  : $((_$__ptr = 0))
+}
+
+make_argv() {
+  __argc=$1; shift;
+  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.
+  __argv_ptr=$__argv
+
+  while [ $# -ge 1 ]; do
+    unpack_string _$__argv_ptr "$1"
+    : $((__argv_ptr += 1))
+    shift
+  done
 }
 
 # Local variables
@@ -60,4 +84,7 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
-_main __
+# Setup argc, argv
+__argc_for_main=$(($# + 1))
+make_argv $__argc_for_main "$0" $@; __argv_for_main=$__argv
+_main __ $__argc_for_main $__argv_for_main

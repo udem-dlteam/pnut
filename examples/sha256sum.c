@@ -1,11 +1,7 @@
 /*
- * compile with:
+ * sha256sum.c: Compute the SHA-256 hash of files passed as arguments
  *
- *   $ ksh pnut.sh sha256sum.c > sha256sum.sh
- *
- * execute with:
- *
- *   $ ksh sha256sum.sh FILE
+ * Usage: ./sha256sum.sh <files>
  */
 
 #include <stdio.h>

@@ -1,16 +1,12 @@
 /*
- * compile with:
+ * winterpi.c: Compute the first 2800 digits of pi
  *
- *   $ ksh pnut.sh winterpi.c > winterpi.sh
- *
- * execute with:
- *
- *   $ ksh winterpi.sh
+ * Usage: ./winterpi.sh
  */
 
-#include <stdio.h>
-
 /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
+
+#include <stdio.h>
 
 int r[2801];
 

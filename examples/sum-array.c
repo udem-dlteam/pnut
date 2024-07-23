@@ -1,3 +1,9 @@
+/*
+ * sum-array.c: Compute the sum of an array of integers of size 10000
+ *
+ * Usage: ./sum-array.sh
+ */
+
 int sum_array(int* n, int size) {
   int i = 0;
   int sum = 0;

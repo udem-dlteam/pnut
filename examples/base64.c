@@ -1,11 +1,7 @@
 /*
- * compile with:
+ * base64.c: Encode and decode base64 data.
  *
- *   $ ksh pnut.sh base64.c > base64.sh
- *
- * execute with:
- *
- *   $ ksh base64.sh < FILE
+ * Usage: ./base64.sh [-d] < input > output
  */
 
 #include <fcntl.h>

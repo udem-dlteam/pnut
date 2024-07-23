@@ -1,6 +1,9 @@
-// wc utility in C. Count lines, words, and characters of files passed as arguments, or stdin if no arguments are passed.
-
-// #define is_word_separator(c) ((c) == ' ' || (c) == '\n' || (c) == '\t')
+/*
+ * wc.c: Read from stdin or files and count lines, words, and characters.
+ *
+ * Usage: ./wc.sh [file ...]
+ *        ./wc.sh < input
+ */
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -10,6 +13,9 @@
 #define BUF_SIZE 1024
 
 char buf[BUF_SIZE];
+
+// is_word_separator can also be defined as a macro to speed up the program.
+// #define is_word_separator(c) ((c) == ' ' || (c) == '\n' || (c) == '\t')
 
 int is_word_separator(char c) {
   return c == ' ' || c == '\n' || c == '\t';

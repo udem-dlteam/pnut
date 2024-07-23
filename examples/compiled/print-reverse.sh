@@ -1,13 +1,22 @@
 #!/bin/sh
 set -e -u
 
-: $((str = 0))
-_print_reverse() { let str $2
-  if [ $((_$str)) != 0 ] ; then
-    _print_reverse __ $((str + 1))
-    printf \\$(((_$str)/64))$(((_$str)/8%8))$(((_$str)%8))
-  fi
-  endlet $1 str
+: $((i = len = tmp = end = str = 0))
+_reverse_str() { let str $2
+  let end; let tmp; let len; let i
+  end=$str
+  i=0
+  while [ $((_$(((end += 1) - 1)))) != 0 ] ; do
+    :
+  done
+  len=$(((end - str) - 1))
+  while [ $i -lt $((len / 2)) ] ; do
+    tmp=$((_$((str + i))))
+    : $((_$((str + i)) = _$((str + ((len - 1) - i)))))
+    : $((_$((str + (len - 1) - i)) = tmp))
+    : $((i += 1))
+  done
+  endlet $1 i len tmp end str
 }
 
 : $((i = argv_ = argc = 0))
@@ -15,16 +24,24 @@ _main() { let argc $2; let argv_ $3
   let i
   i=1
   while [ $i -lt $argc ] ; do
-    _print_reverse __ $((_$((argv_ + i))))
-    printf \\$(((__NEWLINE__)/64))$(((__NEWLINE__)/8%8))$(((__NEWLINE__)%8))
+    _reverse_str __ $((_$((argv_ + i))))
+    _put_pstr __ $i
+    printf "\n" $((_$((argv_ + i))))
     : $((i += 1))
   done
   endlet $1 i argv_ argc
 }
 
-# Character constants
-readonly __NEWLINE__=10
 # Runtime library
+_put_pstr() {
+  : $(($1 = 0)); shift # Return 0
+  __addr=$1; shift
+  while [ $((_$__addr)) != 0 ]; do
+    printf \\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))
+    : $((__addr += 1))
+  done
+}
+
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 _malloc() { # $2 = object size

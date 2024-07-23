@@ -1,33 +1,13 @@
 #!/bin/sh
 set -e -u
 
-: $((i = len = tmp = end = str = 0))
-_reverse_str() { let str $2
-  let end; let tmp; let len; let i
-  end=$str
-  i=0
-  while [ $((_$(((end += 1) - 1)))) != 0 ] ; do
-    : $((len += 1))
-  done
-  : $((len -= 1))
-  while [ $i -lt $((len / 2)) ] ; do
-    tmp=$((_$((str + i))))
-    : $((_$((str + i)) = _$((str + ((len - 1) - i)))))
-    : $((_$((str + (len - 1) - i)) = tmp))
-    : $((i += 1))
-  done
-  endlet $1 i len tmp end str
-}
-
 : $((i = argv_ = argc = 0))
 _main() { let argc $2; let argv_ $3
   let i
   i=1
   while [ $i -lt $argc ] ; do
-    _reverse_str __ $((_$((argv_ + i))))
-    printf "argv[%d] = " $i
-    _put_pstr __ $((_$((argv_ + i))))
-    printf "\n" 
+    _put_pstr __ $((_$((argv_ + (argc - i)))))
+    printf " " 
     : $((i += 1))
   done
   endlet $1 i argv_ argc
