@@ -27,7 +27,7 @@ lengths="1000 2000 5000 10000 20000"
 shells="dash bash yash zsh ksh"
 
 # Compile pnut with
-PNUT_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_OPTIONS pnut.c
 gcc -o $COMP_DIR/pnut-sh-long-lines.exe $PNUT_OPTIONS -DOPTIMIZE_LONG_LINES pnut.c
 

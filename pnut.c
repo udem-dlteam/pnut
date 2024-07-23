@@ -10,13 +10,15 @@
 #define false 0
 #define EOF (-1)
 
-// At the moment of adding this compile option, the x86 runtime library doesn't
-// support fopen and fgetc, meaning that #include directives can't be used.
-#define SUPPORT_INCLUDE_not
-
+#ifdef RELEASE_PNUT_SH
+#define sh
+#define RT_NO_INIT_GLOBALS
 #define INCLUDE_LINE_NUMBER_ON_ERROR
+#define NICE_ERR_MSG
+#define OPTIMIZE_LONG_LINES
+#endif
 
-#define AVOID_AMPAMP_BARBAR_not
+#define SUPPORT_INCLUDE
 
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
@@ -36,7 +38,9 @@
 #endif
 // If we use the `set` command and positional parameters to simulate local vars
 #ifndef SH_INITIALIZE_PARAMS_WITH_LET
+#ifndef SH_SAVE_VARS_WITH_SET
 #define SH_SAVE_VARS_WITH_SET
+#endif
 #endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
@@ -48,13 +52,13 @@
 #define RT_INLINE_PUTCHAR
 #define RT_USE_LOOKUP_TABLE
 
-#ifdef AVOID_AMPAMP_BARBAR
-#define AND &
-#define OR |
-#else
+// Make sure we don't use the long line optimization when RT_COMPACT is on
+#ifdef RT_COMPACT
+#undef OPTIMIZE_LONG_LINES
+#endif
+
 #define AND &&
 #define OR ||
-#endif
 
 typedef int bool;
 

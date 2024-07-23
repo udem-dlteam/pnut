@@ -52,8 +52,8 @@ while [ $i -lt 128 ] ; do
   : $(( i += 1 ))
 done;
 
-PNUT_SH_OPTIONS="-DSUPPORT_INCLUDE -DRT_NO_INIT_GLOBALS -Dsh"
-PNUT_x86_OPTIONS="-DSUPPORT_INCLUDE -Di386"
+PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_x86_OPTIONS="-Di386"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c
 gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 ./$COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut.sh
