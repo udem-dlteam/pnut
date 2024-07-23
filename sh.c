@@ -2340,7 +2340,7 @@ void comp_glo_decl(ast node) {
 }
 
 void prologue() {
-  putstr("set -e\n\n");
+  putstr("set -e -u\n\n");
 }
 
 void epilogue() {

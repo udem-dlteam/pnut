@@ -76,7 +76,7 @@ DEFINE_RUNTIME_FUN(local_vars)
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
   putstr("let() { # $1: variable name, $2: value (optional) \n");
   putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
-  putstr("  : $(($1=$2+0))                   # Init\n");
+  putstr("  : $(($1=${2-0}))                 # Init\n");
   putstr("}\n");
 #else
   putstr("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
@@ -537,12 +537,12 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("# If the variable is already defined, this function does nothing.\n");
   putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
   putstr("defstr() { # $1 = variable name, $2 = string\n");
-  // putstr("  set +u # Necessary to allow the variable to be empty\n");
+  putstr("  set +u # Necessary to allow the variable to be empty\n");
   putstr("  if [ $(($1)) -eq 0 ]; then\n");
   putstr("    unpack_escaped_string \"$2\"\n");
   putstr("    : $(($1 = __addr))\n");
   putstr("  fi\n");
-  // putstr("  set -u\n");
+  putstr("  set -u\n");
   putstr("}\n");
 END_RUNTIME_FUN(defstr)
 
