@@ -248,6 +248,6 @@ endlet() { # $1: return variable
 
 # Setup argc, argv
 __argc_for_main=$(($# + 1))
-make_argv $__argc_for_main "$0" $@; __argv_for_main=$__argv
+make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv
 __code=0; # Success exit code
 _main __code $__argc_for_main $__argv_for_main; exit $__code

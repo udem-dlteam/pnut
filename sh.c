@@ -2369,7 +2369,7 @@ void epilogue() {
     if (runtime_use_make_argv) {
       putstr("# Setup argc, argv\n");
       putstr("__argc_for_main=$(($# + 1))\n");
-      putstr("make_argv $__argc_for_main \"$0\" $@; __argv_for_main=$__argv\n");
+      putstr("make_argv $__argc_for_main \"$0\" \"$@\"; __argv_for_main=$__argv\n");
       main_args = wrap_str(" $__argc_for_main $__argv_for_main");
     }
 

@@ -901,24 +901,24 @@ _open() { # $2: filename, $3: flags, $4: mode
     pack_string $2
     if [ $3 = 0 ] ; then
       case $__fd in
-        0) exec 0< $__res ;; 1) exec 1< $__res ;; 2) exec 2< $__res ;;
-        3) exec 3< $__res ;; 4) exec 4< $__res ;; 5) exec 5< $__res ;;
-        6) exec 6< $__res ;; 7) exec 7< $__res ;; 8) exec 8< $__res ;;
-        9) exec 9< $__res ;;
+        0) exec 0< "$__res" ;; 1) exec 1< "$__res" ;; 2) exec 2< "$__res" ;;
+        3) exec 3< "$__res" ;; 4) exec 4< "$__res" ;; 5) exec 5< "$__res" ;;
+        6) exec 6< "$__res" ;; 7) exec 7< "$__res" ;; 8) exec 8< "$__res" ;;
+        9) exec 9< "$__res" ;;
       esac
     elif [ $3 = 1 ] ; then
       case $__fd in
-        0) exec 0> $__res ;; 1) exec 1> $__res ;; 2) exec 2> $__res ;;
-        3) exec 3> $__res ;; 4) exec 4> $__res ;; 5) exec 5> $__res ;;
-        6) exec 6> $__res ;; 7) exec 7> $__res ;; 8) exec 8> $__res ;;
-        9) exec 9> $__res ;;
+        0) exec 0> "$__res" ;; 1) exec 1> "$__res" ;; 2) exec 2> "$__res" ;;
+        3) exec 3> "$__res" ;; 4) exec 4> "$__res" ;; 5) exec 5> "$__res" ;;
+        6) exec 6> "$__res" ;; 7) exec 7> "$__res" ;; 8) exec 8> "$__res" ;;
+        9) exec 9> "$__res" ;;
       esac
     elif [ $3 = 2 ] ; then
       case $__fd in
-        0) exec 0>> $__res ;; 1) exec 1>> $__res ;; 2) exec 2>> $__res ;;
-        3) exec 3>> $__res ;; 4) exec 4>> $__res ;; 5) exec 5>> $__res ;;
-        6) exec 6>> $__res ;; 7) exec 7>> $__res ;; 8) exec 8>> $__res ;;
-        9) exec 9>> $__res ;;
+        0) exec 0>> "$__res" ;; 1) exec 1>> "$__res" ;; 2) exec 2>> "$__res" ;;
+        3) exec 3>> "$__res" ;; 4) exec 4>> "$__res" ;; 5) exec 5>> "$__res" ;;
+        6) exec 6>> "$__res" ;; 7) exec 7>> "$__res" ;; 8) exec 8>> "$__res" ;;
+        9) exec 9>> "$__res" ;;
       esac
     else
       echo "Unknow file mode" ; exit 1
