@@ -20,6 +20,11 @@ Main features:
 The [examples](examples/compiled) directory contains many examples.
 We invite you take a look!
 
+Other than being able to compile itself, Pnut can also compile the [Ribbit
+Virtual Machine](https://github.com/udem-dlteam/ribbit) which can run a R4RS
+Scheme Read-eval-print loop directly in shell. See
+[repl.sh](examples/compiled/repl.sh) for the generated shell script.
+
 ## Install
 
 Pnut can be distributed as the `pnut.sh` shell script, or compiled to executable
