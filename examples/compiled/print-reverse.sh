@@ -104,5 +104,5 @@ endlet() { # $1: return variable
 
 # Setup argc, argv
 __argc_for_main=$(($# + 1))
-make_argv $__argc_for_main "$0" $@; __argv_for_main=$__argv
+make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv
 _main __ $__argc_for_main $__argv_for_main
