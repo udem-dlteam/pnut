@@ -45,7 +45,7 @@ void write_mach_o_header_64() {
 void write_mach_o_load_command_64() {
   write_4_i8(0x19, 0x00, 0x00, 0x00); // LC_SEGMENT_64
   write_4_i8(0x38, 0x00, 0x00, 0x00); // command size
-  write_str("TEXT");                  // segment name
+  write_4_i8(0x54, 0x45, 0x58, 0x54); // segment name
   write_4_i8(0x00, 0x00, 0x00, 0x00); // VM address
   write_4_i8(0x00, 0x00, 0x00, 0x00); // VM address (cont.)
   write_4_i8(0x58 + code_alloc, 0x00, 0x00, 0x00); // VM size (0x58 = 32 bytes header + 56 bytes load command)
@@ -59,7 +59,7 @@ void write_mach_o_load_command_64() {
 
 // #endif
 
-void generate_mach_o_exe() {
+void generate_exe() {
   int i = 0;
 
 // #ifdef __osx32__
