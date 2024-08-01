@@ -14,6 +14,25 @@
 #ifdef RELEASE_PNUT_SH
 #define sh
 #define RT_NO_INIT_GLOBALS
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_i386_linux
+#define target_i386_linux
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_x86_64_linux
+#define target_x86_64_linux
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_x86_64_mac
+#define target_x86_64_mac
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT
 #define INCLUDE_LINE_NUMBER_ON_ERROR
 #define NICE_ERR_MSG
 #define OPTIMIZE_LONG_LINES
@@ -36,10 +55,8 @@
 #define SH_INITIALIZE_PARAMS_WITH_LET
 #endif
 // If we use the `set` command and positional parameters to simulate local vars
-#ifndef SH_INITIALIZE_PARAMS_WITH_LET
-#ifndef SH_SAVE_VARS_WITH_SET
+#if !defined(SH_SAVE_VARS_WITH_SET) && !defined(SH_INITIALIZE_PARAMS_WITH_LET)
 #define SH_SAVE_VARS_WITH_SET
-#endif
 #endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
