@@ -4,7 +4,7 @@
 
 void handle_shell_include() {
   FILE* shell_include_fp;
-  char c;
+  int c;
   get_tok();
   if (tok == STRING) {
     // Include the shell code from the file
