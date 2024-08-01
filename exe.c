@@ -3,8 +3,8 @@ const int word_size;
 
 void generate_exe();
 
-// 1MB heap
-#define RT_HEAP_SIZE 1048576
+// 100MB heap
+#define RT_HEAP_SIZE 104857600
 
 #define MAX_CODE_SIZE 500000
 int code[MAX_CODE_SIZE];
