@@ -13,6 +13,15 @@
 #ifdef RELEASE_PNUT_SH
 #define sh
 #define RT_NO_INIT_GLOBALS
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_I386
+#define i386
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT
 #define INCLUDE_LINE_NUMBER_ON_ERROR
 #define NICE_ERR_MSG
 #define OPTIMIZE_LONG_LINES

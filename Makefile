@@ -4,9 +4,15 @@ BUILD_DIR = build
 
 BUILD_OPT_SH = -DRELEASE_PNUT_SH $(BUILD_OPT)
 
+BUILD_OPT_EXE = -DRELEASE_PNUT_I386 $(BUILD_OPT)
+
 pnut-sh: pnut.c sh.c sh-runtime.c
 	mkdir -p $(BUILD_DIR)
 	gcc $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
+
+pnut-exe: pnut.c x86.c exe.c elf.c
+	mkdir -p $(BUILD_DIR)
+	gcc $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
 
 pnut.sh: pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut.sh
