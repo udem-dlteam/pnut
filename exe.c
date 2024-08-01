@@ -257,6 +257,7 @@ int fclose_lbl;
 int fgetc_lbl;
 int malloc_lbl;
 int free_lbl;
+int printf_lbl; // Stub
 
 int read_lbl;
 int write_lbl;
@@ -1579,6 +1580,9 @@ void codegen_begin() {
   close_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, int_type);
 
+  printf_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, void_type);
+
   jump(setup_lbl);
 }
 
@@ -2176,6 +2180,11 @@ void codegen_end() {
   def_label(close_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   os_close();
+  ret();
+
+  // printf function stub
+  def_label(printf_lbl);
+  rt_crash("Print is not supported yet.");
   ret();
 
   generate_exe();
