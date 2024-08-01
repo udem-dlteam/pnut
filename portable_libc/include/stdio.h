@@ -4,6 +4,8 @@
 #include "include/sys/types.h"
 #include "include/stdarg.h"
 
+#ifdef USE_STRUCT
+
 typedef struct {
   int fd;
   char buf[1];
@@ -12,9 +14,25 @@ typedef struct {
   size_t string_output_len;
 } FILE;
 
+#else
+
+typedef int FILE;
+
+#endif
+
+#ifdef PNUT_CC
+
+FILE *stdin;
+FILE *stdout;
+FILE *stderr;
+
+#else
+
 extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
+
+#endif
 
 FILE *fopen(const char *pathname, const char *mode);
 FILE *fdopen(int fd, const char *mode);

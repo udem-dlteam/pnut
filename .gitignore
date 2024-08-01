@@ -15,3 +15,4 @@ pnut.exe
 pnut.sh
 pnut-twice-bootstrapped.sh
 bootstrap-results/*
+build/*

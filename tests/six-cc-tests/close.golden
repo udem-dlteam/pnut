@@ -9,9 +9,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 Quote: "
 Backslash: \
 Read len: 199
@@ -26,9 +26,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 hash: 199
 Read content: void putstring(char* s) {
   while (*s) {
@@ -41,9 +41,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 Quote: "
 Backslash: \
 Read len: 199
@@ -58,9 +58,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 hash: 199
 Read content: void putstring(char* s) {
   while (*s) {
@@ -73,9 +73,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 Quote: "
 Backslash: \
 Read len: 199
@@ -90,9 +90,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 hash: 199
 Read content: void putstring(char* s) {
   while (*s) {
@@ -105,9 +105,9 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 Quote: "
 Backslash: \
 Read len: 199
@@ -122,7 +122,7 @@ void putnumber(int n) {
   int acc = 0;
   int i = 0;
   int *digits = malloc(10 * sizeof(int));
-  
+
   if (digits == 0) {
- 
+
 hash: 199

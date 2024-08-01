@@ -7,6 +7,8 @@ Allo in hex: 0x41 0x4c 0x4c 0x4f
 _
 alphabet:
 ABCDEFHIJKLMNOPQRSTUVWXYZ
+4 first letters of the alphabet with next_char:
+ABCD
 4 first letters of the alphabet with .*s:
 ABCD
 4 first letters of the alphabet with 0.4s:

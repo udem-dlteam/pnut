@@ -17,7 +17,7 @@ void putnumber(int n) {
     putchar('-');
     n = -n;
   }
-  
+
   while (n > 0) {
     buffer[i++] = (n % 10) + '0';
     n /= 10;
@@ -27,10 +27,10 @@ void putnumber(int n) {
   }
 }
 
-enum LinkedList { 
-  VAL, 
+enum LinkedList {
+  VAL,
   NEXT,
-  LL_SIZE 
+  LL_SIZE
 };
 
 int* iota_linked_list(int max) {
@@ -57,8 +57,8 @@ int* iota_linked_list(int max) {
       return -1;
     }
     node[VAL] = i;
-    node[NEXT] = 0; 
-    last[NEXT] = (int)node; 
+    node[NEXT] = 0;
+    last[NEXT] = (int)node;
     last = node;
     i = i + 1;
   }

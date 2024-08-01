@@ -3,9 +3,9 @@
 
 #ifdef PNUT_CC
 
-#define ssize_t int
-#define size_t int
-#define off_t int
+typedef int ssize_t;
+typedef int size_t;
+typedef int off_t;
 
 #else
 

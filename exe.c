@@ -236,6 +236,11 @@ void os_fclose();
 void os_fgetc();
 void os_allocate_memory(int size);
 
+void os_read();
+void os_write();
+void os_open();
+void os_close();
+
 void setup_proc_args();
 
 #define cgc int
@@ -252,6 +257,11 @@ int fclose_lbl;
 int fgetc_lbl;
 int malloc_lbl;
 int free_lbl;
+
+int read_lbl;
+int write_lbl;
+int open_lbl;
+int close_lbl;
 
 int cgc_fs = 0;
 // Function bindings that follows lexical scoping rules
@@ -1496,7 +1506,7 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 1)); // value when true
       jump(lbl2);
       def_label(lbl1);
-      grow_fs(-1); // here, the child#1 is not evaluated, so we adjust the stack
+      grow_fs(-1); // here, the child#1 is not on the stack, so we adjust it
       codegen_rvalue(get_child(node, 2)); // value when false
       grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
       def_label(lbl2);
@@ -1556,6 +1566,18 @@ void codegen_begin() {
 
   free_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, char_type);
+
+  read_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, int_type);
+
+  write_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, int_type);
+
+  open_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, int_type);
+
+  close_lbl = alloc_label();
+  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, int_type);
 
   jump(setup_lbl);
 }
@@ -1973,7 +1995,7 @@ void codegen_glo_fun_decl(ast node) {
     binding = cgc_globals;
   }
 
-  if (body != 0) {
+  if (body > 0) { // 0 is empty body, -1 is forward declaration
 
     lbl = heap[binding+4];
 
@@ -2076,9 +2098,10 @@ void codegen_end() {
   def_label(init_next_lbl);
   setup_proc_args(cgc_global_alloc);
   call(main_lbl);
-  os_exit();
+  os_exit(); //TODO: why is this needed? fallthrough should be sufficient
   push_reg(reg_X); // exit process with result of main
   push_reg(reg_X); // dummy return address (exit never needs it)
+
   // exit function
   def_label(exit_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
@@ -2123,6 +2146,36 @@ void codegen_end() {
   def_label(free_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   rt_free();
+  ret();
+
+  // read function
+  def_label(read_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
+  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  os_read();
+  ret();
+
+  // write function
+  def_label(write_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
+  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  os_write();
+  ret();
+
+  // open function
+  def_label(open_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
+  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  os_open();
+  ret();
+
+  // close function
+  def_label(close_lbl);
+  mov_reg_mem(reg_X, reg_SP, word_size);
+  os_close();
   ret();
 
   generate_exe();

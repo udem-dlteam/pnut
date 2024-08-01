@@ -1,8 +1,12 @@
-#ifndef PNUT_CC
-#include <stdio.h>
-#endif
+/*
+ * winterpi.c: Compute the first 2800 digits of pi
+ *
+ * Usage: ./winterpi.sh
+ */
 
 /* https://cs.uwaterloo.ca/~alopez-o/math-faq/mathtext/node12.html */
+
+#include <stdio.h>
 
 int r[2801];
 
@@ -40,16 +44,16 @@ int main() {
       i = i-1;
     }
 
-    putchar(48 + (c + d / 10000) / 1000 % 10);
-    putchar(48 + (c + d / 10000) / 100 % 10);
-    putchar(48 + (c + d / 10000) / 10 % 10);
-    putchar(48 + (c + d / 10000) % 10);
+    putchar('0' + (c + d / 10000) / 1000 % 10);
+    putchar('0' + (c + d / 10000) / 100 % 10);
+    putchar('0' + (c + d / 10000) / 10 % 10);
+    putchar('0' + (c + d / 10000) % 10);
     c = d % 10000;
 
     k = k - 14;
   }
 
-  putchar(10);
+  putchar('\n');
 
   return 0;
 }
