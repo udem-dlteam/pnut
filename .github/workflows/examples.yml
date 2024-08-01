@@ -1,4 +1,4 @@
-name: "Examples are up to date"
+name: examples-up-to-date
 
 on:
   pull_request: # Should trigger on pull requests for all branches
