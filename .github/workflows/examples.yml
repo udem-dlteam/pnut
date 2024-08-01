@@ -15,6 +15,10 @@ jobs:
       - name: Regenerate examples
         run: |
           sh ./examples/prepare.sh
+          if [ $? -ne 0 ]; then
+            echo "Failed to regenerate examples"
+            exit 1
+          fi
 
       - name: Diff examples
         run: |
