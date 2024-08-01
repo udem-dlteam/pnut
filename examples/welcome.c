@@ -5,7 +5,7 @@
  */
 
 void main() {
-  char name[100];
+  char* name = malloc(100); // Allocate 100 bytes for the name
   int i = 0;
 
   puts("What is your name?\n");
