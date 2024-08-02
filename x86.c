@@ -676,7 +676,7 @@ void setup_proc_args(int global_vars_size) {
 
 void os_getchar() {
   int lbl = alloc_label();
-  mov_reg_imm(AX, 0x2000000);    // mov  rax, 0       # SYS_read
+  mov_reg_imm(AX, 0x2000003);    // mov  rax, 0       # SYS_read
   push_reg(AX);          // push rax          # buffer to read byte
   mov_reg_imm(DI, 0);    // mov  rdi, 0       # rdi = 0 = STDIN
   mov_reg_imm(DX, 1);    // mov  rdx, 1       # rdx = 1 = number of bytes to read
@@ -720,7 +720,7 @@ void os_fgetc() {
   push_reg(AX);            // push rax      # buffer to read byte
   mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
   mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
-  mov_reg_imm(AX, 0x2000000); // mov  rax, SYS_read (macOS specific)
+  mov_reg_imm(AX, 0x2000003); // mov  rax, SYS_read (macOS specific)
   syscall();               // syscall
   xor_reg_reg(DX, DX);     // xor  rdx, rdx     # rdx = 0
   cmp_reg_reg(AX, DX);     // cmp  rax, rdx
@@ -751,7 +751,7 @@ void os_read() {
   mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
   mov_reg_reg(SI, reg_Y); // mov  rsi, reg_Y  # buffer
   mov_reg_reg(DX, reg_Z); // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, 0x2000000); // mov  rax, SYS_read (macOS specific)
+  mov_reg_imm(AX, 0x2000003); // mov  rax, SYS_read (macOS specific)
   syscall();              // syscall
 }
 
