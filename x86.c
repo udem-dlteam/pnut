@@ -1,7 +1,7 @@
 // x86 codegen
 
 #include "exe.c"
-#include "elf.c"
+#include "mach-o.c"
 
 #ifdef x86_64
 const int word_size = 8; // generating for x86-64
@@ -668,5 +668,115 @@ void os_close() {
   mov_reg_imm(AX, 3);      // mov  rax, 3      # 3 = SYS_OPEN
   syscall();               // syscall
 }
+
+#endif
+
+#ifdef osx // For 64 bit macOS.
+
+void os_getchar() {
+  int lbl = alloc_label();
+  mov_reg_imm(AX, 0x2000000);    // mov  rax, 0       # SYS_read
+  push_reg(AX);          // push rax          # buffer to read byte
+  mov_reg_imm(DI, 0);    // mov  rdi, 0       # rdi = 0 = STDIN
+  mov_reg_imm(DX, 1);    // mov  rdx, 1       # rdx = 1 = number of bytes to read
+  mov_reg_reg(SI, SP);   // mov  rsi, rsp     # to the stack
+  syscall();             // syscall
+  xor_reg_reg(DX, DX);   // xor  rdx, rdx     # rdx = 0
+  cmp_reg_reg(AX, DX);   // cmp  rax, rdx
+  pop_reg(AX);           // pop  rax
+  jump_cond(NE, lbl);    // jne  lbl          # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);   // mov  rax, -1      # -1 on EOF
+  def_label(lbl);        // end label
+}
+
+void os_putchar() {
+  push_reg(AX);          // push rax          # buffer to write byte
+  mov_reg_imm(AX, 0x2000004); // mov rax, SYS_write (macOS specific)
+  mov_reg_imm(DI, 1);    // mov  rdi, 1       # 1 = STDOUT
+  mov_reg_imm(DX, 1);    // mov  rdx, 1       # 1 = byte count
+  mov_reg_reg(SI, SP);   // mov  rsi, rsp     # buffer is on the stack
+  syscall();             // syscall
+  pop_reg(AX);           // pop  rax
+}
+
+void os_fopen() {
+  mov_reg_reg(DI, AX);   // mov rdi, rax | file name
+  mov_reg_imm(SI, 0);    // mov rsi, 0 | flags
+  mov_reg_imm(DX, 0);    // mov rdx, 0 | mode
+  mov_reg_imm(AX, 0x2000005); // mov rax, SYS_open (macOS specific)
+  syscall();             // syscall
+}
+
+void os_fclose() {
+  mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
+  mov_reg_imm(AX, 0x2000006); // mov rax, SYS_close (macOS specific)
+  syscall();              // syscall
+}
+
+void os_fgetc() {
+  int lbl = alloc_label(); // label for EOF
+  mov_reg_reg(DI, reg_X);  // mov  rdi, file descriptor
+  push_reg(AX);            // push rax      # buffer to read byte
+  mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
+  mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
+  mov_reg_imm(AX, 0x2000000); // mov  rax, SYS_read (macOS specific)
+  syscall();               // syscall
+  xor_reg_reg(DX, DX);     // xor  rdx, rdx     # rdx = 0
+  cmp_reg_reg(AX, DX);     // cmp  rax, rdx
+  pop_reg(AX);             // pop  rax
+  jump_cond(NE, lbl);      // jne  lbl      # if byte was read don't return EOF
+  mov_reg_imm(AX, -1);     // mov  rax, -1  # -1 on EOF
+  def_label(lbl);          // end label
+}
+
+void os_allocate_memory(int size) {
+  mov_reg_imm(DI, 0);     // mov rdi, 0 | NULL
+  mov_reg_imm(SI, size);  // mov rsi, size | size
+  mov_reg_imm(DX, 0x3);   // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
+  mov_reg_imm(R10, 0x22); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
+  mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
+  mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
+  mov_reg_imm(AX, 0x200000C); // mov rax, SYS_mmap (macOS specific)
+  syscall();              // syscall
+}
+
+void os_exit() {
+  mov_reg_reg(DI, reg_X); // mov edi, reg_X  # exit status
+  mov_reg_imm(AX, 0x200003C); // mov eax, SYS_exit (macOS specific)
+  syscall();              // syscall
+}
+
+void os_read() {
+  mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
+  mov_reg_reg(SI, reg_Y); // mov  rsi, reg_Y  # buffer
+  mov_reg_reg(DX, reg_Z); // mov  rdx, reg_Z  # count
+  mov_reg_imm(AX, 0x2000000); // mov  rax, SYS_read (macOS specific)
+  syscall();              // syscall
+}
+
+void os_write() {
+  mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
+  mov_reg_reg(SI, reg_Y); // mov  rsi, reg_Y  # buffer
+  mov_reg_reg(DX, reg_Z); // mov  rdx, reg_Z  # count
+  mov_reg_imm(AX, 0x2000004); // mov  rax, SYS_write (macOS specific)
+  syscall();              // syscall
+}
+
+void os_open() {
+  mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # filename
+  mov_reg_reg(SI, reg_Y); // mov  rsi, reg_Y  # flags
+  mov_reg_reg(DX, reg_Z); // mov  rdx, reg_Z  # mode
+  mov_reg_imm(AX, 0x2000005); // mov  rax, SYS_open (macOS specific)
+  syscall();              // syscall
+}
+
+void os_close() {
+  mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
+  mov_reg_imm(AX, 0x2000006); // mov  rax, SYS_close (macOS specific)
+  syscall();              // syscall
+}
+
+#endif
+
 
 #endif
