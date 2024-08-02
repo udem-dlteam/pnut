@@ -1,17 +1,27 @@
 // x86 codegen
 
-#include "exe.c"
-
-#if defined i386 || x86_64
-	#include "elf.c"
-#else
-	#include "mach-o.c"
+#ifdef i386
+#include "elf.c"
 #endif
 
-#if defined x86_64 || defined osx
-const int word_size = 8; // generating for x86-64 or osx
-#else
-const int word_size = 4; // generating for i386
+#ifdef x86_64
+#include "elf.c"
+#endif
+
+#ifdef mac_os
+#include "mach-o.c"
+#endif
+
+#ifdef x86_64
+const int word_size = 8; // generating for x86-64 Linux
+#endif
+
+#ifdef mac_os
+const int word_size = 8; // generating for x86-64 Mac OS
+#endif
+
+#ifdef i386
+const int word_size = 4; // generating for i386 Linux
 #endif
 
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
@@ -677,7 +687,7 @@ void os_close() {
 #endif
 
 // For 64 bit macOS.
-#ifdef osx 
+#ifdef mac_os
 
 void os_getchar() {
   int lbl = alloc_label();
