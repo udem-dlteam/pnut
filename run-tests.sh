@@ -52,6 +52,8 @@ case "$backend" in
   -Di386 | -Dx86_64)
     ext="exe"
     ;;
+  -DmacOS)
+    ext="app"
   *)
     echo "Unknown backend: $backend"
     exit 1
