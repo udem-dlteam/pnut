@@ -737,7 +737,7 @@ void os_allocate_memory(int size) {
   mov_reg_imm(R10, 0x22); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
   mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
   mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
-  mov_reg_imm(AX, 0x200000C); // mov rax, SYS_mmap (macOS specific)
+  mov_reg_imm(AX, 0x20000C5); // mov rax, SYS_mmap (macOS specific) 197
   syscall();              // syscall
 }
 
