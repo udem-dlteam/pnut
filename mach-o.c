@@ -17,7 +17,7 @@ void write_mach_o_header_64() {
 void write_pagezero(){
   write_4_i8(0x19, 0x00, 0x00, 0x00); // LC_SEGMENT_64 ; 4 bytes
   write_4_i8(0x48, 0x00, 0x00, 0x00); // command size ; 4 bytes
-  write_4_i8(0x5f, 0x5f, 0x50, 0x41); // segment name ; 16 bytes 
+  write_4_i8(0x5f, 0x5f, 0x50, 0x41); // segment name ; 16 bytes
   write_4_i8(0x47, 0x45, 0x5a, 0x45); // segment name (cont.)
   write_4_i8(0x52, 0x4f, 0x00, 0x00); // segment name (cont.)
   write_4_i8(0x00, 0x00, 0x00, 0x00); // segment name (cont.)
@@ -46,12 +46,12 @@ void write_text_section(){
   write_i32_le(0x00000000); // VM address low
   write_i32_le(0x00000001); // VM address high
   write_i32_le(code_alloc & 0xFFFFFFFF); // VM size low
-  write_i32_le((uint64_t)code_alloc >> 32); // VM size high 
+  write_i32_le((uint64_t)code_alloc >> 32); // VM size high
   write_i32_le(0x00000000); // file offset low
   write_i32_le(0x00000000); // file offset high
   write_i32_le(code_alloc & 0xFFFFFFFF); // file size low
   write_i32_le((uint64_t)code_alloc >> 32); // file size high
-  
+
   write_4_i8(0x07, 0x00, 0x00, 0x00); // max VM protection ; 4 bytes
   write_4_i8(0x05, 0x00, 0x00, 0x00); // initial VM protection ; 4 bytes
   write_4_i8(0x00, 0x00, 0x00, 0x00); // number of sections ; 4 bytes
@@ -115,7 +115,7 @@ void generate_exe() {
   write_pagezero();
   write_text_section();
   write_unix_thread();
-  
+
   while (i < code_alloc) {
     write_i8(code[i]);
     i += 1;
@@ -128,5 +128,5 @@ void generate_exe() {
     file_size += 1;
   }
 
-  
+
 }
