@@ -1,4 +1,5 @@
 // x86 codegen
+#include "exe.c"
 
 #ifdef i386
 	#include "elf.c"
