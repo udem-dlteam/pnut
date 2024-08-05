@@ -52,8 +52,9 @@ case "$backend" in
   -Di386 | -Dx86_64)
     ext="exe"
     ;;
-  -DmacOS)
+  -Dmac_os)
     ext="app"
+    ;;
   *)
     echo "Unknown backend: $backend"
     exit 1
@@ -77,7 +78,7 @@ test() {
     generated_by_pnut=0
     if [ ! -f "$golden_file" ]; then
       echo "Generating golden file for $filename using pnut..."
-      "$pnut_exe" < "$file" > "$dir/$filename.golden.$ext" 2> "$dir/$filename.err"
+      "$pnut_exe" "$file" > "$dir/$filename.golden.$ext" 2> "$dir/$filename.err"
       if [ $? -eq 0 ]; then
         chmod +x "$dir/$filename.golden.$ext"
         "./$dir/$filename.golden.$ext" > "$golden_file"
@@ -94,7 +95,7 @@ test() {
       fi
 
       # Compile the test file with pnut.exe
-      "$pnut_exe" < "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+      "$pnut_exe" "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
       if [ $? -eq 0 ]; then # If compilation was successful
         chmod +x "$dir/$filename.$ext"
         "./$dir/$filename.$ext" > "$dir/$filename.output" 2> "$dir/$filename.err"
