@@ -241,7 +241,7 @@ void os_write();
 void os_open();
 void os_close();
 
-void setup_proc_args();
+void setup_proc_args(int global_vars_size);
 
 #define cgc int
 
