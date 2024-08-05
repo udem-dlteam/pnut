@@ -46,11 +46,11 @@ void write_text_section(){
   write_i32_le(0x00000000); // VM address low
   write_i32_le(0x00000001); // VM address high
   write_i32_le(code_alloc & 0xFFFFFFFF); // VM size low
-  write_i32_le(code_alloc >> 32); // VM size high
+  write_i32_le(0x00000000); // VM size high. Warning: This assumes that the file size is less than 4GB
   write_i32_le(0x00000000); // file offset low
   write_i32_le(0x00000000); // file offset high
   write_i32_le(code_alloc & 0xFFFFFFFF); // file size low
-  write_i32_le(code_alloc >> 32); // file size high
+  write_i32_le(0x00000000); // file size high. Warning: This assumes that the file size is less than 4GB
 
   write_4_i8(0x07, 0x00, 0x00, 0x00); // max VM protection ; 4 bytes
   write_4_i8(0x05, 0x00, 0x00, 0x00); // initial VM protection ; 4 bytes
