@@ -2834,15 +2834,15 @@ ast parse_compound_statement() {
 #include "sh.c"
 #endif
 
-#ifdef i386
+#ifdef target_i386_linux
 #include "x86.c"
 #endif
 
-#ifdef x86_64
+#ifdef target_x86_64_linux
 #include "x86.c"
 #endif
 
-#ifdef mac_os
+#ifdef target_x86_64_mac
 #include "x86.c"
 #endif
 
