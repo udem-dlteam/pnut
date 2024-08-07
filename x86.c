@@ -1,13 +1,22 @@
 // x86 codegen
-
 #include "exe.c"
-#include "elf.c"
+
+#ifdef i386
+	#include "elf.c"
+	const int word_size = 4; // generating for i386 Linux
+#endif
 
 #ifdef x86_64
-const int word_size = 8; // generating for x86-64
-#else
-const int word_size = 4; // generating for i386
+	#include "elf.c"
+	const int word_size = 8; // generating for x86-64 Linux
 #endif
+
+#ifdef mac_os
+	#include "mach-o.c"
+	const int word_size = 8; // generating for x86-64 Linux
+#endif
+
+
 
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
 
@@ -561,8 +570,32 @@ void os_close() {
 
 #endif
 
-// For 64 bit linux.
+// Both x86_64 and mac_os use the System V ABI, the difference is in the system calls.
 #ifdef x86_64
+	#define SYSTEM_V_ABI
+	#define SYS_READ 0
+	#define SYS_WRITE 1
+	#define SYS_OPEN 2
+	#define SYS_CLOSE 3
+	#define SYS_MMAP_MAP_TYPE 0x22
+	#define SYS_MMAP 9
+	#define SYS_EXIT 60
+#endif
+
+#ifdef mac_os
+	#define SYSTEM_V_ABI
+	#define SYS_READ 0x2000003
+	#define SYS_WRITE 0x2000004
+	#define SYS_OPEN 0x2000005
+	#define SYS_CLOSE 0x2000006
+	#define SYS_MMAP_MAP_TYPE 0x1020
+	#define SYS_MMAP 0x20000C5
+	#define SYS_EXIT 0x2000001
+#endif
+
+
+// For 64 bit System V ABI.
+#ifdef SYSTEM_V_ABI
 
 void os_getchar() {
   int lbl = alloc_label();
@@ -571,7 +604,7 @@ void os_getchar() {
   mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
   mov_reg_imm(DX, 1);    // mov  rdx, 1   # rdx = 1 = number of bytes to read
   mov_reg_reg(SI, SP);   // mov  rsi, rsp # to the stack
-  mov_reg_imm(AX, 0);    // mov  rax, 0   # 0 = SYS_READ
+  mov_reg_imm(AX, SYS_READ);    // mov  rax, SYS_READ
   syscall();             // syscall
   xor_reg_reg(DX, DX);   // rdx = 0
   cmp_reg_reg(AX, DX);   // cmp  eax, ebx
@@ -583,7 +616,7 @@ void os_getchar() {
 
 void os_putchar() {
   push_reg(AX);          // push rax      # buffer to write byte
-  mov_reg_imm(AX, 1);    // mov eax, 1    # 1 = SYS_WRITE
+  mov_reg_imm(AX, SYS_WRITE);    // mov rax, SYS_WRITE
   mov_reg_imm(DI, 1);    // mov edi, 1    # 1 = STDOUT
   mov_reg_imm(DX, 1);    // mov edx, 1    # 1 = byte count
   mov_reg_reg(SI, SP);   // mov esi, esp  # buffer is on the stack
@@ -595,13 +628,13 @@ void os_fopen() {
   mov_reg_reg(DI, AX);    // mov rdi, rax | file name
   mov_reg_imm(SI, 0);     // mov rsi, 0 | flags
   mov_reg_imm(DX, 0);     // mov rdx, 0 | mode
-  mov_reg_imm(AX, 2);     // mov rax, 2 == SYS_OPEN
+  mov_reg_imm(AX, SYS_OPEN);     // mov rax, SYS_OPEN
   syscall();              // syscall
 }
 
 void os_fclose() {
   mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
-  mov_reg_imm(AX, 3);     // mov rax, 3       # 3 = SYS_CLOSE
+  mov_reg_imm(AX, SYS_CLOSE);     // mov rax, SYS_CLOSE
   syscall();              // syscall
 }
 
@@ -612,7 +645,7 @@ void os_fgetc() {
   push_reg(AX);            // push eax      # buffer to read byte
   mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
   mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
-  mov_reg_imm(AX, 0);      // mov  rax, 0   # SYS_READ
+  mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
   syscall();               // syscall
   xor_reg_reg(DX, DX);     // rdx = 0
   cmp_reg_reg(AX, DX);     // cmp  eax, rdx
@@ -626,16 +659,16 @@ void os_allocate_memory(int size) {
   mov_reg_imm(DI, 0);     // mov rdi, 0 | NULL
   mov_reg_imm(SI, size);  // mov rsi, size | size
   mov_reg_imm(DX, 0x3);   // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
-  mov_reg_imm(R10, 0x22); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
+  mov_reg_imm(R10, SYS_MMAP_MAP_TYPE); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
   mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
   mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
-  mov_reg_imm(AX, 9);     // mov rax, 9  # 9 = SYS_MMAP
+  mov_reg_imm(AX, SYS_MMAP);     // mov rax, SYS_MMAP
   syscall();              // syscall
 }
 
 void os_exit() {
   mov_reg_reg(DI, reg_X); // mov edi, reg_X  # exit status
-  mov_reg_imm(AX, 60);    // mov eax, 60     # 60 = SYS_EXIT
+  mov_reg_imm(AX, SYS_EXIT);    // mov eax, SYS_EXIT
   syscall();              // syscall
 }
 
@@ -643,7 +676,7 @@ void os_read() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
   mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, 0);      // mov  rax, 0      # 0 = SYS_READ
+  mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
   syscall();               // syscall
 }
 
@@ -651,7 +684,7 @@ void os_write() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
   mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, 1);      // mov  rax, 1      # 1 = SYS_WRITE
+  mov_reg_imm(AX, SYS_WRITE);      // mov  rax, SYS_WRITE
   syscall();               // syscall
 }
 
@@ -659,13 +692,13 @@ void os_open() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # filename
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # flags
   mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # mode
-  mov_reg_imm(AX, 2);      // mov  rax, 2      # 2 = SYS_OPEN
+  mov_reg_imm(AX, SYS_OPEN);      // mov  rax, SYS_OPEN
   syscall();               // syscall
 }
 
 void os_close() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_imm(AX, 3);      // mov  rax, 3      # 3 = SYS_OPEN
+  mov_reg_imm(AX, SYS_CLOSE);      // mov  rax, SYS_CLOSE
   syscall();               // syscall
 }
 

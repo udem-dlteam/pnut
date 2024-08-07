@@ -2842,6 +2842,10 @@ ast parse_compound_statement() {
 #include "x86.c"
 #endif
 
+#ifdef mac_os
+#include "x86.c"
+#endif
+
 #ifdef arm
 #include "arm.c"
 #endif
