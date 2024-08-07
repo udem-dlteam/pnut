@@ -1,8 +1,6 @@
 // Minimal Mach-O header for 32-bit and 64-bit architectures.
 // https://stackoverflow.com/questions/32453849/minimal-mach-o-64-binary/32659692#32659692
 
-// #ifdef __osx__
-
 void write_mach_o_header_64() {
   write_4_i8(0xcf, 0xfa, 0xed, 0xfe); // magic number (MH_MAGIC_64)
   write_4_i8(0x07, 0x00, 0x00, 0x01); // CPU type (CPU_TYPE_X86_64)
@@ -45,11 +43,11 @@ void write_text_section(){
 
   write_i32_le(0x00000000); // VM address low
   write_i32_le(0x00000001); // VM address high
-  write_i32_le(code_alloc & 0xFFFFFFFF); // VM size low
+  write_i32_le(code_alloc); // VM size low
   write_i32_le(0x00000000); // VM size high. Warning: This assumes that the file size is less than 4GB
   write_i32_le(0x00000000); // file offset low
   write_i32_le(0x00000000); // file offset high
-  write_i32_le(code_alloc & 0xFFFFFFFF); // file size low
+  write_i32_le(code_alloc); // file size low
   write_i32_le(0x00000000); // file size high. Warning: This assumes that the file size is less than 4GB
 
   write_4_i8(0x07, 0x00, 0x00, 0x00); // max VM protection ; 4 bytes
