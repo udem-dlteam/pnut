@@ -30,7 +30,9 @@ compile() {
 }
 
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
-PNUT_x86_OPTIONS="-Di386"
+PNUT_x86_OPTIONS="-Dtarget_i386_linux"
+#PNUT_x86_OPTIONS="-Dtarget_x86_64_linux"
+#PNUT_x86_OPTIONS="-Dtarget_x86_64_mac"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c
 gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 ./$COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut.sh
@@ -54,5 +56,5 @@ done
 
 # Compile pnut-exe.c using pnut-sh on different shells/compilers
 for run_with in $runners; do
-  compile "$run_with" "pnut.c" "-Di386" "pnut-exe"
+  compile "$run_with" "pnut.c" "-Dtarget_i386_linux" "pnut-exe"
 done

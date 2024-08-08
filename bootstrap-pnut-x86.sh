@@ -2,9 +2,9 @@
 
 TEMP_DIR="bootstrap-results"
 
-# PNUT_x86_OPTIONS="-Dmac_os"
-# PNUT_x86_OPTIONS="-Dx86_64"
-PNUT_x86_OPTIONS="-Di386"
+# PNUT_x86_OPTIONS="-Dtarget_x86_64_mac"
+# PNUT_x86_OPTIONS="-Dtarget_x86_64_linux"
+PNUT_x86_OPTIONS="-Dtarget_i386_linux"
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi

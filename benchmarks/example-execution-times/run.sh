@@ -53,7 +53,9 @@ while [ $i -lt 128 ] ; do
 done;
 
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
-PNUT_x86_OPTIONS="-Di386"
+PNUT_x86_OPTIONS="-Dtarget_i386_linux"
+#PNUT_x86_OPTIONS="-Dtarget_x86_64_linux"
+#PNUT_x86_OPTIONS="-Dtarget_x86_64_mac"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c
 gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
 ./$COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut.sh

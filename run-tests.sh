@@ -49,10 +49,10 @@ case "$backend" in
   -Dsh)
     ext="sh"
     ;;
-  -Di386 | -Dx86_64)
+  -Dtarget_i386_linux | -Dtarget_x86_64_linux)
     ext="exe"
     ;;
-  -Dmac_os)
+  -Dtarget_x86_64_mac)
     ext="app"
     ;;
   *)
