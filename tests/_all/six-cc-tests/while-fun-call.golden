@@ -4,7 +4,7 @@
 1:   char c;
 2:   char c;
 2:   putchar(line+ 48);
-3:   f = fopen("tests/six-cc-tests/fgetc.c", 0);
+3:   f = fopen("tests/_all/six-cc-tests/fgetc.c", 0);
 3:   putchar(':');
 4:   while ((c = fgetc(f)) != -1) {
 4:   putchar(' ');
