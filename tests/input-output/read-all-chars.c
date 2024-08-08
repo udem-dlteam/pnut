@@ -16,6 +16,4 @@ void main() {
   while ((c = fgetc(f)) != -1) {
     putchar(c);
   }
-
-  putchar('\n');
 }

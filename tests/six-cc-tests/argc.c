@@ -1,4 +1,4 @@
-/* args: abc def hij */
+// args: abc def hij
 void putstring(char * s) {
   while (*s) {
     putchar(*s);

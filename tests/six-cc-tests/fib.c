@@ -1,32 +1,25 @@
-void putstring(char *s) {
-  while (*s) {
-    putchar(*s);
-    s = s + 1;
+void putint_aux(int n) {
+  if (n >= 10) putint_aux(n / 10);
+  putchar('0' + (n % 10));
+}
+
+void putint(int n) {
+  if (n < 0) {
+    putchar('-');
+    putint_aux(-n);
+  } else {
+    putint_aux(n);
   }
 }
 
-
 int fib(int n) {
-  int n2;
-  int n3;
-  if (n <= 1) {
-    return n;
-  }
+  if (n <= 1) return n;
 
-  n2 = fib(n - 1);
-  n3 = fib(n - 2);
-  n2 = n2 + n3;
-  return n2;
+  return fib(n - 1) + fib(n - 2);
 }
 
 int main() {
-  int n123;
-  n123 = fib(15);
-  if (n123 == 610){
-    putstring("610");
-  } else {
-    putchar(88);
-  }
+  putint(fib(15));
   putchar(10);
   return 0;
 }
