@@ -36,10 +36,10 @@ test-sh:
 	./run-tests.sh "sh"
 
 test-i386-linux:
-	./run-tests.sh "i386"
+	./run-tests.sh "i386_linux"
 
 test-x86_64-linux:
-	./run-tests.sh "x86_64"
+	./run-tests.sh "x86_64_linux"
 
 test-x86_64-mac:
-	./run-tests.sh "mac_os"
+	./run-tests.sh "x86_64_mac"

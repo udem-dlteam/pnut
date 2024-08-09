@@ -3,7 +3,7 @@
 // Minimal i386 bit ELF header.
 // https://web.archive.org/web/20240409140025/http://www.muppetlabs.com/~breadbox/software/tiny/teensy.html
 // https://web.archive.org/web/20240414151854/https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
-#ifdef i386
+#ifdef target_i386_linux
 
 void write_elf_e_header() {
   write_4_i8(0x7f, 0x45, 0x4c, 0x46); // e_ident
@@ -46,7 +46,7 @@ void write_elf_p_header() {
 //  https://web.archive.org/web/20210918175202/https://stackoverflow.com/questions/38549972/why-elf-executables-have-a-fixed-load-address
 //  Convention set in the x86_64 system-v abi:
 //  https://web.archive.org/web/20230322152842/https://refspecs.linuxfoundation.org/elf/x86_64-SysV-psABI.pdf (Page 26)
-#ifdef x86_64
+#ifdef target_x86_64_linux
 
 void write_elf_e_header() {
   write_4_i8(0x7f, 0x45, 0x4c, 0x46); // Header signature |

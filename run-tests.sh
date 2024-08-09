@@ -2,7 +2,7 @@
 #
 # Run tests for pnut using different backends
 # Usage: ./run-tests.sh <backend> --shell <shell> --match <pattern> --bootstrap
-# The backend can be one of the following: sh, i386, x86_64, mac_os
+# The backend can be one of the following: sh, i386_linux, x86_64_linux, x86_64_mac
 # The --shell flag is used to specify the shell to use for running tests with the sh backend
 # The --match flag is used to run tests that match the given pattern, useful for re-running failed tests
 # The --bootstrap flag compiles the tests using pnut compiled with pnut, useful for catching bootstrap errors
@@ -31,9 +31,11 @@ done
 case "$backend" in
   sh)
     ext="exe" # The extension doesn't matter for sh
+    PNUT_EXE_OPTIONS="-Dsh -DRT_NO_INIT_GLOBALS"
     ;;
-  i386 | x86_64 | mac_os)
+  i386_linux | x86_64_linux | x86_64_mac)
     ext="exe"
+    PNUT_EXE_OPTIONS="-Dtarget_$backend"
     ;;
   *)
     echo "Unknown backend: $backend"
@@ -49,9 +51,9 @@ compile_pnut() {
   pnut_exe_backend="./tests/pnut.$ext"
 
   echo "Compiling $pnut_source with $backend backend..."
-  gcc "$pnut_source" "-D$backend" -DRT_NO_INIT_GLOBALS -o "$pnut_exe" 2> /dev/null || fail "Error: Failed to compile $pnut_source with $backend"
+  gcc "$pnut_source" $PNUT_EXE_OPTIONS -o "$pnut_exe" 2> /dev/null || fail "Error: Failed to compile $pnut_source with $backend"
   if [ "$bootstrap" -eq 1 ]; then
-    "$pnut_exe" "-D$backend" -DRT_NO_INIT_GLOBALS "$pnut_source" > "$pnut_exe_backend" || fail "Error: Failed to compile $pnut_source with $pnut_exe (bootstrap)"
+    "$pnut_exe" $PNUT_EXE_OPTIONS "$pnut_source" > "$pnut_exe_backend" || fail "Error: Failed to compile $pnut_source with $pnut_exe (bootstrap)"
     chmod +x "$pnut_exe_backend"
     pnut_comp="$pnut_exe_backend"
   else

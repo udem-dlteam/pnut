@@ -4,9 +4,7 @@ set -e -u
 
 TEMP_DIR="bootstrap-results"
 
-# PNUT_EXE_OPTIONS="-Dmac_os"
-# PNUT_EXE_OPTIONS="-Dx86_64"
-PNUT_EXE_OPTIONS="-Di386"
+PNUT_EXE_OPTIONS= # Set by the backend option
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
@@ -119,8 +117,8 @@ bootstrap_with_shell() {
 }
 
 # Parse the arguments
-backend="x86_64"  # Default to x86_64 Linux
-shell=            # Defined if doing the full bootstrap using pnut.sh on Posix shell. "all" to test with all shells (slow).
+backend="x86_64_linux"  # Default to x86_64_linux
+shell=                  # Defined if doing the full bootstrap using pnut.sh on Posix shell. "all" to test with all shells (slow).
 
 while [ $# -gt 0 ]; do
   case $1 in
@@ -131,8 +129,8 @@ while [ $# -gt 0 ]; do
 done
 
 case $backend in
-  i386 | x86_64 | mac_os)
-    PNUT_EXE_OPTIONS="-D$backend" ;;
+  x86_64_mac | x86_64_linux | i386_linux)
+    PNUT_EXE_OPTIONS="-Dtarget_$backend" ;;
   *)
     echo "Unknown backend: $backend"
     exit 1

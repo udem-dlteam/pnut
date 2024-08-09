@@ -10,11 +10,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: i386
+          - target: i386_linux
             host: ubuntu-latest
-          - target: x86_64
+          - target: x86_64_linux
             host: ubuntu-latest
-          - target: mac_os
+          - target: x86_64_mac
             host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
@@ -68,13 +68,13 @@ jobs:
     strategy:
       matrix:
         shell: ["bash", "dash", "ksh"] # Not all shells to save some time
-        target: ["i386", "x86_64", "mac_os"]
+        target: ["i386_linux", "x86_64_linux", "x86_64_mac"]
         include:
-          - target: i386
+          - target: i386_linux
             host: ubuntu-latest
-          - target: x86_64
+          - target: x86_64_linux
             host: ubuntu-latest
-          - target: mac_os
+          - target: x86_64_mac
             host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
