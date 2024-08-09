@@ -2093,9 +2093,22 @@ void rt_free() {
 
 void codegen_end() {
 
+  int glo_setup_loop_lbl = alloc_label();
+
   def_label(setup_lbl);
-  grow_stack_bytes(cgc_global_alloc);
-  mov_reg_reg(reg_glo, reg_SP);
+
+  // Set to 0 the part of the stack that's used for global variables
+  mov_reg_imm(reg_X, 0);              // reg_X = 0 constant
+  mov_reg_reg(reg_Y, reg_SP);         // reg_Y = end of global variables (excluded)
+  grow_stack_bytes(cgc_global_alloc); // Allocate space for global variables
+  mov_reg_reg(reg_glo, reg_SP);       // reg_glo = start of global variables
+
+  def_label(glo_setup_loop_lbl);      // Loop over words of global variables table
+  mov_mem_reg(reg_glo, 0, reg_X);     // Set to 0
+  add_reg_imm(reg_glo, word_size);    // Move to next entry
+  jump_cond_reg_reg(LT, glo_setup_loop_lbl, reg_glo, reg_Y);
+
+  mov_reg_reg(reg_glo, reg_SP); // Reset global variables pointer
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // init heap start
