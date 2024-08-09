@@ -25,9 +25,12 @@ uninstall:
 	sudo $(RM) /usr/local/bin/pnut.sh
 
 clean:
-	$(RM) $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut.sh $(BUILD_DIR)/pnut-bootstrapped.sh
-	$(RM) tests/**/*.exe tests/**/*.sh
-	$(RM) tests/**/*.err tests/**/*.output
+	$(RM) $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut.sh $(BUILD_DIR)/pnut-bootstrapped.shield
+	# Recursively remove .exe files from the tests directory
+	find tests -name "*.exe" -exec $(RM) {} \;
+	find tests -name "*.sh" -exec $(RM) {} \;
+	find tests -name "*.err" -exec $(RM) {} \;
+	find tests -name "*.output" -exec $(RM) {} \;
 
 test-sh:
 	./run-tests.sh "sh"
