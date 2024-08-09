@@ -47,9 +47,9 @@ int main(){
 
 	putstring("Color: ");
 	if(c == 0){
-		putstring("RED \n");
+		putstring("RED\n");
 	} else{
-		putstring("FAIL \n");
+		putstring("FAIL\n");
 		putstring("Color: ");
 		putchar(c + 48);
 		putchar(10);
@@ -73,9 +73,9 @@ int main(){
 	putchar(10);
 
 	if (flag) {
-		putstring("Boolean: TRUE \n");
+		putstring("Boolean: TRUE\n");
 	} else {
-		putstring("Boolean: FALSE \n");
+		putstring("Boolean: FALSE\n");
 	}
 
 	putstring("Large Enum: ");

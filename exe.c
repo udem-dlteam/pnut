@@ -272,6 +272,8 @@ int cgc_locals_fun = 0;
 int cgc_globals = 0;
 // Bump allocator used to allocate static objects
 int cgc_global_alloc = 0;
+// If the main function returns a value
+bool main_returns = false;
 
 void grow_fs(int words) {
   cgc_fs += words;
@@ -1987,6 +1989,12 @@ void codegen_glo_fun_decl(ast node) {
     fatal_error("add_params: returning arrays from function not supported");
   }
 
+  // If the function is main
+  if (name == MAIN_ID) {
+    // Check if main returns an exit code.
+    if (get_op(fun_type) != VOID_KW) main_returns = true;
+  }
+
   binding = cgc_lookup_fun(name, cgc_globals);
 
   if (binding == 0) {
@@ -2098,7 +2106,7 @@ void codegen_end() {
   def_label(init_next_lbl);
   setup_proc_args(cgc_global_alloc);
   call(main_lbl);
-  os_exit(); //TODO: why is this needed? fallthrough should be sufficient
+  if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main
   push_reg(reg_X); // dummy return address (exit never needs it)
 

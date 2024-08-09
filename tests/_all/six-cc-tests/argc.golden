@@ -1,0 +1,6 @@
+Number of arguments: 4
+Arguments:
+argv[0] = ./tests/_all/six-cc-tests/argc.exe
+argv[1] = abc
+argv[2] = def
+argv[3] = hij

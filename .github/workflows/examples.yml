@@ -1,0 +1,31 @@
+name: examples-up-to-date
+
+on:
+  pull_request: # Should trigger on pull requests for all branches
+    branches:
+      - '**'  # Matches all branches
+
+jobs:
+  regenerate-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Regenerate examples
+        run: |
+          sh ./examples/prepare.sh
+          if [ $? -ne 0 ]; then
+            echo "Failed to regenerate examples"
+            exit 1
+          fi
+
+      - name: Diff examples
+        run: |
+          files=$(git diff --name-only)
+          if [ -n "$files" ]; then
+            echo "Examples are out of date. Please run ./examples/prepare.sh"
+            echo "The following files are out of date:"
+            echo "$files"
+            exit 1
+          fi

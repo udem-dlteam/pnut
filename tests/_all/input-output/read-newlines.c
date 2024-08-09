@@ -12,10 +12,8 @@ typedef int FILE;
 void main() {
   int i = 0;
   char c;
-  FILE *f = fopen("tests/input-output/file-with-newlines.txt", "r");
+  FILE *f = fopen("tests/_all/input-output/file-with-newlines.txt", "r");
   while ((c = fgetc(f)) != -1) {
     putchar(c);
   }
-
-  putchar('\n');
 }
