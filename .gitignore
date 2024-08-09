@@ -1,18 +1,11 @@
+# Mac OS X Finder artifacts
 .DS_Store
 */.DS_Store
-out.sh
+# Tests artifacts
 tests/*.sh
-tests/*.err
-*.op
-*.o
-vm-tests/*.expected
-vm-tests/*.result
-six-cc-tests/*.sh
-c4-for-six.sh
-c4_by_c4-for-six-op.golden.*
-tokenizer.sh
-pnut.exe
-pnut.sh
-pnut-twice-bootstrapped.sh
+tests/**/*.exe
+tests/**/*.err
+tests/**/*.output
+# Build artifacts
 bootstrap-results/*
 build/*
