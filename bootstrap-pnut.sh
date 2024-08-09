@@ -1,5 +1,7 @@
 #! /bin/sh
 
+set -e
+
 TEMP_DIR="bootstrap-results"
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
 
@@ -22,17 +24,24 @@ bootstrap_with_shell() {
   wc pnut.c "$TEMP_DIR/pnut.sh" "$TEMP_DIR/pnut-twice-bootstrapped.sh"
 }
 
-# Handle runtime options
-TEST_ALL_SHELLS=0
+# Parse the arguments
+shell="$SHELL" # Use current shell as the default. "all" to test all shells.
 
-if [ $# -gt 0 ] && [ $1 = "TEST_ALL_SHELLS" ] ; then TEST_ALL_SHELLS=1; shift; fi
+while [ $# -gt 0 ]; do
+  case $1 in
+    --shell) shell="$2"; shift 2 ;;
+    *) echo "Unknown option: $1"; exit 1;;
+  esac
+done
 
-bootstrap_with_shell "ksh"
-
-if [ $TEST_ALL_SHELLS -ne 0 ]; then
+if [ "$shell" = "all" ]; then
+  set +e # Don't exit on error because we want to test all shells.
   bootstrap_with_shell "dash"
+  bootstrap_with_shell "ksh"
   bootstrap_with_shell "bash"
-  bootstrap_with_shell "zsh"
   bootstrap_with_shell "yash"
   bootstrap_with_shell "mksh"
+  bootstrap_with_shell "zsh"
+else
+  bootstrap_with_shell "$shell"
 fi

@@ -570,7 +570,7 @@ void os_close() {
 
 #endif
 
-// Both x86_64 and mac_os use the System V ABI, the difference is in the system calls.
+// Both x86_64_linux and x86_64_mac use the System V ABI, the difference is in the system calls.
 #ifdef target_x86_64_linux
 	#define SYSTEM_V_ABI
 	#define SYS_READ 0

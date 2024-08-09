@@ -272,6 +272,8 @@ int cgc_locals_fun = 0;
 int cgc_globals = 0;
 // Bump allocator used to allocate static objects
 int cgc_global_alloc = 0;
+// If the main function returns a value
+bool main_returns = false;
 
 void grow_fs(int words) {
   cgc_fs += words;
@@ -1987,6 +1989,12 @@ void codegen_glo_fun_decl(ast node) {
     fatal_error("add_params: returning arrays from function not supported");
   }
 
+  // If the function is main
+  if (name == MAIN_ID) {
+    // Check if main returns an exit code.
+    if (get_op(fun_type) != VOID_KW) main_returns = true;
+  }
+
   binding = cgc_lookup_fun(name, cgc_globals);
 
   if (binding == 0) {
@@ -2085,9 +2093,22 @@ void rt_free() {
 
 void codegen_end() {
 
+  int glo_setup_loop_lbl = alloc_label();
+
   def_label(setup_lbl);
-  grow_stack_bytes(cgc_global_alloc);
-  mov_reg_reg(reg_glo, reg_SP);
+
+  // Set to 0 the part of the stack that's used for global variables
+  mov_reg_imm(reg_X, 0);              // reg_X = 0 constant
+  mov_reg_reg(reg_Y, reg_SP);         // reg_Y = end of global variables (excluded)
+  grow_stack_bytes(cgc_global_alloc); // Allocate space for global variables
+  mov_reg_reg(reg_glo, reg_SP);       // reg_glo = start of global variables
+
+  def_label(glo_setup_loop_lbl);      // Loop over words of global variables table
+  mov_mem_reg(reg_glo, 0, reg_X);     // Set to 0
+  add_reg_imm(reg_glo, word_size);    // Move to next entry
+  jump_cond_reg_reg(LT, glo_setup_loop_lbl, reg_glo, reg_Y);
+
+  mov_reg_reg(reg_glo, reg_SP); // Reset global variables pointer
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // init heap start
@@ -2098,7 +2119,7 @@ void codegen_end() {
   def_label(init_next_lbl);
   setup_proc_args(cgc_global_alloc);
   call(main_lbl);
-  os_exit(); //TODO: why is this needed? fallthrough should be sufficient
+  if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main
   push_reg(reg_X); // dummy return address (exit never needs it)
 

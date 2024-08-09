@@ -1,0 +1,16 @@
+Shape 0: 0 0 0 0
+Shape 1: 1 1 1 1
+Shape 2: 2 4 2 4
+Rectangle 1: 1 2
+Point: 5 6
+Shape: 5 6 1 2
+pass_as_ref: Point: 5 6
+pass_as_ref: Point: 123 456
+Point: 123 456
+pass_as_ref_int: 123
+pass_as_ref_int: 42
+Point: 42 456
+arr[12]: 12
+pass_as_ref_int: 12
+pass_as_ref_int: 42
+arr[12]: 42

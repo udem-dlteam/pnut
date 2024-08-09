@@ -4,7 +4,7 @@
 
 void handle_shell_include() {
   FILE* shell_include_fp;
-  char c;
+  int c;
   get_tok();
   if (tok == STRING) {
     // Include the shell code from the file
@@ -1501,7 +1501,7 @@ text comp_putchar_inline(ast param) {
 
   if (contains_side_effects) {
     ident = fresh_ident();
-    append_glo_decl(string_concat3(comp_lvalue(ident), wrap_char('='), res));
+    append_glo_decl(string_concat4(comp_lvalue(ident), wrap_str("=$(("), res, wrap_str("))")));
     res = comp_lvalue(ident);
   } else if (get_op(param) != IDENTIFIER) {
     res = string_concat3(wrap_char('('), res, wrap_char(')'));
