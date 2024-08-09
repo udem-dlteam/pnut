@@ -1,17 +1,17 @@
 // x86 codegen
 #include "exe.c"
 
-#ifdef i386
+#ifdef target_i386_linux
 	#include "elf.c"
 	const int word_size = 4; // generating for i386 Linux
 #endif
 
-#ifdef x86_64
+#ifdef target_x86_64_linux
 	#include "elf.c"
 	const int word_size = 8; // generating for x86-64 Linux
 #endif
 
-#ifdef mac_os
+#ifdef target_x86_64_mac
 	#include "mach-o.c"
 	const int word_size = 8; // generating for x86-64 Linux
 #endif
@@ -440,7 +440,7 @@ void setup_proc_args(int global_vars_size) {
 }
 
 // For 32 bit linux.
-#ifdef i386
+#ifdef target_i386_linux
 
 void os_getchar() {
   int lbl = alloc_label();
@@ -571,7 +571,7 @@ void os_close() {
 #endif
 
 // Both x86_64 and mac_os use the System V ABI, the difference is in the system calls.
-#ifdef x86_64
+#ifdef target_x86_64_linux
 	#define SYSTEM_V_ABI
 	#define SYS_READ 0
 	#define SYS_WRITE 1
@@ -582,7 +582,7 @@ void os_close() {
 	#define SYS_EXIT 60
 #endif
 
-#ifdef mac_os
+#ifdef target_x86_64_mac
 	#define SYSTEM_V_ABI
 	#define SYS_READ 0x2000003
 	#define SYS_WRITE 0x2000004
