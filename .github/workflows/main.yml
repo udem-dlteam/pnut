@@ -6,133 +6,49 @@ on:
       - '**'  # Matches all branches
 
 jobs:
-  x86-test:
+  tests-linux:
+    strategy:
+      matrix:
+        target: ["i386", "x86_64"] # Test on both i386 and x86_64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Run x86 tests
+      - name: Run ${{ matrix.target }} Linux tests
         run: |
           set -e
-          chmod +x run-tests.sh
-          ./run-tests.sh -Di386 test || exit 1
-          ./run-tests.sh -Di386 clean || true
+          ./run-tests.sh ${{ matrix.target }}
 
-  shell-test-bash:
-    runs-on: ubuntu-latest
-
+  tests-mac:
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Run bash tests
+      - name: Run MacOS x86_64 tests
         run: |
-          set +e
-          chmod +x run-tests.sh
-          bash ./run-tests.sh -Dsh test
-          status=$?
-          bash ./run-tests.sh -Dsh clean || true
-          if [ $status -ne 0 ]; then
-            echo "Test failed with bash"
-            exit 1
-          fi
+          set -e
+          ./run-tests.sh mac_os
 
-  shell-test-zsh:
+  tests-shell:
+    strategy:
+      matrix:
+        shell: ["bash", "dash", "ksh", "zsh"]
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Install zsh
+      - name: Install shells
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh
+          sudo apt-get install -y ${{ matrix.shell }}
 
-      - name: Run zsh tests
+      - name: Run tests with ${{ matrix.shell }}
         run: |
-          set +e
-          chmod +x run-tests.sh
-          zsh ./run-tests.sh -Dsh test
-          status=$?
-          zsh ./run-tests.sh -Dsh clean || true
-          if [ $status -ne 0 ]; then
-            echo "Test failed with zsh"
-            exit 1
-          fi
-
-  shell-test-yash:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Install yash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yash
-
-      - name: Run yash tests
-        run: |
-          set +e
-          chmod +x run-tests.sh
-          yash ./run-tests.sh -Dsh test
-          status=$?
-          yash ./run-tests.sh -Dsh clean || true
-          if [ $status -ne 0 ]; then
-            echo "Test failed with yash"
-            exit 1
-          fi
-
-  shell-test-ksh:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Install ksh
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ksh
-
-      - name: Run ksh tests
-        run: |
-          set +e
-          chmod +x run-tests.sh
-          ksh ./run-tests.sh -Dsh test
-          status=$?
-          ksh ./run-tests.sh -Dsh clean || true
-          if [ $status -ne 0 ]; then
-            echo "Test failed with ksh"
-            exit 1
-          fi
-
-  shell-test-dash:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Install dash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dash
-
-      - name: Run dash tests
-        run: |
-          set +e
-          chmod +x run-tests.sh
-          dash ./run-tests.sh -Dsh test
-          status=$?
-          dash ./run-tests.sh -Dsh clean || true
-          if [ $status -ne 0 ]; then
-            echo "Test failed with dash"
-            exit 1
-          fi
+          set -e
+          ./run-tests.sh sh --shell ${{ matrix.shell }}
 
   bootstrap-shell:
     runs-on: ubuntu-latest
@@ -188,7 +104,7 @@ jobs:
 
   success-message:
     runs-on: ubuntu-latest
-    needs: [x86-test, shell-test-bash, shell-test-zsh, shell-test-yash, shell-test-ksh, shell-test-dash, bootstrap-shell, bootstrap-x86]
+    needs: [tests-linux, tests-mac, tests-shell, bootstrap-shell, bootstrap-x86]
     steps:
       - name: Tests finished
         run: |
