@@ -36,6 +36,8 @@ enum LinkedList {
 int* iota_linked_list(int max) {
   int *head, *last, *node;
   int i = 1;
+  int *temp;
+
   head = malloc(LL_SIZE * sizeof(int));
   if (head == 0) {
     return -1; // Memory allocation failed
@@ -50,7 +52,7 @@ int* iota_linked_list(int max) {
     if (node == 0) {
 
       while (head != 0) {
-        int *temp = (int*)head[NEXT];
+        *temp = (int*)head[NEXT];
         free(head);
         head = temp;
       }
@@ -78,6 +80,7 @@ int linked_list_sum(int *head) {
 int main() {
   int *ll;
   int sum;
+  int *temp;
 
   ll = iota_linked_list(1000);
   if (ll == -1) {
@@ -92,7 +95,7 @@ int main() {
 
   // Free the linked list
   while (ll != 0) {
-    int *temp = (int*)ll[NEXT];
+    temp = (int*)ll[NEXT];
     free(ll);
     ll = temp;
   }

@@ -37,7 +37,6 @@ void complexSwitch(){
 
 	skip_default:
 	putchar('E');
-
 }
 
 void complex2Switch(){
@@ -63,7 +62,6 @@ void complex2Switch(){
 
 	end:
 	putchar('E');
-
 }
 
 void switchWhile(){
@@ -89,7 +87,6 @@ void switchWhile(){
 		}
 		i++;
 	}
-
 }
 
 int main() {

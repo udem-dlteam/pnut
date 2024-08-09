@@ -18,8 +18,8 @@ int main() {
   char c1;
   char c2;
   int i = 0;
-  f1 = fopen("tests/_all/six-cc-tests/fgetc.c", 0);
-  f2 = fopen("tests/_all/six-cc-tests/while-fun-call.c", 0);
+  f1 = fopen("tests/_all/six-cc-tests/fgetc.c", "r");
+  f2 = fopen("tests/_all/six-cc-tests/while-fun-call.c", "r");
   while (1) {
     c1 = emit_line(i, f1);
     c2 = emit_line(i, f2);
