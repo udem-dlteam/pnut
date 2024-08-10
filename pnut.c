@@ -79,8 +79,9 @@ int last_tok_column_number = 0;
 struct IncludeStack {
   FILE* fp;
   struct IncludeStack *next;
+  char *dirname;  // The base path of the file, used to resolve relative paths
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  char *filename;
+  char *filepath; // The path of the file, used to print error messages
   int line_number;
   int column_number;
 #endif
@@ -207,7 +208,7 @@ void fatal_error(char *msg) {
 void syntax_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
 #ifdef SUPPORT_INCLUDE
-  putstr(include_stack->filename); putchar(':');
+  putstr(include_stack->filepath); putchar(':');
 #endif
   putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
   putstr("  syntax error: "); putstr(msg); putchar('\n');
@@ -510,6 +511,8 @@ void get_ch() {
       line_number = include_stack->line_number;
       column_number = include_stack->column_number;
 #endif
+      // Not freeing include_stack2->filepath because it may not be dynamically allocated
+      free(include_stack2->dirname);
       free(include_stack2);
       get_ch();
     }
@@ -541,13 +544,78 @@ void get_ch() {
 }
 
 #ifdef SUPPORT_INCLUDE
-void include_file(char *file_name) {
+
+#ifdef PNUT_CC
+// TODO: It would be nice to not have to duplicate this code
+int strlen(char *str) {
+  int i = 0;
+  while (str[i] != '\0') i += 1;
+  return i;
+}
+
+void memcpy(char *dest, char *src, int n) {
+  int i;
+  for (i = 0; i < n; i += 1) {
+    dest[i] = src[i];
+  }
+}
+
+#endif
+
+char *substr(char *str, int start, int end) {
+  int i = start;
+  int len = end - start;
+  char *temp = malloc(len + 1);
+  memcpy(temp, str + start, len);
+  temp[len] = '\0';
+  return temp;
+}
+
+char *str_concat(char *s1, char *s2) {
+  int s1_len = strlen(s1);
+  int s2_len = strlen(s2);
+  char *temp = malloc(s1_len + s2_len + 1);
+  memcpy(temp, s1, s1_len);
+  memcpy(temp + s1_len, s2, s2_len);
+  temp[s1_len + s2_len] = '\0';
+  return temp;
+}
+
+// Removes the last component of the path, keeping the trailing slash if any.
+// For example, /a/b/c.txt -> /a/b/
+// If the path does not contain a slash, it returns "".
+char *file_parent_directory(char *path) {
+  int i = 0;
+  int last_slash = -1;
+  while (path[i] != '\0') {
+    if (path[i] == '/') last_slash = i;
+
+    i += 1;
+  }
+  if (last_slash == -1) {
+    path = malloc(1);
+    path[0] = '\0';
+  } else {
+    path = substr(path, 0, last_slash + 1);
+  }
+  return path;
+}
+
+void include_file(char *file_name, bool relative) {
+  if (relative) {
+    file_name = str_concat(include_stack->dirname, file_name);
+  }
   fp = fopen(file_name, "r");
+  if (fp == 0) {
+    putstr("Could not open file: "); putstr(file_name); putchar('\n');
+    exit(1);
+  }
   include_stack2 = malloc(sizeof(struct IncludeStack));
   include_stack2->next = include_stack;
   include_stack2->fp = fp;
+  include_stack2->dirname = file_parent_directory(file_name);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  include_stack2->filename = file_name;
+  include_stack2->filepath = file_name;
   include_stack2->line_number = 1;
   include_stack2->column_number = 0;
   // Save the current file position so we can return to it after the included file is done
@@ -731,7 +799,7 @@ void handle_include() {
   get_tok();
 #ifdef SUPPORT_INCLUDE
   if (tok == STRING) {
-    include_file(string_pool + val);
+    include_file(string_pool + val, true);
   } else if (tok == '<') {
     get_tok();
     // Ignore the file name for now.
@@ -2881,7 +2949,7 @@ int main(int argc, char **argv) {
     } else {
       // Options that don't start with '-' are file names
 #ifdef SUPPORT_INCLUDE
-      include_file(argv[i]);
+      include_file(argv[i], false);
 #else
       fatal_error("input file not supported. Pnut expects the input from stdin.");
 #endif
