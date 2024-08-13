@@ -400,10 +400,11 @@ void expect_tok(int expected);
 #endif
 
 #define IFDEF_DEPTH_MAX 20
-bool ifdef_stack[IFDEF_DEPTH_MAX]; // Stack of ifdef states
-bool ifdef_stack_ix = 0;
-bool ifdef_mask = true;         // Indicates if the current if/elif block is being executed
-int  ifdef_nest_level = 0;      // Current number of unmatched #if/#ifdef/#ifndef directives that were masked out
+bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
+bool if_macro_stack_ix = 0;
+bool if_macro_mask = true;      // Indicates if the current if/elif block is being executed
+bool if_macro_executed = false; // If any of the previous if/elif conditions were true
+int  if_macro_nest_level = 0;      // Current number of unmatched #if/#ifdef/#ifndef directives that were masked out
 
 // get_tok parameters:
 // Whether to expand macros or not.
@@ -421,27 +422,27 @@ int macro_args = 0;     // Current list of arguments for the macro being expande
 int macro_args_count;   // Number of arguments for the current macro being expanded
 bool paste_last_token = false; // Whether the last token was a ## or not
 
-void flip_ifdef_mask() {
-  ifdef_mask = !ifdef_mask;
-}
-
-void push_ifdef_mask(bool new_mask) {
-  if (ifdef_stack_ix >= IFDEF_DEPTH_MAX) {
-    syntax_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
+void push_if_macro_mask(bool new_mask) {
+  if (if_macro_stack_ix >= IFDEF_DEPTH_MAX) {
+    fatal_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
   }
   // Save current mask on the stack because it's about to be overwritten
-  ifdef_stack[ifdef_stack_ix] = ifdef_mask;
-  ifdef_stack_ix += 1;
+  if_macro_stack[if_macro_stack_ix] = if_macro_mask;
+  if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
+  if_macro_stack_ix += 2;
   // Then set the new mask value
-  ifdef_mask = new_mask;
+  if_macro_mask = new_mask;
+  // If the condition is true, we don't want to execute the next #elif that's true
+  if_macro_executed = if_macro_mask;
 }
 
-void pop_ifdef_mask() {
-  if (ifdef_stack_ix == 0) {
-    syntax_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
+void pop_if_macro_mask() {
+  if (if_macro_stack_ix == 0) {
+    fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
   }
-  ifdef_stack_ix -= 1;
-  ifdef_mask = ifdef_stack[ifdef_stack_ix];
+  if_macro_stack_ix -= 2;
+  if_macro_mask = if_macro_stack[if_macro_stack_ix];
+  if_macro_executed = if_macro_stack[if_macro_stack_ix + 1];
 }
 
 // Includes the preprocessed C code along with the generated shell code
@@ -636,10 +637,12 @@ void include_file(char *file_name, bool relative) {
 // treat them as such.
 int IFDEF_ID;
 int IFNDEF_ID;
+int ELIF_ID;
 int ENDIF_ID;
 int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
+int DEFINED_ID;
 int WARNING_ID;
 int ERROR_ID;
 int INCLUDE_SHELL_ID;
@@ -797,6 +800,187 @@ void handle_define() {
   }
 }
 
+// For evaluating #if condition, we use the shunting yard algorithm
+// https://en.wikipedia.org/wiki/Shunting_yard_algorithm
+#define IF_CONDITION_STACK_SIZE 100
+int op_stack[IF_CONDITION_STACK_SIZE];
+int op_stack_ix = 0;
+int val_stack[IF_CONDITION_STACK_SIZE];
+int val_stack_ix = 0;
+
+// Operator precedence of C operators allowed in #if condition
+// Convert to lookup table?
+int precedence(int op) {
+  if (op == '(')                                      return -1; // Left paren are lowest precedence
+  else if ((op == '!') OR (op == '~'))                return 2;
+  else if ((op == '*') OR (op == '/') OR (op == '%')) return 3;
+  else if ((op == '+') OR (op == '-'))                return 4;
+  else if ((op == LSHIFT) OR (op == RSHIFT))          return 5;
+  else if ((op == '<')  OR (op == '>')
+        OR (op == LT_EQ) OR (op == GT_EQ))            return 6;
+  else if ((op == EQ_EQ) OR (op == EXCL_EQ))          return 7;
+  else if (op == '&')                                 return 8;
+  else if (op == '^')                                 return 9;
+  else if (op == '|')                                 return 10;
+  else if (op == AMP_AMP)                             return 9;
+  else if (op == BAR_BAR)                             return 12;
+  else {
+    printf("op=%d\n", op);
+    fatal_error("precedence: unknown operator");
+    return -1;
+  }
+}
+
+void pop_op() {
+  int op = op_stack[op_stack_ix - 1];
+  op_stack_ix -= 1;
+
+  if (op == '!' OR op == '~') {
+    // Unary operators
+    if (val_stack_ix < 1) {
+      fatal_error("invalid unary expression, not enough values in #if condition");
+    }
+    if (op == '!') {
+      val_stack[val_stack_ix - 1] = !val_stack[val_stack_ix - 1];
+    } else if (op == '~') {
+      val_stack[val_stack_ix - 1] = ~val_stack[val_stack_ix - 1];
+    }
+  } else {
+    // Binary operators
+    if (val_stack_ix < 2) {
+      fatal_error("invalid binary expression, not enough values in #if condition");
+    }
+
+    if (op == '*') {
+      val_stack[val_stack_ix - 2] *= val_stack[val_stack_ix - 1];
+    } else if (op == '/') {
+      val_stack[val_stack_ix - 2] /= val_stack[val_stack_ix - 1];
+    } else if (op == '%') {
+      val_stack[val_stack_ix - 2] %= val_stack[val_stack_ix - 1];
+    } else if (op == '+') {
+      val_stack[val_stack_ix - 2] += val_stack[val_stack_ix - 1];
+    } else if (op == '-') {
+      val_stack[val_stack_ix - 2] -= val_stack[val_stack_ix - 1];
+    } else if (op == LSHIFT) {
+      val_stack[val_stack_ix - 2] <<= val_stack[val_stack_ix - 1];
+    } else if (op == RSHIFT) {
+      val_stack[val_stack_ix - 2] >>= val_stack[val_stack_ix - 1];
+    } else if (op == '<') {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] < val_stack[val_stack_ix - 1];
+    } else if (op == '>') {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] > val_stack[val_stack_ix - 1];
+    } else if (op == LT_EQ) {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] <= val_stack[val_stack_ix - 1];
+    } else if (op == GT_EQ) {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] >= val_stack[val_stack_ix - 1];
+    } else if (op == EQ_EQ) {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] == val_stack[val_stack_ix - 1];
+    } else if (op == EXCL_EQ) {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] != val_stack[val_stack_ix - 1];
+    } else if (op == '&') {
+      val_stack[val_stack_ix - 2] &= val_stack[val_stack_ix - 1];
+    } else if (op == '^') {
+      val_stack[val_stack_ix - 2] ^= val_stack[val_stack_ix - 1];
+    } else if (op == '|') {
+      val_stack[val_stack_ix - 2] |= val_stack[val_stack_ix - 1];
+    } else if (op == AMP_AMP) {
+      // C documentation specifies that && and || are short-circuit operators, not
+      // sure how they make sense in a #if condition since the operators don't
+      // have side effects.
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] && val_stack[val_stack_ix - 1];
+    } else if (op == BAR_BAR) {
+      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] || val_stack[val_stack_ix - 1];
+    } else {
+      printf("op=%d\n", op);
+      fatal_error("pop_op: unknown operator");
+    }
+    val_stack_ix -= 1;
+  }
+}
+
+void push_op(int op) {
+  int op_precedence = precedence(op);
+
+  if (op_stack_ix >= IF_CONDITION_STACK_SIZE) {
+    fatal_error("too many operators in #if condition");
+  }
+
+  while (op_stack_ix != 0
+     AND op_stack[op_stack_ix - 1] != '('
+     AND precedence(op_stack[op_stack_ix - 1]) <= op_precedence) {
+    pop_op();
+  }
+
+  op_stack[op_stack_ix] = op;
+  op_stack_ix += 1;
+}
+
+void push_val(int val) {
+  if (val_stack_ix >= IF_CONDITION_STACK_SIZE) {
+    fatal_error("too many values in #if condition");
+  }
+
+  val_stack[val_stack_ix] = val;
+  val_stack_ix += 1;
+}
+
+int evaluate_if_condition() {
+  int previous_mask = if_macro_mask;
+  if_macro_mask = true; // Temporarily set to true so that we can read the condition even if it's inside an ifdef false block
+  while (ch != '\n' AND ch != EOF) {
+    get_tok();
+    if (tok == '(') {
+      push_op(tok);
+    } else if (tok == ')') {
+      while (op_stack_ix != 0 AND op_stack[op_stack_ix - 1] != '(') {
+        pop_op();
+      }
+      if (op_stack_ix == 0) {
+        fatal_error("unmatched parenthesis in #if condition");
+      }
+      op_stack_ix -= 1; // Pop the '('
+    } else if (tok == IDENTIFIER AND val == DEFINED_ID) {
+      get_tok_macro(); // Skip the defined keyword
+      if (tok == '(') {
+        get_tok_macro(); // Skip the '('
+        push_val(tok == MACRO);
+        get_tok_macro(); // Skip the macro name
+        if (tok != ')') {
+          // Not using expect_tok because it may be the end of the line
+          printf("tok=%d\n", tok);
+          fatal_error("expected ')' in #if defined condition");
+        }
+      } else if (tok == IDENTIFIER OR tok == MACRO) {
+        // #if defined MACRO is valid syntax
+        push_val(tok == MACRO);
+      } else {
+        printf("tok=%d\n", tok);
+        fatal_error("expected identifier or macro in #if defined condition");
+      }
+    } else if (tok == INTEGER) {
+      push_val(-val);
+    } else if (tok == CHARACTER) {
+      push_val(val);
+    } else if (tok == IDENTIFIER) {
+      push_val(0); // Undefined macros are 0
+    } else {
+      push_op(tok); // Invalid operators are caught by push_op
+    }
+  }
+  if_macro_mask = previous_mask; // Restore the mask to its previous value
+
+  // Pop remaining operators
+  while (op_stack_ix != 0) {
+    pop_op();
+  }
+
+  if (val_stack_ix != 1) {
+    fatal_error("invalid #if condition");
+  }
+  val_stack_ix = 0; // Reset the value stack
+  return val_stack[0];
+}
+
 void handle_include() {
   get_tok();
 #ifdef SUPPORT_INCLUDE
@@ -824,42 +1008,60 @@ void handle_shell_include();
 #endif
 
 void handle_preprocessor_directive() {
-  bool prev_ifdef_mask = ifdef_mask;
+  bool prev_if_mask = if_macro_mask;
+  int if_res;
 #ifdef SH_INCLUDE_C_CODE
   int prev_char_buf_ix = declaration_char_buf_ix;
 #endif
   get_ch(); // Skip the #
-  ifdef_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
+  if_macro_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
   get_tok(); // Get the directive
-  ifdef_mask = prev_ifdef_mask;
+  if_macro_mask = prev_if_mask;
 
   if (tok == IDENTIFIER AND val == IFDEF_ID) {
-    ifdef_mask = true; get_tok_macro(); ifdef_mask = prev_ifdef_mask;
-    if (ifdef_mask) {
-      push_ifdef_mask(tok == MACRO);
+    if_macro_mask = true; get_tok_macro(); if_macro_mask = prev_if_mask;
+    if (if_macro_mask) {
+      push_if_macro_mask(tok == MACRO);
     } else {
       // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      ifdef_nest_level += 1;
+      if_macro_nest_level += 1;
     }
   } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
-    ifdef_mask = true; get_tok_macro(); ifdef_mask = prev_ifdef_mask;
-    if (ifdef_mask) {
-      push_ifdef_mask(tok != MACRO);
+    if_macro_mask = true; get_tok_macro(); if_macro_mask = prev_if_mask;
+    if (if_macro_mask) {
+      push_if_macro_mask(tok != MACRO);
     } else {
       // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      ifdef_nest_level += 1;
+      if_macro_nest_level += 1;
+    }
+  } else if (tok == IF_KW) {
+    if_res = evaluate_if_condition();
+    if (if_macro_mask) {
+      push_if_macro_mask(if_res);
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      if_macro_nest_level += 1;
+    }
+  } else if (tok == IDENTIFIER AND val == ELIF_ID) {
+    if_res = evaluate_if_condition();
+    if (if_macro_executed) {
+      // The condition is true, but its ignored if one of the conditions before was also true
+      if_macro_mask = false;
+    } else {
+      if_macro_executed |= if_res;
+      if_macro_mask = if_res;
     }
   } else if (tok == ELSE_KW) {
-    if (ifdef_mask OR ifdef_nest_level == 0) {
-      flip_ifdef_mask();
+    if (if_macro_mask OR if_macro_nest_level == 0) {
+      if_macro_mask = !if_macro_executed;
     }
   } else if (tok == IDENTIFIER AND val == ENDIF_ID) {
-    if (ifdef_mask OR ifdef_nest_level == 0) {
-      pop_ifdef_mask();
+    if (if_macro_mask OR if_macro_nest_level == 0) {
+      pop_if_macro_mask();
     } else {
-      ifdef_nest_level -= 1;
+      if_macro_nest_level -= 1;
     }
-  } else if (ifdef_mask) {
+  } else if (if_macro_mask) {
     if (tok == IDENTIFIER AND val == INCLUDE_ID) {
       handle_include();
     }
@@ -1008,12 +1210,14 @@ void init_ident_table() {
   // used as identifiers after the preprocessor stage.
   IFDEF_ID   = init_ident(IDENTIFIER, "ifdef");
   IFNDEF_ID  = init_ident(IDENTIFIER, "ifndef");
+  ELIF_ID    = init_ident(IDENTIFIER, "elif");
   ENDIF_ID   = init_ident(IDENTIFIER, "endif");
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
   WARNING_ID = init_ident(IDENTIFIER, "warning");
   ERROR_ID   = init_ident(IDENTIFIER, "error");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
+  DEFINED_ID = init_ident(IDENTIFIER, "defined");
   INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
@@ -1329,7 +1533,7 @@ void get_tok() {
 #endif
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  while (first_time OR !ifdef_mask) {
+  while (first_time OR !if_macro_mask) {
     first_time = false;
 #ifdef SH_INCLUDE_C_CODE
     declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
@@ -1428,7 +1632,7 @@ void get_tok() {
           // We only expand in ifdef true blocks and if the expander is enabled.
           // Since this is the "base case" of the macro expansion, we don't need
           // to disable the other places where macro expansion is done.
-          if (ifdef_mask AND expand_macro) {
+          if (if_macro_mask AND expand_macro) {
             if (attempt_macro_expansion(val)) {
               continue;
             }
