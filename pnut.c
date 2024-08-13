@@ -1352,11 +1352,13 @@ int macro_parse_argument() {
   return arg_tokens;
 }
 
-void check_macro_arity(int macro_args_count, int expected_argc) {
+void check_macro_arity(int macro_args_count, int macro) {
+  int expected_argc = cdr(heap[macro + 3]);
   if (macro_args_count != expected_argc) {
     putstr("expected_argc="); putint(expected_argc);
     putstr(" != macro_args_count="); putint(macro_args_count);
     putchar('\n');
+    putstr("macro="); putstr(string_pool + heap[macro + 1]); putchar('\n');
     syntax_error("macro argument count mismatch");
   }
 }
@@ -1364,13 +1366,14 @@ void check_macro_arity(int macro_args_count, int expected_argc) {
 // Reads the arguments of a macro call, where the arguments are split by commas.
 // Note that args are accumulated in reverse order, as the macro arguments refer
 // to the tokens in reverse order.
-int get_macro_args_toks(int expected_argc) {
+int get_macro_args_toks(int macro) {
   int args = 0;
   int macro_args_count = 0;
+  bool prev_is_comma = false;
   get_tok_macro(); // Skip the macro identifier
 
   if (tok != '(') { // Function-like macro with 0 arguments
-    check_macro_arity(macro_args_count, expected_argc);
+    check_macro_arity(macro_args_count, macro);
     return -1; // No arguments
   }
 
@@ -1380,15 +1383,28 @@ int get_macro_args_toks(int expected_argc) {
     // Allow sequence of commas, this is more lenient than the standard
     if (tok == ',') {
       get_tok_macro(); // Skip comma
+      if (prev_is_comma) { // Push empty arg
+        args = cons(0, args);
+        macro_args_count += 1;
+      }
+      prev_is_comma = true;
       continue;
+    } else {
+      prev_is_comma = false;
     }
+
     args = cons(macro_parse_argument(), args);
     macro_args_count += 1;
   }
 
   expect_tok(')');
 
-  check_macro_arity(macro_args_count, expected_argc);
+  if (prev_is_comma) {
+    args = cons(0, args); // Push empty arg
+    macro_args_count += 1;
+  }
+
+  check_macro_arity(macro_args_count, macro);
 
   return args;
 }
@@ -1435,7 +1451,7 @@ bool attempt_macro_expansion(int macro) {
     push_macro(car(heap[macro + 3]), 0);
     return true;
   } else {
-    new_macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
+    new_macro_args = get_macro_args_toks(macro);
     // get_macro_args_toks fetched the next token, we save it so it's not lost
     push_macro(cons(cons(tok, val), 0), new_macro_args);
     if (new_macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
@@ -1484,20 +1500,36 @@ int paste_integers(int left_val, int right_val) {
 void paste_tokens(int left_tok, int left_val) {
   int right_tok;
   int right_val;
+  expand_macro_arg = false;
   get_tok_macro();
+  expand_macro_arg = true;
+  // We need to handle the case where the right-hand side is a macro argument that expands to empty
+  // In that case, the left-hand side is returned as is.
+  if (tok == MACRO_ARG) {
+    if (get_macro_arg(val) == 0) {
+      tok = left_tok;
+      val = left_val;
+      return;
+    } else {
+      push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+      get_tok_macro();
+    }
+  }
   right_tok = tok;
   right_val = val;
-  if (left_tok == IDENTIFIER OR left_tok == MACRO) {
+  if (left_tok == IDENTIFIER || left_tok == MACRO || left_tok <= WHILE_KW) {
     // Something that starts with an identifier can only be an identifier
     begin_string();
     accum_string_string(heap[left_val + 1]);
 
-    if (right_tok == IDENTIFIER OR right_tok == MACRO) {
+    if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
       accum_string_string(heap[right_val + 1]);
     } else if (right_tok == INTEGER) {
       accum_string_integer(-right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
+      // show identifier/macro string
+      putstr("left="); putstr(string_pool + heap[left_val + 1]); putchar('\n');
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -1564,7 +1596,7 @@ void get_tok() {
             paste_tokens(tok, val);
             break;
           }
-        } else if (macro_tok_lst == 0 AND paste_last_token) {
+        } else if (macro_tok_lst == 0 AND paste_last_token) { // We finished expanding the left-hand side of ##
           if (macro_stack_ix == 0) {
             // If we are not in a macro expansion, we can't paste the last token
             // This should not happen if the macro is well-formed, which is
