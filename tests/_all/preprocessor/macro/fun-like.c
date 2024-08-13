@@ -29,8 +29,8 @@ int THUNK = 8;
 
 #define MULTI_LINE_MACRO(X, Y) \
   FST(X, Y) + \
-  SND(X, Y) + \
-  SETBIT(SETBIT2, ARGS)
+  SND(X, Y)
+  // + SETBIT(SETBIT2, ARGS) Disabled for now
 
 void putdigit(int n) {
   putchar('0' + n);
