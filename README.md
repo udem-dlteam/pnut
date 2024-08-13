@@ -1,74 +1,122 @@
-# pnut
+# 🥜 Pnut: A Self-Compiling C Transpiler Targeting Human-Readable POSIX Shell
 
-A self-compiling C compiler written in C generating human-readable POSIX shell scripts.
+Pnut compiles a reasonnably large subset of C99 to human-readable POSIX shell
+scripts. It can be used to generate portable shell scripts without having to
+write shell.
 
-Pnut aims to supports a large enough subset of C99 to compile TCC.
+It's main uses are:
 
-## Pnut bootstrap
+- As a transpiler to write portable shell scripts in C.
+- As a way to bootstrap a compiler written in C with an executable version that is still human readable (See [reproducible builds](#reproducible-builds)).
 
-Pnut can be bootstrapped using an existing C compiler such as GCC. Once the
-initial compilation using this compiler is done, the generated shell script can
-then
+Main features:
 
-```mermaid
-flowchart LR
-    subgraph "Initial bootstrap using GCC"
-        GCC --> pnut-sh.exe
-        pnut-sh.c --> pnut-sh.exe
-        pnut-sh.c --> pnut.sh
-        pnut-sh.exe --> pnut.sh
-    end
+- No new language to learn -- C code in, shell code out.
+- The human-readable shell script is easy to read and understand.
+- A runtime library including file I/O and dynamic memory allocations.
+- A preprocessor (`#include`, `#ifdef`, `#define MACRO ...`, `#define MACRO_F(x) ...`).
+- Integrates easily with existing shell scripts.
 
-    subgraph "Bootstrap on Shell"
-        pnut-sh.c --> pnut-bootstrapped.sh
-        pnut.sh --> pnut-bootstrapped.sh
-    end
+The [examples](examples/compiled) directory contains many examples.
+We invite you take a look!
+
+Other than being able to compile itself, Pnut can also compile the [Ribbit
+Virtual Machine](https://github.com/udem-dlteam/ribbit) which can run a R4RS
+Scheme Read-eval-print loop directly in shell. See
+[repl.sh](examples/compiled/repl.sh) for the generated shell script.
+
+## Install
+
+Pnut can be distributed as the `pnut.sh` shell script, or compiled to executable
+code using a C compiler.
+
+To install pnut:
+
+```shell
+> git clone https://github.com/udem-dlteam/pnut.git
+> cd pnut
+> sudo make install
 ```
 
-In the spirit of Reflections on Trusting Trust, the generated shell script
-closely match the input C file and can be verified by a human. This step is only
-required once, as GCC is no longer needed after that step.
+This installs both `pnut.sh` and `pnut` in `/usr/local/bin`.
 
-Native code backends are also available to remove the dependency on the shell
-and to speed up subsequent compilation steps.
+### Compilation options
 
-```mermaid
-flowchart LR
-    subgraph "Initial compilation using GCC"
-        GCC --> pnut-sh.exe
-        pnut-sh.c --> pnut-sh.exe
-        pnut-sh.c --> pnut.sh
-        pnut-sh.exe --> pnut.sh
-    end
-    subgraph "Bootstrap of native Pnut on Shell"
-        pnut-native.c --> pnut-native.exe
-        pnut.sh --> pnut-native.exe
-    end
-```
+Certain compilation options can be used to change the generated shell script:
+
+- `-DRT_COMPACT` reduces the size of the runtime library at the
+  cost of reduced I/O performance.
+- `-DSH_SAVE_VARS_WITH_SET` reduces the overhead of local variables at the cost
+  of readability. This can reduce the execution time of certain programs by more
+  than 50%.
+- `-DSH_INCLUDE_C_CODE` includes the original C code in the generated shell
+  script.
+
+They can be set using `make install BUILD_OPT="..."`.
 
 ## How to use
 
 The `pnut` compiler takes a C file path as input, and outputs to stdout the
 POSIX shell code.
 
-Here is a demonstration of self compilation:
+Here's an example of how to compile a C file using Pnut:
 
-```
-    $ gcc -Dsh pnut.c -o pnut-sh.exe        # Compile pnut with Shell backend
-    $ ./pnut-sh.exe -Dsh pnut.c > pnut.sh   # Generate Pnut shell script
-    $ ksh pnut.sh pnut.c -Dsh > pnut2.sh    # Self compile pnut using shell script
-    $ ksh pnut2.sh pnut.c -Dsh > pnut3.sh   # One more time
-    $ wc pnut.c pnut.sh pnut2.sh pnut3.sh   # Make sure the bootstrapped compilers are equivalent
-        2090    6114   45919 pnut.c
-        4347   17849  128716 pnut.sh
-        4347   17849  128716 pnut2.sh
-        4347   17849  128716 pnut3.sh
-       15131   59661  432067 total
+```shell
+> pnut.sh examples/fib.c > fib.sh # Compile fib.c to a shell script
+> chmod +x fib.sh                 # Make the shell script executable
+> ./fib.sh                        # Run the shell script
 ```
 
-Here is an example of using the bootstrapped compiler:
+## Mixing C and shell code
 
-    $ ksh pnut.sh pi.c > pi.sh
-    $ chmod +x pi.sh
-    $ ./pi.sh
-    31415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185
+The `#include_shell "{file.sh}"` directive can be used to include shell code in
+the generated shell script. This makes it possible to call system utilities from
+C code, or to use shell scripts generated by Pnut as a library. See
+[select-file.c](examples/select-file.c) and [posix-utils.sh](posix-utils.sh) for
+how to use this feature.
+
+## Which shell to use
+
+Because Pnut generates purely POSIX shell code, the generated shell scripts
+can be run on any POSIX compliant shell. However, certain shells are faster than
+others. For faster scripts, we recommend the use of `ksh`, `dash` or `bash`.
+`zsh` is also supported but tends to be slower on large programs.
+
+## Reproducible builds
+
+Because Pnut can be distributed as a human-readable shell script (`pnut.sh`), it
+can serve as the basis for a reproducible build system. With a POSIX compliant
+shell, `pnut.sh` is sufficiently powerful to compile itself and, with some
+effort, [TCC](https://bellard.org/tcc/). Because TCC can be used to bootstrap
+GCC, this makes it possible to bootstrap a fully featured build toolchain from
+only human-readable source files and a POSIX shell.
+
+Because Pnut doesn't support certain C features used in TCC, Pnut features a
+native code backend that supports a larger subset of C99. We call this compiler
+`pnut-exe`, and it can be compiled using `pnut.sh`. This makes it possible to
+compile `pnut-exe.c` using `pnut.sh`, and then compile TCC, all from a POSIX
+shell.
+
+## Limitations
+
+Unfortunately, certains C constructs don't map nicely to POSIX shell which means:
+
+- No support for floating point numbers and unsigned integers.
+- `goto` and `switch` fallthrough are not supported.
+- The address of (`&`) operator on local variables is not supported.
+
+## Known issues
+
+- The preprocessor is not perfect and may fail on some edge cases. `#if` and `#elif` are not supported. `#include <...>` are ignored.
+- All local variable declarations must be at the beginning of a function.
+- Aggregate types (arrays and structures) cannot be stack-allocated, passed by value or nested in a structure.
+- `do { ... } while(...)` is not supported at the moment.
+
+## Contributing
+
+Pnut is a research project and contributions are welcome. Please open an issue
+to report any bugs or to discuss new features.
+
+To make sure your changes are good, a good practice is to attempt the bootstrap
+of `pnut.c` using `pnut.sh`. This can be done using the `./bootstrap-pnut.sh`
+command. Using `ksh`, this should take around 30s.
