@@ -90,8 +90,8 @@ struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
 #endif
 
+// Tokens and AST nodes
 enum {
-  // Tokens and AST nodes
   AUTO_KW = 300,
   BREAK_KW,
   CASE_KW,
@@ -640,6 +640,8 @@ int ENDIF_ID;
 int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
+int WARNING_ID;
+int ERROR_ID;
 int INCLUDE_SHELL_ID;
 
 int NOT_SUPPORTED_ID;
@@ -878,6 +880,22 @@ void handle_preprocessor_directive() {
       }
     } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
       handle_define();
+    } else if (tok == IDENTIFIER && val == WARNING_ID) {
+      get_tok_macro();
+      putstr("warning: ");
+      if (tok == STRING) {
+        putstr(string_pool + val);
+      } else {
+        syntax_error("#warning/#error directives can only be followed by a string");
+      }
+    } else if (tok == IDENTIFIER AND val == ERROR_ID) {
+      get_tok_macro();
+      putstr("error: ");
+      if (tok == STRING) {
+        syntax_error(string_pool + val);
+      } else {
+        syntax_error("#warning/#error directives can only be followed by a string");
+      }
     } else {
       putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
       syntax_error("unsupported preprocessor directive");
@@ -992,6 +1010,8 @@ void init_ident_table() {
   IFNDEF_ID  = init_ident(IDENTIFIER, "ifndef");
   ENDIF_ID   = init_ident(IDENTIFIER, "endif");
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
+  WARNING_ID = init_ident(IDENTIFIER, "warning");
+  ERROR_ID   = init_ident(IDENTIFIER, "error");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
   INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
