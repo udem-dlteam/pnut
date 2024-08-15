@@ -103,14 +103,11 @@ enum {
   DOUBLE_KW,
   ELSE_KW,
   ENUM_KW,
-  ERROR_KW,
   EXTERN_KW,
   FLOAT_KW,
   FOR_KW,
   GOTO_KW,
   IF_KW,
-  IFNDEF_KW,
-  INCLUDE_KW,
   INT_KW,
   LONG_KW,
   REGISTER_KW,
@@ -256,8 +253,8 @@ int string_start;
 int hash;
 
 /* These parameters give a perfect hashing of the C keywords */
-#define HASH_PARAM 2764
-#define HASH_PRIME 107
+#define HASH_PARAM 1997
+#define HASH_PRIME 53
 #define HEAP_SIZE 200000
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
@@ -1183,7 +1180,6 @@ void init_ident_table() {
   init_ident(DOUBLE_KW,   "double");
   init_ident(ELSE_KW,     "else");
   init_ident(ENUM_KW,     "enum");
-  init_ident(ERROR_KW,    "error");
   init_ident(EXTERN_KW,   "extern");
   init_ident(FLOAT_KW,    "float");
   init_ident(FOR_KW,      "for");
