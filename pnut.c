@@ -1636,10 +1636,6 @@ void get_tok() {
         }
 
         /* skip whitespace, detecting when it is at start of line */
-
-        if (ch == '\n') tok = ch;
-        get_ch();
-
         while (0 <= ch AND ch <= ' ') {
           if (ch == '\n') tok = ch;
           get_ch();
