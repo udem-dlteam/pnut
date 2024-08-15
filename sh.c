@@ -5,7 +5,6 @@
 void handle_shell_include() {
   FILE* shell_include_fp;
   int c;
-  get_tok();
   if (tok == STRING) {
     // Include the shell code from the file
     shell_include_fp = fopen(string_pool + val, "r");
@@ -18,6 +17,7 @@ void handle_shell_include() {
     }
     putchar('\n');
     fclose(shell_include_fp);
+    get_tok_macro(); // Skip the string
   } else {
     putstr("tok="); putint(tok); putchar('\n');
     syntax_error("expected string to #include_shell directive");
