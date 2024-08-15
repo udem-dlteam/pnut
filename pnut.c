@@ -512,7 +512,9 @@ void get_ch() {
       // Not freeing include_stack2->filepath because it may not be dynamically allocated
       free(include_stack2->dirname);
       free(include_stack2);
-      get_ch();
+      // EOF is treated as a newline so that files without a newline at the end are still parsed correctly
+      // On the next get_ch call, the first character of the next file will be read
+      ch = '\n';
     }
   }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
