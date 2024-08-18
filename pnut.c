@@ -1569,6 +1569,13 @@ void paste_tokens(int left_tok, int left_val) {
   } else if (left_tok == INTEGER) {
     if (right_tok == INTEGER) {
       val = -paste_integers(-left_val, -right_val);
+    } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
+      begin_string();
+      accum_string_integer(-left_val);
+      accum_string_string(heap[right_val + 1]);
+
+      val = end_ident();
+      tok = heap[val+2]; // The kind of the identifier
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       syntax_error("cannot paste an integer with a non-integer");
