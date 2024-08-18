@@ -30,13 +30,15 @@
 #define PARENS_PARENS_EXPR (PARENS_EXPR)
 #define PARENS_EXPR (1 + 1)
 
+#define float int // We can redefine keywords
+
 void putdigit(int n) {
   putchar('0' + n);
   putchar('\n');
 }
 
 void main() {
-  int foo_val;
+  float foo_val; // not a float, but an int
 
   putdigit(EMPTY + 8); // Will expand to + 8
   putdigit(FOO);
