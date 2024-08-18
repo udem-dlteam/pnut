@@ -198,7 +198,15 @@ void putintneg(int n) {
 }
 
 void fatal_error(char *msg) {
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+#ifdef SUPPORT_INCLUDE
+  putstr(include_stack->filepath); putchar(':');
+#endif
+  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
   putstr(msg); putchar('\n');
+#else
+  putstr(msg); putchar('\n');
+#endif
   exit(1);
 }
 
@@ -212,11 +220,6 @@ void syntax_error(char *msg) {
 #else
   putstr("syntax error: "); putstr(msg); putchar('\n');
 #endif
-  exit(1);
-}
-
-void missing_feature_error(char *msg) {
-  putstr("not yet implemented: "); putstr(msg);
   exit(1);
 }
 
