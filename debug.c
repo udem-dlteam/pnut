@@ -55,6 +55,7 @@ void print_tok(int tok, int val) {
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+  else if (tok == ARROW)        putstr("->");
   else if (tok == BAR_BAR)      putstr("||");
   else if (tok == BAR_EQ)       putstr("|=");
   else if (tok == CARET_EQ)     putstr("^=");
@@ -150,6 +151,7 @@ void print_tok_type(int tok) {
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+  else if (tok == ARROW)        putstr("->");
   else if (tok == BAR_BAR)      putstr("||");
   else if (tok == BAR_EQ)       putstr("|=");
   else if (tok == CARET_EQ)     putstr("^=");
