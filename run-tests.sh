@@ -7,7 +7,9 @@
 # The --match flag is used to run tests that match the given pattern, useful for re-running failed tests
 # The --bootstrap flag compiles the tests using pnut compiled with pnut, useful for catching bootstrap errors
 
-fail() { echo "$1"; exit "$2"; }
+trap "exit 1" INT
+
+fail() { echo "$1"; exit $2; }
 
 if [ $# -lt 1 ]; then
   fail "Usage: $0 <backend> -m pattern --bootstrap" 1
@@ -71,10 +73,17 @@ test_args() {
 
 execute_test() { # executable: $1, args: $2 ...
   if [ "$backend" = "sh" ]; then
-    bash "./$1" $2 # Default to bash for sh backend
+    # Default to bash for sh backend
+    # Use a 5s timeout to prevent infinite loops
+    timeout 5 bash "./$1" $2
   else
     "./$1" $2
   fi
+}
+
+compile_test() { # c_file: $1
+  # 5s timeout to prevent infinite loops in pnut
+  timeout 5 "$pnut_comp" "$1"
 }
 
 run_test() { # file_to_test: $1
@@ -89,7 +98,7 @@ run_test() { # file_to_test: $1
 
   # Generate golden file if it doesn't exist
   if [ ! -f "$golden_file" ]; then
-    "$pnut_comp" "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+    compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then
       chmod +x "$dir/$filename.$ext"
       execute_test "$dir/$filename.$ext" "$(test_args $file)" > "$golden_file"
@@ -101,7 +110,7 @@ run_test() { # file_to_test: $1
   fi
 
   # Compile the test file with pnut.exe
-  "$pnut_comp" "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+  compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
 
   if [ $? -eq 0 ]; then # If compilation was successful
     chmod +x "$dir/$filename.$ext"

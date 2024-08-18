@@ -21,6 +21,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Install utils
+        run: |
+          if [ ${{ matrix.host }} = "macos-latest" ]; then
+            brew install coreutils
+          fi
+
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }}
         run: |
           set -e
