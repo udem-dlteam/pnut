@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
@@ -46,7 +47,7 @@ unpack_escaped_string() {
         __buf="${__buf#?}" # Remove the current char from $__buf
         ;;
       *)
-        __c=$(LC_CTYPE=C printf "%d" "'${__buf%"${__buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+        __c=$(printf "%d" "'${__buf%"${__buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
         __buf="${__buf#?}" # Remove the current char from $__buf
         ;;
     esac
@@ -190,7 +191,7 @@ _getchar() {
       fi
     fi
   fi
-  __c=$(LC_CTYPE=C printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+  __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
   : $(($1 = __c))
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
 }
@@ -206,7 +207,7 @@ unpack_string() {
     # Remove all but first char
     __char="${__str%"$__tail"}"
     # Convert char to ASCII
-    __c=$(LC_CTYPE=C printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
+    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
     # Write character to memory
     : $((_$__ptr = __c))
     # Continue with rest of string

@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
@@ -78,7 +79,7 @@ unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __buffer=$2
   __ends_with_eof=$3
   while [ ! -z "$__fgetc_buf" ]; do
-    __c=$(LC_CTYPE=C printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
     : $((_$__buffer = __c))
     __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
     : $((__buffer += 1))              # Move to the next buffer position
@@ -272,7 +273,7 @@ unpack_string() {
     # Remove all but first char
     __char="${__str%"$__tail"}"
     # Convert char to ASCII
-    __c=$(LC_CTYPE=C printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
+    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
     # Write character to memory
     : $((_$__ptr = __c))
     # Continue with rest of string

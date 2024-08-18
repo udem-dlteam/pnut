@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 : $((i = len = tmp = end = str = 0))
 _reverse_str() { let str $2
@@ -62,7 +63,7 @@ unpack_string() {
     # Remove all but first char
     __char="${__str%"$__tail"}"
     # Convert char to ASCII
-    __c=$(LC_CTYPE=C printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
+    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
     # Write character to memory
     : $((_$__ptr = __c))
     # Continue with rest of string
