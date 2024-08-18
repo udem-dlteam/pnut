@@ -2381,7 +2381,8 @@ void comp_glo_decl(ast node) {
 
 void prologue() {
   putstr("#!/bin/sh\n");
-  putstr("set -e -u\n\n");
+  putstr("set -e -u\n");
+  putstr("LC_ALL=C\n\n");
 }
 
 void epilogue() {
