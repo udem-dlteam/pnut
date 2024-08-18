@@ -18,8 +18,6 @@
 #define OPTIMIZE_LONG_LINES
 #endif
 
-#define SUPPORT_INCLUDE
-
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -75,7 +73,6 @@ int last_tok_line_number = 1;
 int last_tok_column_number = 0;
 #endif
 
-#ifdef SUPPORT_INCLUDE
 struct IncludeStack {
   FILE* fp;
   struct IncludeStack *next;
@@ -88,7 +85,7 @@ struct IncludeStack {
 };
 struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
-#endif
+char* include_search_path = 0; // Search path for include files
 
 // Tokens and AST nodes
 enum {
@@ -199,9 +196,7 @@ void putintneg(int n) {
 
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-#ifdef SUPPORT_INCLUDE
   putstr(include_stack->filepath); putchar(':');
-#endif
   putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
   putstr(msg); putchar('\n');
 #else
@@ -212,9 +207,7 @@ void fatal_error(char *msg) {
 
 void syntax_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-#ifdef SUPPORT_INCLUDE
   putstr(include_stack->filepath); putchar(':');
-#endif
   putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
   putstr("  syntax error: "); putstr(msg); putchar('\n');
 #else
@@ -499,7 +492,6 @@ void output_declaration_c_code(bool no_header) {
 #endif
 
 void get_ch() {
-#ifdef SUPPORT_INCLUDE
   ch = fgetc(fp);
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
@@ -528,25 +520,12 @@ void get_ch() {
     column_number += 1;
   }
 #endif
-#else
-  ch = getchar();
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (ch == '\n') {
-    line_number += 1;
-    column_number = 0;
-  } else {
-    column_number += 1;
-  }
-#endif
-#endif
 #ifdef SH_INCLUDE_C_CODE
   // Save C code chars so they can be displayed with the shell code
   declaration_char_buf[declaration_char_buf_ix] = ch;
   declaration_char_buf_ix += 1;
 #endif
 }
-
-#ifdef SUPPORT_INCLUDE
 
 #ifdef PNUT_CC
 // TODO: It would be nice to not have to duplicate this code
@@ -604,9 +583,9 @@ char *file_parent_directory(char *path) {
   return path;
 }
 
-void include_file(char *file_name, bool relative) {
-  if (relative) {
-    file_name = str_concat(include_stack->dirname, file_name);
+void include_file(char *file_name, char *relative_to) {
+  if (relative_to) {
+    file_name = str_concat(relative_to, file_name);
   }
   fp = fopen(file_name, "r");
   if (fp == 0) {
@@ -631,7 +610,101 @@ void include_file(char *file_name, bool relative) {
 #endif
   include_stack = include_stack2;
 }
-#endif
+
+int accum_digit(int base) {
+  int digit = 99;
+  if ('0' <= ch AND ch <= '9') {
+    digit = ch - '0';
+  } else if ('A' <= ch AND ch <= 'Z') {
+    digit = ch - 'A' + 10;
+  } else if ('a' <= ch AND ch <= 'z') {
+    digit = ch - 'a' + 10;
+  }
+  if (digit >= base) {
+    return 0; /* character is not a digit in that base */
+  } else {
+    /*
+    TODO: Put overflow check back
+    if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
+      fatal_error("literal integer overflow");
+    }
+    */
+    val = val * base - digit;
+    get_ch();
+    return 1;
+  }
+}
+
+void get_string_char() {
+
+  val = ch;
+  get_ch();
+
+  if (val == '\\') {
+    if ('0' <= ch AND ch <= '7') {
+      /*
+      Parse octal character, up to 3 digits.
+      Note that \1111 is parsed as '\111' followed by '1'
+      See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
+      */
+      val = 0;
+      accum_digit(8);
+      accum_digit(8);
+      accum_digit(8);
+      val = -(val % 256); /* keep low 8 bits, without overflowing */
+    } else if ((ch == 'x') OR (ch == 'X')) {
+      get_ch();
+      val = 0;
+      /* Allow 1 or 2 hex digits. */
+      if (accum_digit(16)) {
+        accum_digit(16);
+      } else {
+        syntax_error("invalid hex escape -- it must have at least one digit");
+      }
+      val = -(val % 256); /* keep low 8 bits, without overflowing */
+    } else {
+      if (ch == 'a') {
+        val = 7;
+      } else if (ch == 'b') {
+        val = 8;
+      } else if (ch == 'f') {
+        val = 12;
+      } else if (ch == 'n') {
+        val = 10;
+      } else if (ch == 'r') {
+        val = 13;
+      } else if (ch == 't') {
+        val = 9;
+      } else if (ch == 'v') {
+        val = 11;
+      } else if ((ch == '\\') OR (ch == '\'') OR (ch == '\"')) {
+        val = ch;
+      } else {
+        syntax_error("unimplemented string character escape");
+      }
+      get_ch();
+    }
+  }
+}
+
+void accum_string_until(char end) {
+  while ((ch != end) AND (ch != EOF)) {
+    get_string_char();
+    tok = ch;
+    ch = val;
+    accum_string();
+    ch = tok;
+  }
+
+  if (ch != end) {
+    syntax_error("unterminated string literal");
+  }
+
+  ch = 0;
+  accum_string();
+
+  get_ch();
+}
 
 // We add the preprocessor keywords to the ident table so they can be easily
 // recognized by the preprocessor. Because these are not C keywords, their kind
@@ -1016,25 +1089,21 @@ int evaluate_if_condition() {
 }
 
 void handle_include() {
-#ifdef SUPPORT_INCLUDE
   if (tok == STRING) {
-    include_file(string_pool + val, true);
+    include_file(string_pool + val, include_stack->dirname);
     get_tok_macro(); // Skip the string
   } else if (tok == '<') {
-    // Ignore the file name for now.
-    // Note that the token is not a string with the file name, but an identifier
-    // with part of the file. This means we'll need to assemble the filename
-    // string, or change get_tok to consider '<' and '>' as string delimiters.
-    while (tok != '>') get_tok_macro();
-    get_tok_macro(); // Skip the '>'
+    accum_string_until('>');
+    // #include <file> directives only take effect if the search path is provided
+    // TODO: Issue a warning to stderr when skipping the directive
+    if (include_search_path != 0) {
+      include_file(string_pool + string_start, include_search_path);
+    }
+    get_tok_macro(); // Skip the string
   } else {
     putstr("tok="); putint(tok); putchar('\n');
     syntax_error("expected string to #include directive");
   }
-
-#else
-  syntax_error("The #include directive is not supported in this version of the compiler.");
-#endif
 }
 
 #ifdef sh
@@ -1281,82 +1350,6 @@ void init_ident_table() {
 
 void init_pnut_macros() {
   init_ident(MACRO, "PNUT_CC");
-}
-
-int accum_digit(int base) {
-  int digit = 99;
-  if ('0' <= ch AND ch <= '9') {
-    digit = ch - '0';
-  } else if ('A' <= ch AND ch <= 'Z') {
-    digit = ch - 'A' + 10;
-  } else if ('a' <= ch AND ch <= 'z') {
-    digit = ch - 'a' + 10;
-  }
-  if (digit >= base) {
-    return 0; /* character is not a digit in that base */
-  } else {
-    /*
-    TODO: Put overflow check back
-    if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
-      fatal_error("literal integer overflow");
-    }
-    */
-    val = val * base - digit;
-    get_ch();
-    return 1;
-  }
-}
-
-void get_string_char() {
-
-  val = ch;
-  get_ch();
-
-  if (val == '\\') {
-    if ('0' <= ch AND ch <= '7') {
-      /*
-      Parse octal character, up to 3 digits.
-      Note that \1111 is parsed as '\111' followed by '1'
-      See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
-      */
-      val = 0;
-      accum_digit(8);
-      accum_digit(8);
-      accum_digit(8);
-      val = -(val % 256); /* keep low 8 bits, without overflowing */
-    } else if ((ch == 'x') OR (ch == 'X')) {
-      get_ch();
-      val = 0;
-      /* Allow 1 or 2 hex digits. */
-      if (accum_digit(16)) {
-        accum_digit(16);
-      } else {
-        syntax_error("invalid hex escape -- it must have at least one digit");
-      }
-      val = -(val % 256); /* keep low 8 bits, without overflowing */
-    } else {
-      if (ch == 'a') {
-        val = 7;
-      } else if (ch == 'b') {
-        val = 8;
-      } else if (ch == 'f') {
-        val = 12;
-      } else if (ch == 'n') {
-        val = 10;
-      } else if (ch == 'r') {
-        val = 13;
-      } else if (ch == 't') {
-        val = 9;
-      } else if (ch == 'v') {
-        val = 11;
-      } else if ((ch == '\\') OR (ch == '\'') OR (ch == '\"')) {
-        val = ch;
-      } else {
-        syntax_error("unimplemented string character escape");
-      }
-      get_ch();
-    }
-  }
 }
 
 // A macro argument is represented using a list of tokens.
@@ -1770,23 +1763,7 @@ void get_tok() {
         get_ch();
 
         begin_string();
-
-        while ((ch != '\"') AND (ch != EOF)) {
-          get_string_char();
-          tok = ch;
-          ch = val;
-          accum_string();
-          ch = tok;
-        }
-
-        if (ch != '\"') {
-          syntax_error("unterminated string literal");
-        }
-
-        ch = 0;
-        accum_string();
-
-        get_ch();
+        accum_string_until('\"');
 
         val = string_start;
         tok = STRING;
@@ -3248,30 +3225,33 @@ int main(int argc, char **argv) {
 
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
-      if (argv[i][1] == 'D') {
-        init_ident(MACRO, argv[i] + 2);
-      } else {
-        putstr("Option ");
-        putstr(argv[i]);
-        putchar('\n');
-        fatal_error("unknown option");
+      switch (argv[i][1]) {
+        case 'D':
+          init_ident(MACRO, argv[i] + 2);
+          break;
+
+        case 'I':
+          if (include_search_path != 0) {
+            fatal_error("only one include path allowed");
+          }
+          include_search_path = argv[i] + 2;
+          break;
+
+        default:
+          putstr("Option "); putstr(argv[i]); putchar('\n');
+          fatal_error("unknown option");
+          break;
       }
     } else {
       // Options that don't start with '-' are file names
-#ifdef SUPPORT_INCLUDE
-      include_file(argv[i], false);
-#else
-      fatal_error("input file not supported. Pnut expects the input from stdin.");
-#endif
+      include_file(argv[i], 0);
     }
   }
 
-#ifdef SUPPORT_INCLUDE
   if (fp == 0) {
     putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
-#endif
 
 #ifndef DEBUG_CPP
 #ifndef DEBUG_GETCHAR

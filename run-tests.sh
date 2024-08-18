@@ -71,6 +71,17 @@ test_args() {
   echo `sed -n -e "/\/\/ args:/p" "$1" | sed -e "s/^\/\/ args://" |  tr '\n' ',' | sed -e 's/,$//'`
 }
 
+# Some tests specify command line arguments in the source file meant to be passed to the compiler.
+# This function extracts the arguments from the source file.
+# To specify arguments, add a comment in the source file like this:
+# // pnut_opt: arg1 arg2 arg3
+test_args_comp() {
+  # echo "test_args_comp file $1" >&2
+  echo `sed -n -e "/\/\/ pnut_opt:/p" "$1" | sed -e "s/^\/\/ pnut_opt://" |  tr '\n' ',' | sed -e 's/,$//'`
+}
+
+# echo "test_args_comp: $(test_args_comp tests/_all/preprocessor/include/include-bracket.c)"
+
 execute_test() { # executable: $1, args: $2 ...
   if [ "$backend" = "sh" ]; then
     # Default to bash for sh backend
@@ -83,7 +94,7 @@ execute_test() { # executable: $1, args: $2 ...
 
 compile_test() { # c_file: $1
   # 5s timeout to prevent infinite loops in pnut
-  timeout 5 "$pnut_comp" "$1"
+  timeout 5 "$pnut_comp" "$1" $2
 }
 
 run_test() { # file_to_test: $1
@@ -98,7 +109,7 @@ run_test() { # file_to_test: $1
 
   # Generate golden file if it doesn't exist
   if [ ! -f "$golden_file" ]; then
-    compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+    compile_test "$file" "$(test_args_comp $file)" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then
       chmod +x "$dir/$filename.$ext"
       execute_test "$dir/$filename.$ext" "$(test_args $file)" > "$golden_file"
@@ -110,7 +121,7 @@ run_test() { # file_to_test: $1
   fi
 
   # Compile the test file with pnut.exe
-  compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+  compile_test "$file" "$(test_args_comp $file)" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
 
   if [ $? -eq 0 ]; then # If compilation was successful
     chmod +x "$dir/$filename.$ext"

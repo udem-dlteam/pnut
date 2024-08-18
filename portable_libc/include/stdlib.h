@@ -1,7 +1,7 @@
 #ifndef _STDLIB_H
 #define _STDLIB_H
 
-#include "include/sys/types.h"
+#include "sys/types.h"
 
 void *malloc(size_t size);
 void free(void *ptr);
