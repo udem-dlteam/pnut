@@ -2557,6 +2557,8 @@ ast parse_definition(int local) {
     expect_tok(';');
     return result;
   } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("unknown decl: type expected");
     return result;
   }
 }
