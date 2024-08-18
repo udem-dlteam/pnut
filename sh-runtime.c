@@ -214,6 +214,7 @@ END_RUNTIME_FUN(int_to_char)
 DEFINE_RUNTIME_FUN(char_to_int)
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
+  putstr("  LC_ALL=C\n");
   putstr("__c2i_0=48\n");
   putstr("__c2i_1=49\n");
   putstr("__c2i_2=50\n");
