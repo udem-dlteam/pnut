@@ -429,10 +429,8 @@ void push_if_macro_mask(bool new_mask) {
   if_macro_stack[if_macro_stack_ix] = if_macro_mask;
   if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
   if_macro_stack_ix += 2;
-  // Then set the new mask value
-  if_macro_mask = new_mask;
-  // If the condition is true, we don't want to execute the next #elif that's true
-  if_macro_executed = if_macro_mask;
+  // Then set the new mask value and reset the executed flag
+  if_macro_mask = if_macro_executed = new_mask;
 }
 
 void pop_if_macro_mask() {
