@@ -765,7 +765,7 @@ void handle_define() {
   int args = 0; // List of arguments for a function-like macro
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
-  if (tok == IDENTIFIER OR tok == MACRO) {
+  if (tok == IDENTIFIER OR tok == MACRO OR (0 <= AUTO_KW AND tok <= WHILE_KW)) {
     heap[val + 2] = MACRO; // Mark the identifier as a macro
     macro = val;
   } else {
