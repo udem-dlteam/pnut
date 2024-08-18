@@ -36,6 +36,8 @@ void putdigit(int n) {
 }
 
 void main() {
+  int foo_val;
+
   putdigit(EMPTY + 8); // Will expand to + 8
   putdigit(FOO);
   putdigit(GARPLY);
@@ -52,4 +54,9 @@ void main() {
   putdigit(PARENS_EXPR);
   putdigit(PARENS_PARENS_EXPR);
   putdigit(PARENS_PARENS_EXPR2);
+  foo_val = FOO
+  #define FOO 3 // This will not change the value of foo_val
+  ;
+
+  putdigit(foo_val);
 }

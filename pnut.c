@@ -1477,9 +1477,11 @@ void push_tokens(int tokens) {
 // Returns 1 if the macro was expanded, 0 otherwise.
 bool attempt_macro_expansion(int macro) {
   int new_macro_args;
+  // We must save the tokens because the macro may be redefined while reading the arguments
+  int tokens = car(heap[macro + 3]);
   macro = val;
   if (cdr(heap[macro + 3]) == -1) { // Object-like macro
-    push_macro(car(heap[macro + 3]), 0);
+    push_macro(tokens, 0);
     return true;
   } else {
     new_macro_args = get_macro_args_toks(macro);
@@ -1491,7 +1493,7 @@ bool attempt_macro_expansion(int macro) {
       val = macro;
       return false;
     } else {
-      push_macro(car(heap[macro + 3]), new_macro_args);
+      push_macro(tokens, new_macro_args);
       return true;
     }
   }
