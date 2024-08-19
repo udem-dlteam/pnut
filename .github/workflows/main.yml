@@ -62,7 +62,7 @@ jobs:
       - name: Bootstrap pnut.sh on ${{ matrix.shell }}
         run: |
           set -e
-          bash ./bootstrap-pnut.sh --shell ${{ matrix.shell }}
+          bash ./bootstrap-pnut.sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-exe:
     strategy:
@@ -93,12 +93,12 @@ jobs:
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
         run: |
           set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }}
+          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --fast
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }}  --shell ${{ matrix.shell }}
+          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }}  --shell ${{ matrix.shell }} --fast
 
   success-message:
     runs-on: ubuntu-latest
