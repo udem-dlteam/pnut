@@ -6,6 +6,7 @@ TEMP_DIR="bootstrap-results"
 
 PNUT_EXE_OPTIONS= # Set by the backend option
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
@@ -52,8 +53,7 @@ bootstrap_with_shell() {
   # gcc -E -P -DPNUT_CC $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh-after-cpp.c"
   ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh
 
-  # create pnut-i386.sh, the C to i386 machine code compiler as a shell script
-  # gcc -E -P -DPNUT_CC $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-i386-after-cpp.c
+  # create pnut-exe.sh, the C to machine code compiler as a shell script
   printf_timing "pnut-sh.sh compiling pnut.c -> pnut-sh-compiled-by-pnut-sh-sh.sh" \
                 "$1 $TEMP_DIR/pnut-sh.sh $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh"
   if diff $TEMP_DIR/pnut-sh.sh $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh 2>&1 > /dev/null ; then
@@ -62,27 +62,27 @@ bootstrap_with_shell() {
     printf "         FAILURE... %s\n" "pnut-sh.sh != pnut-sh-compiled-by-pnut-sh-sh.sh"
     exit 1
   fi
-  printf_timing "pnut-sh.sh compiling pnut.c -> pnut-i386-compiled-by-pnut-sh-sh.sh" \
-                "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh"
-  printf_timing "pnut-i386-compiled-by-pnut-sh-sh.sh compiling pnut.c -> pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe" \
-                "$1 $TEMP_DIR/pnut-i386-compiled-by-pnut-sh-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+  printf_timing "pnut-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-sh-sh.sh" \
+                "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh"
+  printf_timing "pnut-exe-compiled-by-pnut-sh-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
+                "$1 $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
 
-  chmod +x $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe
+  chmod +x $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe
 
-  printf_timing "pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe compiling pnut.c -> pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe" \
-                "./$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+  printf_timing "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
+                "./$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
 
-  chmod +x $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe
+  chmod +x $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe
 
-  if [ -s $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe ] ; then
-    if diff $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe 2>&1 > /dev/null ; then
-      printf "         SUCCESS... %s\n" "pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe == pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+  if [ -s $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe ] ; then
+    if diff $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe 2>&1 > /dev/null ; then
+      printf "         SUCCESS... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe == pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
     else
-      printf "         FAILURE... %s\n" "pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe != pnut-sh-compiled-by-pnut-sh-sh.sh"
+      printf "         FAILURE... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe != pnut-sh-compiled-by-pnut-sh-sh.sh"
       exit 1
     fi
   else
-    printf "         FAILURE... %s\n" "pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe is empty! (compiler crash?)"
+    printf "         FAILURE... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe is empty! (compiler crash?)"
     exit 1
   fi
 
@@ -104,14 +104,14 @@ bootstrap_with_shell() {
 
     ls -l \
     "$TEMP_DIR/pnut-sh-compiled-by-gcc.exe" \
-    "$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe" \
-    "$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
 
     printf "\n"
 
     sha1sum \
-    "$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe" \
-    "$TEMP_DIR/pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-i386-compiled-by-pnut-sh-sh.exe"
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
 
   fi
 }
@@ -122,8 +122,9 @@ shell=                  # Defined if doing the full bootstrap using pnut.sh on P
 
 while [ $# -gt 0 ]; do
   case $1 in
-    --backend) backend="$2"; shift 2 ;;
-    --shell) shell="$2"; shift 2 ;;
+    --backend) backend="$2";                            shift 2 ;;
+    --shell)   shell="$2";                              shift 2 ;;
+    --fast)    PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -133,6 +134,7 @@ case $backend in
     PNUT_EXE_OPTIONS="-Dtarget_$backend" ;;
   *)
     echo "Unknown backend: $backend"
+    echo "Supported backends: x86_64_mac x86_64_linux i386_linux"
     exit 1
     ;;
 esac
