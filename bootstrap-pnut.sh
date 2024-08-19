@@ -4,14 +4,7 @@ set -e
 
 TEMP_DIR="bootstrap-results"
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
-
-if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
-
-gcc -o "$TEMP_DIR/pnut.exe" $PNUT_SH_OPTIONS pnut.c
-
-# gcc -E -C -P -DPNUT_CC -Dsh pnut.c > "$TEMP_DIR/pnut-after-cpp.c"
-
-./$TEMP_DIR/pnut.exe $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut.sh"
+PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
 bootstrap_with_shell() {
 
@@ -30,9 +23,16 @@ shell="$SHELL" # Use current shell as the default. "all" to test all shells.
 while [ $# -gt 0 ]; do
   case $1 in
     --shell) shell="$2"; shift 2 ;;
+    --fast)  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
+
+if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
+
+gcc -o "$TEMP_DIR/pnut.exe" $PNUT_SH_OPTIONS pnut.c
+
+./$TEMP_DIR/pnut.exe $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut.sh"
 
 if [ "$shell" = "all" ]; then
   set +e # Don't exit on error because we want to test all shells.
