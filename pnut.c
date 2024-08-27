@@ -46,7 +46,7 @@
 #define SH_INLINE_CHAR_LITERAL_not
 
 // Options to parameterize the shell runtime library
-#define RT_FREE_UNSETS_VARS
+// #define RT_FREE_UNSETS_VARS
 #define RT_NO_INIT_GLOBALS_not
 #define RT_COMPACT_not
 #define RT_INLINE_PUTCHAR
