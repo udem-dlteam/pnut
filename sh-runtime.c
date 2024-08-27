@@ -602,7 +602,7 @@ END_RUNTIME_FUN(exit)
 DEFINE_RUNTIME_FUN(putchar)
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
-  putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
+  putstr("  printf \"%b\" \"\\0$(($1/64))$(($1/8%8))$(($1%8))\"\n");
   putstr("}\n");
 END_RUNTIME_FUN(putchar)
 
@@ -666,7 +666,7 @@ DEPENDS_ON(putchar)
   putstr("  __addr=$1; shift\n");
   putstr("  while [ $((_$__addr)) != 0 ]; do\n");
 #ifdef RT_INLINE_PUTCHAR
-  putstr("    printf \\\\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))\n");
+  putstr("    printf \"%b\" \"\\0$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))\"\n");
 #else
   putstr("    _putchar __ $((_$__addr))\n");
 #endif
@@ -724,7 +724,7 @@ DEPENDS_ON(int_to_char)
   putstr("          ;;\n");
   putstr("        'c') # 99 = 'c' Character\n");
   putstr("          # Don't need to handle non-printable characters the only use of %c is for printable characters\n");
-  putstr("          printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
+  putstr("          printf \"%b\" \"\\0$(($1/64))$(($1/8%8))$(($1%8))\"\n");
   putstr("          shift\n");
   putstr("          ;;\n");
   putstr("        'x') # 120 = 'x' Hexadecimal integer\n");
@@ -782,7 +782,7 @@ DEPENDS_ON(int_to_char)
   putstr("      case $__head in\n");
   putstr("        10) printf \"\\n\" ;;  # 10 == '\\n'\n");
   putstr("        37) __mod=1 ;; # 37 == '%'\n");
-  putstr("        *) printf \\\\$(($__head/64))$(($__head/8%8))$(($__head%8)) ;;\n");
+  putstr("        *) printf \"%b\" \"\\0$(($__head/64))$(($__head/8%8))$(($__head%8))\" ;;\n");
   putstr("      esac\n");
   putstr("    fi\n");
   putstr("  done\n");

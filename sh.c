@@ -1513,7 +1513,7 @@ text comp_putchar_inline(ast param) {
       string_concat3(wrap_str("$(("), res, wrap_str("/8%8))")),
       string_concat3(wrap_str("$(("), res, wrap_str("%8))")));
 
-  return string_concat(wrap_str("printf \\\\"), res);
+  return string_concat3(wrap_str("printf \"%b\" \"\\0"), res, wrap_char('\"'));
 }
 #endif
 
