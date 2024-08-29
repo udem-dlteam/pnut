@@ -98,7 +98,37 @@ jobs:
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }}  --shell ${{ matrix.shell }} --fast
+          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast
+
+  bootstrap-bash-2_05a:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup woody environment
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y debootstrap         # debootstrap allows us to create a minimal Debian environment
+          tar -czf ../pnut.tar.gz .                   # Make a copy of the pnut repo (excluding the woody directory)
+          sudo debootstrap --arch=i386 woody woody http://archive.debian.org/debian
+          sudo cp ../pnut.tar.gz woody/pnut.tar.gz    # Copy the pnut repo into the woody environment
+          sudo chroot woody /bin/bash -c "mkdir pnut && tar -xvzf pnut.tar.gz -C pnut" # Extract the pnut repo into the woody environment
+          sudo chroot woody /bin/bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential" # Install gcc
+
+      - name: Bootstrap pnut.sh with bash 2.05a
+        run: |
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut.sh --shell bash --fast"
+
+      - name: Bootstrap pnut-exe with bash 2.05a
+        run: |
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast"
+
+      - name: Run tests with bash 2.05a
+        run: |
+          sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./run-tests.sh sh --shell bash"
 
   success-message:
     runs-on: ubuntu-latest
