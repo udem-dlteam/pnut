@@ -14,6 +14,7 @@ if [ $# -lt 1 ]; then
 fi
 
 # Parse the arguments
+: ${PNUT_OPTIONS:=} # Default to empty options
 backend=$1; shift
 bootstrap=0
 shell="$SHELL" # Use current shell as the default
@@ -31,11 +32,11 @@ done
 case "$backend" in
   sh)
     ext="exe" # The extension doesn't matter for sh
-    PNUT_EXE_OPTIONS="-Dsh -DRT_NO_INIT_GLOBALS"
+    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dsh -DRT_NO_INIT_GLOBALS"
     ;;
   i386_linux | x86_64_linux | x86_64_mac)
     ext="exe"
-    PNUT_EXE_OPTIONS="-Dtarget_$backend"
+    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dtarget_$backend"
     ;;
   *)
     echo "Unknown backend: $backend"
