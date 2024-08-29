@@ -37,11 +37,13 @@ const int R13 = 13;
 const int R14 = 14;
 const int R15 = 15;
 
-const int reg_X = AX;
-const int reg_Y = CX;
-const int reg_Z = BP; // used as a temporary register for certain meta instructions
-const int reg_SP = SP;
-const int reg_glo = BX;
+// On old versions of gcc (such as on debian woody), setting a const variable
+// to another const variable produces an error. This is a workaround.
+const int reg_X = 0; // AX: temporary register
+const int reg_Y = 1; // CX: temporary register
+const int reg_Z = 5; // BP: temporary register
+const int reg_SP = 4; // SP: stack pointer
+const int reg_glo = 3; // BX: global variables table
 
 void rex_prefix(int reg1, int reg2) {
   if (word_size == 8) {
