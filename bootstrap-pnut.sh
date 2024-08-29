@@ -2,8 +2,10 @@
 
 set -e
 
+: ${PNUT_OPTIONS:=} # Default to empty options
+
 TEMP_DIR="bootstrap-results"
-PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_SH_OPTIONS="$PNUT_OPTIONS -DRT_NO_INIT_GLOBALS -Dsh"
 PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
 bootstrap_with_shell() {
