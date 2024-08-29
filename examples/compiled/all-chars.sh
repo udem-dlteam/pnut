@@ -6,7 +6,7 @@ _main() {
   let c
   c=0
   while [ $c -lt 128 ] ; do
-    printf \\$((c/64))$((c/8%8))$((c%8))
+    printf "%b" "\0$((c/64))$((c/8%8))$((c%8))"
     : $((c += 1))
   done
   endlet $1 c

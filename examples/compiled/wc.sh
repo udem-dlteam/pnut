@@ -90,7 +90,7 @@ _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
   while [ $((_$__addr)) != 0 ]; do
-    printf \\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))
+    printf "%b" "\0$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))"
     : $((__addr += 1))
   done
 }

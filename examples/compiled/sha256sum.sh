@@ -151,8 +151,8 @@ _hex() { let byte $2
   let digits
   defstr __str_0 "0123456789abcdef"
   digits=$__str_0
-  printf \\$(((_$((digits + (15 & (byte >> 4)))))/64))$(((_$((digits + (15 & (byte >> 4)))))/8%8))$(((_$((digits + (15 & (byte >> 4)))))%8))
-  printf \\$(((_$((digits + (15 & byte))))/64))$(((_$((digits + (15 & byte))))/8%8))$(((_$((digits + (15 & byte))))%8))
+  printf "%b" "\0$(((_$((digits + (15 & (byte >> 4)))))/64))$(((_$((digits + (15 & (byte >> 4)))))/8%8))$(((_$((digits + (15 & (byte >> 4)))))%8))"
+  printf "%b" "\0$(((_$((digits + (15 & byte))))/64))$(((_$((digits + (15 & byte))))/8%8))$(((_$((digits + (15 & byte))))%8))"
   endlet $1 digits byte
 }
 
@@ -205,13 +205,13 @@ _process_file() { let filename $2
     _hex __ $h
     : $((i += 1))
   done
-  printf \\$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))
-  printf \\$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))
+  printf "%b" "\0$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))"
+  printf "%b" "\0$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))"
   while [ $((_$filename)) != 0 ] ; do
-    printf \\$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
+    printf "%b" "\0$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))"
     : $((filename += 1))
   done
-  printf \\$(((__NEWLINE__)/64))$(((__NEWLINE__)/8%8))$(((__NEWLINE__)%8))
+  printf "%b" "\0$(((__NEWLINE__)/64))$(((__NEWLINE__)/8%8))$(((__NEWLINE__)%8))"
   : $(($1 = 0))
   endlet $1 h n fd i filename
 }
