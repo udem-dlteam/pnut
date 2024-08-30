@@ -21,6 +21,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Install utils
+        run: |
+          if [ ${{ matrix.host }} = "macos-latest" ]; then
+            brew install coreutils
+          else
+            sudo apt-get update
+            sudo apt-get install -y coreutils
+          fi
+
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }}
         run: |
           set -e
@@ -38,12 +47,12 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash ${{ matrix.shell }}
+          sudo apt-get install -y coreutils ${{ matrix.shell }}
 
       - name: Run tests with ${{ matrix.shell }}
         run: |
           set -e
-          bash ./run-tests.sh sh --shell ${{ matrix.shell }}
+          ./run-tests.sh sh --shell ${{ matrix.shell }}
 
   bootstrap-pnut-sh:
     strategy:
@@ -57,12 +66,12 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash ${{ matrix.shell }}
+          sudo apt-get install -y coreutils ${{ matrix.shell }}
 
       - name: Bootstrap pnut.sh on ${{ matrix.shell }}
         run: |
           set -e
-          bash ./bootstrap-pnut.sh --shell ${{ matrix.shell }} --fast
+          ./bootstrap-pnut.sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-exe:
     strategy:
@@ -84,10 +93,10 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           if [ ${{ matrix.host }} = "macos-latest" ]; then
-            brew install ${{ matrix.shell }}
+            brew install coreutils ${{ matrix.shell }}
           else
             sudo apt-get update
-            sudo apt-get install -y ${{ matrix.shell }}
+            sudo apt-get install -y coreutils ${{ matrix.shell }}
           fi
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
@@ -117,7 +126,7 @@ jobs:
           # Check that the woody environment has the right bash version
           sudo chroot woody /bin/bash -c "bash --version" | grep 2.05a || { echo "Bash 2.05a is required for this job"; exit 1; }
           sudo chroot woody /bin/bash -c "mkdir pnut && tar -xvzf pnut.tar.gz -C pnut" # Extract the pnut repo into the woody environment
-          sudo chroot woody /bin/bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential time" # Install gcc and time utils
+          sudo chroot woody /bin/bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential time timeout" # Install gcc and time utils
 
       - name: Run tests with bash 2.05a
         run: |
