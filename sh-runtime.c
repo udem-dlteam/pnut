@@ -21,11 +21,7 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define call_char_to_int(prefix, char_var) putstr(prefix "char_to_int \"" char_var "\"\n");
 #endif
 
-#ifdef RT_COMPACT
 #define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$((" int_var "/64))$((" int_var "/8%8))$((" int_var "%8))\")\n");
-#else
-#define call_int_to_char(prefix, int_var) putstr(prefix "int_to_char \"" int_var "\"\n");
-#endif
 
 // The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
 // occurrences See analyze-big-c.py to see the frequency of each character in big.c.
@@ -111,105 +107,6 @@ DEFINE_RUNTIME_FUN(local_vars)
 END_RUNTIME_FUN(local_vars)
 
 // char<->int conversion
-
-DEFINE_RUNTIME_FUN(int_to_char)
-#ifndef RT_COMPACT
-  putstr("int_to_char() {\n");
-  putstr("  case $1 in\n");
-  putstr("    48|49|50|51|52|53|54|55|56|57) __char=$(($1 - 48)) ;;\n");
-  putstr("    97)  __char=\"a\" ;;\n");
-  putstr("    98)  __char=\"b\" ;;\n");
-  putstr("    99)  __char=\"c\" ;;\n");
-  putstr("    100) __char=\"d\" ;;\n");
-  putstr("    101) __char=\"e\" ;;\n");
-  putstr("    102) __char=\"f\" ;;\n");
-  putstr("    103) __char=\"g\" ;;\n");
-  putstr("    104) __char=\"h\" ;;\n");
-  putstr("    105) __char=\"i\" ;;\n");
-  putstr("    106) __char=\"j\" ;;\n");
-  putstr("    107) __char=\"k\" ;;\n");
-  putstr("    108) __char=\"l\" ;;\n");
-  putstr("    109) __char=\"m\" ;;\n");
-  putstr("    110) __char=\"n\" ;;\n");
-  putstr("    111) __char=\"o\" ;;\n");
-  putstr("    112) __char=\"p\" ;;\n");
-  putstr("    113) __char=\"q\" ;;\n");
-  putstr("    114) __char=\"r\" ;;\n");
-  putstr("    115) __char=\"s\" ;;\n");
-  putstr("    116) __char=\"t\" ;;\n");
-  putstr("    117) __char=\"u\" ;;\n");
-  putstr("    118) __char=\"v\" ;;\n");
-  putstr("    119) __char=\"w\" ;;\n");
-  putstr("    120) __char=\"x\" ;;\n");
-  putstr("    121) __char=\"y\" ;;\n");
-  putstr("    122) __char=\"z\" ;;\n");
-  putstr("    65)  __char=\"A\" ;;\n");
-  putstr("    66)  __char=\"B\" ;;\n");
-  putstr("    67)  __char=\"C\" ;;\n");
-  putstr("    68)  __char=\"D\" ;;\n");
-  putstr("    69)  __char=\"E\" ;;\n");
-  putstr("    70)  __char=\"F\" ;;\n");
-  putstr("    71)  __char=\"G\" ;;\n");
-  putstr("    72)  __char=\"H\" ;;\n");
-  putstr("    73)  __char=\"I\" ;;\n");
-  putstr("    74)  __char=\"J\" ;;\n");
-  putstr("    75)  __char=\"K\" ;;\n");
-  putstr("    76)  __char=\"L\" ;;\n");
-  putstr("    77)  __char=\"M\" ;;\n");
-  putstr("    78)  __char=\"N\" ;;\n");
-  putstr("    79)  __char=\"O\" ;;\n");
-  putstr("    80)  __char=\"P\" ;;\n");
-  putstr("    81)  __char=\"Q\" ;;\n");
-  putstr("    82)  __char=\"R\" ;;\n");
-  putstr("    83)  __char=\"S\" ;;\n");
-  putstr("    84)  __char=\"T\" ;;\n");
-  putstr("    85)  __char=\"U\" ;;\n");
-  putstr("    86)  __char=\"V\" ;;\n");
-  putstr("    87)  __char=\"W\" ;;\n");
-  putstr("    88)  __char=\"X\" ;;\n");
-  putstr("    89)  __char=\"Y\" ;;\n");
-  putstr("    90)  __char=\"Z\" ;;\n");
-  putstr("    32)  __char=\" \" ;;\n");
-  putstr("    33)  __char=\"!\" ;;\n");
-  putstr("    34)  __char=\"\\\"\" ;;\n");
-  putstr("    35)  __char=\"#\" ;;\n");
-  putstr("    36)  __char=\"$\" ;;\n");
-  putstr("    37)  __char=\"%\" ;;\n");
-  putstr("    38)  __char=\"&\" ;;\n");
-  putstr("    39)  __char=\"'\" ;;\n");
-  putstr("    40)  __char=\"(\" ;;\n");
-  putstr("    41)  __char=\")\" ;;\n");
-  putstr("    42)  __char=\"*\" ;;\n");
-  putstr("    43)  __char=\"+\" ;;\n");
-  putstr("    44)  __char=\",\" ;;\n");
-  putstr("    45)  __char=\"-\" ;;\n");
-  putstr("    46)  __char=\".\" ;;\n");
-  putstr("    47)  __char=\"/\" ;;\n");
-  putstr("    58)  __char=\":\" ;;\n");
-  putstr("    59)  __char=\";\" ;;\n");
-  putstr("    60)  __char=\"<\" ;;\n");
-  putstr("    61)  __char=\"=\" ;;\n");
-  putstr("    62)  __char=\">\" ;;\n");
-  putstr("    63)  __char=\"?\" ;;\n");
-  putstr("    64)  __char=\"@\" ;;\n");
-  putstr("    91)  __char=\"[\" ;;\n");
-  putstr("    92)  __char=\"\\\\\" ;;\n");
-  putstr("    93)  __char=\"]\" ;;\n");
-  putstr("    94)  __char=\"^\" ;;\n");
-  putstr("    95)  __char=\"_\" ;;\n");
-  putstr("    96)  __char=\"\\`\" ;;\n");
-  putstr("    123) __char=\"{\" ;;\n");
-  putstr("    124) __char=\"|\" ;;\n");
-  putstr("    125) __char=\"}\" ;;\n");
-  putstr("    126) __char=\"~\" ;;\n");
-  putstr("    10)  __char=\"\\n\" ;;\n");
-  putstr("    *)\n");
-  putstr("      echo \"Invalid character code: $1\" ; exit 1\n");
-  putstr("      __char=$(printf \"\\\\$(printf \"%o\" \"$1\")\") ;;\n");
-  putstr("  esac\n");
-  putstr("}\n");
-#endif
-END_RUNTIME_FUN(int_to_char)
 
 DEFINE_RUNTIME_FUN(char_to_int)
 #ifndef RT_COMPACT
@@ -552,7 +449,6 @@ DEPENDS_ON(char_to_int)
 END_RUNTIME_FUN(unpack_escaped_string)
 
 DEFINE_RUNTIME_FUN(pack_string)
-DEPENDS_ON(int_to_char)
   putstr("# Convert a pointer to a C string to a Shell string.\n");
   putstr("# $__res is set to the result, and $__len is set to the length of the string.\n");
   putstr("pack_string() { # $1 = string address, $2 = end of string delimiter (default to null), $3 = max length (default to 100000000) \n");
@@ -676,7 +572,6 @@ DEPENDS_ON(putchar)
 END_RUNTIME_FUN(print_pnut_str)
 
 DEFINE_RUNTIME_FUN(print_string)
-DEPENDS_ON(int_to_char)
   putstr("# Emit a C-string line by line so that whitespace isn't mangled\n");
   putstr("print_string() {\n");
   putstr("  __addr=$1; shift\n");
@@ -706,7 +601,6 @@ END_RUNTIME_FUN(print_string)
 DEFINE_RUNTIME_FUN(printf)
 DEPENDS_ON(print_string)
 DEPENDS_ON(pack_string)
-DEPENDS_ON(int_to_char)
   putstr("_printf() { # $1 = printf format string, $2... = printf args\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __fmt_ptr=$1; shift\n");
