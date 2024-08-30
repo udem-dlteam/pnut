@@ -21,6 +21,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Install utils
+        run: |
+          if [ ${{ matrix.host }} = "macos-latest" ]; then
+            brew install coreutils
+          else
+            sudo apt-get update
+            sudo apt-get install -y coreutils
+          fi
+
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }}
         run: |
           set -e
@@ -38,12 +47,12 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash ${{ matrix.shell }}
+          sudo apt-get install -y coreutils ${{ matrix.shell }}
 
       - name: Run tests with ${{ matrix.shell }}
         run: |
           set -e
-          bash ./run-tests.sh sh --shell ${{ matrix.shell }}
+          ./run-tests.sh sh --shell ${{ matrix.shell }}
 
   bootstrap-pnut-sh:
     strategy:
@@ -57,12 +66,12 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y bash ${{ matrix.shell }}
+          sudo apt-get install -y coreutils ${{ matrix.shell }}
 
       - name: Bootstrap pnut.sh on ${{ matrix.shell }}
         run: |
           set -e
-          bash ./bootstrap-pnut.sh --shell ${{ matrix.shell }} --fast
+          ./bootstrap-pnut.sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-exe:
     strategy:
@@ -84,10 +93,10 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           if [ ${{ matrix.host }} = "macos-latest" ]; then
-            brew install ${{ matrix.shell }}
+            brew install coreutils ${{ matrix.shell }}
           else
             sudo apt-get update
-            sudo apt-get install -y ${{ matrix.shell }}
+            sudo apt-get install -y coreutils ${{ matrix.shell }}
           fi
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
@@ -98,11 +107,44 @@ jobs:
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }}  --shell ${{ matrix.shell }} --fast
+          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast
+
+  bootstrap-bash-2_05a:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup woody environment
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y debootstrap         # debootstrap allows us to create a minimal Debian environment
+          tar -czf ../pnut.tar.gz .                   # Make a copy of the pnut repo (excluding the woody directory)
+          sudo debootstrap --arch=i386 woody woody http://archive.debian.org/debian
+          sudo cp ../pnut.tar.gz woody/pnut.tar.gz    # Copy the pnut repo into the woody environment
+          # Check that the woody environment has the right bash version
+          sudo chroot woody /bin/bash -c "bash --version" | grep 2.05a || { echo "Bash 2.05a is required for this job"; exit 1; }
+          sudo chroot woody /bin/bash -c "mkdir pnut && tar -xvzf pnut.tar.gz -C pnut" # Extract the pnut repo into the woody environment
+          sudo chroot woody /bin/bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential time timeout" # Install gcc and time utils
+
+      - name: Run tests with bash 2.05a
+        run: |
+          sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./run-tests.sh sh --shell bash"
+
+      - name: Bootstrap pnut.sh with bash 2.05a
+        run: |
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut.sh --shell bash --fast"
+
+      - name: Bootstrap pnut-exe with bash 2.05a
+        run: |
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast"
+
 
   success-message:
     runs-on: ubuntu-latest
-    needs: [tests-exe, tests-shell, bootstrap-pnut-sh, bootstrap-pnut-exe]
+    needs: [tests-exe, tests-shell, bootstrap-pnut-sh, bootstrap-pnut-exe, bootstrap-bash-2_05a]
     steps:
       - name: Tests finished
         run: |

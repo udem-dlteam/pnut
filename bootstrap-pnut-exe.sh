@@ -4,8 +4,10 @@ set -e -u
 
 TEMP_DIR="bootstrap-results"
 
-PNUT_EXE_OPTIONS= # Set by the backend option
-PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
+: ${PNUT_OPTIONS:=} # Default to empty options
+
+PNUT_EXE_OPTIONS="$PNUT_OPTIONS" # Backend is set by the backend option
+PNUT_SH_OPTIONS="$PNUT_OPTIONS -DRT_NO_INIT_GLOBALS -Dsh"
 PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
@@ -131,7 +133,7 @@ done
 
 case $backend in
   x86_64_mac | x86_64_linux | i386_linux)
-    PNUT_EXE_OPTIONS="-Dtarget_$backend" ;;
+    PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -Dtarget_$backend" ;;
   *)
     echo "Unknown backend: $backend"
     echo "Supported backends: x86_64_mac x86_64_linux i386_linux"

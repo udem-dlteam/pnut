@@ -224,7 +224,7 @@ _getchar() {
       fi
     fi
   fi
-  __c=$(LC_CTYPE=C printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}")
+  __c=$(LC_CTYPE=C printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
   : $(($1 = __c))
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
 }
@@ -298,7 +298,7 @@ unpack_string() {
     # Remove all but first char
     __char="${__str%"$__tail"}"
     # Convert char to ASCII
-    __c=$(LC_CTYPE=C printf "%d" "'$__char")
+    __c=$(LC_CTYPE=C printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
     # Write character to memory
     : $((_$__ptr = __c))
     # Continue with rest of string
