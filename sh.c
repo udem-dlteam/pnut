@@ -1538,6 +1538,16 @@ bool printf_uses_shell_format_specifiers(char* a) {
   return true;
 }
 
+void printf_util_call(char *format_str, ast params, int params_count) {
+  // Some shells interpret leading - as options. In that case, we add an empty "%s" argument.
+
+  if (format_str[0] == '-') {
+    append_glo_decl(string_concat4(wrap_str("printf \"%s"), escape_text(wrap_str(format_str), false), wrap_str("\" \"\" "), fun_call_params(params, params_count)));
+  } else {
+    append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_str), false), wrap_str("\" "), fun_call_params(params, params_count)));
+  }
+}
+
 // _printf pulls a lot of dependencies from the runtime. In most cases the
 // format string is known at compile time, and we can avoid calling printf by
 // using the shell's printf instead. This function generates a sequence of shell
@@ -1567,7 +1577,7 @@ void handle_printf_call(char* format_str, ast params) {
         if (format_start != format_str - 1) {
           *(format_str - 1) = '\0'; // Null-terminate the format string
 
-          append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, params_count)));
+          printf_util_call(format_start, params_start, params_count);
           *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
         }
 
@@ -1592,7 +1602,7 @@ void handle_printf_call(char* format_str, ast params) {
 
   // Dump the remaining format string
   if (format_start != format_str) {
-    append_glo_decl(string_concat4(wrap_str("printf \""), escape_text(wrap_str(format_start), false), wrap_str("\" "), fun_call_params(params_start, 1000)));
+    printf_util_call(format_start, params_start, 10000);
   }
 }
 #endif
