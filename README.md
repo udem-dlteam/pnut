@@ -86,16 +86,22 @@ others. For faster scripts, we recommend the use of `ksh`, `dash` or `bash`.
 
 Because Pnut can be distributed as a human-readable shell script (`pnut.sh`), it
 can serve as the basis for a reproducible build system. With a POSIX compliant
-shell, `pnut.sh` is sufficiently powerful to compile itself and, with some
-effort, [TCC](https://bellard.org/tcc/). Because TCC can be used to bootstrap
-GCC, this makes it possible to bootstrap a fully featured build toolchain from
-only human-readable source files and a POSIX shell.
+shell, `pnut.sh` is sufficiently powerful to compile itself and, in the future,
+to bootstrap [TCC](https://bellard.org/tcc/). Because TCC can be used to compile
+GCC, this will make it possible to bootstrap a fully featured build toolchain
+from only human-readable source files and a POSIX shell.
 
-Because Pnut doesn't support certain C features used in TCC, Pnut features a
-native code backend that supports a larger subset of C99. We call this compiler
-`pnut-exe`, and it can be compiled using `pnut.sh`. This makes it possible to
-compile `pnut-exe.c` using `pnut.sh`, and then compile TCC, all from a POSIX
-shell.
+Because `pnut.sh` cannot support certain C features used by TCC, Pnut features
+a native code backend that supports a larger subset of C. We call this
+compiler `pnut-exe`, and it can be compiled using `pnut.sh`. The work to make
+`pnut-exe` compatible with TCC is ongoing.
+
+Once `pnut-exe` supports a large enough subset of C99 to compile TCC, the
+following steps will be taken to bootstrap TCC from `pnut.sh`:
+
+1. Compile `pnut-exe.c` to `pnut-exe.sh` using `pnut.sh`. `pnut-exe.sh` is a shell script that turns C code into machine code.
+2. Compile `pnut-exe.c` to `pnut-exe` using `pnut-exe.sh`. This version of `pnut-exe` is an executable and is much faster.
+3. Compile TCC using `pnut-exe`.
 
 ## Limitations
 

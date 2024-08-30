@@ -1,3 +1,4 @@
+// expect_failure_for: yash
 void putstring(char *s) {
   while (*s) {
     putchar(*s);

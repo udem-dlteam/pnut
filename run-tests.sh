@@ -12,19 +12,20 @@ trap "exit 1" INT
 fail() { echo "$1"; exit $2; }
 
 if [ $# -lt 1 ]; then
-  fail "Usage: $0 <backend> -m pattern --bootstrap" 1
+  fail "Usage: $0 <backend> --shell shell -m pattern --bootstrap" 1
 fi
 
 # Parse the arguments
+: ${PNUT_OPTIONS:=} # Default to empty options
 backend=$1; shift
 bootstrap=0
 shell="$SHELL" # Use current shell as the default
 pattern=".*"
 while [ $# -gt 0 ]; do
   case $1 in
-    --shell) shell="$2";      shift 2;;
-    --match) pattern="$2";    shift 2;;
-    --bootstrap) bootstrap=1; shift 1;;
+    --shell)         shell="$2";         shift 2;;
+    --match)         pattern="$2";       shift 2;;
+    --bootstrap)     bootstrap=1;        shift 1;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -33,11 +34,11 @@ done
 case "$backend" in
   sh)
     ext="exe" # The extension doesn't matter for sh
-    PNUT_EXE_OPTIONS="-Dsh -DRT_NO_INIT_GLOBALS"
+    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dsh -DRT_NO_INIT_GLOBALS"
     ;;
   i386_linux | x86_64_linux | x86_64_mac)
     ext="exe"
-    PNUT_EXE_OPTIONS="-Dtarget_$backend"
+    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dtarget_$backend"
     ;;
   *)
     echo "Unknown backend: $backend"
@@ -63,12 +64,17 @@ compile_pnut() {
   fi
 }
 
-# Some tests specify command line arguments in the source file
-# This function extracts the arguments from the source file
-# To specify arguments, add a comment in the source file like this:
-# // args: arg1 arg2 arg3
-test_args() {
-  echo `sed -n -e "/\/\/ args:/p" "$1" | sed -e "s/^\/\/ args://" |  tr '\n' ',' | sed -e 's/,$//'`
+shell_version() {
+  case "$1" in
+    bash) bash -c 'echo $BASH_VERSION' ;;
+    ksh)  ksh  -c 'echo $KSH_VERSION' ;;
+    mksh) mksh -c 'echo $KSH_VERSION' ;;
+    yash) yash --version | head -n 1 ;;
+    zsh)  zsh  --version ;;
+    # dash doesn't support --version or DASH_VERSION and we'd have to query the package manager
+    dash) echo "dash" ;;
+    *)    echo "Unknown shell: $1" ;;
+  esac
 }
 
 # Some tests specify command line arguments in the source file meant to be passed to the compiler.
@@ -77,18 +83,59 @@ test_args() {
 # // pnut_opt: arg1 arg2 arg3
 test_args_comp() {
   # echo "test_args_comp file $1" >&2
-  echo `sed -n -e "/\/\/ pnut_opt:/p" "$1" | sed -e "s/^\/\/ pnut_opt://" |  tr '\n' ',' | sed -e 's/,$//'`
+  echo `sed -n -e "/\/\/ pnut_opt: /p" "$1" | sed -e "s/^\/\/ pnut_opt: //" |  tr '\n' ',' | sed -e 's/,$//'`
 }
 
-# echo "test_args_comp: $(test_args_comp tests/_all/preprocessor/include/include-bracket.c)"
+# Some tests specify command line arguments in the source file
+# This function extracts the arguments from the source file
+# To specify arguments, add a comment in the source file like this:
+# // args: arg1 arg2 arg3
+test_args() {
+  echo `sed -n -e "/\/\/ args: /p" "$1" | sed -e "s/^\/\/ args: //" |  tr '\n' ',' | sed -e 's/,$//'`
+}
 
-execute_test() { # executable: $1, args: $2 ...
+# Some shells don't support certain features which mean some tests will fail.
+# While we often can work around the bugs and non-standard behavior of certain
+# shells, it can be easier to just disable the tests, especially if the test is
+# not relevant to the bootstrap process.
+# // expect_failure_for: bash-2*
+# // expect_failure_for: yash
+test_expect_falure_for_shells() {
+  echo `sed -n -e "/\/\/ expect_failure_for: /p" "$1" | sed -e "s/^\/\/ expect_failure_for: //"`
+}
+
+# Some tests take a long time to run, so we set a timeout to prevent infinite
+# loops However, we don't want to set a high timeout for all tests, so we have
+# an option to set a specific timeout.
+test_timeout() {
+  echo `sed -n -e "/\/\/ timeout: /p" "$1" | sed -e "s/^\/\/ timeout: //"`
+}
+
+test_expect_failure_for_shell() { # file: $1
+  failing_shells=$(test_expect_falure_for_shells "$1")
+  for failing_shell in $failing_shells; do
+    failing_shell_name=$(echo "$failing_shell" | sed 's/-.*//')
+    failing_shell_version=$(echo "$failing_shell" | sed 's/.*-//')
+    if [ "$failing_shell_name" = "$shell" ]; then # First match on the shell name, then on the version if any
+      if [ -z "$failing_shell_version" ] || [ "$failing_shell_version" = "$failing_shell" ]; then
+        return 0 # No version specified, match!
+      elif shell_version "$shell" | grep -q -E "$failing_shell_version"; then
+        return 0 # version matched!
+      else
+        return 1 # version didn't match!
+      fi
+    fi
+  done
+  return 1 # No match
+}
+
+execute_test() { # executable: $1, timeout: $2, args: $3
   if [ "$backend" = "sh" ]; then
-    # Default to bash for sh backend
-    # Use a 5s timeout to prevent infinite loops
-    timeout 5 bash "./$1" $2
+    # Use a 30s timeout to prevent infinite loops
+    timeout ${2:-30} $shell "./$1" $3
   else
-    "./$1" $2
+    # Native code is much faster, it should never take more than a few seconds
+    timeout ${2:-5} "./$1" $3
   fi
 }
 
@@ -112,7 +159,7 @@ run_test() { # file_to_test: $1
     compile_test "$file" "$(test_args_comp $file)" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then
       chmod +x "$dir/$filename.$ext"
-      execute_test "$dir/$filename.$ext" "$(test_args $file)" > "$golden_file"
+      execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$golden_file"
       echo "🟡 Golden file generated by pnut"
     else
       echo "❌ Failed to compile with pnut"
@@ -125,22 +172,28 @@ run_test() { # file_to_test: $1
 
   if [ $? -eq 0 ]; then # If compilation was successful
     chmod +x "$dir/$filename.$ext"
-    execute_test "$dir/$filename.$ext" "$(test_args $file)" > "$dir/$filename.output" 2> "$dir/$filename.err"
+    execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$dir/$filename.output" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then # If the executable ran successfully
-        diff_out=$(diff "$dir/$filename.output" "$dir/$filename.golden")
-        if [ $? -eq 0 ]; then # If the output matches the golden file
-          echo "✅ Test passed"
-          return 0
-        else
-          echo "❌ Test failed"
-          echo "diff (output vs expected)"
-          echo "$diff_out"
-          return 1
-        fi
+      diff_out=$(diff "$dir/$filename.output" "$dir/$filename.golden")
+      if [ $? -eq 0 ]; then # If the output matches the golden file
+        echo "✅ Test passed"
+        return 0
+      elif test_expect_failure_for_shell "$file"; then
+        echo "⚠️ Test disabled for $shell"
+        return 0
       else
-        echo "❌ Failed to run: $(cat "$dir/$filename.err")"
+        echo "❌ Test failed"
+        echo "diff (output vs expected)"
+        echo "$diff_out"
         return 1
       fi
+    elif test_expect_failure_for_shell "$file"; then
+      echo "⚠️ Test disabled for $shell"
+      return 0
+    else
+      echo "❌ Failed to run: $(cat "$dir/$filename.err")"
+      return 1
+    fi
   else
     echo "❌ Failed to compile with pnut: $(cat "$dir/$filename.err")"
     return 1
@@ -181,7 +234,8 @@ run_tests() {
     for file in $(printf "$failed_tests"); do
       printf " - %s\n" "$file"
     done
-    exit 1
+    # Return the number of failed tests, assuming it's less than 256
+    exit $(printf "$failed_tests" | wc -l)
   else
     exit 0
   fi

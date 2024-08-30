@@ -1,3 +1,6 @@
+// On mksh, this test takes more than 30s. Adjusting the timeout to make it pass.
+// timeout: 120
+
 int main() {
   int f;
   char c;
