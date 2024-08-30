@@ -569,37 +569,10 @@ DEPENDS_ON(putchar)
   putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(print_pnut_str)
-
-DEFINE_RUNTIME_FUN(print_string)
-  putstr("# Emit a C-string line by line so that whitespace isn't mangled\n");
-  putstr("print_string() {\n");
-  putstr("  __addr=$1; shift\n");
-  putstr("  __max_len=100000000\n");
-  putstr("  __delim=0\n");
-  putstr("  __len=0\n");
-  putstr("  __acc=\"\"\n");
-  putstr("  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter\n");
-  putstr("  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length\n");
-  putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
-  putstr("    __char=$((_$__addr))\n");
-  putstr("    __addr=$((__addr + 1))\n");
-  putstr("    __len=$((__len + 1))\n");
-  putstr("    case $__char in\n");
-  putstr("      10) # 10 == '\\n'\n");
-  putstr("        printf \"%s\\n\" \"$__acc\"\n");
-  putstr("        __acc=\"\" ;;\n");
-  putstr("      *)\n");
-  call_int_to_char("        ", "$__char")
-  putstr("        __acc=\"$__acc$__char\" ;;\n");
-  putstr("    esac\n");
-  putstr("  done\n");
-  putstr("  printf \"%s\" \"$__acc\"\n");
-  putstr("}\n");
-END_RUNTIME_FUN(print_string)
+END_RUNTIME_FUN(put_pstr)
 
 DEFINE_RUNTIME_FUN(printf)
-DEPENDS_ON(print_string)
+DEPENDS_ON(put_pstr)
 DEPENDS_ON(pack_string)
   putstr("_printf() { # $1 = printf format string, $2... = printf args\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
@@ -626,17 +599,19 @@ DEPENDS_ON(pack_string)
   putstr("          shift\n");
   putstr("          ;;\n");
   putstr("        's') # 115 = 's' String\n");
-  putstr("          print_string $1\n");
+  putstr("          _put_pstr __ $1\n");
   putstr("          shift\n");
   putstr("          ;;\n");
-  putstr("        '.') # String with length. %.*s will print the first 4 characters of the string\n");
-  putstr("          pack_string $__fmt_ptr 0 2 # Read next 2 characters\n");
-  putstr("          __fmt_ptr=$((__fmt_ptr + 2))\n");
-  putstr("          if [ \"$__res\" = \"*s\" ]; then\n");
-  putstr("            print_string $2 0 $1\n");
+  putstr("        '.') # String with length. printf('%.*s', N, str) will print the first N chars of str\n");
+  putstr("          if [ $((_$__fmt_ptr)) = 42 ] && [ $((_$((__fmt_ptr + 1)))) = 115 ]; then\n");
+  putstr("            __fmt_ptr=$((__fmt_ptr + 2))\n");
+  putstr("            __char_bk=$((_$(($2 + $1))))\n");
+  putstr("            : $((_$(($2 + $1)) = 0)) # Temporarily null-terminate the string\n");
+  putstr("            _put_pstr __ $2\n");
+  putstr("            : $((_$(($2 + $1)) = __char_bk)) # Restore string\n");
   putstr("            shift 2\n");
   putstr("          else\n");
-  putstr("            echo \"Unknown format specifier: %.$__res\" ; exit 1\n");
+  putstr("            printf \"Unknown format specifier: %%.\" ; _put_pstr __ $__fmt_ptr; exit 1\n");
   putstr("          fi\n");
   putstr("          ;;\n");
   putstr("        [0-9])                         # parse integer\n");
@@ -663,7 +638,10 @@ DEPENDS_ON(pack_string)
   putstr("              : $((__padlen -= 1))\n");
   putstr("              done\n");
   putstr("            printf \"%s\" \"$__pad\" # Pad string\n");
-  putstr("            print_string $__str_ref 0 $__str_len # Print string\n");
+  putstr("            __char_bk=$((_$(($__str_ref + $__str_len))))\n");
+  putstr("            : $((_$(($__str_ref + $__str_len)) = 0)) # Temporarily null-terminate the string\n");
+  putstr("            _put_pstr __ $__str_ref\n");
+  putstr("            : $((_$(($__str_ref + $__str_len)) = __char_bk)) # Restore string\n");
   putstr("          else\n");
   putstr("            echo \"Unknown format specifier: '%$__min_len.$__str_len$__head_char'\" ; exit 1;\n");
   putstr("          fi\n");
