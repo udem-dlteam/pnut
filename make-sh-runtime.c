@@ -17,6 +17,6 @@ void putstr(char* s) {
 
 #include "sh-runtime.c"
 
-void main() {
+int main() {
   produce_runtime();
 }
