@@ -208,6 +208,8 @@ run_tests() {
   else # Run all tests for other backends
     run_tests_in_folder "tests/_exe"
   fi
+  # Folder containing tests that expose bugs in pnut or shells
+  run_tests_in_folder "tests/_bug"
 
   echo "Summary:"
   echo "===================="
