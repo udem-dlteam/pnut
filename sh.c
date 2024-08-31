@@ -10,7 +10,7 @@ void handle_shell_include() {
     shell_include_fp = fopen(string_pool + val, "r");
     // Include pack_string and unpack_string functions
     // since they will likely be used in the included file
-    runtime_use_pack_string = true;
+    runtime_use_put_pstr = true;
     runtime_use_unpack_string = true;
     while ((c = fgetc(shell_include_fp)) != EOF) {
       putchar(c);
