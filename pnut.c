@@ -991,202 +991,120 @@ void handle_define() {
 #endif
 }
 
-// For evaluating #if condition, we use the shunting yard algorithm
-// https://en.wikipedia.org/wiki/Shunting_yard_algorithm
-#define IF_CONDITION_STACK_SIZE 100
-int op_stack[IF_CONDITION_STACK_SIZE];
-int op_stack_ix = 0;
-int val_stack[IF_CONDITION_STACK_SIZE];
-int val_stack_ix = 0;
+int eval_constant(ast expr, bool if_macro) {
+  int val;
+  int op = get_op(expr);
+  int op1;
+  int op2;
+  int result;
+  int i;
 
-// Operator precedence of C operators allowed in #if condition
-// Convert to lookup table?
-int precedence(int op) {
-  if (op == '(')                                      return -1; // Left paren are lowest precedence
-  else if ((op == '!') OR (op == '~'))                return 2;
-  else if ((op == '*') OR (op == '/') OR (op == '%')) return 3;
-  else if ((op == '+') OR (op == '-'))                return 4;
-  else if ((op == LSHIFT) OR (op == RSHIFT))          return 5;
-  else if ((op == '<')  OR (op == '>')
-        OR (op == LT_EQ) OR (op == GT_EQ))            return 6;
-  else if ((op == EQ_EQ) OR (op == EXCL_EQ))          return 7;
-  else if (op == '&')                                 return 8;
-  else if (op == '^')                                 return 9;
-  else if (op == '|')                                 return 10;
-  else if (op == AMP_AMP)                             return 9;
-  else if (op == BAR_BAR)                             return 12;
-  else {
-    putstr("op="); putint(op); putchar('\n');
-    syntax_error("#if: unknown operator");
-    return -1;
-  }
-}
-
-void pop_op() {
-  int op = op_stack[op_stack_ix - 1];
-  op_stack_ix -= 1;
-
-  if (op == '!' OR op == '~') {
-    // Unary operators
-    if (val_stack_ix < 1) {
-      fatal_error("invalid unary expression, not enough values in #if condition");
-    }
-    if (op == '!') {
-      val_stack[val_stack_ix - 1] = !val_stack[val_stack_ix - 1];
-    } else if (op == '~') {
-      val_stack[val_stack_ix - 1] = ~val_stack[val_stack_ix - 1];
-    }
-  } else {
-    // Binary operators
-    if (val_stack_ix < 2) {
-      fatal_error("invalid binary expression, not enough values in #if condition");
-    }
-
-    if (op == '*') {
-      val_stack[val_stack_ix - 2] *= val_stack[val_stack_ix - 1];
-    } else if (op == '/') {
-      val_stack[val_stack_ix - 2] /= val_stack[val_stack_ix - 1];
-    } else if (op == '%') {
-      val_stack[val_stack_ix - 2] %= val_stack[val_stack_ix - 1];
-    } else if (op == '+') {
-      val_stack[val_stack_ix - 2] += val_stack[val_stack_ix - 1];
-    } else if (op == '-') {
-      val_stack[val_stack_ix - 2] -= val_stack[val_stack_ix - 1];
-    } else if (op == LSHIFT) {
-      val_stack[val_stack_ix - 2] <<= val_stack[val_stack_ix - 1];
-    } else if (op == RSHIFT) {
-      val_stack[val_stack_ix - 2] >>= val_stack[val_stack_ix - 1];
-    } else if (op == '<') {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] < val_stack[val_stack_ix - 1];
-    } else if (op == '>') {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] > val_stack[val_stack_ix - 1];
-    } else if (op == LT_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] <= val_stack[val_stack_ix - 1];
-    } else if (op == GT_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] >= val_stack[val_stack_ix - 1];
-    } else if (op == EQ_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] == val_stack[val_stack_ix - 1];
-    } else if (op == EXCL_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] != val_stack[val_stack_ix - 1];
-    } else if (op == '&') {
-      val_stack[val_stack_ix - 2] &= val_stack[val_stack_ix - 1];
-    } else if (op == '^') {
-      val_stack[val_stack_ix - 2] ^= val_stack[val_stack_ix - 1];
-    } else if (op == '|') {
-      val_stack[val_stack_ix - 2] |= val_stack[val_stack_ix - 1];
-    } else if (op == AMP_AMP) {
-      // C documentation specifies that && and || are short-circuit operators, not
-      // sure how they make sense in a #if condition since the operators don't
-      // have side effects.
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] && val_stack[val_stack_ix - 1];
-    } else if (op == BAR_BAR) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] || val_stack[val_stack_ix - 1];
-    } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("pop_op: unknown operator");
-    }
-    val_stack_ix -= 1;
-  }
-}
-
-void push_op(int op) {
-  int op_precedence = precedence(op);
-
-  if (op_stack_ix >= IF_CONDITION_STACK_SIZE) {
-    fatal_error("too many operators in #if condition");
-  }
-
-  while (op_stack_ix != 0
-     AND op_stack[op_stack_ix - 1] != '('
-     AND precedence(op_stack[op_stack_ix - 1]) <= op_precedence) {
-    pop_op();
-  }
-
-  op_stack[op_stack_ix] = op;
-  op_stack_ix += 1;
-}
-
-void push_val(int val) {
-  if (val_stack_ix >= IF_CONDITION_STACK_SIZE) {
-    fatal_error("too many values in #if condition");
-  }
-
-  val_stack[val_stack_ix] = val;
-  val_stack_ix += 1;
-}
-
-void handle_if_op() {
-  switch (tok) {
-    case '(':
-      push_op(tok);
-      break;
-    case ')':
-      while (op_stack_ix != 0 AND op_stack[op_stack_ix - 1] != '(') pop_op();
-      if (op_stack_ix == 0) fatal_error("unmatched parenthesis in #if condition");
-      op_stack_ix -= 1; // Pop the '('
-      break;
-    case IDENTIFIER:
-      if (val == DEFINED_ID) {
-        get_tok_macro(); // Skip the defined keyword
-        if (tok == '(') {
-          get_tok_macro(); // Skip the '('
-          push_val(tok == MACRO);
-          get_tok_macro(); // Skip the macro name
-          if (tok != ')') {
-            // Not using expect_tok because it may be the end of the line
-            putstr("tok="); putint(tok); putchar('\n');
-            fatal_error("expected ')' in #if defined condition");
-          }
-        } else if (tok == IDENTIFIER OR tok == MACRO) {
-          // #if defined MACRO is valid syntax
-          push_val(tok == MACRO);
-        } else {
-          putstr("tok="); putint(tok); putchar('\n');
-          fatal_error("expected identifier or macro in #if defined condition");
-        }
-      } else {
-        push_val(0); // Undefined identifiers are 0
+  switch (op) {
+    case INTEGER:   return -get_val(expr);
+    case CHARACTER: return get_val(expr);
+    case '~':       return !eval_constant(get_child(expr, 0), if_macro);
+    case '!':       return !eval_constant(get_child(expr, 0), if_macro);
+    case '-':
+    case '+':
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (get_nb_children(expr) == 1) {
+        return op == '-' ? -op1 : op1;
       }
-      break;
-    case INTEGER:
-      push_val(-val);
-      break;
-    case CHARACTER:
-      push_val(val);
-      break;
+      op2 = eval_constant(get_child(expr, 1), if_macro);
+      return op == '-' ? op1 - op2 : op1 + op2;
+
+    case '?':
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (op1) {
+        return eval_constant(get_child(expr, 1), if_macro);
+      }
+      return eval_constant(get_child(expr, 2), if_macro);
+
+    case '*':
+    case '/':
+    case '%':
+    case '&':
+    case '|':
+    case '^':
+    case LSHIFT:
+    case RSHIFT:
+    case EQ_EQ:
+    case EXCL_EQ:
+    case LT_EQ:
+    case GT_EQ:
+    case '<':
+    case '>':
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      op2 = eval_constant(get_child(expr, 1), if_macro);
+      switch (op) {
+        case '*':     return op1 * op2;
+        case '/':     return op1 / op2;
+        case '%':     return op1 % op2;
+        case '&':     return op1 & op2;
+        case '|':     return op1 | op2;
+        case '^':     return op1 ^ op2;
+        case LSHIFT:  return op1 << op2;
+        case RSHIFT:  return op1 >> op2;
+        case EQ_EQ:   return op1 == op2;
+        case EXCL_EQ: return op1 != op2;
+        case LT_EQ:   return op1 <= op2;
+        case GT_EQ:   return op1 >= op2;
+        case '<':     return op1 < op2;
+        case '>':     return op1 > op2;
+      }
+      return 0; // Should never reach here
+
+    case AMP_AMP:
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (!op1) return 0;
+      return eval_constant(get_child(expr, 1), if_macro);
+
+    case BAR_BAR:
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (op1) return 1;
+      return eval_constant(get_child(expr, 1), if_macro);
+
+    case '(': // defined operators are represented as fun calls
+      if (if_macro && get_val(get_child(expr, 0)) == DEFINED_ID) {
+        return get_child(expr, 1) == MACRO;
+      }
+
+      fatal_error("unknown function call in constant expressions");
+      return 0;
+
+    case IDENTIFIER:
+      if (if_macro) {
+        // Undefined identifiers are 0
+        // At this point, macros have already been expanded so we can't have a macro identifier
+        return 0;
+      }
+      // TODO: Enums when not not if_macro
+      fatal_error("identifiers are not allowed in constant expression");
+      return 0;
+
     default:
-      push_op(tok); // Invalid operators are caught by push_op
-      break;
+      putstr("op="); putint(op); putchar('\n');
+      fatal_error("unsupported operator in constant expression");
   }
 }
+
+ast parse_assignment_expression();
 
 int evaluate_if_condition() {
   bool prev_skip_newlines = skip_newlines;
   int previous_mask = if_macro_mask;
+  ast expr;
   // Temporarily set to true so that we can read the condition even if it's inside an ifdef false block
   // Unlike in other directives using get_tok_macro, we want to expand macros in the condition
   if_macro_mask = true;
   skip_newlines = false; // We want to stop when we reach the first newline
-  get_tok();
-  while (tok != '\n' AND tok != EOF) {
-    handle_if_op();
-    get_tok();
-  }
+  get_tok(); // Skip the #if keyword
+  expr = parse_assignment_expression();
 
   // Restore the previous value
   if_macro_mask = previous_mask;
   skip_newlines = prev_skip_newlines;
-
-  // Pop remaining operators
-  while (op_stack_ix != 0) {
-    pop_op();
-  }
-
-  if (val_stack_ix != 1) {
-    fatal_error("invalid #if condition");
-  }
-  val_stack_ix = 0; // Reset the value stack
-  return val_stack[0];
+  return eval_constant(expr, true);
 }
 
 void handle_include() {
@@ -2698,7 +2616,7 @@ ast parse_unary_expression() {
     result = parse_cast_expression();
     result = new_ast1(op, result);
 
-  } else if (tok == SIZEOF_KW) {
+  } else if (skip_newlines && tok == SIZEOF_KW) { // only parse sizeof if we're not in a #if expression
 
     get_tok();
     if (tok == '(') {
@@ -2709,6 +2627,21 @@ ast parse_unary_expression() {
       result = parse_unary_expression();
     }
     result = new_ast1(SIZEOF_KW, result);
+
+  } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
+
+    get_tok_macro();
+    if (tok == '(') {
+      get_tok_macro();
+      result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
+      get_tok_macro();
+      expect_tok(')');
+    } else if (tok == IDENTIFIER || tok == MACRO) {
+      result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
+      get_tok_macro();
+    } else {
+      syntax_error("identifier or '(' expected");
+    }
 
   } else {
     result = parse_postfix_expression();
