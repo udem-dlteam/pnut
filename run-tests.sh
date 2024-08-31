@@ -140,8 +140,12 @@ execute_test() { # executable: $1, timeout: $2, args: $3
 }
 
 compile_test() { # c_file: $1
-  # 5s timeout to prevent infinite loops in pnut
-  timeout 5 "$pnut_comp" "$1" $2
+  # 15s timeout to prevent infinite loops in pnut
+  if [ $bootstrap -eq 1 ]; then
+    timeout 15 $shell "$pnut_comp" $PNUT_EXE_OPTIONS "$1" $2
+  else
+    timeout 5 "$pnut_comp" "$1" $2
+  fi
 }
 
 run_test() { # file_to_test: $1
