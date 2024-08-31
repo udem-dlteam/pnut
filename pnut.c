@@ -300,6 +300,105 @@ int set_cdr(int pair, int value) {
   return value;
 }
 
+int get_op(ast node) {
+  return heap[node] & 1023;
+}
+
+ast get_nb_children(ast node) {
+  return heap[node] >> 10;
+}
+
+int get_val(ast node) {
+  return heap[node+1];
+}
+
+void set_val(ast node, int val) {
+  heap[node+1] = val;
+}
+
+ast get_child(ast node, int i) {
+  return heap[node+i+1];
+}
+
+void set_child(ast node, int i, ast child) {
+  heap[node+i+1] = child;
+}
+
+ast ast_result;
+
+ast new_ast0(int op, int val) {
+
+  ast_result = alloc_obj(2);
+
+  heap[ast_result] = op;
+  set_val(ast_result, val);
+
+  return ast_result;
+}
+
+ast new_ast1(int op, ast child0) {
+
+  ast_result = alloc_obj(2);
+
+  heap[ast_result] = op + 1024;
+  set_child(ast_result, 0, child0);
+
+  return ast_result;
+}
+
+ast new_ast2(int op, ast child0, ast child1) {
+
+  ast_result = alloc_obj(3);
+
+  heap[ast_result] = op + 2048;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+
+  return ast_result;
+}
+
+ast new_ast3(int op, ast child0, ast child1, ast child2) {
+
+  ast_result = alloc_obj(4);
+
+  heap[ast_result] = op + 3072;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+  set_child(ast_result, 2, child2);
+
+  return ast_result;
+}
+
+ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
+
+  ast_result = alloc_obj(5);
+
+  heap[ast_result] = op + 4096;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+  set_child(ast_result, 2, child2);
+  set_child(ast_result, 3, child3);
+
+  return ast_result;
+}
+
+ast clone_ast(ast orig) {
+  int nb_children = get_nb_children(orig);
+  int i;
+
+  // Account for the value of ast nodes with no child
+  if (nb_children == 0) nb_children = 1;
+
+  ast_result = alloc_obj(nb_children + 1);
+
+  heap[ast_result] = heap[orig]; // copy operator and nb of children
+  for (i = 0; i < nb_children; i += 1) {
+    set_child(ast_result, i, get_child(orig, i));
+  }
+
+  return ast_result;
+}
+
 void begin_string() {
   string_start = string_pool_alloc;
   hash = 0;
@@ -1990,105 +2089,6 @@ void get_tok() {
 }
 
 /* parser */
-
-int get_op(ast node) {
-  return heap[node] & 1023;
-}
-
-ast get_nb_children(ast node) {
-  return heap[node] >> 10;
-}
-
-int get_val(ast node) {
-  return heap[node+1];
-}
-
-void set_val(ast node, int val) {
-  heap[node+1] = val;
-}
-
-ast get_child(ast node, int i) {
-  return heap[node+i+1];
-}
-
-void set_child(ast node, int i, ast child) {
-  heap[node+i+1] = child;
-}
-
-ast ast_result;
-
-ast new_ast0(int op, int val) {
-
-  ast_result = alloc_obj(2);
-
-  heap[ast_result] = op;
-  set_val(ast_result, val);
-
-  return ast_result;
-}
-
-ast new_ast1(int op, ast child0) {
-
-  ast_result = alloc_obj(2);
-
-  heap[ast_result] = op + 1024;
-  set_child(ast_result, 0, child0);
-
-  return ast_result;
-}
-
-ast new_ast2(int op, ast child0, ast child1) {
-
-  ast_result = alloc_obj(3);
-
-  heap[ast_result] = op + 2048;
-  set_child(ast_result, 0, child0);
-  set_child(ast_result, 1, child1);
-
-  return ast_result;
-}
-
-ast new_ast3(int op, ast child0, ast child1, ast child2) {
-
-  ast_result = alloc_obj(4);
-
-  heap[ast_result] = op + 3072;
-  set_child(ast_result, 0, child0);
-  set_child(ast_result, 1, child1);
-  set_child(ast_result, 2, child2);
-
-  return ast_result;
-}
-
-ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
-
-  ast_result = alloc_obj(5);
-
-  heap[ast_result] = op + 4096;
-  set_child(ast_result, 0, child0);
-  set_child(ast_result, 1, child1);
-  set_child(ast_result, 2, child2);
-  set_child(ast_result, 3, child3);
-
-  return ast_result;
-}
-
-ast clone_ast(ast orig) {
-  int nb_children = get_nb_children(orig);
-  int i;
-
-  // Account for the value of ast nodes with no child
-  if (nb_children == 0) nb_children = 1;
-
-  ast_result = alloc_obj(nb_children + 1);
-
-  heap[ast_result] = heap[orig]; // copy operator and nb of children
-  for (i = 0; i < nb_children; i += 1) {
-    set_child(ast_result, i, get_child(orig, i));
-  }
-
-  return ast_result;
-}
 
 #ifdef NICE_ERR_MSG
 #include "debug.c"
