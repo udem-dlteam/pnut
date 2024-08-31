@@ -200,7 +200,7 @@ void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   putstr(include_stack->filepath); putchar(':');
   putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-  putstr(msg); putchar('\n');
+  putstr("  "); putstr(msg); putchar('\n');
 #else
   putstr(msg); putchar('\n');
 #endif
