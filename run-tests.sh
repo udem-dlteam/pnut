@@ -67,12 +67,12 @@ compile_pnut() {
 shell_version() {
   case "$1" in
     bash) bash -c 'echo $BASH_VERSION' ;;
-    ksh)  ksh  -c 'echo $KSH_VERSION' ;;
-    mksh) mksh -c 'echo $KSH_VERSION' ;;
-    yash) yash --version | head -n 1 ;;
-    zsh)  zsh  --version ;;
+    ksh)  ksh  -c 'echo $KSH_VERSION'  ;;
+    mksh) mksh -c 'echo $KSH_VERSION'  ;;
+    yash) yash -c 'echo $YASH_VERSION' ;;
+    zsh)  zsh -c  'echo $ZSH_VERSION'  ;;
     # dash doesn't support --version or DASH_VERSION and we'd have to query the package manager
-    dash) echo "dash" ;;
+    dash) dash -c 'echo unknown-possibly-0.5.12' ;;
     *)    echo "Unknown shell: $1" ;;
   esac
 }
@@ -228,6 +228,8 @@ run_tests() {
   else # Run all tests for other backends
     run_tests_in_folder "tests/_exe"
   fi
+  # Folder containing tests that expose bugs in pnut or shells
+  run_tests_in_folder "tests/_bug"
 
   echo "Summary:"
   echo "===================="
