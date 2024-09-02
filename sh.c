@@ -7,7 +7,7 @@ void handle_shell_include() {
   int c;
   if (tok == STRING) {
     // Include the shell code from the file
-    shell_include_fp = fopen(string_pool + val, "r");
+    shell_include_fp = fopen(STRING_BUF(val), "r");
     // Include pack_string and unpack_string functions
     // since they will likely be used in the included file
     runtime_use_put_pstr = true;
@@ -530,10 +530,15 @@ ast fresh_ident() {
   return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
 }
 
-// TODO: Reuse identifier for strings used in multiple places
-ast fresh_string_ident() {
-  string_counter += 1;
-  return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter - 1));
+ast fresh_string_ident(int string_probe) {
+  // Strings are interned, meaning that the same string used twice will have the
+  // same address. We use the token tag to mark the string as already defined.
+  // This allows comp_defstr to use the same string variable for the same string.
+  if (heap[string_probe + 3] == 0) { // tag defaults to 0
+    string_counter += 1;
+    heap[string_probe + 3] = string_counter - 1;
+  }
+  return new_ast0(IDENTIFIER_STRING, wrap_int(heap[string_probe + 3]));
 }
 
 // The local environment is a list of variables represented using ',' nodes.
@@ -965,9 +970,9 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
       return node;
     } else if (op == STRING) {
-      // We must initialize strings before the expression
-      sub1 = fresh_string_ident();
-      literals_inits = new_ast2(',', new_ast2(',', sub1, get_val(node)), literals_inits);
+      /* We must initialize strings before the expression */
+      sub1 = fresh_string_ident(get_val(node));
+      literals_inits = new_ast2(',', new_ast2(',', sub1, heap[get_val(node) + 1]), literals_inits);
       return sub1;
     } else {
       printf("handle_side_effects_go: op=%d %c", op, op);
@@ -1692,10 +1697,10 @@ text comp_fun_call_code(ast node, ast assign_to) {
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && params != 0 && get_op(params) == STRING)) { // puts("..."), putstr("..."), printf("...")
-      return printf_call(string_pool + get_val(params), 0, 0, true);
-    } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) { // printf("...", ...)
-      handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
-      return 0; // This generates no code. I guess we could return the last printf call?
+      return printf_call(STRING_BUF(get_val(params)), 0, 0, true);
+    } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) {
+      handle_printf_call(STRING_BUF(get_val(get_child(params, 0))), get_child(params, 1));
+      return 0;
     }
 #ifdef SH_INLINE_PUTCHAR
     else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
