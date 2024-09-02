@@ -48,7 +48,7 @@ int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 enum TEXT_NODES {
   TEXT_TREE,
   TEXT_INTEGER,
-  TEXT_FROM_POOL,
+  TEXT_STRING,
   TEXT_ESCAPED
 };
 
@@ -162,11 +162,16 @@ text wrap_str(char *s) {
   return result;
 }
 
-text wrap_str_pool(int s) {
+// Like wrap_str, but assumes that the string is constant and doesn't need to be copied
+text wrap_str_const(char *s) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_FROM_POOL);
-  text_pool[text_alloc + 1] = string_pool + s;
+  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_STRING);
+  text_pool[text_alloc + 1] = s;
   return (text_alloc += 2) - 2;
+}
+
+text wrap_str_pool(int s) {
+  return wrap_str_const(string_pool + s);
 }
 
 text concatenate_strings_with(text t1, text t2, text sep) {
@@ -226,7 +231,7 @@ void print_escaped_text(text t, bool for_printf) {
     }
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
     putint(VOID_PTR_TO_INT(text_pool[t + 1]));
-  } else if ( text_pool[t] == INT_TO_VOID_PTR(TEXT_FROM_POOL)) {
+  } else if ( text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
     print_escaped_string(text_pool[t + 1], for_printf);
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
@@ -255,7 +260,7 @@ void print_text(text t) {
     }
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
     putint(VOID_PTR_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_FROM_POOL)) {
+  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
     putstr(text_pool[t + 1]);
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_ESCAPED)) {
     print_escaped_text(VOID_PTR_TO_INT(text_pool[t + 1]), VOID_PTR_TO_INT(text_pool[t + 2]));
