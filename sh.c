@@ -1611,6 +1611,7 @@ void handle_printf_call(char* format_str, ast params) {
         format_start = format_str + 1; // skip the 's'
         params = get_child(params, 1); // skip the string parameter
         params_start = params;
+        params_count = 0;
       } else if (*format_str != '%') { // Do nothing for %%
         fatal_error("Unsupported format specifier");
       }
