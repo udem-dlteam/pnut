@@ -3,7 +3,7 @@
 // putchar
 #include <stdio.h>
 
-// // Macro with a comma in the argument
+// Macro with a comma in the argument
 #define FST(X, Y) X
 #define SND(X, Y) Y
 #define ADD_PAIR(X, Y) FST(X, Y) + SND(X, Y)

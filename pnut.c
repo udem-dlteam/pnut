@@ -1441,7 +1441,7 @@ int get_macro_args_toks(int macro) {
     macro_args_count += 1;
   }
 
-  expect_tok(')');
+  if (tok != ')') syntax_error("unterminated macro argument list");
 
   if (prev_is_comma) {
     args = cons(0, args); // Push empty arg
@@ -1463,7 +1463,7 @@ int get_macro_arg(int ix) {
   return car(arg);
 }
 
-void push_macro(int tokens, int args) {
+void play_macro(int tokens, int args) {
   if (tokens != 0) {
     if (macro_tok_lst != 0) {
       if (macro_stack_ix + 2 >= MACRO_RECURSION_MAX) {
@@ -1479,10 +1479,6 @@ void push_macro(int tokens, int args) {
   }
 }
 
-void push_tokens(int tokens) {
-  push_macro(tokens, 0);
-}
-
 // Try to expand a macro.
 // If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
@@ -1494,19 +1490,19 @@ bool attempt_macro_expansion(int macro) {
   int tokens = car(heap[macro + 3]);
   macro = val;
   if (cdr(heap[macro + 3]) == -1) { // Object-like macro
-    push_macro(tokens, 0);
+    play_macro(tokens, 0);
     return true;
   } else {
     new_macro_args = get_macro_args_toks(macro);
-    // get_macro_args_toks fetched the next token, we save it so it's not lost
-    push_macro(cons(cons(tok, val), 0), new_macro_args);
-    if (new_macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
-      // Function-like macro without (), so we don't expand it.
+    // There was no argument list, i.e. not a function-like macro call even though it is a function-like macro
+    if (new_macro_args == -1) {
+      // get_macro_args_toks looked at the next token so we need to save it
+      play_macro(cons(cons(tok, val), 0), 0);
       tok = IDENTIFIER;
       val = macro;
       return false;
     } else {
-      push_macro(tokens, new_macro_args);
+      play_macro(tokens, new_macro_args);
       return true;
     }
   }
@@ -1557,7 +1553,7 @@ void paste_tokens(int left_tok, int left_val) {
       val = left_val;
       return;
     } else {
-      push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+      play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
       get_tok_macro();
     }
   }
@@ -1669,7 +1665,7 @@ void get_tok() {
           }
           break;
         } else if (tok == MACRO_ARG AND expand_macro_arg) {
-          push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+          play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
         } else if (tok == '#') { // Stringizing!
           stringify();
@@ -2683,7 +2679,7 @@ ast parse_cast_expression() {
     } else {
       // We need to put the current token and '(' back on the token stream.
       tokens = cons(cons(tok, val), 0);
-      push_tokens(tokens);
+      play_macro(tokens, 0);
       tok = '(';
       val = 0;
     }
