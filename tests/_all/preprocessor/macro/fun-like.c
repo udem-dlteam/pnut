@@ -3,7 +3,7 @@
 // putchar
 #include <stdio.h>
 
-// // Macro with a comma in the argument
+// Macro with a comma in the argument
 #define FST(X, Y) X
 #define SND(X, Y) Y
 #define ADD_PAIR(X, Y) FST(X, Y) + SND(X, Y)
@@ -26,6 +26,19 @@ int THUNK = 8;
 #define ADDR 5
 #define CONTROL 7
 #define ARGS ADDR,3,CONTROL
+
+#define DEF(id, str, val) ,id
+
+enum {
+  ABC = 42
+  DEF(def, "def",)
+  DEF(ghi, "ghi",)
+  DEF(jkl, "jlk",)
+// Tests that the expansion of the preceding DEF uses the old DEF macro
+#define DEF(id, str, val) ,id = val
+  DEF(mno, "mno", 1)
+  DEF(pqr, "pqr", 2)
+};
 
 #define MULTI_LINE_MACRO(X, Y) \
   FST(X, Y) + \
@@ -53,4 +66,9 @@ void main() {
   putdigit(THUNK);   // THUNK is also a variable containing 42
   putdigit(SETBIT(SETBIT2, ARGS));
   putdigit(MULTI_LINE_MACRO(1, 2));
+  putdigit(def % 10);
+  putdigit(ghi % 10);
+  putdigit(jkl % 10);
+  putdigit(mno % 10);
+  putdigit(pqr % 10);
 }

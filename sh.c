@@ -5,7 +5,6 @@
 void handle_shell_include() {
   FILE* shell_include_fp;
   int c;
-  get_tok();
   if (tok == STRING) {
     // Include the shell code from the file
     shell_include_fp = fopen(string_pool + val, "r");
@@ -18,6 +17,7 @@ void handle_shell_include() {
     }
     putchar('\n');
     fclose(shell_include_fp);
+    get_tok_macro(); // Skip the string
   } else {
     putstr("tok="); putint(tok); putchar('\n');
     syntax_error("expected string to #include_shell directive");
@@ -1674,10 +1674,15 @@ void comp_assignment(ast lhs, ast rhs) {
       comp_fun_call(rhs, lhs);
     } else {
       /*
-        TODO: This may need to be disabled because of arithmetic precision issues with some shells.
+        If lhs is an identifier, we use x=$((...)) instead of : $((x = ...)).
+        This is unless the right hand side is an assignment, in which case we
+        generate everything in 1 arithmetic expansion for symmetry.
+
+        Note: On certain shells there seems to be a conversion when entering and
+        exiting arithmetic expansions, meaning that the `x=$((...))` may not
+        always be equivalent to `: $((x =  ...))`.
       */
-      /* If lhs is an identifier, we generate x=$(( ... )) instead of : $(( x = ... )) */
-      if (lhs_op == IDENTIFIER) {
+      if (lhs_op == IDENTIFIER && get_op(rhs) != '=') {
         append_glo_decl(string_concat3(comp_lvalue(lhs), wrap_char('='), comp_rvalue(rhs, RVALUE_CTX_BASE)));
       } else {
         append_glo_decl(string_concat5(wrap_str(": $(("), comp_lvalue(lhs), wrap_str(" = "), comp_rvalue(rhs, RVALUE_CTX_ARITH_EXPANSION), wrap_str("))")));

@@ -18,8 +18,6 @@
 #define OPTIMIZE_LONG_LINES
 #endif
 
-#define SUPPORT_INCLUDE
-
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -77,7 +75,6 @@ int last_tok_line_number = 1;
 int last_tok_column_number = 0;
 #endif
 
-#ifdef SUPPORT_INCLUDE
 struct IncludeStack {
   FILE* fp;
   struct IncludeStack *next;
@@ -90,7 +87,7 @@ struct IncludeStack {
 };
 struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
-#endif
+char* include_search_path = 0; // Search path for include files
 
 // Tokens and AST nodes
 enum {
@@ -105,14 +102,11 @@ enum {
   DOUBLE_KW,
   ELSE_KW,
   ENUM_KW,
-  ERROR_KW,
   EXTERN_KW,
   FLOAT_KW,
   FOR_KW,
   GOTO_KW,
   IF_KW,
-  IFNDEF_KW,
-  INCLUDE_KW,
   INT_KW,
   LONG_KW,
   REGISTER_KW,
@@ -203,25 +197,24 @@ void putintneg(int n) {
 }
 
 void fatal_error(char *msg) {
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  putstr(include_stack->filepath); putchar(':');
+  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+  putstr("  "); putstr(msg); putchar('\n');
+#else
   putstr(msg); putchar('\n');
+#endif
   exit(1);
 }
 
 void syntax_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-#ifdef SUPPORT_INCLUDE
   putstr(include_stack->filepath); putchar(':');
-#endif
   putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
   putstr("  syntax error: "); putstr(msg); putchar('\n');
 #else
   putstr("syntax error: "); putstr(msg); putchar('\n');
 #endif
-  exit(1);
-}
-
-void missing_feature_error(char *msg) {
-  putstr("not yet implemented: "); putstr(msg);
   exit(1);
 }
 
@@ -258,8 +251,8 @@ int string_start;
 int hash;
 
 /* These parameters give a perfect hashing of the C keywords */
-#define HASH_PARAM 2764
-#define HASH_PRIME 107
+#define HASH_PARAM 1997
+#define HASH_PRIME 53
 #define HEAP_SIZE 200000
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
@@ -305,6 +298,105 @@ int set_car(int pair, int value) {
 int set_cdr(int pair, int value) {
   heap[pair+1] = value;
   return value;
+}
+
+int get_op(ast node) {
+  return heap[node] & 1023;
+}
+
+ast get_nb_children(ast node) {
+  return heap[node] >> 10;
+}
+
+int get_val(ast node) {
+  return heap[node+1];
+}
+
+void set_val(ast node, int val) {
+  heap[node+1] = val;
+}
+
+ast get_child(ast node, int i) {
+  return heap[node+i+1];
+}
+
+void set_child(ast node, int i, ast child) {
+  heap[node+i+1] = child;
+}
+
+ast ast_result;
+
+ast new_ast0(int op, int val) {
+
+  ast_result = alloc_obj(2);
+
+  heap[ast_result] = op;
+  set_val(ast_result, val);
+
+  return ast_result;
+}
+
+ast new_ast1(int op, ast child0) {
+
+  ast_result = alloc_obj(2);
+
+  heap[ast_result] = op + 1024;
+  set_child(ast_result, 0, child0);
+
+  return ast_result;
+}
+
+ast new_ast2(int op, ast child0, ast child1) {
+
+  ast_result = alloc_obj(3);
+
+  heap[ast_result] = op + 2048;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+
+  return ast_result;
+}
+
+ast new_ast3(int op, ast child0, ast child1, ast child2) {
+
+  ast_result = alloc_obj(4);
+
+  heap[ast_result] = op + 3072;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+  set_child(ast_result, 2, child2);
+
+  return ast_result;
+}
+
+ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
+
+  ast_result = alloc_obj(5);
+
+  heap[ast_result] = op + 4096;
+  set_child(ast_result, 0, child0);
+  set_child(ast_result, 1, child1);
+  set_child(ast_result, 2, child2);
+  set_child(ast_result, 3, child3);
+
+  return ast_result;
+}
+
+ast clone_ast(ast orig) {
+  int nb_children = get_nb_children(orig);
+  int i;
+
+  // Account for the value of ast nodes with no child
+  if (nb_children == 0) nb_children = 1;
+
+  ast_result = alloc_obj(nb_children + 1);
+
+  heap[ast_result] = heap[orig]; // copy operator and nb of children
+  for (i = 0; i < nb_children; i += 1) {
+    set_child(ast_result, i, get_child(orig, i));
+  }
+
+  return ast_result;
 }
 
 void begin_string() {
@@ -414,6 +506,8 @@ int  if_macro_nest_level = 0;      // Current number of unmatched #if/#ifdef/#if
 bool expand_macro = true;
 // Don't expand macro arguments. Used for stringification and token pasting.
 bool expand_macro_arg = true;
+// Don't produce newline tokens. Used when reading the tokens of a macro definition.
+bool skip_newlines = true;
 
 #define MACRO_RECURSION_MAX 100
 int macro_stack[MACRO_RECURSION_MAX];
@@ -432,10 +526,8 @@ void push_if_macro_mask(bool new_mask) {
   if_macro_stack[if_macro_stack_ix] = if_macro_mask;
   if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
   if_macro_stack_ix += 2;
-  // Then set the new mask value
-  if_macro_mask = new_mask;
-  // If the condition is true, we don't want to execute the next #elif that's true
-  if_macro_executed = if_macro_mask;
+  // Then set the new mask value and reset the executed flag
+  if_macro_mask = if_macro_executed = new_mask;
 }
 
 void pop_if_macro_mask() {
@@ -501,7 +593,6 @@ void output_declaration_c_code(bool no_header) {
 #endif
 
 void get_ch() {
-#ifdef SUPPORT_INCLUDE
   ch = fgetc(fp);
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
@@ -517,7 +608,9 @@ void get_ch() {
       // Not freeing include_stack2->filepath because it may not be dynamically allocated
       free(include_stack2->dirname);
       free(include_stack2);
-      get_ch();
+      // EOF is treated as a newline so that files without a newline at the end are still parsed correctly
+      // On the next get_ch call, the first character of the next file will be read
+      ch = '\n';
     }
   }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
@@ -528,25 +621,12 @@ void get_ch() {
     column_number += 1;
   }
 #endif
-#else
-  ch = getchar();
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (ch == '\n') {
-    line_number += 1;
-    column_number = 0;
-  } else {
-    column_number += 1;
-  }
-#endif
-#endif
 #ifdef SH_INCLUDE_C_CODE
   // Save C code chars so they can be displayed with the shell code
   declaration_char_buf[declaration_char_buf_ix] = ch;
   declaration_char_buf_ix += 1;
 #endif
 }
-
-#ifdef SUPPORT_INCLUDE
 
 #ifdef PNUT_CC
 // TODO: It would be nice to not have to duplicate this code
@@ -604,9 +684,9 @@ char *file_parent_directory(char *path) {
   return path;
 }
 
-void include_file(char *file_name, bool relative) {
-  if (relative) {
-    file_name = str_concat(include_stack->dirname, file_name);
+void include_file(char *file_name, char *relative_to) {
+  if (relative_to) {
+    file_name = str_concat(relative_to, file_name);
   }
   fp = fopen(file_name, "r");
   if (fp == 0) {
@@ -630,626 +710,6 @@ void include_file(char *file_name, bool relative) {
   column_number = 1;
 #endif
   include_stack = include_stack2;
-}
-#endif
-
-// We add the preprocessor keywords to the ident table so they can be easily
-// recognized by the preprocessor. Because these are not C keywords, their kind
-// is still IDENTIFIER so the parser (which runs after the preprocessor) can
-// treat them as such.
-int IFDEF_ID;
-int IFNDEF_ID;
-int ELIF_ID;
-int ENDIF_ID;
-int DEFINE_ID;
-int UNDEF_ID;
-int INCLUDE_ID;
-int DEFINED_ID;
-int WARNING_ID;
-int ERROR_ID;
-int INCLUDE_SHELL_ID;
-
-int NOT_SUPPORTED_ID;
-
-// We want to recognize certain identifers without having to do expensive string comparisons
-int ARGV__ID;
-int ARGV_ID;
-int IFS_ID;
-int MAIN_ID;
-
-int PUTCHAR_ID;
-int GETCHAR_ID;
-int EXIT_ID;
-int MALLOC_ID;
-int FREE_ID;
-int PRINTF_ID;
-int FOPEN_ID;
-int FCLOSE_ID;
-int FGETC_ID;
-int PUTSTR_ID;
-int PUTS_ID;
-int READ_ID;
-int WRITE_ID;
-int OPEN_ID;
-int CLOSE_ID;
-
-void get_tok_macro() {
-  expand_macro = false;
-  get_tok();
-  expand_macro = true; // TODO: Restore to previous value?
-}
-
-int lookup_macro_token(int args, int tok, int val) {
-  int ix = 0;
-
-  if (tok < IDENTIFIER) return cons(tok, val); // Not an identifier
-
-  while (args != 0) {
-    if (car(args) == val) break; // Found!
-    args = cdr(args);
-    ix += 1;
-  }
-
-  if (args == 0) { // Identifier is not a macro argument
-    return cons(tok, val);
-  } else {
-    return cons(MACRO_ARG, ix);
-  }
-}
-
-int read_macro_tokens(int args) {
-  int toks = 0; // List of token to replay
-  int tail;
-
-  // Accumulate tokens so they can be replayed when the macro is used
-  if (ch != '\n' AND ch != EOF) {
-    get_tok_macro();
-    // Append the token/value pair to the replay list
-    toks = cons(lookup_macro_token(args, tok, val), 0);
-    tail = toks;
-    while (ch != '\n' AND ch != EOF) {
-      get_tok_macro();
-      heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
-      tail = cdr(tail); // Advance tail
-    }
-
-    // Check that there are no leading or trailing ##
-    if (car(car(toks)) == HASH_HASH OR car(car(tail)) == HASH_HASH) {
-      syntax_error("'##' cannot appear at either end of a macro expansion");
-    }
-  }
-
-  return toks;
-}
-
-#ifdef DEBUG_CPP
-void print_macro_raw_tokens(int tokens) {
-  int i = 0;
-  while (tokens != 0) {
-    // print_tok(car(car(tokens)), cdr(car(tokens)));
-    putchar(car(car(tokens))); putchar('('); putint(car(car(tokens))); putchar(')');
-    tokens = cdr(tokens);
-    i += 1;
-  }
-  putstr("("); putint(i); putstr(" tokens)");
-}
-#endif
-
-// A few things that are different from the standard:
-// - We allow sequence of commas in the argument list
-// - Function-like macros with 0 arguments can be called either without parenthesis or with ().
-// - No support for variadic macros. Tcc only uses them in tests so it should be ok.
-void handle_define() {
-  int macro;    // The identifier that is being defined as a macro
-  int args = 0; // List of arguments for a function-like macro
-  int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
-
-  get_tok_macro();
-  if (tok == IDENTIFIER OR tok == MACRO) {
-    heap[val + 2] = MACRO; // Mark the identifier as a macro
-    macro = val;
-  } else {
-    putstr("tok="); putint(tok); putchar('\n');
-    syntax_error("#define directive can only be followed by a identifier");
-  }
-  if (ch == '(') { // Function-like macro
-    args_count = 0;
-    get_ch();
-    while (ch != '\n' AND ch != EOF) {
-      if (ch == ',') {
-        // Allow sequence of commas, this is more lenient than the standard
-        get_ch();
-        continue;
-      } else if (ch == ')') {
-        get_ch();
-        break;
-      }
-      get_tok_macro();
-      // Accumulate parameters in reverse order. That's ok because the arguments
-      // to the macro will also be in reverse order.
-      args = cons(val, args);
-      args_count += 1;
-    }
-  }
-
-  // Skip whitespace between the parameters and macro body
-  while (ch != '\n' AND ch != EOF AND ch <= ' ') {
-    get_ch();
-  }
-
-  if (ch == '\n' OR ch == EOF) {
-    heap[macro + 3] = cons(0, args_count); // No tokens to replay
-  } else {
-    // Accumulate tokens so they can be replayed when the macro is used
-    heap[macro + 3] = cons(read_macro_tokens(args), args_count);
-
-#ifdef DEBUG_CPP
-    putstr("# ");
-    putstr(string_pool + heap[macro + 1]);
-    if (args_count != -1) putchar('('); // Function-like macro
-
-    while (args_count > 0) {
-      putstr(string_pool + heap[car(args) + 1]);
-      args = cdr(args);
-      args_count -= 1;
-      if (args_count > 0) putstr(", ");
-    }
-
-    if (args_count != -1) putstr(") ");
-    print_macro_raw_tokens(car(heap[macro + 3]));
-    putchar('\n');
-#endif
-  }
-}
-
-// For evaluating #if condition, we use the shunting yard algorithm
-// https://en.wikipedia.org/wiki/Shunting_yard_algorithm
-#define IF_CONDITION_STACK_SIZE 100
-int op_stack[IF_CONDITION_STACK_SIZE];
-int op_stack_ix = 0;
-int val_stack[IF_CONDITION_STACK_SIZE];
-int val_stack_ix = 0;
-
-// Operator precedence of C operators allowed in #if condition
-// Convert to lookup table?
-int precedence(int op) {
-  if (op == '(')                                      return -1; // Left paren are lowest precedence
-  else if ((op == '!') OR (op == '~'))                return 2;
-  else if ((op == '*') OR (op == '/') OR (op == '%')) return 3;
-  else if ((op == '+') OR (op == '-'))                return 4;
-  else if ((op == LSHIFT) OR (op == RSHIFT))          return 5;
-  else if ((op == '<')  OR (op == '>')
-        OR (op == LT_EQ) OR (op == GT_EQ))            return 6;
-  else if ((op == EQ_EQ) OR (op == EXCL_EQ))          return 7;
-  else if (op == '&')                                 return 8;
-  else if (op == '^')                                 return 9;
-  else if (op == '|')                                 return 10;
-  else if (op == AMP_AMP)                             return 9;
-  else if (op == BAR_BAR)                             return 12;
-  else {
-    printf("op=%d\n", op);
-    fatal_error("precedence: unknown operator");
-    return -1;
-  }
-}
-
-void pop_op() {
-  int op = op_stack[op_stack_ix - 1];
-  op_stack_ix -= 1;
-
-  if (op == '!' OR op == '~') {
-    // Unary operators
-    if (val_stack_ix < 1) {
-      fatal_error("invalid unary expression, not enough values in #if condition");
-    }
-    if (op == '!') {
-      val_stack[val_stack_ix - 1] = !val_stack[val_stack_ix - 1];
-    } else if (op == '~') {
-      val_stack[val_stack_ix - 1] = ~val_stack[val_stack_ix - 1];
-    }
-  } else {
-    // Binary operators
-    if (val_stack_ix < 2) {
-      fatal_error("invalid binary expression, not enough values in #if condition");
-    }
-
-    if (op == '*') {
-      val_stack[val_stack_ix - 2] *= val_stack[val_stack_ix - 1];
-    } else if (op == '/') {
-      val_stack[val_stack_ix - 2] /= val_stack[val_stack_ix - 1];
-    } else if (op == '%') {
-      val_stack[val_stack_ix - 2] %= val_stack[val_stack_ix - 1];
-    } else if (op == '+') {
-      val_stack[val_stack_ix - 2] += val_stack[val_stack_ix - 1];
-    } else if (op == '-') {
-      val_stack[val_stack_ix - 2] -= val_stack[val_stack_ix - 1];
-    } else if (op == LSHIFT) {
-      val_stack[val_stack_ix - 2] <<= val_stack[val_stack_ix - 1];
-    } else if (op == RSHIFT) {
-      val_stack[val_stack_ix - 2] >>= val_stack[val_stack_ix - 1];
-    } else if (op == '<') {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] < val_stack[val_stack_ix - 1];
-    } else if (op == '>') {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] > val_stack[val_stack_ix - 1];
-    } else if (op == LT_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] <= val_stack[val_stack_ix - 1];
-    } else if (op == GT_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] >= val_stack[val_stack_ix - 1];
-    } else if (op == EQ_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] == val_stack[val_stack_ix - 1];
-    } else if (op == EXCL_EQ) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] != val_stack[val_stack_ix - 1];
-    } else if (op == '&') {
-      val_stack[val_stack_ix - 2] &= val_stack[val_stack_ix - 1];
-    } else if (op == '^') {
-      val_stack[val_stack_ix - 2] ^= val_stack[val_stack_ix - 1];
-    } else if (op == '|') {
-      val_stack[val_stack_ix - 2] |= val_stack[val_stack_ix - 1];
-    } else if (op == AMP_AMP) {
-      // C documentation specifies that && and || are short-circuit operators, not
-      // sure how they make sense in a #if condition since the operators don't
-      // have side effects.
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] && val_stack[val_stack_ix - 1];
-    } else if (op == BAR_BAR) {
-      val_stack[val_stack_ix - 2] = val_stack[val_stack_ix - 2] || val_stack[val_stack_ix - 1];
-    } else {
-      printf("op=%d\n", op);
-      fatal_error("pop_op: unknown operator");
-    }
-    val_stack_ix -= 1;
-  }
-}
-
-void push_op(int op) {
-  int op_precedence = precedence(op);
-
-  if (op_stack_ix >= IF_CONDITION_STACK_SIZE) {
-    fatal_error("too many operators in #if condition");
-  }
-
-  while (op_stack_ix != 0
-     AND op_stack[op_stack_ix - 1] != '('
-     AND precedence(op_stack[op_stack_ix - 1]) <= op_precedence) {
-    pop_op();
-  }
-
-  op_stack[op_stack_ix] = op;
-  op_stack_ix += 1;
-}
-
-void push_val(int val) {
-  if (val_stack_ix >= IF_CONDITION_STACK_SIZE) {
-    fatal_error("too many values in #if condition");
-  }
-
-  val_stack[val_stack_ix] = val;
-  val_stack_ix += 1;
-}
-
-int evaluate_if_condition() {
-  int previous_mask = if_macro_mask;
-  if_macro_mask = true; // Temporarily set to true so that we can read the condition even if it's inside an ifdef false block
-  while (ch != '\n' AND ch != EOF) {
-    get_tok();
-    if (tok == '(') {
-      push_op(tok);
-    } else if (tok == ')') {
-      while (op_stack_ix != 0 AND op_stack[op_stack_ix - 1] != '(') {
-        pop_op();
-      }
-      if (op_stack_ix == 0) {
-        fatal_error("unmatched parenthesis in #if condition");
-      }
-      op_stack_ix -= 1; // Pop the '('
-    } else if (tok == IDENTIFIER AND val == DEFINED_ID) {
-      get_tok_macro(); // Skip the defined keyword
-      if (tok == '(') {
-        get_tok_macro(); // Skip the '('
-        push_val(tok == MACRO);
-        get_tok_macro(); // Skip the macro name
-        if (tok != ')') {
-          // Not using expect_tok because it may be the end of the line
-          printf("tok=%d\n", tok);
-          fatal_error("expected ')' in #if defined condition");
-        }
-      } else if (tok == IDENTIFIER OR tok == MACRO) {
-        // #if defined MACRO is valid syntax
-        push_val(tok == MACRO);
-      } else {
-        printf("tok=%d\n", tok);
-        fatal_error("expected identifier or macro in #if defined condition");
-      }
-    } else if (tok == INTEGER) {
-      push_val(-val);
-    } else if (tok == CHARACTER) {
-      push_val(val);
-    } else if (tok == IDENTIFIER) {
-      push_val(0); // Undefined macros are 0
-    } else {
-      push_op(tok); // Invalid operators are caught by push_op
-    }
-  }
-  if_macro_mask = previous_mask; // Restore the mask to its previous value
-
-  // Pop remaining operators
-  while (op_stack_ix != 0) {
-    pop_op();
-  }
-
-  if (val_stack_ix != 1) {
-    fatal_error("invalid #if condition");
-  }
-  val_stack_ix = 0; // Reset the value stack
-  return val_stack[0];
-}
-
-void handle_include() {
-  get_tok();
-#ifdef SUPPORT_INCLUDE
-  if (tok == STRING) {
-    include_file(string_pool + val, true);
-  } else if (tok == '<') {
-    get_tok();
-    // Ignore the file name for now.
-    // Note that the token is not a string with the file name, but an identifier
-    // with part of the file. This means we'll need to assemble the filename
-    // string, or change get_tok to consider '<' and '>' as string delimiters.
-    while (tok != '>') get_tok();
-  } else {
-    putstr("tok="); putint(tok); putchar('\n');
-    syntax_error("expected string to #include directive");
-  }
-
-#else
-  syntax_error("The #include directive is not supported in this version of the compiler.");
-#endif
-}
-
-#ifdef sh
-void handle_shell_include();
-#endif
-
-void handle_preprocessor_directive() {
-  bool prev_if_mask = if_macro_mask;
-  int if_res;
-#ifdef SH_INCLUDE_C_CODE
-  int prev_char_buf_ix = declaration_char_buf_ix;
-#endif
-  get_ch(); // Skip the #
-  if_macro_mask = true; // Temporarily set to true so that we can read the directive even if it's inside an ifdef false block
-  get_tok(); // Get the directive
-  if_macro_mask = prev_if_mask;
-
-  if (tok == IDENTIFIER AND val == IFDEF_ID) {
-    if_macro_mask = true; get_tok_macro(); if_macro_mask = prev_if_mask;
-    if (if_macro_mask) {
-      push_if_macro_mask(tok == MACRO);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
-  } else if (tok == IDENTIFIER AND val == IFNDEF_ID) {
-    if_macro_mask = true; get_tok_macro(); if_macro_mask = prev_if_mask;
-    if (if_macro_mask) {
-      push_if_macro_mask(tok != MACRO);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
-  } else if (tok == IF_KW) {
-    if_res = evaluate_if_condition();
-    if (if_macro_mask) {
-      push_if_macro_mask(if_res);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
-  } else if (tok == IDENTIFIER AND val == ELIF_ID) {
-    if_res = evaluate_if_condition();
-    if (if_macro_executed) {
-      // The condition is true, but its ignored if one of the conditions before was also true
-      if_macro_mask = false;
-    } else {
-      if_macro_executed |= if_res;
-      if_macro_mask = if_res;
-    }
-  } else if (tok == ELSE_KW) {
-    if (if_macro_mask OR if_macro_nest_level == 0) {
-      if_macro_mask = !if_macro_executed;
-    }
-  } else if (tok == IDENTIFIER AND val == ENDIF_ID) {
-    if (if_macro_mask OR if_macro_nest_level == 0) {
-      pop_if_macro_mask();
-    } else {
-      if_macro_nest_level -= 1;
-    }
-  } else if (if_macro_mask) {
-    if (tok == IDENTIFIER AND val == INCLUDE_ID) {
-      handle_include();
-    }
-#ifdef sh
-    else if (tok == IDENTIFIER AND val == INCLUDE_SHELL_ID) {
-      // Not standard C, but serves to mix existing shell code with compiled C code
-      handle_shell_include();
-    }
-#endif
-    else if (tok == IDENTIFIER AND val == UNDEF_ID) {
-      get_tok_macro();
-      if (tok == MACRO) {
-        heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
-        // TODO: Doesn't play nice with typedefs, because they are not marked as macros
-      } else {
-        putstr("tok="); putint(tok); putchar('\n');
-        syntax_error("#undef directive can only be followed by a identifier");
-      }
-    } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
-      handle_define();
-    } else if (tok == IDENTIFIER && val == WARNING_ID) {
-      get_tok_macro();
-      putstr("warning: ");
-      if (tok == STRING) {
-        putstr(string_pool + val);
-      } else {
-        syntax_error("#warning/#error directives can only be followed by a string");
-      }
-    } else if (tok == IDENTIFIER AND val == ERROR_ID) {
-      get_tok_macro();
-      putstr("error: ");
-      if (tok == STRING) {
-        syntax_error(string_pool + val);
-      } else {
-        syntax_error("#warning/#error directives can only be followed by a string");
-      }
-    } else {
-      putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
-      syntax_error("unsupported preprocessor directive");
-    }
-  } else {
-    // Skip the directive
-    while (ch != '\n' AND ch != EOF) {
-      get_ch();
-    }
-  }
-  // Because handle_preprocessor_directive is called from get_tok, and it loops after
-  // the call to handle_preprocessor_directive, we don't need to call get_tok here
-  if (ch != '\n' AND ch != EOF) {
-    putstr("ch="); putint(ch); putchar('\n');
-    syntax_error("preprocessor expected end of line");
-  }
-#ifdef SH_INCLUDE_C_CODE
-  declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
-#endif
-}
-
-void get_ident() {
-
-  begin_string();
-
-  while (('A' <= ch AND ch <= 'Z') OR
-         ('a' <= ch AND ch <= 'z') OR
-         ('0' <= ch AND ch <= '9') OR
-         (ch == '_')) {
-    accum_string();
-    get_ch();
-  }
-
-  val = end_ident();
-  tok = heap[val+2];
-  /*
-  putstr("tok="); putint(tok);
-  putstr(" val="); putint(val);
-  putstr(" "); putstr(string_pool + heap[val+1]);
-  putchar('\n');
-  */
-}
-
-int init_ident(int tok, char *name) {
-
-  int i = 0;
-  int prev_ch = ch; // The character may be important to the calling function, saving it
-
-  begin_string();
-
-  while (name[i] != 0) {
-    ch = name[i];
-    accum_string();
-    i += 1;
-  }
-
-  i = end_ident();
-
-  heap[i+2] = tok;
-
-  ch = prev_ch;
-
-  return i;
-}
-
-void init_ident_table() {
-
-  int i = 0;
-
-  while (i < HASH_PRIME) {
-    heap[i] = 0;
-    i += 1;
-  }
-
-  init_ident(AUTO_KW,     "auto");
-  init_ident(BREAK_KW,    "break");
-  init_ident(CASE_KW,     "case");
-  init_ident(CHAR_KW,     "char");
-  init_ident(CONST_KW,    "const");
-  init_ident(CONTINUE_KW, "continue");
-  init_ident(DEFAULT_KW,  "default");
-  init_ident(DO_KW,       "do");
-  init_ident(DOUBLE_KW,   "double");
-  init_ident(ELSE_KW,     "else");
-  init_ident(ENUM_KW,     "enum");
-  init_ident(ERROR_KW,    "error");
-  init_ident(EXTERN_KW,   "extern");
-  init_ident(FLOAT_KW,    "float");
-  init_ident(FOR_KW,      "for");
-  init_ident(GOTO_KW,     "goto");
-  init_ident(IF_KW,       "if");
-  init_ident(INT_KW,      "int");
-  init_ident(LONG_KW,     "long");
-  init_ident(REGISTER_KW, "register");
-  init_ident(RETURN_KW,   "return");
-  init_ident(SHORT_KW,    "short");
-  init_ident(SIGNED_KW,   "signed");
-  init_ident(SIZEOF_KW,   "sizeof");
-  init_ident(STATIC_KW,   "static");
-  init_ident(STRUCT_KW,   "struct");
-  init_ident(SWITCH_KW,   "switch");
-  init_ident(TYPEDEF_KW,  "typedef");
-  init_ident(UNION_KW,    "union");
-  init_ident(UNSIGNED_KW, "unsigned");
-  init_ident(VOID_KW,     "void");
-  init_ident(VOLATILE_KW, "volatile");
-  init_ident(WHILE_KW,    "while");
-
-  // Preprocessor keywords. These are not tagged as keyword since they can be
-  // used as identifiers after the preprocessor stage.
-  IFDEF_ID   = init_ident(IDENTIFIER, "ifdef");
-  IFNDEF_ID  = init_ident(IDENTIFIER, "ifndef");
-  ELIF_ID    = init_ident(IDENTIFIER, "elif");
-  ENDIF_ID   = init_ident(IDENTIFIER, "endif");
-  DEFINE_ID  = init_ident(IDENTIFIER, "define");
-  WARNING_ID = init_ident(IDENTIFIER, "warning");
-  ERROR_ID   = init_ident(IDENTIFIER, "error");
-  UNDEF_ID   = init_ident(IDENTIFIER, "undef");
-  INCLUDE_ID = init_ident(IDENTIFIER, "include");
-  DEFINED_ID = init_ident(IDENTIFIER, "defined");
-  INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
-
-  ARGV_ID = init_ident(IDENTIFIER, "argv");
-  ARGV__ID = init_ident(IDENTIFIER, "argv_");
-  IFS_ID  = init_ident(IDENTIFIER, "IFS");
-  MAIN_ID = init_ident(IDENTIFIER, "main");
-
-  PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
-  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
-  EXIT_ID    = init_ident(IDENTIFIER, "exit");
-  MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
-  FREE_ID    = init_ident(IDENTIFIER, "free");
-  PRINTF_ID  = init_ident(IDENTIFIER, "printf");
-  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
-  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
-  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
-  PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
-  PUTS_ID    = init_ident(IDENTIFIER, "puts");
-  READ_ID    = init_ident(IDENTIFIER, "read");
-  WRITE_ID   = init_ident(IDENTIFIER, "write");
-  OPEN_ID    = init_ident(IDENTIFIER, "open");
-  CLOSE_ID   = init_ident(IDENTIFIER, "close");
-
-  // Stringizing is recognized by the macro expander, but it returns a hardcoded
-  // string instead of the actual value. This may be enough to compile TCC.
-  NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
-}
-
-void init_pnut_macros() {
-  init_ident(MACRO, "PNUT_CC");
 }
 
 int accum_digit(int base) {
@@ -1328,6 +788,589 @@ void get_string_char() {
   }
 }
 
+void accum_string_until(char end) {
+  while ((ch != end) AND (ch != EOF)) {
+    get_string_char();
+    tok = ch;
+    ch = val;
+    accum_string();
+    ch = tok;
+  }
+
+  if (ch != end) {
+    syntax_error("unterminated string literal");
+  }
+
+  ch = 0;
+  accum_string();
+
+  get_ch();
+}
+
+// We add the preprocessor keywords to the ident table so they can be easily
+// recognized by the preprocessor. Because these are not C keywords, their kind
+// is still IDENTIFIER so the parser (which runs after the preprocessor) can
+// treat them as such.
+int IFDEF_ID;
+int IFNDEF_ID;
+int ELIF_ID;
+int ENDIF_ID;
+int DEFINE_ID;
+int UNDEF_ID;
+int INCLUDE_ID;
+int DEFINED_ID;
+int WARNING_ID;
+int ERROR_ID;
+int INCLUDE_SHELL_ID;
+
+int NOT_SUPPORTED_ID;
+
+// We want to recognize certain identifers without having to do expensive string comparisons
+int ARGV__ID;
+int ARGV_ID;
+int IFS_ID;
+int MAIN_ID;
+
+int PUTCHAR_ID;
+int GETCHAR_ID;
+int EXIT_ID;
+int MALLOC_ID;
+int FREE_ID;
+int PRINTF_ID;
+int FOPEN_ID;
+int FCLOSE_ID;
+int FGETC_ID;
+int PUTSTR_ID;
+int PUTS_ID;
+int READ_ID;
+int WRITE_ID;
+int OPEN_ID;
+int CLOSE_ID;
+
+// When we parse a macro, we generally want the tokens as they are, without expanding them.
+void get_tok_macro() {
+  bool prev_expand_macro = expand_macro;
+  bool prev_macro_mask = if_macro_mask;
+  bool skip_newlines_prev = skip_newlines;
+
+  expand_macro = false;
+  if_macro_mask = true;
+  skip_newlines = false;
+  get_tok();
+  expand_macro = prev_expand_macro;
+  if_macro_mask = prev_macro_mask;
+  skip_newlines = skip_newlines_prev;
+}
+
+// Like get_tok_macro, but skips newline
+// This is useful when we want to read the arguments of a macro expansion.
+void get_tok_macro_expand() {
+  bool prev_expand_macro = expand_macro;
+  bool prev_macro_mask = if_macro_mask;
+
+  expand_macro = false;
+  if_macro_mask = true;
+  get_tok();
+  expand_macro = prev_expand_macro;
+  if_macro_mask = prev_macro_mask;
+}
+
+int lookup_macro_token(int args, int tok, int val) {
+  int ix = 0;
+
+  if (tok < IDENTIFIER) return cons(tok, val); // Not an identifier
+
+  while (args != 0) {
+    if (car(args) == val) break; // Found!
+    args = cdr(args);
+    ix += 1;
+  }
+
+  if (args == 0) { // Identifier is not a macro argument
+    return cons(tok, val);
+  } else {
+    return cons(MACRO_ARG, ix);
+  }
+}
+
+int read_macro_tokens(int args) {
+  int toks = 0; // List of token to replay
+  int tail;
+
+  // Accumulate tokens so they can be replayed when the macro is used
+  if (tok != '\n' AND tok != EOF) {
+    // Append the token/value pair to the replay list
+    toks = cons(lookup_macro_token(args, tok, val), 0);
+    tail = toks;
+    get_tok_macro();
+    while (tok != '\n' AND tok != EOF) {
+      heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
+      tail = cdr(tail); // Advance tail
+      get_tok_macro();
+    }
+
+    // Check that there are no leading or trailing ##
+    if (car(car(toks)) == HASH_HASH OR car(car(tail)) == HASH_HASH) {
+      syntax_error("'##' cannot appear at either end of a macro expansion");
+    }
+  }
+
+  return toks;
+}
+
+#ifdef DEBUG_CPP
+void print_macro_raw_tokens(int tokens) {
+  int i = 0;
+  while (tokens != 0) {
+    // print_tok(car(car(tokens)), cdr(car(tokens)));
+    putchar(car(car(tokens))); putchar('('); putint(car(car(tokens))); putchar(')');
+    tokens = cdr(tokens);
+    i += 1;
+  }
+  putstr("("); putint(i); putstr(" tokens)");
+}
+#endif
+
+// A few things that are different from the standard:
+// - We allow sequence of commas in the argument list
+// - Function-like macros with 0 arguments can be called either without parenthesis or with ().
+// - No support for variadic macros. Tcc only uses them in tests so it should be ok.
+void handle_define() {
+  int macro;    // The identifier that is being defined as a macro
+  int args = 0; // List of arguments for a function-like macro
+  int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
+
+  if (tok == IDENTIFIER OR tok == MACRO OR (0 <= AUTO_KW AND tok <= WHILE_KW)) {
+    heap[val + 2] = MACRO; // Mark the identifier as a macro
+    macro = val;
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("#define directive can only be followed by a identifier");
+  }
+  if (ch == '(') { // Function-like macro
+    args_count = 0;
+    get_tok_macro(); // Skip macro name
+    get_tok_macro(); // Skip '('
+    while (tok != '\n' AND tok != EOF) {
+      if (tok == ',') {
+        // Allow sequence of commas, this is more lenient than the standard
+        get_tok_macro();
+        continue;
+      } else if (tok == ')') {
+        get_tok_macro();
+        break;
+      }
+      get_tok_macro();
+      // Accumulate parameters in reverse order. That's ok because the arguments
+      // to the macro will also be in reverse order.
+      args = cons(val, args);
+      args_count += 1;
+    }
+  } else {
+    get_tok_macro(); // Skip macro name
+  }
+
+  // Accumulate tokens so they can be replayed when the macro is used
+  heap[macro + 3] = cons(read_macro_tokens(args), args_count);
+
+#ifdef DEBUG_CPP
+  putstr("# ");
+  putstr(string_pool + heap[macro + 1]);
+  if (args_count != -1) putchar('('); // Function-like macro
+
+  while (args_count > 0) {
+    putstr(string_pool + heap[car(args) + 1]);
+    args = cdr(args);
+    args_count -= 1;
+    if (args_count > 0) putstr(", ");
+  }
+
+  if (args_count != -1) putstr(") ");
+  print_macro_raw_tokens(car(heap[macro + 3]));
+  putchar('\n');
+#endif
+}
+
+int eval_constant(ast expr, bool if_macro) {
+  int val;
+  int op = get_op(expr);
+  int op1;
+  int op2;
+  int result;
+  int i;
+
+  switch (op) {
+    case INTEGER:   return -get_val(expr);
+    case CHARACTER: return get_val(expr);
+    case '~':       return !eval_constant(get_child(expr, 0), if_macro);
+    case '!':       return !eval_constant(get_child(expr, 0), if_macro);
+    case '-':
+    case '+':
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (get_nb_children(expr) == 1) {
+        return op == '-' ? -op1 : op1;
+      }
+      op2 = eval_constant(get_child(expr, 1), if_macro);
+      return op == '-' ? op1 - op2 : op1 + op2;
+
+    case '?':
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (op1) {
+        return eval_constant(get_child(expr, 1), if_macro);
+      }
+      return eval_constant(get_child(expr, 2), if_macro);
+
+    case '*':
+    case '/':
+    case '%':
+    case '&':
+    case '|':
+    case '^':
+    case LSHIFT:
+    case RSHIFT:
+    case EQ_EQ:
+    case EXCL_EQ:
+    case LT_EQ:
+    case GT_EQ:
+    case '<':
+    case '>':
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      op2 = eval_constant(get_child(expr, 1), if_macro);
+      switch (op) {
+        case '*':     return op1 * op2;
+        case '/':     return op1 / op2;
+        case '%':     return op1 % op2;
+        case '&':     return op1 & op2;
+        case '|':     return op1 | op2;
+        case '^':     return op1 ^ op2;
+        case LSHIFT:  return op1 << op2;
+        case RSHIFT:  return op1 >> op2;
+        case EQ_EQ:   return op1 == op2;
+        case EXCL_EQ: return op1 != op2;
+        case LT_EQ:   return op1 <= op2;
+        case GT_EQ:   return op1 >= op2;
+        case '<':     return op1 < op2;
+        case '>':     return op1 > op2;
+      }
+      return 0; // Should never reach here
+
+    case AMP_AMP:
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (!op1) return 0;
+      return eval_constant(get_child(expr, 1), if_macro);
+
+    case BAR_BAR:
+      op1 = eval_constant(get_child(expr, 0), if_macro);
+      if (op1) return 1;
+      return eval_constant(get_child(expr, 1), if_macro);
+
+    case '(': // defined operators are represented as fun calls
+      if (if_macro && get_val(get_child(expr, 0)) == DEFINED_ID) {
+        return get_child(expr, 1) == MACRO;
+      }
+
+      fatal_error("unknown function call in constant expressions");
+      return 0;
+
+    case IDENTIFIER:
+      if (if_macro) {
+        // Undefined identifiers are 0
+        // At this point, macros have already been expanded so we can't have a macro identifier
+        return 0;
+      }
+      // TODO: Enums when not not if_macro
+      fatal_error("identifiers are not allowed in constant expression");
+      return 0;
+
+    default:
+      putstr("op="); putint(op); putchar('\n');
+      fatal_error("unsupported operator in constant expression");
+  }
+}
+
+ast parse_assignment_expression();
+
+int evaluate_if_condition() {
+  bool prev_skip_newlines = skip_newlines;
+  int previous_mask = if_macro_mask;
+  ast expr;
+  // Temporarily set to true so that we can read the condition even if it's inside an ifdef false block
+  // Unlike in other directives using get_tok_macro, we want to expand macros in the condition
+  if_macro_mask = true;
+  skip_newlines = false; // We want to stop when we reach the first newline
+  get_tok(); // Skip the #if keyword
+  expr = parse_assignment_expression();
+
+  // Restore the previous value
+  if_macro_mask = previous_mask;
+  skip_newlines = prev_skip_newlines;
+  return eval_constant(expr, true);
+}
+
+void handle_include() {
+  if (tok == STRING) {
+    include_file(string_pool + val, include_stack->dirname);
+    get_tok_macro(); // Skip the string
+  } else if (tok == '<') {
+    accum_string_until('>');
+    // #include <file> directives only take effect if the search path is provided
+    // TODO: Issue a warning to stderr when skipping the directive
+    if (include_search_path != 0) {
+      include_file(string_pool + string_start, include_search_path);
+    }
+    get_tok_macro(); // Skip the string
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("expected string to #include directive");
+  }
+}
+
+#ifdef sh
+void handle_shell_include();
+#endif
+
+void handle_preprocessor_directive() {
+  int temp;
+#ifdef SH_INCLUDE_C_CODE
+  int prev_char_buf_ix = declaration_char_buf_ix;
+#endif
+  get_tok_macro(); // Get the # token
+  get_tok_macro(); // Get the directive
+
+  if (tok == IDENTIFIER AND (val == IFDEF_ID || val == IFNDEF_ID)) {
+    temp = val;
+    get_tok_macro(); // Get the macro name
+    if (if_macro_mask) {
+      push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      if_macro_nest_level += 1;
+    }
+    get_tok_macro(); // Skip the macro name
+  } else if (tok == IF_KW) {
+    temp = evaluate_if_condition();
+    if (if_macro_mask) {
+      push_if_macro_mask(temp);
+    } else {
+      // Keep track of the number of #ifdef so we can skip the corresponding #endif
+      if_macro_nest_level += 1;
+    }
+  } else if (tok == IDENTIFIER AND val == ELIF_ID) {
+    temp = evaluate_if_condition();
+    if (if_macro_executed) {
+      // The condition is true, but its ignored if one of the conditions before was also true
+      if_macro_mask = false;
+    } else {
+      if_macro_executed |= temp;
+      if_macro_mask = temp;
+    }
+  } else if (tok == ELSE_KW) {
+    if (if_macro_mask OR if_macro_nest_level == 0) {
+      if_macro_mask = !if_macro_executed;
+    }
+    get_tok_macro(); // Skip the else keyword
+  } else if (tok == IDENTIFIER AND val == ENDIF_ID) {
+    if (if_macro_mask OR if_macro_nest_level == 0) {
+      pop_if_macro_mask();
+    } else {
+      if_macro_nest_level -= 1;
+    }
+    get_tok_macro(); // Skip the else keyword
+  } else if (if_macro_mask) {
+    if (tok == IDENTIFIER AND val == INCLUDE_ID) {
+      get_tok_macro(); // Get the STRING token
+      handle_include();
+    }
+#ifdef sh
+    // Not standard C, but serves to mix existing shell code with compiled C code
+    else if (tok == IDENTIFIER AND val == INCLUDE_SHELL_ID) {
+      get_tok_macro(); // Get the STRING token
+      handle_shell_include();
+    }
+#endif
+    else if (tok == IDENTIFIER AND val == UNDEF_ID) {
+      get_tok_macro(); // Get the macro name
+      if (tok == IDENTIFIER || tok == MACRO) {
+        // TODO: Doesn't play nice with typedefs, because they are not marked as macros
+        heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
+        get_tok_macro(); // Skip the macro name
+      } else {
+        putstr("tok="); putint(tok); putchar('\n');
+        syntax_error("#undef directive can only be followed by a identifier");
+      }
+    } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
+      get_tok_macro(); // Get the macro name
+      handle_define();
+    } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
+      temp = val;
+      putstr(temp == WARNING_ID ? "warning:" : "error:");
+      // Print the rest of the line, it does not support \ at the end of the line but that's ok
+      while (ch != '\n' AND ch != EOF) {
+        putchar(ch); get_ch();
+      }
+      putchar('\n');
+      tok = '\n';
+      if (temp == ERROR_ID) exit(1);
+    } else {
+      putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
+      syntax_error("unsupported preprocessor directive");
+    }
+  } else {
+    // Skip the rest of the directive
+    while (tok != '\n' AND tok != EOF) get_tok_macro();
+  }
+
+  if (tok != '\n' AND tok != EOF) {
+    putstr("tok="); putint(tok); putchar('\n');
+    putstr("directive="); putint(tok); putchar('\n');
+    putstr("string="); putstr(string_pool + heap[val + 1]); putchar('\n');
+    if (tok == IDENTIFIER OR tok == MACRO) {
+      putstr("string = ");
+      putstr(string_pool + heap[1 + val]);
+      putchar('\n');
+    }
+    syntax_error("preprocessor expected end of line");
+  }
+
+  // Because handle_preprocessor_directive is called from get_tok, and it loops
+  // after the call to handle_preprocessor_directive, we don't need to call
+  // get_tok before returning.
+
+#ifdef SH_INCLUDE_C_CODE
+  declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
+#endif
+}
+
+void get_ident() {
+
+  begin_string();
+
+  while (('A' <= ch AND ch <= 'Z') OR
+         ('a' <= ch AND ch <= 'z') OR
+         ('0' <= ch AND ch <= '9') OR
+         (ch == '_')) {
+    accum_string();
+    get_ch();
+  }
+
+  val = end_ident();
+  tok = heap[val+2];
+  /*
+  putstr("tok="); putint(tok);
+  putstr(" val="); putint(val);
+  putstr(" "); putstr(string_pool + heap[val+1]);
+  putchar('\n');
+  */
+}
+
+int init_ident(int tok, char *name) {
+
+  int i = 0;
+  int prev_ch = ch; // The character may be important to the calling function, saving it
+
+  begin_string();
+
+  while (name[i] != 0) {
+    ch = name[i];
+    accum_string();
+    i += 1;
+  }
+
+  i = end_ident();
+
+  heap[i+2] = tok;
+
+  ch = prev_ch;
+
+  return i;
+}
+
+void init_ident_table() {
+
+  int i = 0;
+
+  while (i < HASH_PRIME) {
+    heap[i] = 0;
+    i += 1;
+  }
+
+  init_ident(AUTO_KW,     "auto");
+  init_ident(BREAK_KW,    "break");
+  init_ident(CASE_KW,     "case");
+  init_ident(CHAR_KW,     "char");
+  init_ident(CONST_KW,    "const");
+  init_ident(CONTINUE_KW, "continue");
+  init_ident(DEFAULT_KW,  "default");
+  init_ident(DO_KW,       "do");
+  init_ident(DOUBLE_KW,   "double");
+  init_ident(ELSE_KW,     "else");
+  init_ident(ENUM_KW,     "enum");
+  init_ident(EXTERN_KW,   "extern");
+  init_ident(FLOAT_KW,    "float");
+  init_ident(FOR_KW,      "for");
+  init_ident(GOTO_KW,     "goto");
+  init_ident(IF_KW,       "if");
+  init_ident(INT_KW,      "int");
+  init_ident(LONG_KW,     "long");
+  init_ident(REGISTER_KW, "register");
+  init_ident(RETURN_KW,   "return");
+  init_ident(SHORT_KW,    "short");
+  init_ident(SIGNED_KW,   "signed");
+  init_ident(SIZEOF_KW,   "sizeof");
+  init_ident(STATIC_KW,   "static");
+  init_ident(STRUCT_KW,   "struct");
+  init_ident(SWITCH_KW,   "switch");
+  init_ident(TYPEDEF_KW,  "typedef");
+  init_ident(UNION_KW,    "union");
+  init_ident(UNSIGNED_KW, "unsigned");
+  init_ident(VOID_KW,     "void");
+  init_ident(VOLATILE_KW, "volatile");
+  init_ident(WHILE_KW,    "while");
+
+  // Preprocessor keywords. These are not tagged as keyword since they can be
+  // used as identifiers after the preprocessor stage.
+  IFDEF_ID   = init_ident(IDENTIFIER, "ifdef");
+  IFNDEF_ID  = init_ident(IDENTIFIER, "ifndef");
+  ELIF_ID    = init_ident(IDENTIFIER, "elif");
+  ENDIF_ID   = init_ident(IDENTIFIER, "endif");
+  DEFINE_ID  = init_ident(IDENTIFIER, "define");
+  WARNING_ID = init_ident(IDENTIFIER, "warning");
+  ERROR_ID   = init_ident(IDENTIFIER, "error");
+  UNDEF_ID   = init_ident(IDENTIFIER, "undef");
+  INCLUDE_ID = init_ident(IDENTIFIER, "include");
+  DEFINED_ID = init_ident(IDENTIFIER, "defined");
+  INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
+
+  ARGV_ID = init_ident(IDENTIFIER, "argv");
+  ARGV__ID = init_ident(IDENTIFIER, "argv_");
+  IFS_ID  = init_ident(IDENTIFIER, "IFS");
+  MAIN_ID = init_ident(IDENTIFIER, "main");
+
+  PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
+  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
+  EXIT_ID    = init_ident(IDENTIFIER, "exit");
+  MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
+  FREE_ID    = init_ident(IDENTIFIER, "free");
+  PRINTF_ID  = init_ident(IDENTIFIER, "printf");
+  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
+  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
+  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
+  PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
+  PUTS_ID    = init_ident(IDENTIFIER, "puts");
+  READ_ID    = init_ident(IDENTIFIER, "read");
+  WRITE_ID   = init_ident(IDENTIFIER, "write");
+  OPEN_ID    = init_ident(IDENTIFIER, "open");
+  CLOSE_ID   = init_ident(IDENTIFIER, "close");
+
+  // Stringizing is recognized by the macro expander, but it returns a hardcoded
+  // string instead of the actual value. This may be enough to compile TCC.
+  NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
+}
+
+void init_pnut_macros() {
+  init_ident(MACRO, "PNUT_CC");
+}
+
 // A macro argument is represented using a list of tokens.
 // Macro arguments are split by commas, but commas can also appear in function
 // calls and as operators. To distinguish between the two, we need to keep track
@@ -1348,17 +1391,19 @@ int macro_parse_argument() {
       heap[tail + 1] = cons(cons(tok, val), 0);
       tail = cdr(tail);
     }
-    get_tok_macro();
+    get_tok_macro_expand();
   }
 
   return arg_tokens;
 }
 
-void check_macro_arity(int macro_args_count, int expected_argc) {
+void check_macro_arity(int macro_args_count, int macro) {
+  int expected_argc = cdr(heap[macro + 3]);
   if (macro_args_count != expected_argc) {
     putstr("expected_argc="); putint(expected_argc);
     putstr(" != macro_args_count="); putint(macro_args_count);
     putchar('\n');
+    putstr("macro="); putstr(string_pool + heap[macro + 1]); putchar('\n');
     syntax_error("macro argument count mismatch");
   }
 }
@@ -1366,31 +1411,44 @@ void check_macro_arity(int macro_args_count, int expected_argc) {
 // Reads the arguments of a macro call, where the arguments are split by commas.
 // Note that args are accumulated in reverse order, as the macro arguments refer
 // to the tokens in reverse order.
-int get_macro_args_toks(int expected_argc) {
+int get_macro_args_toks(int macro) {
   int args = 0;
   int macro_args_count = 0;
-  get_tok_macro(); // Skip the macro identifier
+  bool prev_is_comma = false;
+  get_tok_macro_expand(); // Skip the macro identifier
 
   if (tok != '(') { // Function-like macro with 0 arguments
-    check_macro_arity(macro_args_count, expected_argc);
+    check_macro_arity(macro_args_count, macro);
     return -1; // No arguments
   }
 
-  get_tok_macro(); // Skip '('
+  get_tok_macro_expand(); // Skip '('
 
   while (tok != ')' AND tok != EOF) {
-    // Allow sequence of commas, this is more lenient than the standard
     if (tok == ',') {
-      get_tok_macro(); // Skip comma
+      get_tok_macro_expand(); // Skip comma
+      if (prev_is_comma) { // Push empty arg
+        args = cons(0, args);
+        macro_args_count += 1;
+      }
+      prev_is_comma = true;
       continue;
+    } else {
+      prev_is_comma = false;
     }
+
     args = cons(macro_parse_argument(), args);
     macro_args_count += 1;
   }
 
-  expect_tok(')');
+  if (tok != ')') syntax_error("unterminated macro argument list");
 
-  check_macro_arity(macro_args_count, expected_argc);
+  if (prev_is_comma) {
+    args = cons(0, args); // Push empty arg
+    macro_args_count += 1;
+  }
+
+  check_macro_arity(macro_args_count, macro);
 
   return args;
 }
@@ -1405,7 +1463,7 @@ int get_macro_arg(int ix) {
   return car(arg);
 }
 
-void push_macro(int tokens, int args) {
+void play_macro(int tokens, int args) {
   if (tokens != 0) {
     if (macro_tok_lst != 0) {
       if (macro_stack_ix + 2 >= MACRO_RECURSION_MAX) {
@@ -1421,10 +1479,6 @@ void push_macro(int tokens, int args) {
   }
 }
 
-void push_tokens(int tokens) {
-  push_macro(tokens, 0);
-}
-
 // Try to expand a macro.
 // If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
@@ -1432,21 +1486,23 @@ void push_tokens(int tokens) {
 // Returns 1 if the macro was expanded, 0 otherwise.
 bool attempt_macro_expansion(int macro) {
   int new_macro_args;
+  // We must save the tokens because the macro may be redefined while reading the arguments
+  int tokens = car(heap[macro + 3]);
   macro = val;
   if (cdr(heap[macro + 3]) == -1) { // Object-like macro
-    push_macro(car(heap[macro + 3]), 0);
+    play_macro(tokens, 0);
     return true;
   } else {
-    new_macro_args = get_macro_args_toks(cdr(heap[macro + 3]));
-    // get_macro_args_toks fetched the next token, we save it so it's not lost
-    push_macro(cons(cons(tok, val), 0), new_macro_args);
-    if (new_macro_args == -1) { // There was no argument list, i.e. not a function-like macro call
-      // Function-like macro without (), so we don't expand it.
+    new_macro_args = get_macro_args_toks(macro);
+    // There was no argument list, i.e. not a function-like macro call even though it is a function-like macro
+    if (new_macro_args == -1) {
+      // get_macro_args_toks looked at the next token so we need to save it
+      play_macro(cons(cons(tok, val), 0), 0);
       tok = IDENTIFIER;
       val = macro;
       return false;
     } else {
-      push_macro(car(heap[macro + 3]), new_macro_args);
+      play_macro(tokens, new_macro_args);
       return true;
     }
   }
@@ -1486,20 +1542,36 @@ int paste_integers(int left_val, int right_val) {
 void paste_tokens(int left_tok, int left_val) {
   int right_tok;
   int right_val;
+  expand_macro_arg = false;
   get_tok_macro();
+  expand_macro_arg = true;
+  // We need to handle the case where the right-hand side is a macro argument that expands to empty
+  // In that case, the left-hand side is returned as is.
+  if (tok == MACRO_ARG) {
+    if (get_macro_arg(val) == 0) {
+      tok = left_tok;
+      val = left_val;
+      return;
+    } else {
+      play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+      get_tok_macro();
+    }
+  }
   right_tok = tok;
   right_val = val;
-  if (left_tok == IDENTIFIER OR left_tok == MACRO) {
+  if (left_tok == IDENTIFIER || left_tok == MACRO || left_tok <= WHILE_KW) {
     // Something that starts with an identifier can only be an identifier
     begin_string();
     accum_string_string(heap[left_val + 1]);
 
-    if (right_tok == IDENTIFIER OR right_tok == MACRO) {
+    if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
       accum_string_string(heap[right_val + 1]);
     } else if (right_tok == INTEGER) {
       accum_string_integer(-right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
+      // show identifier/macro string
+      putstr("left="); putstr(string_pool + heap[left_val + 1]); putchar('\n');
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -1508,6 +1580,13 @@ void paste_tokens(int left_tok, int left_val) {
   } else if (left_tok == INTEGER) {
     if (right_tok == INTEGER) {
       val = -paste_integers(-left_val, -right_val);
+    } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
+      begin_string();
+      accum_string_integer(-left_val);
+      accum_string_string(heap[right_val + 1]);
+
+      val = end_ident();
+      tok = heap[val+2]; // The kind of the identifier
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       syntax_error("cannot paste an integer with a non-integer");
@@ -1566,7 +1645,7 @@ void get_tok() {
             paste_tokens(tok, val);
             break;
           }
-        } else if (macro_tok_lst == 0 AND paste_last_token) {
+        } else if (macro_tok_lst == 0 AND paste_last_token) { // We finished expanding the left-hand side of ##
           if (macro_stack_ix == 0) {
             // If we are not in a macro expansion, we can't paste the last token
             // This should not happen if the macro is well-formed, which is
@@ -1586,7 +1665,7 @@ void get_tok() {
           }
           break;
         } else if (tok == MACRO_ARG AND expand_macro_arg) {
-          push_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+          play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
         } else if (tok == '#') { // Stringizing!
           stringify();
@@ -1605,23 +1684,34 @@ void get_tok() {
           break;
         }
 
-        /* skip whitespace, detecting when it is at start of line */
+        /*
+          skip whitespace, detecting when it is at start of line.
+          When skip_newlines is false, produces a '\n' token whenever it
+          encounters whitespace containing at least a newline.
+          This condenses multiple newlines into a single '\n' token and serves
+          to end the current preprocessor directive.
+        */
 
-        if (ch == '\n') tok = ch;
-        get_ch();
-
+       tok = 0; // Reset the token
         while (0 <= ch AND ch <= ' ') {
           if (ch == '\n') tok = ch;
           get_ch();
         }
 
-        /* detect '#' at start of line, possibly preceded by whitespace */
-
-        if ((tok == '\n') AND (ch == '#'))
-          handle_preprocessor_directive();
+        if (tok == '\n' && !skip_newlines) {
+          // If the newline is followed by a #, the preprocessor directive is
+          // handled in the next iteration of the loop.
+          break;
+        }
 
         /* will continue while (1) loop */
+      }
 
+      /* detect '#' at start of line, possibly preceded by whitespace */
+      else if (tok == '\n' && ch == '#') {
+        tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
+        handle_preprocessor_directive();
+        /* will continue while (1) loop */
       }
 
       else if (('a' <= ch AND ch <= 'z') OR
@@ -1688,23 +1778,7 @@ void get_tok() {
         get_ch();
 
         begin_string();
-
-        while ((ch != '\"') AND (ch != EOF)) {
-          get_string_char();
-          tok = ch;
-          ch = val;
-          accum_string();
-          ch = tok;
-        }
-
-        if (ch != '\"') {
-          syntax_error("unterminated string literal");
-        }
-
-        ch = 0;
-        accum_string();
-
-        get_ch();
+        accum_string_until('\"');
 
         val = string_start;
         tok = STRING;
@@ -1929,105 +2003,6 @@ void get_tok() {
 }
 
 /* parser */
-
-int get_op(ast node) {
-  return heap[node] & 1023;
-}
-
-ast get_nb_children(ast node) {
-  return heap[node] >> 10;
-}
-
-int get_val(ast node) {
-  return heap[node+1];
-}
-
-void set_val(ast node, int val) {
-  heap[node+1] = val;
-}
-
-ast get_child(ast node, int i) {
-  return heap[node+i+1];
-}
-
-void set_child(ast node, int i, ast child) {
-  heap[node+i+1] = child;
-}
-
-ast ast_result;
-
-ast new_ast0(int op, int val) {
-
-  ast_result = alloc_obj(2);
-
-  heap[ast_result] = op;
-  set_val(ast_result, val);
-
-  return ast_result;
-}
-
-ast new_ast1(int op, ast child0) {
-
-  ast_result = alloc_obj(2);
-
-  heap[ast_result] = op + 1024;
-  set_child(ast_result, 0, child0);
-
-  return ast_result;
-}
-
-ast new_ast2(int op, ast child0, ast child1) {
-
-  ast_result = alloc_obj(3);
-
-  heap[ast_result] = op + 2048;
-  set_child(ast_result, 0, child0);
-  set_child(ast_result, 1, child1);
-
-  return ast_result;
-}
-
-ast new_ast3(int op, ast child0, ast child1, ast child2) {
-
-  ast_result = alloc_obj(4);
-
-  heap[ast_result] = op + 3072;
-  set_child(ast_result, 0, child0);
-  set_child(ast_result, 1, child1);
-  set_child(ast_result, 2, child2);
-
-  return ast_result;
-}
-
-ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
-
-  ast_result = alloc_obj(5);
-
-  heap[ast_result] = op + 4096;
-  set_child(ast_result, 0, child0);
-  set_child(ast_result, 1, child1);
-  set_child(ast_result, 2, child2);
-  set_child(ast_result, 3, child3);
-
-  return ast_result;
-}
-
-ast clone_ast(ast orig) {
-  int nb_children = get_nb_children(orig);
-  int i;
-
-  // Account for the value of ast nodes with no child
-  if (nb_children == 0) nb_children = 1;
-
-  ast_result = alloc_obj(nb_children + 1);
-
-  heap[ast_result] = heap[orig]; // copy operator and nb of children
-  for (i = 0; i < nb_children; i += 1) {
-    set_child(ast_result, i, get_child(orig, i));
-  }
-
-  return ast_result;
-}
 
 #ifdef NICE_ERR_MSG
 #include "debug.c"
@@ -2475,6 +2450,8 @@ ast parse_definition(int local) {
     expect_tok(';');
     return result;
   } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("unknown decl: type expected");
     return result;
   }
 }
@@ -2635,7 +2612,7 @@ ast parse_unary_expression() {
     result = parse_cast_expression();
     result = new_ast1(op, result);
 
-  } else if (tok == SIZEOF_KW) {
+  } else if (skip_newlines && tok == SIZEOF_KW) { // only parse sizeof if we're not in a #if expression
 
     get_tok();
     if (tok == '(') {
@@ -2646,6 +2623,21 @@ ast parse_unary_expression() {
       result = parse_unary_expression();
     }
     result = new_ast1(SIZEOF_KW, result);
+
+  } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
+
+    get_tok_macro();
+    if (tok == '(') {
+      get_tok_macro();
+      result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
+      get_tok_macro();
+      expect_tok(')');
+    } else if (tok == IDENTIFIER || tok == MACRO) {
+      result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
+      get_tok_macro();
+    } else {
+      syntax_error("identifier or '(' expected");
+    }
 
   } else {
     result = parse_postfix_expression();
@@ -2687,7 +2679,7 @@ ast parse_cast_expression() {
     } else {
       // We need to put the current token and '(' back on the token stream.
       tokens = cons(cons(tok, val), 0);
-      push_tokens(tokens);
+      play_macro(tokens, 0);
       tok = '(';
       val = 0;
     }
@@ -3164,30 +3156,33 @@ int main(int argc, char **argv) {
 
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
-      if (argv[i][1] == 'D') {
-        init_ident(MACRO, argv[i] + 2);
-      } else {
-        putstr("Option ");
-        putstr(argv[i]);
-        putchar('\n');
-        fatal_error("unknown option");
+      switch (argv[i][1]) {
+        case 'D':
+          init_ident(MACRO, argv[i] + 2);
+          break;
+
+        case 'I':
+          if (include_search_path != 0) {
+            fatal_error("only one include path allowed");
+          }
+          include_search_path = argv[i] + 2;
+          break;
+
+        default:
+          putstr("Option "); putstr(argv[i]); putchar('\n');
+          fatal_error("unknown option");
+          break;
       }
     } else {
       // Options that don't start with '-' are file names
-#ifdef SUPPORT_INCLUDE
-      include_file(argv[i], false);
-#else
-      fatal_error("input file not supported. Pnut expects the input from stdin.");
-#endif
+      include_file(argv[i], 0);
     }
   }
 
-#ifdef SUPPORT_INCLUDE
   if (fp == 0) {
     putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
     fatal_error("no input file");
   }
-#endif
 
 #ifndef DEBUG_CPP
 #ifndef DEBUG_GETCHAR

@@ -31,7 +31,6 @@ void print_tok(int tok, int val) {
   else if (tok == DOUBLE_KW)    putstr("double");
   else if (tok == ELSE_KW)      putstr("else");
   else if (tok == ENUM_KW)      putstr("enum");
-  else if (tok == ERROR_KW)     putstr("error");
   else if (tok == EXTERN_KW)    putstr("extern");
   else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
@@ -56,6 +55,7 @@ void print_tok(int tok, int val) {
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+  else if (tok == ARROW)        putstr("->");
   else if (tok == BAR_BAR)      putstr("||");
   else if (tok == BAR_EQ)       putstr("|=");
   else if (tok == CARET_EQ)     putstr("^=");
@@ -127,7 +127,6 @@ void print_tok_type(int tok) {
   else if (tok == DOUBLE_KW)    putstr("double");
   else if (tok == ELSE_KW)      putstr("else");
   else if (tok == ENUM_KW)      putstr("enum");
-  else if (tok == ERROR_KW)     putstr("error");
   else if (tok == EXTERN_KW)    putstr("extern");
   else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
@@ -152,6 +151,7 @@ void print_tok_type(int tok) {
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+  else if (tok == ARROW)        putstr("->");
   else if (tok == BAR_BAR)      putstr("||");
   else if (tok == BAR_EQ)       putstr("|=");
   else if (tok == CARET_EQ)     putstr("^=");

@@ -7,7 +7,9 @@
 # The --match flag is used to run tests that match the given pattern, useful for re-running failed tests
 # The --bootstrap flag compiles the tests using pnut compiled with pnut, useful for catching bootstrap errors
 
-fail() { echo "$1"; exit "$2"; }
+trap "exit 1" INT
+
+fail() { echo "$1"; exit $2; }
 
 if [ $# -lt 1 ]; then
   fail "Usage: $0 <backend> --shell shell -m pattern --bootstrap" 1
@@ -75,6 +77,15 @@ shell_version() {
   esac
 }
 
+# Some tests specify command line arguments in the source file meant to be passed to the compiler.
+# This function extracts the arguments from the source file.
+# To specify arguments, add a comment in the source file like this:
+# // pnut_opt: arg1 arg2 arg3
+test_args_comp() {
+  # echo "test_args_comp file $1" >&2
+  echo `sed -n -e "/\/\/ pnut_opt: /p" "$1" | sed -e "s/^\/\/ pnut_opt: //" |  tr '\n' ',' | sed -e 's/,$//'`
+}
+
 # Some tests specify command line arguments in the source file
 # This function extracts the arguments from the source file
 # To specify arguments, add a comment in the source file like this:
@@ -128,6 +139,15 @@ execute_test() { # executable: $1, timeout: $2, args: $3
   fi
 }
 
+compile_test() { # c_file: $1
+  # 15s timeout to prevent infinite loops in pnut
+  if [ $bootstrap -eq 1 ]; then
+    timeout 15 $shell "$pnut_comp" $PNUT_EXE_OPTIONS "$1" $2
+  else
+    timeout 5 "$pnut_comp" "$1" $2
+  fi
+}
+
 run_test() { # file_to_test: $1
   file="$1"
   filename=$(basename "$file" .c) # Get the filename without extension
@@ -140,7 +160,7 @@ run_test() { # file_to_test: $1
 
   # Generate golden file if it doesn't exist
   if [ ! -f "$golden_file" ]; then
-    "$pnut_comp" "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+    compile_test "$file" "$(test_args_comp $file)" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then
       chmod +x "$dir/$filename.$ext"
       execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$golden_file"
@@ -152,7 +172,7 @@ run_test() { # file_to_test: $1
   fi
 
   # Compile the test file with pnut.exe
-  "$pnut_comp" "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+  compile_test "$file" "$(test_args_comp $file)" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
 
   if [ $? -eq 0 ]; then # If compilation was successful
     chmod +x "$dir/$filename.$ext"

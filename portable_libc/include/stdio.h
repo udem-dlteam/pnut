@@ -1,8 +1,8 @@
 #ifndef _STDIO_H
 #define _STDIO_H
 
-#include "include/sys/types.h"
-#include "include/stdarg.h"
+#include "sys/types.h"
+#include "stdarg.h"
 
 #ifdef USE_STRUCT
 
