@@ -984,6 +984,11 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
 
       start_gensym_ix = gensym_ix;
 
+      // At this point, the temporary identifier of the variable is not live and
+      // can be used to evaluate the function arguments. This reduces the number
+      // of temporary variables.
+      gensym_ix -= 1;
+
       /* Traverse the arguments and replace them with the result of handle_side_effects_go */
       sub2 = get_child(node, 1);
       if (sub2 != 0) { /* Check if not an empty list */
