@@ -369,9 +369,9 @@ _init_weights() {
   : $((_$((_weights + 5)) = 4))
 }
 
-: $((__t3 = __t2 = __t1 = c = x = op = d = n = 0))
+: $((__t1 = c = x = op = d = n = 0))
 _decode() {
-  set $@ $n $d $op $x $c $__t1 $__t2 $__t3
+  set $@ $n $d $op $x $c $__t1
   while [ 1 != 0 ] ; do
     _get_code x 
     n=$x
@@ -391,8 +391,8 @@ _decode() {
           _get_int __t1 0
           n=$(((__t1 << 1) | 1))
         else
-          _get_int __t2 $(((n - d) - 1))
-          _symbol_ref __t1 $__t2
+          _get_int __t1 $(((n - d) - 1))
+          _symbol_ref __t1 $__t1
           n=$__t1
         fi
       else
@@ -404,9 +404,9 @@ _decode() {
         fi
       fi
       if [ $op -gt 4 ] ; then
-        _pop __t3 
-        _alloc_rib2 __t2 $n $(((0 << 1) | 1)) $__t3
-        _alloc_rib __t1 $__t2 $((_$((_FALSE + __field1)))) $(((1 << 1) | 1))
+        _pop __t1 
+        _alloc_rib2 __t1 $n $(((0 << 1) | 1)) $__t1
+        _alloc_rib __t1 $__t1 $((_$((_FALSE + __field1)))) $(((1 << 1) | 1))
         n=$__t1
         if [ $_stack = $(((0 << 1) | 1)) ] ; then
           break
@@ -423,7 +423,7 @@ _decode() {
     : $((_$((_stack + __field0)) = c))
   done
   _pc=$((_$((_$((n + __field0)) + __field2))))
-  : $((__tmp = $1)) $((n = $2)) $((d = $3)) $((op = $4)) $((x = $5)) $((c = $6)) $((__t1 = $7)) $((__t2 = $8)) $((__t3 = $9)) $(($1 = __tmp))
+  : $((__tmp = $1)) $((n = $2)) $((d = $3)) $((op = $4)) $((x = $5)) $((c = $6)) $((__t1 = $7)) $(($1 = __tmp))
 }
 
 : $((str = current = length = i = s = 0))
@@ -615,9 +615,9 @@ _prim() { # no: $2
   : $((__tmp = $1)) $((no = $3)) $((x = $4)) $((y = $5)) $((z = $6)) $((new_rib = $7)) $((arg = $8)) $((file = $9)) $((buffer = ${10})) $((success = ${11})) $((bytes_read = ${12})) $((num_args = ${13})) $((filename = ${14})) $((__t1 = ${15})) $(($1 = __tmp))
 }
 
-: $((__t2 = __t1 = opnd = x = p = rest = new_pc = k = c2 = s2 = proc = jump = vari = nparams = nparams_vari = nargs = instr = i = 0))
+: $((__t1 = opnd = x = p = rest = new_pc = k = c2 = s2 = proc = jump = vari = nparams = nparams_vari = nargs = instr = i = 0))
 _run() {
-  set $@ $i $instr $nargs $nparams_vari $nparams $vari $jump $proc $s2 $c2 $k $new_pc $rest $p $x $opnd $__t1 $__t2
+  set $@ $i $instr $nargs $nparams_vari $nparams $vari $jump $proc $s2 $c2 $k $new_pc $rest $p $x $opnd $__t1
   while [ 1 != 0 ] ; do
     instr=$((_$((_pc + __field0)) >> 1))
     if [ $instr = 5 ] ; then
@@ -656,8 +656,8 @@ _run() {
             rest=$((_$((_FALSE + __field1))))
             i=0
             while [ $i -lt $nargs ] ; do
-              _pop __t2 
-              _alloc_rib __t1 $__t2 $rest $s2
+              _pop __t1 
+              _alloc_rib __t1 $__t1 $rest $s2
               rest=$__t1
               s2=$((_$((rest + __field2))))
               : $((_$((rest + __field2)) = (0 << 1) | 1))
@@ -668,8 +668,8 @@ _run() {
           fi
           i=0
           while [ $i -lt $nparams ] ; do
-            _pop __t2 
-            _alloc_rib __t1 $__t2 $s2 $(((0 << 1) | 1))
+            _pop __t1 
+            _alloc_rib __t1 $__t1 $s2 $(((0 << 1) | 1))
             s2=$__t1
             : $((i += 1))
           done
@@ -720,7 +720,7 @@ _run() {
       exit 6
     fi
   done
-  : $((__tmp = $1)) $((i = $2)) $((instr = $3)) $((nargs = $4)) $((nparams_vari = $5)) $((nparams = $6)) $((vari = $7)) $((jump = $8)) $((proc = $9)) $((s2 = ${10})) $((c2 = ${11})) $((k = ${12})) $((new_pc = ${13})) $((rest = ${14})) $((p = ${15})) $((x = ${16})) $((opnd = ${17})) $((__t1 = ${18})) $((__t2 = ${19})) $(($1 = __tmp))
+  : $((__tmp = $1)) $((i = $2)) $((instr = $3)) $((nargs = $4)) $((nparams_vari = $5)) $((nparams = $6)) $((vari = $7)) $((jump = $8)) $((proc = $9)) $((s2 = ${10})) $((c2 = ${11})) $((k = ${12})) $((new_pc = ${13})) $((rest = ${14})) $((p = ${15})) $((x = ${16})) $((opnd = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
 }
 
 : $((first = 0))
@@ -737,14 +737,14 @@ _setup_stack() {
   : $((__tmp = $1)) $((first = $2)) $(($1 = __tmp))
 }
 
-: $((__t3 = __t2 = __t1 = 0))
+: $((__t2 = __t1 = 0))
 _init() {
-  set $@ $__t1 $__t2 $__t3
+  set $@ $__t1 $__t2
   _init_weights __ 
   _init_heap __ 
+  _alloc_rib __t1 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((5 << 1) | 1))
   _alloc_rib __t2 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((5 << 1) | 1))
-  _alloc_rib __t3 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((5 << 1) | 1))
-  _alloc_rib __t1 $__t2 $__t3 $(((5 << 1) | 1))
+  _alloc_rib __t1 $__t1 $__t2 $(((5 << 1) | 1))
   _FALSE=$__t1
   _build_sym_table __ 
   _decode __ 
@@ -755,7 +755,7 @@ _init() {
   _set_global __ $((_$((_FALSE + __field1))))
   _setup_stack __ 
   _run __ 
-  : $((__tmp = $1)) $((__t1 = $2)) $((__t2 = $3)) $((__t3 = $4)) $(($1 = __tmp))
+  : $((__tmp = $1)) $((__t1 = $2)) $((__t2 = $3)) $(($1 = __tmp))
 }
 
 _main() {
