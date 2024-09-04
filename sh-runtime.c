@@ -279,7 +279,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
 
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
-  putstr("    [a-zA-Z0-9]) __c=$((__c2i_$1)) ;;\n");
+  putstr("    [[:alnum:]]) __c=$((__c2i_$1)) ;;\n");
 #else
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
