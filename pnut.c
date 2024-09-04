@@ -646,7 +646,6 @@ void memcpy(char *dest, char *src, int n) {
 #endif
 
 char *substr(char *str, int start, int end) {
-  int i = start;
   int len = end - start;
   char *temp = malloc(len + 1);
   memcpy(temp, str + start, len);
@@ -992,12 +991,9 @@ void handle_define() {
 }
 
 int eval_constant(ast expr, bool if_macro) {
-  int val;
   int op = get_op(expr);
   int op1;
   int op2;
-  int result;
-  int i;
 
   switch (op) {
     case INTEGER:   return -get_val(expr);
@@ -1085,6 +1081,7 @@ int eval_constant(ast expr, bool if_macro) {
     default:
       putstr("op="); putint(op); putchar('\n');
       fatal_error("unsupported operator in constant expression");
+      return 0;
   }
 }
 
@@ -2253,6 +2250,7 @@ ast parse_struct() {
 
 ast parse_union() {
   syntax_error("union not supported");
+  return 0;
 }
 
 ast parse_declaration() {
@@ -2521,6 +2519,7 @@ ast parse_primary_expression() {
 
   } else {
     syntax_error("identifier, literal, or '(' expected");
+    return 0;
   }
 
   return result;
@@ -2637,6 +2636,7 @@ ast parse_unary_expression() {
       get_tok_macro();
     } else {
       syntax_error("identifier or '(' expected");
+      return 0;
     }
 
   } else {
