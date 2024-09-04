@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e -u
+set -e -u -f
 LC_ALL=C
 
 : $((__t1 = i = name = 0))

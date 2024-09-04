@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e -u
+set -e -u -f
 LC_ALL=C
 
 : $((i = len = tmp = end = str = 0))
