@@ -165,7 +165,7 @@ text wrap_str_const(char *s, int len) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_STRING);
   text_pool[text_alloc + 1] = s;
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(len); // substring length, -1 means the whole string
+  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(len); // substring length, negative value means the whole string
   return (text_alloc += 3) - 3;
 }
 
@@ -236,7 +236,7 @@ void print_escaped_text(text t, bool for_printf) {
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
     putint(VOID_PTR_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
-    if (text_pool[t + 2] == INT_TO_VOID_PTR(-1)) {
+    if (VOID_PTR_TO_INT(text_pool[t + 2]) < 0) {
       print_escaped_string(text_pool[t + 1], for_printf);
     } else {
       char_bk = *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2])));
@@ -272,7 +272,7 @@ void print_text(text t) {
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
     putint(VOID_PTR_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
-    if (text_pool[t + 2] == INT_TO_VOID_PTR(-1)) {
+    if (VOID_PTR_TO_INT(text_pool[t + 2]) < 0) {
       putstr(text_pool[t + 1]);
     } else {
       char_bk = *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2])));
@@ -1044,7 +1044,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       }
 
       return sub1;
-    } else if ( (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
+    } else if ((op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
       OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[')
       OR (op == '.') OR (op == ARROW) ) {
       /* We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls */
@@ -1505,17 +1505,16 @@ text comp_lvalue(ast node) {
   }
 }
 
-text fun_call_params(ast params, int count) {
+text fun_call_params(ast params) {
   ast param;
   text code_params = 0;
 
-  if (params != 0 && count > 0) { /* Check if not an empty list */
+  if (params != 0) { /* Check if not an empty list */
     if (get_op(params) == ',') {
-      while (get_op(params) == ',' && count > 0) {
+      while (get_op(params) == ',') {
         param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
         code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
         params = get_child(params, 1);
-        count -= 1;
       }
     } else {
       code_params = comp_rvalue(params, RVALUE_CTX_BASE);
@@ -1558,83 +1557,150 @@ text comp_putchar_inline(ast param) {
 #endif
 
 #ifdef SH_AVOID_PRINTF_USE
-bool printf_uses_shell_format_specifiers(char* a) {
-  // The supported format specifiers are those that are common between C and shell,
-  // and those for which the representation is the same in both languages.
-  // For now, this includes %d, %c, %x.
-  // Non-literals strings cannot be passed directly to printf as they first need
-  // to be unpacked, but can be passed to _puts from the runtime which can
-  // handle them.
-  while (*a != '\0') {
-    if (*a == '%') {
-      a += 1;
-      if (*a != 'd' && *a != 'c' && *a != 'x' && *a != '%' && *a != 's') {
-        return false; // Unsupported format specifier
-      }
-    }
-
-    a += 1;
-  }
-  return true;
-}
-
-void printf_util_call(char *format_str, ast params, int params_count) {
-  // Some shells interpret leading - as options. In that case, we add an empty "%s" argument.
-
-  if (format_str[0] == '-') {
-    append_glo_decl(string_concat4(wrap_str_lit("printf \"%s"), escape_text(wrap_str(format_str), false), wrap_str_lit("\" \"\" "), fun_call_params(params, params_count)));
+// format_str is from the string pool so constant
+text printf_call(char *format_str, char *format_str_end, text params_text, bool escape) {
+  if (format_str == format_str_end) {
+    return 0;
   } else {
-    append_glo_decl(string_concat4(wrap_str_lit("printf \""), escape_text(wrap_str(format_str), false), wrap_str_lit("\" "), fun_call_params(params, params_count)));
+    // Some shells interpret leading - as options. In that case, we add -- in front of the format string.
+    return string_concat4(wrap_str_lit(format_str[0] == '-' ? "printf -- \"" : "printf \""),
+                          escape_text(wrap_str_const(format_str, format_str_end - format_str), escape),
+                          wrap_str_lit("\" "),
+                          params_text);
   }
 }
+
+enum PRINTF_STATE {
+  PRINTF_STATE_FLAGS,
+  PRINTF_STATE_WIDTH,
+  PRINTF_STATE_PRECISION,
+  PRINTF_STATE_SPECIFIER
+};
 
 // _printf pulls a lot of dependencies from the runtime. In most cases the
 // format string is known at compile time, and we can avoid calling printf by
 // using the shell's printf instead. This function generates a sequence of shell
 // printf and put_pstr equivalent to the given printf call.
-void handle_printf_call(char* format_str, ast params) {
-  // The supported format specifiers are those that are common between C and shell,
-  // and those for which the representation is the same in both languages.
-  // For now, this includes %d, %c, %x
-  // Non-literals strings are not supported because they would need to first be unpacked.
-  char* format_start = format_str;
-  int params_count = 0;
-  ast params_start = params;
+void handle_printf_call(char *format_str, ast params) {
+  char *format_start = format_str;
+  char *specifier_start;
+  // compiled parameters to be passed to printf
+  text params_text = 0, width_text = 0, precision_text = 0;
+
+  bool mod = false;
+  bool has_width = false;
+  bool has_precision = false;
+
+  enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
 
   while (*format_str != '\0') {
-    if (*format_str == '%') {
-      format_str += 1;
-      if (*format_str == 'd' || *format_str == 'x') {
-        // Keep accumulating the format string
-        if (params == 0) fatal_error("Not enough parameters for printf");
-        params_count += 1;
-        params = get_child(params, 1);
-      } else if (*format_str == 's' || *format_str == 'c') {
-        // We can't pass strings to printf directly, they need to be unpacked first.
-        // We do that by calling the _print_pnut_str function.
+    if (mod) {
+      switch (*format_str) {
+        case ' ': case '#': case '+': case '-': case '0': // Flags
+          // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
+          // 16 bits meaning we can easily convert char -> bit if we wanted to.
+          if (state != PRINTF_STATE_FLAGS) fatal_error("Invalid printf format: Flags must come before width and precision");
+          break;
 
-        // Generate the printf call for the format string up to this point.
-        if (format_start != format_str - 1) {
-          *(format_str - 1) = '\0'; // Null-terminate the format string
+        // Width or precision literal
+        case '1': case '2': case '3':
+        case '4': case '5': case '6':
+        case '7': case '8': case '9':
+          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("Invalid printf format: Width or precision already specified by a number");
+          while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
+          has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
+          has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
+          state += 1;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+          format_str -= 1; // Reprocess non-numeric character
+          break;
 
-          printf_util_call(format_start, params_start, params_count);
-          *(format_str - 1) = '%'; // Restore the format string, because it's a string from the string_pool
-        }
+        // Precision
+        case '.':
+          if (state >= PRINTF_STATE_PRECISION) fatal_error("Invalid printf format: precision already specified");
+          state = PRINTF_STATE_PRECISION;
+          break;
 
-        if (*format_str == 's') {
-          runtime_use_put_pstr = true;
-          append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
-        } else {
+        case '*':
+          if (params == 0) fatal_error("Not enough parameters for printf");
+          if (state == PRINTF_STATE_FLAGS) {
+            width_text = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
+            has_width = true;
+          } else if (state == PRINTF_STATE_PRECISION) {
+            precision_text = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
+            has_precision = true;
+          } else {
+            fatal_error("Width or precision already specified by a number");
+          }
+          params = get_child(params, 1); // Consume * parameter
+          break;
+
+        case '%':
+          if (state != PRINTF_STATE_FLAGS) fatal_error("Cannot use flags, width or precision with %%");
+          mod = false;
+          break;
+
+        // The following options are the same between the shell's printf and C's printf
+        case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
+          if (params == 0) fatal_error("Not enough parameters for printf");
+          params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
+          params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+          params_text = concatenate_strings_with(params_text, comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
+          params = get_child(params, 1);
+          mod = false;
+          break;
+
+        // We can't pass characters to printf directly because %c has a different meaning.
+        // We could use the %b format specifier, but it can't emit \0 character on some older
+        // shells, so we make a separate printf call using the \\ooo format.
+        // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
+        case 'c':
+          if (params == 0) fatal_error("Not enough parameters for printf");
+          // TODO: Find way to support width that's not too verbose
+          if (has_width)   fatal_error("Width not supported for %c");
+          // Generate printf call with what we have so far
+          append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+          // New format string starts after the %
+          format_start = format_str + 1;
+          // Generate the printf call for the character
           append_glo_decl(comp_putchar_inline(get_child(params, 0)));
-        }
-        gensym_ix = 0; // We generate multiple statements, and we want to reuse the same gensym names
-        format_start = format_str + 1; // skip the 's'
-        params = get_child(params, 1); // skip the string parameter
-        params_start = params;
-        params_count = 0;
-      } else if (*format_str != '%') { // Do nothing for %%
-        fatal_error("Unsupported format specifier");
+          params = get_child(params, 1);
+          params_text = 0; // Reset the parameters
+          mod = false;
+          break;
+
+        // We can't a string to printf directly, it needs to be unpacked first.
+        case 's':
+          if (params == 0)       fatal_error("Not enough parameters for printf");
+          runtime_use_put_pstr = true;
+          // If the format specifier has width or precision, we have to pack the string and call then printf.
+          // Otherwise, we can call _put_pstr directly and avoid the subshell.
+          if (has_width || has_precision) {
+            params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
+            params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+            params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("\"$(_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE), wrap_str_lit(")\"")), wrap_char(' ')); // Add the parameter
+          } else {
+            // Generate printf call with what we have so far
+            append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+            // New format string starts after the %
+            format_start = format_str + 1;
+            // Compile printf("...%s...", str) to _put_pstr str
+            append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
+          }
+          params = get_child(params, 1);
+          mod = false;
+          break;
+
+        default:
+          printf("specifier=%s\n", specifier_start);
+          printf("format char='%c'\n", *format_str);
+          fatal_error("Unsupported format specifier");
       }
+    } else if (*format_str == '%') {
+      mod = true;
+      specifier_start = format_str;
+      // Reset the state machine
+      width_text = precision_text = has_width = has_precision = 0;
+      state = PRINTF_STATE_FLAGS;
     }
 
     // Keep accumulating the format string
@@ -1642,9 +1708,7 @@ void handle_printf_call(char* format_str, ast params) {
   }
 
   // Dump the remaining format string
-  if (format_start != format_str) {
-    printf_util_call(format_start, params_start, 10000);
-  }
+  append_glo_decl(printf_call(format_start, format_str, params_text, false));
 }
 #endif
 
@@ -1656,14 +1720,12 @@ text comp_fun_call_code(ast node, ast assign_to) {
 
 #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
-    if (((name_id == PUTSTR_ID OR name_id == PUTS_ID) && params != 0 && get_op(params) == STRING) // puts("...")
-      || (name_id == PRINTF_ID && params != 0 && get_op(params) == STRING)) { // printf("...")
-      return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_str_pool(get_val(params)), true), wrap_str_lit("\""));
-    } else if (name_id == PRINTF_ID && params != 0 && get_op(params) == ',') {
-      if (printf_uses_shell_format_specifiers(string_pool + get_val(get_child(params, 0)))) {
-        handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
-        return 0; // This generates no code. I guess we could return the last printf call?
-      }
+    if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
+        && params != 0 && get_op(params) == STRING)) { // puts("..."), putstr("..."), printf("...")
+      return printf_call(string_pool + get_val(params), 0, 0, true);
+    } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) { // printf("...", ...)
+      handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
+      return 0; // This generates no code. I guess we could return the last printf call?
     }
 #ifdef SH_INLINE_PUTCHAR
     else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
@@ -1698,7 +1760,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
     wrap_char(' '),
     comp_lvalue(assign_to),
     wrap_char(' '),
-    fun_call_params(params, 1000) // 1000 is an arbitrary large number
+    fun_call_params(params)
   );
 }
 
