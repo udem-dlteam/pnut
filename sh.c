@@ -578,8 +578,9 @@ void mark_variable_as_mutable(ast ident) {
 int variable_is_constant_param(ast local_var) {
   if (local_var != -1 && get_child(local_var, 2) == KIND_PARAM && get_child(local_var, 3)) {
     return true;
+  } else {
+    return false;
   }
-  return false;
 }
 
 /*
@@ -1262,6 +1263,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)), outer_op, op);
       } else {
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+        return 0;
       }
     } else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(get_child(node, 0)), outer_op, op);
@@ -1436,6 +1438,7 @@ text comp_lvalue_address(ast node) {
     // we can know more about variables other than "it's local" and "it's not
     // local so it must be global".
     fatal_error("comp_rvalue_go: can't take the address of a local variable");
+    return 0;
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = comp_rvalue(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION);
@@ -1446,7 +1449,6 @@ text comp_lvalue_address(ast node) {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child(node, 1));
     return string_concat3(sub1, wrap_str_const(" + "), sub2);
-    return string_concat5(wrap_str_const("_$(("), sub1, wrap_str_const(" + "), sub2, wrap_str_const("))"));
   } else if (op == CAST) {
     return comp_lvalue_address(get_child(node, 1));
   } else {
@@ -1474,7 +1476,6 @@ text comp_lvalue(ast node) {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child(node, 1));
     return string_concat5(wrap_str_const("_$(("), sub1, wrap_str_const(" + "), sub2, wrap_str_const("))"));
-    return string_concat3(wrap_str_const("_$(("), sub1, wrap_str_const("))"));
   } else if (op == CAST) {
     return comp_lvalue(get_child(node, 1));
   } else {
@@ -1741,6 +1742,7 @@ bool comp_switch_block_statement(ast node, bool start_in_tail_position) {
     return true;
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("comp_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
+    return false;
   } else {
     comp_statement(node, false);
     return false;

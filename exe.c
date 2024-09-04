@@ -151,14 +151,12 @@ int power_of_2_log(int n) {
 }
 
 void mul_for_pointer_arith(int reg, int type_width) {
-  int i = 0;
   int other_reg = reg == reg_X ? reg_Y : reg_X;
 
   if (type_width == 1) return;
 
   if (is_power_of_2(type_width)) {
     while (type_width > 1) {
-      i += 1;
       type_width /= 2;
       add_reg_reg(reg, reg);
     }
@@ -171,8 +169,6 @@ void mul_for_pointer_arith(int reg, int type_width) {
 }
 
 void div_for_pointer_arith(int reg, int type_width) {
-  int i = 0;
-  int other_reg = reg == reg_X ? reg_Y : reg_X;
   int reg_start = reg;
 
   if (type_width == 1) return;
@@ -605,7 +601,11 @@ int cgc_lookup_enum_value(int ident, int env) {
 
 // A pointer type is either an array type or a type with at least one star
 bool is_pointer_type(ast type) {
-  return (get_op(type) == '[') | (get_val(type) != 0);
+  if (get_op(type) == '[' || get_val(type) != 0) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // An aggregate type is either an array type or a struct/union type (that's not a reference)
@@ -1044,6 +1044,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
         width = ref_type_width(right_type);
       } else {
         fatal_error("codegen_binop: invalid array access operands");
+        return;
       }
 
       add_reg_reg(reg_X, reg_Y);
