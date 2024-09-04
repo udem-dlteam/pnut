@@ -1,0 +1,2 @@
+accents: éôèà
+some emoji: 🥜
