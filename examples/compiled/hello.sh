@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 _main() {
   printf "Hello, world\n"

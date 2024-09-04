@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 : $((i = argv_ = argc = 0))
 _main() { let argc $2; let argv_ $3
@@ -44,7 +45,7 @@ unpack_string() {
     # Remove all but first char
     __char="${__str%"$__tail"}"
     # Convert char to ASCII
-    __c=$(LC_CTYPE=C printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
+    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
     # Write character to memory
     : $((_$__ptr = __c))
     # Continue with rest of string

@@ -16,7 +16,7 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define RETURN_IF_TRUE(var) if (var) return; var = true;
 
 #ifdef RT_COMPACT
-#define call_char_to_int(prefix, char_var) putstr(prefix "__c=$(LC_CTYPE=C printf \"%d\" \"'" char_var "\"); __c=$((__c > 0 ? __c : 256 + __c))\n");
+#define call_char_to_int(prefix, char_var) putstr(prefix "__c=$(printf \"%d\" \"'" char_var "\"); __c=$((__c > 0 ? __c : 256 + __c))\n");
 #else
 #define call_char_to_int(prefix, char_var) putstr(prefix "char_to_int \"" char_var "\"\n");
 #endif
@@ -279,7 +279,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
 
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
-  putstr("    [a-zA-Z0-9]) __c=$((__c2i_$1)) ;;\n");
+  putstr("    [[:alnum:]]) __c=$((__c2i_$1)) ;;\n");
 #else
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
@@ -371,7 +371,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
   putstr("    '}') __c=125 ;;\n");
   putstr("    '~') __c=126 ;;\n");
   putstr("    *)\n");
-  putstr("      __c=$(LC_CTYPE=C printf \"%d\" \"'$1\"); __c=$((__c > 0 ? __c : 256 + __c)) ;; \n");
+  putstr("      __c=$(printf \"%d\" \"'$1\"); __c=$((__c > 0 ? __c : 256 + __c)) ;; \n");
   putstr("  esac\n");
   putstr("}\n");
 #endif

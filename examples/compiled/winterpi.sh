@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 

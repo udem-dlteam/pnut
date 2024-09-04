@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 : $((__t2 = __t1 = n = 0))
 _fib() { let n $2

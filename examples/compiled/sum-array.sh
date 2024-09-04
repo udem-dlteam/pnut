@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e -u
+LC_ALL=C
 
 : $((sum = i = size = n = 0))
 _sum_array() { let n $2; let size $3
