@@ -161,20 +161,20 @@ text wrap_str(char *s) {
 }
 
 // Like wrap_str, but assumes that the string is constant and doesn't need to be copied
-text wrap_str_const(char *s, int len) {
+text wrap_str_const(char *s, char *end) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_STRING);
   text_pool[text_alloc + 1] = s;
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(len); // substring length, negative value means the whole string
+  text_pool[text_alloc + 2] = end; // end of string address. 0 for null-terminated strings
   return (text_alloc += 3) - 3;
 }
 
 text wrap_str_lit(char *s) {
-  return wrap_str_const(s, -1);
+  return wrap_str_const(s, 0);
 }
 
 text wrap_str_pool(int s) {
-  return wrap_str_const(string_pool + s, -1);
+  return wrap_str_const(string_pool + s, 0);
 }
 
 text concatenate_strings_with(text t1, text t2, text sep) {
@@ -236,13 +236,13 @@ void print_escaped_text(text t, bool for_printf) {
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
     putint(VOID_PTR_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
-    if (VOID_PTR_TO_INT(text_pool[t + 2]) < 0) {
+    if (VOID_PTR_TO_INT(text_pool[t + 2]) == 0) {
       print_escaped_string(text_pool[t + 1], for_printf);
     } else {
-      char_bk = *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2])));
-      *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2]))) = 0; // Null-terminate the string
+      char_bk = *((char*)(text_pool[t + 2]));
+      *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
       print_escaped_string(text_pool[t + 1], for_printf);
-      *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2]))) = char_bk;
+      *((char*)(text_pool[t + 2])) = char_bk;
     }
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
@@ -272,13 +272,13 @@ void print_text(text t) {
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
     putint(VOID_PTR_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
-    if (VOID_PTR_TO_INT(text_pool[t + 2]) < 0) {
+    if (VOID_PTR_TO_INT(text_pool[t + 2]) == 0) {
       putstr(text_pool[t + 1]);
     } else {
-      char_bk = *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2])));
-      *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2]))) = 0; // Null-terminate the string
+      char_bk = *((char*)(text_pool[t + 2]));
+      *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
       putstr(text_pool[t + 1]);
-      *((char*)(text_pool[t + 1] + VOID_PTR_TO_INT(text_pool[t + 2]))) = char_bk;
+      *((char*)(text_pool[t + 2])) = char_bk;
     }
   } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_ESCAPED)) {
     print_escaped_text(VOID_PTR_TO_INT(text_pool[t + 1]), VOID_PTR_TO_INT(text_pool[t + 2]));
@@ -1564,7 +1564,7 @@ text printf_call(char *format_str, char *format_str_end, text params_text, bool 
   } else {
     // Some shells interpret leading - as options. In that case, we add -- in front of the format string.
     return string_concat4(wrap_str_lit(format_str[0] == '-' ? "printf -- \"" : "printf \""),
-                          escape_text(wrap_str_const(format_str, format_str_end - format_str), escape),
+                          escape_text(wrap_str_const(format_str, format_str_end), escape),
                           wrap_str_lit("\" "),
                           params_text);
   }
