@@ -3,7 +3,7 @@ set -e -u
 LC_ALL=C
 
 _main() {
-  printf "Hello, world\n"
+  printf "Hello, world\n" 
 }
 
 # Runtime library

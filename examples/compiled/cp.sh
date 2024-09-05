@@ -26,7 +26,7 @@ defarr _buffer 1024
 _main() { let argc $2; let args $3
   let src; let dst; let c; let len; let __t1
   if [ $argc != 3 ] ; then
-    printf "Usage: cp <source> <destination>\n"
+    printf "Usage: cp <source> <destination>\n" 
     : $(($1 = 1))
     endlet $1 __t1 len c dst src args argc
     return
@@ -254,7 +254,7 @@ make_argv() {
 # Local variables
 __=0
 __SP=0
-let() { # $1: variable name, $2: value (optional) 
+let() { # $1: variable name, $2: value (optional)
   : $((__SP += 1)) $((__$__SP=$1)) # Push
   : $(($1=${2-0}))                 # Init
 }

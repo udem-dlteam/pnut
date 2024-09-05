@@ -11,7 +11,7 @@ _main() { let argc $2; let argv_ $3
     printf " " 
     : $((i += 1))
   done
-  printf "\n"
+  printf "\n" 
   endlet $1 i argv_ argc
 }
 
@@ -70,7 +70,7 @@ make_argv() {
 # Local variables
 __=0
 __SP=0
-let() { # $1: variable name, $2: value (optional) 
+let() { # $1: variable name, $2: value (optional)
   : $((__SP += 1)) $((__$__SP=$1)) # Push
   : $(($1=${2-0}))                 # Init
 }

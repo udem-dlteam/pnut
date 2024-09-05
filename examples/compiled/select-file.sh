@@ -153,7 +153,7 @@ _print_array() { let arr $2
   while [ $((_$((arr + i)))) != 0 ] ; do
     printf "%d: " $i
     _put_pstr __ $((_$((arr + i))))
-    printf "\n" 
+    printf "\n" $i
     : $((i += 1))
   done
   endlet $1 i arr
@@ -197,12 +197,12 @@ _main() {
   _array_len len $files
   _print_array __ $files
   while [ 1 != 0 ] ; do
-    printf "Select a file to print: "
+    printf "Select a file to print: " 
     _read_int ix 
     if [ 0 -le $ix ] && [ $ix -lt $len ] ; then
       break
     fi
-    printf "Invalid index.\n"
+    printf "Invalid index.\n" 
   done
   _cat __ $((_$((files + ix))))
   endlet $1 __t1 len ix files
@@ -255,7 +255,7 @@ _put_pstr() {
 # Local variables
 __=0
 __SP=0
-let() { # $1: variable name, $2: value (optional) 
+let() { # $1: variable name, $2: value (optional)
   : $((__SP += 1)) $((__$__SP=$1)) # Push
   : $(($1=${2-0}))                 # Init
 }

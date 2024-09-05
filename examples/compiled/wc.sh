@@ -47,7 +47,7 @@ _wc_fd() { let fd $2; let filename $3
   if [ $filename != 0 ] ; then
     printf "%d %d %d " $lines $words $chars
     _put_pstr __ $filename
-    printf "\n" 
+    printf "\n" $lines $words $chars
   else
     printf "%d %d %d\n" $lines $words $chars
   fi
@@ -299,7 +299,7 @@ make_argv() {
 # Local variables
 __=0
 __SP=0
-let() { # $1: variable name, $2: value (optional) 
+let() { # $1: variable name, $2: value (optional)
   : $((__SP += 1)) $((__$__SP=$1)) # Push
   : $(($1=${2-0}))                 # Init
 }
