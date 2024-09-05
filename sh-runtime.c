@@ -86,7 +86,7 @@ DEFINE_RUNTIME_FUN(local_vars)
 #ifndef SH_SAVE_VARS_WITH_SET
   putstr("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  putstr("let() { # $1: variable name, $2: value (optional) \n");
+  putstr("let() { # $1: variable name, $2: value (optional)\n");
   putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
   putstr("  : $(($1=${2-0}))                 # Init\n");
   putstr("}\n");
@@ -268,7 +268,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
   putstr("    '}') __c=125 ;;\n");
   putstr("    '~') __c=126 ;;\n");
   putstr("    *)\n");
-  putstr("      __c=$(printf \"%d\" \"'$1\"); __c=$((__c > 0 ? __c : 256 + __c)) ;; \n");
+  putstr("      __c=$(printf \"%d\" \"'$1\"); __c=$((__c > 0 ? __c : 256 + __c)) ;;\n");
   putstr("  esac\n");
   putstr("}\n");
 #endif
@@ -546,6 +546,8 @@ DEPENDS_ON(putchar)
   putstr("}\n");
 END_RUNTIME_FUN(put_pstr)
 
+// POSIX shell printf documentation: https://web.archive.org/web/20240829022722/https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+// C printf documentation: ISO/IEC 9899:1999 - 7.19.6 Formatted input/output functions (page 273)
 DEFINE_RUNTIME_FUN(printf)
 DEPENDS_ON(put_pstr)
   putstr("read_int() {\n");
@@ -556,12 +558,19 @@ DEPENDS_ON(put_pstr)
   putstr("  done\n");
   putstr("}\n");
   putstr("\n");
-  putstr("invalid_format_error() {\n");
+  putstr("printf_invalid_format_error() {\n");
   putstr("  printf \"Invalid format specifier. %%\"\n");
   putstr("  : $((_$__fmt_ptr = 0)) # Terminate string after %...\n");
   putstr("  _put_pstr __ $__mod_start\n");
   putstr("  printf \"\\n\"\n");
   putstr("  exit 1\n");
+  putstr("}\n");
+  putstr("\n");
+  putstr("printf_reset() {\n");
+  putstr("  __mod=0\n");
+  putstr("  __flags=\n");
+  putstr("  __width=\n");
+  putstr("  __precision=\n");
   putstr("}\n");
   putstr("\n");
   putstr("_printf() { # $1 = printf format string, $2... = printf args\n");
@@ -570,7 +579,6 @@ DEPENDS_ON(put_pstr)
   putstr("  __mod_start=0\n");
   putstr("  __mod=0\n");
   putstr("  __flags=\n");
-  putstr("  __width=\n");
   putstr("  __width=\n");
   putstr("  __precision=\n");
   putstr("  while [ \"$((_$__fmt_ptr))\" != 0 ] ; do\n");
@@ -581,37 +589,47 @@ DEPENDS_ON(put_pstr)
   putstr("      __head_char=$__char\n");
   putstr("      case $__head_char in\n");
   putstr("        '%')\n");
-  putstr("          __mod=0\n");
+  putstr("          if [ -n \"${__flags}${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
   putstr("          printf \"%%\"\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
   putstr("        'd'|'i'|'o'|'u'|'x'|'X')\n");
-  putstr("          __mod=0\n");
-  // putstr("          printf \"flags: '$__flags', width: '$__width', precision: '$__precision'\"\n");
   putstr("          printf \"%${__flags}${__width}${__precision}${__head_char}\" $1\n");
   putstr("          shift\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
   putstr("        'c')\n");
-  putstr("          __mod=0\n");
-  putstr("          printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
+  //                Can't use printf "%b" here because it doesn't support null
+  //                bytes so we use printf "%s" to add padding, and then printf
+  //                "\\ooo" to print the character or vice versa if '-' is set.
+  putstr("          case \"$__flags\" in\n");
+  putstr("            *'-'*) printf \\\\$(($1/64))$(($1/8%8))$(($1%8)); printf \"%$((__width ? __width - 1 : 0))s\" \"\" ;;\n");
+  putstr("            *) printf \"%$((__width ? __width - 1 : 0))s\" \"\"; printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ;;\n");
+  putstr("          esac\n");
   putstr("          shift\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
   putstr("        's')\n");
-  putstr("          __mod=0\n");
-  putstr("          __str=$(_put_pstr __ $1)\n");
-  putstr("          printf \"%${__flags}${__width}${__precision}s\" \"$__str\"\n");
+  putstr("          # We only want to use the shell's native printf (and _put_pstr subshell) if %s has sub-specifiers\n");
+  putstr("          if [ -z \"{__flags}${__width}{__precision}\" ]; then\n");
+  putstr("            _put_pstr __ $1\n");
+  putstr("          else\n");
+  putstr("            printf \"%${__flags}${__width}${__precision}s\" \"$(_put_pstr __ $1)\"\n");
+  putstr("          fi\n");
   putstr("          shift\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
   putstr("        '-'|'+'|' '|'#'|'0')\n"); // flags
-  putstr("          if [ -n \"$__width$__precision\" ]; then invalid_format_error; fi\n");
+  putstr("          if [ -n \"${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
   putstr("          __flags=\"$__flags$__head_char\"\n");
   putstr("          ;;\n");
   putstr("        [0-9])\n"); // constant width
-  putstr("          if [ -n \"$__width$__precision\" ]; then invalid_format_error; fi\n");
+  putstr("          if [ -n \"${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
   putstr("          read_int\n");
   putstr("          __width=\"$__head_char$__int\"\n");
   putstr("          ;;\n");
   putstr("        '*')\n"); // width param
-  putstr("          if [ -n \"$__width$__precision\" ]; then invalid_format_error; fi\n");
+  putstr("          if [ -n \"${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
   putstr("          __width=$1\n");
   putstr("          shift\n");
   putstr("          ;;\n");
@@ -625,18 +643,16 @@ DEPENDS_ON(put_pstr)
   putstr("            read_int\n");
   putstr("            __precision=\".$__int\"\n");
   putstr("          else\n");
-  putstr("            invalid_format_error\n");
+  putstr("            printf_invalid_format_error\n");
   putstr("          fi\n");
   putstr("          ;;\n");
   putstr("        *)\n");
   putstr("          echo \"4: Unknown format specifier %$__head_char\"; exit 1\n");
   putstr("      esac\n");
+  putstr("    elif [ $__head = 37 ]; then # 37 == '%'\n");
+  putstr("      __mod=1; __mod_start=$__fmt_ptr\n");
   putstr("    else\n");
-  putstr("      case $__head in\n");
-  putstr("        10) printf \"\\n\" ;;  # 10 == '\\n'\n");
-  putstr("        37) __mod=1; __mod_start=$__fmt_ptr ;; # 37 == '%'\n");
-  putstr("        *) printf \\\\$(($__head/64))$(($__head/8%8))$(($__head%8)) ;;\n");
-  putstr("      esac\n");
+  putstr("      printf \\\\$(($__head/64))$(($__head/8%8))$(($__head%8))\n");
   putstr("    fi\n");
   putstr("  done\n");
   putstr("}\n");
