@@ -7,7 +7,7 @@ _main() {
   let name; let i; let __t1
   _malloc name 100
   i=0
-  printf "What is your name?\n"
+  printf "What is your name?\n" 
   while { _getchar __t1 ; [ $((_$((name + i)) = __t1)) != -1 ]; } && [ $((_$((name + i)))) != $__NEWLINE__ ] ; do
     : $((i += 1))
   done
@@ -73,7 +73,7 @@ _put_pstr() {
 # Local variables
 __=0
 __SP=0
-let() { # $1: variable name, $2: value (optional) 
+let() { # $1: variable name, $2: value (optional)
   : $((__SP += 1)) $((__$__SP=$1)) # Push
   : $(($1=${2-0}))                 # Init
 }

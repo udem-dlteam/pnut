@@ -27,6 +27,14 @@
 # functions that return multiple strings, the `unpack_lines` function can be
 # used to unpack them into an array of strings.
 #
+# By default, the `unpack_string` function from the runtime library is included.
+# This is because the implementation of `unpack_string` depends on the
+# compilation options of pnut and may be optimized for different use cases.
+#
+# Similarly, the `pack_string` function calls the `_put_pstr` function from the
+# runtime library so it doesn't have to be included twice (one for the runtime
+# library and one for this script).
+#
 # ############################# Memory allocation ##############################
 #
 # Memory can be dynamically allocated using the `_malloc` function, and freed
@@ -45,6 +53,11 @@
 # structures.
 #
 ################################################################################
+
+# Convert a C string to a shell string. The result is stored in $__res.
+pack_string() { # $1 = string address
+  __res=$(_put_pstr __ $1)
+}
 
 # Like `unpack_string` but for multiple strings separated by newlines.
 # Returns a pointer to the first string in the array, and null terminates the

@@ -21,11 +21,7 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 #define call_char_to_int(prefix, char_var) putstr(prefix "char_to_int \"" char_var "\"\n");
 #endif
 
-#ifdef RT_COMPACT
 #define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$((" int_var "/64))$((" int_var "/8%8))$((" int_var "%8))\")\n");
-#else
-#define call_int_to_char(prefix, int_var) putstr(prefix "int_to_char \"" int_var "\"\n");
-#endif
 
 // The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
 // occurrences See analyze-big-c.py to see the frequency of each character in big.c.
@@ -90,7 +86,7 @@ DEFINE_RUNTIME_FUN(local_vars)
 #ifndef SH_SAVE_VARS_WITH_SET
   putstr("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  putstr("let() { # $1: variable name, $2: value (optional) \n");
+  putstr("let() { # $1: variable name, $2: value (optional)\n");
   putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
   putstr("  : $(($1=${2-0}))                 # Init\n");
   putstr("}\n");
@@ -111,105 +107,6 @@ DEFINE_RUNTIME_FUN(local_vars)
 END_RUNTIME_FUN(local_vars)
 
 // char<->int conversion
-
-DEFINE_RUNTIME_FUN(int_to_char)
-#ifndef RT_COMPACT
-  putstr("int_to_char() {\n");
-  putstr("  case $1 in\n");
-  putstr("    48|49|50|51|52|53|54|55|56|57) __char=$(($1 - 48)) ;;\n");
-  putstr("    97)  __char=\"a\" ;;\n");
-  putstr("    98)  __char=\"b\" ;;\n");
-  putstr("    99)  __char=\"c\" ;;\n");
-  putstr("    100) __char=\"d\" ;;\n");
-  putstr("    101) __char=\"e\" ;;\n");
-  putstr("    102) __char=\"f\" ;;\n");
-  putstr("    103) __char=\"g\" ;;\n");
-  putstr("    104) __char=\"h\" ;;\n");
-  putstr("    105) __char=\"i\" ;;\n");
-  putstr("    106) __char=\"j\" ;;\n");
-  putstr("    107) __char=\"k\" ;;\n");
-  putstr("    108) __char=\"l\" ;;\n");
-  putstr("    109) __char=\"m\" ;;\n");
-  putstr("    110) __char=\"n\" ;;\n");
-  putstr("    111) __char=\"o\" ;;\n");
-  putstr("    112) __char=\"p\" ;;\n");
-  putstr("    113) __char=\"q\" ;;\n");
-  putstr("    114) __char=\"r\" ;;\n");
-  putstr("    115) __char=\"s\" ;;\n");
-  putstr("    116) __char=\"t\" ;;\n");
-  putstr("    117) __char=\"u\" ;;\n");
-  putstr("    118) __char=\"v\" ;;\n");
-  putstr("    119) __char=\"w\" ;;\n");
-  putstr("    120) __char=\"x\" ;;\n");
-  putstr("    121) __char=\"y\" ;;\n");
-  putstr("    122) __char=\"z\" ;;\n");
-  putstr("    65)  __char=\"A\" ;;\n");
-  putstr("    66)  __char=\"B\" ;;\n");
-  putstr("    67)  __char=\"C\" ;;\n");
-  putstr("    68)  __char=\"D\" ;;\n");
-  putstr("    69)  __char=\"E\" ;;\n");
-  putstr("    70)  __char=\"F\" ;;\n");
-  putstr("    71)  __char=\"G\" ;;\n");
-  putstr("    72)  __char=\"H\" ;;\n");
-  putstr("    73)  __char=\"I\" ;;\n");
-  putstr("    74)  __char=\"J\" ;;\n");
-  putstr("    75)  __char=\"K\" ;;\n");
-  putstr("    76)  __char=\"L\" ;;\n");
-  putstr("    77)  __char=\"M\" ;;\n");
-  putstr("    78)  __char=\"N\" ;;\n");
-  putstr("    79)  __char=\"O\" ;;\n");
-  putstr("    80)  __char=\"P\" ;;\n");
-  putstr("    81)  __char=\"Q\" ;;\n");
-  putstr("    82)  __char=\"R\" ;;\n");
-  putstr("    83)  __char=\"S\" ;;\n");
-  putstr("    84)  __char=\"T\" ;;\n");
-  putstr("    85)  __char=\"U\" ;;\n");
-  putstr("    86)  __char=\"V\" ;;\n");
-  putstr("    87)  __char=\"W\" ;;\n");
-  putstr("    88)  __char=\"X\" ;;\n");
-  putstr("    89)  __char=\"Y\" ;;\n");
-  putstr("    90)  __char=\"Z\" ;;\n");
-  putstr("    32)  __char=\" \" ;;\n");
-  putstr("    33)  __char=\"!\" ;;\n");
-  putstr("    34)  __char=\"\\\"\" ;;\n");
-  putstr("    35)  __char=\"#\" ;;\n");
-  putstr("    36)  __char=\"$\" ;;\n");
-  putstr("    37)  __char=\"%\" ;;\n");
-  putstr("    38)  __char=\"&\" ;;\n");
-  putstr("    39)  __char=\"'\" ;;\n");
-  putstr("    40)  __char=\"(\" ;;\n");
-  putstr("    41)  __char=\")\" ;;\n");
-  putstr("    42)  __char=\"*\" ;;\n");
-  putstr("    43)  __char=\"+\" ;;\n");
-  putstr("    44)  __char=\",\" ;;\n");
-  putstr("    45)  __char=\"-\" ;;\n");
-  putstr("    46)  __char=\".\" ;;\n");
-  putstr("    47)  __char=\"/\" ;;\n");
-  putstr("    58)  __char=\":\" ;;\n");
-  putstr("    59)  __char=\";\" ;;\n");
-  putstr("    60)  __char=\"<\" ;;\n");
-  putstr("    61)  __char=\"=\" ;;\n");
-  putstr("    62)  __char=\">\" ;;\n");
-  putstr("    63)  __char=\"?\" ;;\n");
-  putstr("    64)  __char=\"@\" ;;\n");
-  putstr("    91)  __char=\"[\" ;;\n");
-  putstr("    92)  __char=\"\\\\\" ;;\n");
-  putstr("    93)  __char=\"]\" ;;\n");
-  putstr("    94)  __char=\"^\" ;;\n");
-  putstr("    95)  __char=\"_\" ;;\n");
-  putstr("    96)  __char=\"\\`\" ;;\n");
-  putstr("    123) __char=\"{\" ;;\n");
-  putstr("    124) __char=\"|\" ;;\n");
-  putstr("    125) __char=\"}\" ;;\n");
-  putstr("    126) __char=\"~\" ;;\n");
-  putstr("    10)  __char=\"\\n\" ;;\n");
-  putstr("    *)\n");
-  putstr("      echo \"Invalid character code: $1\" ; exit 1\n");
-  putstr("      __char=$(printf \"\\\\$(printf \"%o\" \"$1\")\") ;;\n");
-  putstr("  esac\n");
-  putstr("}\n");
-#endif
-END_RUNTIME_FUN(int_to_char)
 
 DEFINE_RUNTIME_FUN(char_to_int)
 #ifndef RT_COMPACT
@@ -371,7 +268,7 @@ DEFINE_RUNTIME_FUN(char_to_int)
   putstr("    '}') __c=125 ;;\n");
   putstr("    '~') __c=126 ;;\n");
   putstr("    *)\n");
-  putstr("      __c=$(printf \"%d\" \"'$1\"); __c=$((__c > 0 ? __c : 256 + __c)) ;; \n");
+  putstr("      __c=$(printf \"%d\" \"'$1\"); __c=$((__c > 0 ? __c : 256 + __c)) ;;\n");
   putstr("  esac\n");
   putstr("}\n");
 #endif
@@ -551,32 +448,6 @@ DEPENDS_ON(char_to_int)
   putstr("}\n");
 END_RUNTIME_FUN(unpack_escaped_string)
 
-DEFINE_RUNTIME_FUN(pack_string)
-DEPENDS_ON(int_to_char)
-  putstr("# Convert a pointer to a C string to a Shell string.\n");
-  putstr("# $__res is set to the result, and $__len is set to the length of the string.\n");
-  putstr("pack_string() { # $1 = string address, $2 = end of string delimiter (default to null), $3 = max length (default to 100000000) \n");
-  putstr("  __addr=$1; \n");
-  putstr("  __max_len=100000000\n");
-  putstr("  __delim=0\n");
-  putstr("  __len=0\n");
-  putstr("  __res=\"\"\n");
-  putstr("  if [ $# -ge 2 ] ; then __delim=$2   ; fi # Optional end of string delimiter\n");
-  putstr("  if [ $# -ge 3 ] ; then __max_len=$3 ; fi # Optional max length\n");
-  putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
-  putstr("    __char=$((_$__addr))\n");
-  putstr("    __addr=$((__addr + 1))\n");
-  putstr("    __len=$((__len + 1))\n");
-  putstr("    case $__char in\n");
-  putstr("      10) __res=\"$__res\\n\" ;; # 10 == '\\n'\n");
-  putstr("      *)");
-  call_int_to_char("        ", "$__char")
-  putstr("        __res=\"$__res$__char\" ;;\n");
-  putstr("    esac\n");
-  putstr("  done\n");
-  putstr("}\n");
-END_RUNTIME_FUN(pack_string)
-
 DEFINE_RUNTIME_FUN(defstr)
 DEPENDS_ON(unpack_escaped_string)
   putstr("# Define a string, and return a reference to it in the varible taken as argument.\n");
@@ -673,44 +544,46 @@ DEPENDS_ON(putchar)
   putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(print_pnut_str)
+END_RUNTIME_FUN(put_pstr)
 
-DEFINE_RUNTIME_FUN(print_string)
-DEPENDS_ON(int_to_char)
-  putstr("# Emit a C-string line by line so that whitespace isn't mangled\n");
-  putstr("print_string() {\n");
-  putstr("  __addr=$1; shift\n");
-  putstr("  __max_len=100000000\n");
-  putstr("  __delim=0\n");
-  putstr("  __len=0\n");
-  putstr("  __acc=\"\"\n");
-  putstr("  if [ $# -ge 1 ] ; then __delim=$1   ; shift ; fi # Optional end of string delimiter\n");
-  putstr("  if [ $# -ge 1 ] ; then __max_len=$1 ; shift ; fi # Optional max length\n");
-  putstr("  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do\n");
-  putstr("    __char=$((_$__addr))\n");
-  putstr("    __addr=$((__addr + 1))\n");
-  putstr("    __len=$((__len + 1))\n");
-  putstr("    case $__char in\n");
-  putstr("      10) # 10 == '\\n'\n");
-  putstr("        printf \"%s\\n\" \"$__acc\"\n");
-  putstr("        __acc=\"\" ;;\n");
-  putstr("      *)\n");
-  call_int_to_char("        ", "$__char")
-  putstr("        __acc=\"$__acc$__char\" ;;\n");
-  putstr("    esac\n");
-  putstr("  done\n");
-  putstr("  printf \"%s\" \"$__acc\"\n");
-  putstr("}\n");
-END_RUNTIME_FUN(print_string)
-
+// POSIX shell printf documentation: https://web.archive.org/web/20240829022722/https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+// C printf documentation: ISO/IEC 9899:1999 - 7.19.6 Formatted input/output functions (page 273)
 DEFINE_RUNTIME_FUN(printf)
-DEPENDS_ON(print_string)
-DEPENDS_ON(pack_string)
-DEPENDS_ON(int_to_char)
+DEPENDS_ON(put_pstr)
+  putstr("read_int() {\n");
+  putstr("  __int=\n");
+  putstr("  while [ $((_$__fmt_ptr)) != 0 ] && [ $((_$__fmt_ptr)) -ge 48 ] && [ $((_$__fmt_ptr)) -le 57 ]; do\n");
+  putstr("    __int=\"$__int$((_$__fmt_ptr - 48))\"\n");
+  putstr("    : $((__fmt_ptr += 1))\n");
+  putstr("  done\n");
+  putstr("}\n");
+  putstr("\n");
+  putstr("pad() {\n");
+  putstr("  if [ $(($1 - 1)) -ge 1 ]; then\n");
+  putstr("    printf \"%$(($1 - 1))s\" \"\"\n");
+  putstr("  fi\n");
+  putstr("}\n");
+  putstr("\n");
+  putstr("printf_invalid_format_error() {\n");
+  putstr("  printf \"Invalid format specifier. %%\"\n");
+  putstr("  : $((_$__fmt_ptr = 0)) # Terminate string after %...\n");
+  putstr("  _put_pstr __ $__mod_start\n");
+  putstr("  printf \"\\n\"\n");
+  putstr("  exit 1\n");
+  putstr("}\n");
+  putstr("\n");
+  putstr("printf_reset() {\n");
+  putstr("  __mod=0\n");
+  putstr("  __flags=\n");
+  putstr("  __width=\n");
+  putstr("  __precision=\n");
+  putstr("}\n");
+  putstr("\n");
   putstr("_printf() { # $1 = printf format string, $2... = printf args\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __fmt_ptr=$1; shift\n");
-  putstr("  __mod=0\n");
+  putstr("  __mod_start=0\n");
+  putstr("  printf_reset\n");
   putstr("  while [ \"$((_$__fmt_ptr))\" != 0 ] ; do\n");
   putstr("    __head=$((_$__fmt_ptr))\n");
   putstr("    __fmt_ptr=$((__fmt_ptr + 1))\n");
@@ -718,72 +591,72 @@ DEPENDS_ON(int_to_char)
   call_int_to_char("      ", "$__head")
   putstr("      __head_char=$__char\n");
   putstr("      case $__head_char in\n");
-  putstr("        'd') # 100 = 'd' Decimal integer\n");
-  putstr("          printf \"%d\" $1\n");
-  putstr("          shift\n");
+  putstr("        '%')\n");
+  putstr("          if [ -n \"${__flags}${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
+  putstr("          printf \"%%\"\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
-  putstr("        'c') # 99 = 'c' Character\n");
-  putstr("          # Don't need to handle non-printable characters the only use of %c is for printable characters\n");
-  putstr("          printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
+  putstr("        'd'|'i'|'o'|'u'|'x'|'X')\n");
+  putstr("          printf \"%${__flags}${__width}${__precision}${__head_char}\" $1\n");
   putstr("          shift\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
-  putstr("        'x') # 120 = 'x' Hexadecimal integer\n");
-  putstr("          printf \"%x\" $1\n");
+  putstr("        'c')\n");
+  //                Can't use printf "%b" here because it doesn't support null
+  //                bytes so we use printf "%s" to add padding, and then printf
+  //                "\\ooo" to print the character or vice versa if '-' is set.
+  putstr("          case \"$__flags\" in\n");
+  putstr("            *'-'*)\n");
+  putstr("              printf \\\\$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;\n");
+  putstr("            *) pad ${__width:-0}; printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ;;\n");
+  putstr("          esac\n");
   putstr("          shift\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
-  putstr("        's') # 115 = 's' String\n");
-  putstr("          print_string $1\n");
-  putstr("          shift\n");
-  putstr("          ;;\n");
-  putstr("        '.') # String with length. %.*s will print the first 4 characters of the string\n");
-  putstr("          pack_string $__fmt_ptr 0 2 # Read next 2 characters\n");
-  putstr("          __fmt_ptr=$((__fmt_ptr + 2))\n");
-  putstr("          if [ \"$__res\" = \"*s\" ]; then\n");
-  putstr("            print_string $2 0 $1\n");
-  putstr("            shift 2\n");
+  putstr("        's')\n");
+  putstr("          # We only want to use the shell's native printf (and _put_pstr subshell) if %s has sub-specifiers\n");
+  putstr("          if [ -z \"{__flags}${__width}{__precision}\" ]; then\n");
+  putstr("            _put_pstr __ $1\n");
   putstr("          else\n");
-  putstr("            echo \"Unknown format specifier: %.$__res\" ; exit 1\n");
+  putstr("            printf \"%${__flags}${__width}${__precision}s\" \"$(_put_pstr __ $1)\"\n");
   putstr("          fi\n");
+  putstr("          shift\n");
+  putstr("          printf_reset\n");
   putstr("          ;;\n");
-  putstr("        [0-9])                         # parse integer\n");
-  putstr("          # Get max length (with padding)\n");
-  putstr("          pack_string $__fmt_ptr 46 # Read until '.' or end of string\n");
-  putstr("          __fmt_ptr=$((__fmt_ptr + __len + 1))\n");
-  putstr("          __min_len=\"$__head_char$__res\" # Don't forget the first digit we've already read\n");
-  putstr("          # Get string length\n");
-  putstr("          pack_string $__fmt_ptr 115 # Read until 's' or end of string\n");
-  putstr("          __fmt_ptr=$((__fmt_ptr + __len))\n");
-  putstr("          __str_len=$__res\n");
+  putstr("        '-'|'+'|' '|'#'|'0')\n"); // flags
+  putstr("          if [ -n \"${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
+  putstr("          __flags=\"$__flags$__head_char\"\n");
+  putstr("          ;;\n");
+  putstr("        [0-9])\n"); // constant width
+  putstr("          if [ -n \"${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
+  putstr("          read_int\n");
+  putstr("          __width=\"$__head_char$__int\"\n");
+  putstr("          ;;\n");
+  putstr("        '*')\n"); // width param
+  putstr("          if [ -n \"${__width}${__precision}\" ]; then printf_invalid_format_error; fi\n");
+  putstr("          __width=$1\n");
+  putstr("          shift\n");
+  putstr("          ;;\n");
+  putstr("        '.')\n"); // precision
   putstr("          __head=$((_$__fmt_ptr))\n");
-  call_int_to_char("          ", "$__head")
-  putstr("          __head_char=$__char\n");
-  putstr("          __fmt_ptr=$((__fmt_ptr + 1))\n");
-  putstr("          if [ \"$__head_char\" = 's' ]; then\n");
-  putstr("            __str_ref=$1; shift\n");
-  putstr("            # Count length of string with pack_string but don't use packed string\n");
-  putstr("            pack_string $__str_ref 0 $__str_len\n");
-  putstr("            __pad=\"\"\n");
-  putstr("            __padlen=$((__min_len - __len)) # Pad string so it has at least $__min_len characters\n");
-  putstr("            while [ $__padlen -gt 0 ]; do\n");
-  putstr("              __pad=\" $__pad\"\n");
-  putstr("              : $((__padlen -= 1))\n");
-  putstr("              done\n");
-  putstr("            printf \"%s\" \"$__pad\" # Pad string\n");
-  putstr("            print_string $__str_ref 0 $__str_len # Print string\n");
+  putstr("          if [ $__head = 42 ]; then # 42 = '*'\n");
+  putstr("            __fmt_ptr=$((__fmt_ptr + 1))\n");
+  putstr("            __precision=\".$1\"\n");
+  putstr("            shift\n");
+  putstr("          elif [ $__head -ge 48 ] && [ $__head -le 57 ]; then\n");
+  putstr("            read_int\n");
+  putstr("            __precision=\".$__int\"\n");
   putstr("          else\n");
-  putstr("            echo \"Unknown format specifier: '%$__min_len.$__str_len$__head_char'\" ; exit 1;\n");
+  putstr("            printf_invalid_format_error\n");
   putstr("          fi\n");
   putstr("          ;;\n");
   putstr("        *)\n");
-  putstr("          echo \"Unknown format specifier %$__head_char\"; exit 1\n");
+  putstr("          echo \"4: Unknown format specifier %$__head_char\"; exit 1\n");
   putstr("      esac\n");
-  putstr("      __mod=0\n");
+  putstr("    elif [ $__head = 37 ]; then # 37 == '%'\n");
+  putstr("      __mod=1; __mod_start=$__fmt_ptr\n");
   putstr("    else\n");
-  putstr("      case $__head in\n");
-  putstr("        10) printf \"\\n\" ;;  # 10 == '\\n'\n");
-  putstr("        37) __mod=1 ;; # 37 == '%'\n");
-  putstr("        *) printf \\\\$(($__head/64))$(($__head/8%8))$(($__head%8)) ;;\n");
-  putstr("      esac\n");
+  putstr("      printf \\\\$(($__head/64))$(($__head/8%8))$(($__head%8))\n");
   putstr("    fi\n");
   putstr("  done\n");
   putstr("}\n");
@@ -791,7 +664,7 @@ END_RUNTIME_FUN(printf)
 
 DEFINE_RUNTIME_FUN(open)
 DEPENDS_ON(malloc)
-DEPENDS_ON(pack_string)
+DEPENDS_ON(put_pstr)
   putstr("__state_fd0=0;\n");
   putstr("_malloc __buffer_fd0 1000   # Allocate buffer\n");
   putstr(": $((_$__buffer_fd0 = 0))   # Init buffer to \"\"\n");
@@ -829,7 +702,7 @@ DEPENDS_ON(pack_string)
   putstr("    : $((__cursor_fd$__fd = 0))         # Make buffer empty\n");
   putstr("    : $((__buflen_fd$__fd = 1000))      # Init buffer length\n");
   putstr("    : $((__state_fd$__fd = $3))         # Mark the fd as opened\n");
-  putstr("    pack_string $2\n");
+  putstr("    __res=$(_put_pstr __ $2)\n");
   putstr("    if [ $3 = 0 ] ; then\n");
   putstr("      case $__fd in\n");
   putstr("        0) exec 0< \"$__res\" ;; 1) exec 1< \"$__res\" ;; 2) exec 2< \"$__res\" ;;\n");
@@ -1041,6 +914,5 @@ void produce_runtime() {
   if (runtime_use_close)      runtime_close();
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
-  if (runtime_use_pack_string) runtime_pack_string();
   if (runtime_use_unpack_string) runtime_unpack_string();
 }

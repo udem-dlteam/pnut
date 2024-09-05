@@ -31,6 +31,14 @@ LC_ALL=C
 # functions that return multiple strings, the `unpack_lines` function can be
 # used to unpack them into an array of strings.
 #
+# By default, the `unpack_string` function from the runtime library is included.
+# This is because the implementation of `unpack_string` depends on the
+# compilation options of pnut and may be optimized for different use cases.
+#
+# Similarly, the `pack_string` function calls the `_put_pstr` function from the
+# runtime library so it doesn't have to be included twice (one for the runtime
+# library and one for this script).
+#
 # ############################# Memory allocation ##############################
 #
 # Memory can be dynamically allocated using the `_malloc` function, and freed
@@ -49,6 +57,11 @@ LC_ALL=C
 # structures.
 #
 ################################################################################
+
+# Convert a C string to a shell string. The result is stored in $__res.
+pack_string() { # $1 = string address
+  __res=$(_put_pstr __ $1)
+}
 
 # Like `unpack_string` but for multiple strings separated by newlines.
 # Returns a pointer to the first string in the array, and null terminates the
@@ -140,7 +153,7 @@ _print_array() { let arr $2
   while [ $((_$((arr + i)))) != 0 ] ; do
     printf "%d: " $i
     _put_pstr __ $((_$((arr + i))))
-    printf "\n" 
+    printf "\n" $i
     : $((i += 1))
   done
   endlet $1 i arr
@@ -184,12 +197,12 @@ _main() {
   _array_len len $files
   _print_array __ $files
   while [ 1 != 0 ] ; do
-    printf "Select a file to print: "
+    printf "Select a file to print: " 
     _read_int ix 
     if [ 0 -le $ix ] && [ $ix -lt $len ] ; then
       break
     fi
-    printf "Invalid index.\n"
+    printf "Invalid index.\n" 
   done
   _cat __ $((_$((files + ix))))
   endlet $1 __t1 len ix files
@@ -242,7 +255,7 @@ _put_pstr() {
 # Local variables
 __=0
 __SP=0
-let() { # $1: variable name, $2: value (optional) 
+let() { # $1: variable name, $2: value (optional)
   : $((__SP += 1)) $((__$__SP=$1)) # Push
   : $(($1=${2-0}))                 # Init
 }
@@ -255,29 +268,6 @@ endlet() { # $1: return variable
     shift;
   done
   : $(($__ret=__tmp))   # Restore return value
-}
-
-
-# Convert a pointer to a C string to a Shell string.
-# $__res is set to the result, and $__len is set to the length of the string.
-pack_string() { # $1 = string address, $2 = end of string delimiter (default to null), $3 = max length (default to 100000000) 
-  __addr=$1; 
-  __max_len=100000000
-  __delim=0
-  __len=0
-  __res=""
-  if [ $# -ge 2 ] ; then __delim=$2   ; fi # Optional end of string delimiter
-  if [ $# -ge 3 ] ; then __max_len=$3 ; fi # Optional max length
-  while [ $((_$__addr)) != $__delim ] && [ $__max_len -gt $__len ] ; do
-    __char=$((_$__addr))
-    __addr=$((__addr + 1))
-    __len=$((__len + 1))
-    case $__char in
-      10) __res="$__res\n" ;; # 10 == '\n'
-      *)        __char=$(printf "\\$(($__char/64))$(($__char/8%8))$(($__char%8))")
-        __res="$__res$__char" ;;
-    esac
-  done
 }
 
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
