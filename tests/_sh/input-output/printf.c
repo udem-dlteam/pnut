@@ -1,3 +1,6 @@
+// Yash does not support * for precision like in printf "%.*s" 5 "abc"
+// printf_runtime works on yash because * are replaced with values before calling printf
+// expect_failure_for: yash
 #ifndef PNUT_CC
 #include <stdio.h>
 #else
