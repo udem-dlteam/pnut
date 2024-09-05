@@ -558,6 +558,12 @@ DEPENDS_ON(put_pstr)
   putstr("  done\n");
   putstr("}\n");
   putstr("\n");
+  putstr("pad() {\n");
+  putstr("  if [ $(($1 - 1)) -ge 1 ]; then\n");
+  putstr("    printf \"%$(($1 - 1))s\" \"\"\n");
+  putstr("  fi\n");
+  putstr("}\n");
+  putstr("\n");
   putstr("printf_invalid_format_error() {\n");
   putstr("  printf \"Invalid format specifier. %%\"\n");
   putstr("  : $((_$__fmt_ptr = 0)) # Terminate string after %...\n");
@@ -577,10 +583,7 @@ DEPENDS_ON(put_pstr)
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __fmt_ptr=$1; shift\n");
   putstr("  __mod_start=0\n");
-  putstr("  __mod=0\n");
-  putstr("  __flags=\n");
-  putstr("  __width=\n");
-  putstr("  __precision=\n");
+  putstr("  printf_reset\n");
   putstr("  while [ \"$((_$__fmt_ptr))\" != 0 ] ; do\n");
   putstr("    __head=$((_$__fmt_ptr))\n");
   putstr("    __fmt_ptr=$((__fmt_ptr + 1))\n");
@@ -603,8 +606,9 @@ DEPENDS_ON(put_pstr)
   //                bytes so we use printf "%s" to add padding, and then printf
   //                "\\ooo" to print the character or vice versa if '-' is set.
   putstr("          case \"$__flags\" in\n");
-  putstr("            *'-'*) printf \\\\$(($1/64))$(($1/8%8))$(($1%8)); printf \"%$((__width ? __width - 1 : 0))s\" \"\" ;;\n");
-  putstr("            *) printf \"%$((__width ? __width - 1 : 0))s\" \"\"; printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ;;\n");
+  putstr("            *'-'*)\n");
+  putstr("              printf \\\\$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;\n");
+  putstr("            *) pad ${__width:-0}; printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ;;\n");
   putstr("          esac\n");
   putstr("          shift\n");
   putstr("          printf_reset\n");

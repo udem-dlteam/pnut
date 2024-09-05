@@ -35,7 +35,6 @@ void main() {
   printf("'% x'\n", 42);
   printf("'% s'\n", "world"); // No effect
   // '#': The result shall always be prefixed by the 0x or 0X prefix.
-  printf("'%#d'\n", 42); // undefined behavior
   printf("'%#10x'\n", 42);
   printf("'%-#10x'\n", 42);
   printf("'%-#10o'\n", 42);
