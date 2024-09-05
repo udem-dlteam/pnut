@@ -1,5 +1,5 @@
 // tests for #include "" directives
-// pnut_opt: -Iportable_libc/include/
+// comp_opt: -Iportable_libc/include/
 
 #include <stdio.h>
 
