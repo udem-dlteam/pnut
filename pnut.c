@@ -239,7 +239,7 @@ void print_hex(int n) {
   }
 }
 
-/* tokenizer */
+// tokenizer
 
 int ch;
 int tok;
@@ -251,7 +251,7 @@ int string_pool_alloc = 0;
 int string_start;
 int hash;
 
-/* These parameters give a perfect hashing of the C keywords */
+// These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1997
 #define HASH_PRIME 53
 #define HEAP_SIZE 200000
@@ -451,8 +451,8 @@ int c2;
 int end_ident_i;
 
 int end_ident() {
-  string_pool[string_pool_alloc] = 0; /* terminate string */
-  string_pool_alloc += 1; /* account for terminator */
+  string_pool[string_pool_alloc] = 0; // terminate string
+  string_pool_alloc += 1; // account for terminator
 
   probe = heap[hash];
 
@@ -463,27 +463,27 @@ int end_ident() {
     c2 = string_pool[probe_start+end_ident_i];
     while (c1 == c2) {
       if (c1 == 0) {
-        string_pool_alloc = string_start; /* undo string allocation */
+        string_pool_alloc = string_start; // undo string allocation
         return probe;
       }
       end_ident_i += 1;
       c1 = string_pool[string_start+end_ident_i];
       c2 = string_pool[probe_start+end_ident_i];
     }
-    hash = probe; /* remember previous ident */
+    hash = probe; // remember previous ident
     probe = heap[probe];
   }
 
-  /* a new ident has been found */
+  // a new ident has been found
 
   probe = alloc_obj(4);
 
-  heap[hash] = probe; /* add new ident at end of chain */
+  heap[hash] = probe; // add new ident at end of chain
 
-  heap[probe] = 0; /* no next ident */
+  heap[probe] = 0; // no next ident
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
-  heap[probe+3] = 0; /* Token tag */
+  heap[probe+3] = 0; // Token tag
 
   return probe;
 }
@@ -722,14 +722,13 @@ int accum_digit(int base) {
     digit = ch - 'a' + 10;
   }
   if (digit >= base) {
-    return 0; /* character is not a digit in that base */
+    return 0; // character is not a digit in that base
   } else {
-    /*
-    TODO: Put overflow check back
-    if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
-      fatal_error("literal integer overflow");
-    }
-    */
+    // TODO: Put overflow check back
+    // if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
+    //   fatal_error("literal integer overflow");
+    // }
+
     val = val * base - digit;
     get_ch();
     return 1;
@@ -743,26 +742,24 @@ void get_string_char() {
 
   if (val == '\\') {
     if ('0' <= ch AND ch <= '7') {
-      /*
-      Parse octal character, up to 3 digits.
-      Note that \1111 is parsed as '\111' followed by '1'
-      See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
-      */
+      // Parse octal character, up to 3 digits.
+      // Note that \1111 is parsed as '\111' followed by '1'
+      // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
       val = 0;
       accum_digit(8);
       accum_digit(8);
       accum_digit(8);
-      val = -(val % 256); /* keep low 8 bits, without overflowing */
+      val = -(val % 256); // keep low 8 bits, without overflowing
     } else if ((ch == 'x') OR (ch == 'X')) {
       get_ch();
       val = 0;
-      /* Allow 1 or 2 hex digits. */
+      // Allow 1 or 2 hex digits.
       if (accum_digit(16)) {
         accum_digit(16);
       } else {
         syntax_error("invalid hex escape -- it must have at least one digit");
       }
-      val = -(val % 256); /* keep low 8 bits, without overflowing */
+      val = -(val % 256); // keep low 8 bits, without overflowing
     } else {
       if (ch == 'a') {
         val = 7;
@@ -1253,12 +1250,6 @@ void get_ident() {
 
   val = end_ident();
   tok = heap[val+2];
-  /*
-  putstr("tok="); putint(tok);
-  putstr(" val="); putint(val);
-  putstr(" "); putstr(string_pool + heap[val+1]);
-  putchar('\n');
-  */
 }
 
 int init_ident(int tok, char *name) {
@@ -1682,15 +1673,13 @@ void get_tok() {
           break;
         }
 
-        /*
-          skip whitespace, detecting when it is at start of line.
-          When skip_newlines is false, produces a '\n' token whenever it
-          encounters whitespace containing at least a newline.
-          This condenses multiple newlines into a single '\n' token and serves
-          to end the current preprocessor directive.
-        */
+        // skip whitespace, detecting when it is at start of line.
+        // When skip_newlines is false, produces a '\n' token whenever it
+        // encounters whitespace containing at least a newline.
+        // This condenses multiple newlines into a single '\n' token and serves
+        // to end the current preprocessor directive.
 
-       tok = 0; // Reset the token
+        tok = 0; // Reset the token
         while (0 <= ch AND ch <= ' ') {
           if (ch == '\n') tok = ch;
           get_ch();
@@ -1702,14 +1691,14 @@ void get_tok() {
           break;
         }
 
-        /* will continue while (1) loop */
+        // will continue while (1) loop
       }
 
-      /* detect '#' at start of line, possibly preceded by whitespace */
+      // detect '#' at start of line, possibly preceded by whitespace
       else if (tok == '\n' && ch == '#') {
         tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
         handle_preprocessor_directive();
-        /* will continue while (1) loop */
+        // will continue while (1) loop
       }
 
       else if (('a' <= ch AND ch <= 'z') OR
@@ -1736,7 +1725,7 @@ void get_tok() {
 
         get_ch();
 
-        if (val == 0) { /* val == 0 <=> ch == '0' */
+        if (val == 0) { // val == 0 <=> ch == '0'
           if ((ch == 'x') OR (ch == 'X')) {
             get_ch();
             val = 0;
@@ -1785,14 +1774,14 @@ void get_tok() {
 
       } else {
 
-        tok = ch; /* fallback for single char tokens */
+        tok = ch; // fallback for single char tokens
 
         if (ch == '/') {
 
           get_ch();
           if (ch == '*') {
             get_ch();
-            tok = ch; /* remember previous char, except first one */
+            tok = ch; // remember previous char, except first one
             while (((tok != '*') OR (ch != '/')) AND (ch != EOF)) {
               tok = ch;
               get_ch();
@@ -1801,12 +1790,12 @@ void get_tok() {
               syntax_error("unterminated comment");
             }
             get_ch();
-            /* will continue while (1) loop */
+            // will continue while (1) loop
           } else if (ch == '/') {
             while ((ch != '\n') AND (ch != EOF)) {
               get_ch();
             }
-            /* will continue while (1) loop */
+            // will continue while (1) loop
           } else {
             if (ch == '=') {
               get_ch();
@@ -1977,7 +1966,7 @@ void get_tok() {
         } else if (ch == '\\') {
           get_ch();
 
-          if (ch == '\n') { /* Continues with next token */
+          if (ch == '\n') { // Continues with next token
             get_ch();
           } else {
             putstr("ch="); putint(ch); putchar('\n');
@@ -2000,7 +1989,7 @@ void get_tok() {
 #endif
 }
 
-/* parser */
+// parser
 
 #ifdef NICE_ERR_MSG
 #include "debug.c"
@@ -2061,8 +2050,8 @@ ast parse_type() {
       if (type_kw != 0) syntax_error("inconsistent type");
       return parse_union();
     } else if (tok == TYPE) {
-      /* Look in types table. It's a type, not a type_kw, but we reuse the variable */
-      type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+      // Look in types table. It's a type, not a type_kw, but we reuse the variable
+      type_kw = heap[val + 3]; // For TYPE tokens, the tag is the type
       get_tok();
       return type_kw;
     } else {
@@ -2127,7 +2116,7 @@ ast parse_enum() {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
   } else if (tok == TYPE) {
-    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    result = heap[val + 3]; // For TYPE tokens, the tag is the type
     if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
     get_tok();
     if (tok == '{') syntax_error("enum type cannot be redefined");
@@ -2195,7 +2184,7 @@ ast parse_struct() {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
   } else if (tok == TYPE) {
-    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    result = heap[val + 3]; // For TYPE tokens, the tag is the type
     if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
     get_tok();
     if (tok == '{') syntax_error("struct type cannot be redefined");
@@ -2270,10 +2259,8 @@ ast parse_declaration() {
 
     if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
       syntax_error("variable with void type");
-    /*
-    if (tok == '[')
-      syntax_error("array declaration only allowed at global level");
-    */
+    // if (tok == '[')
+    //   syntax_error("array declaration only allowed at global level");
 
     result = new_ast3(VAR_DECL, name, type, 0);
   } else if (tok == IDENTIFIER) {
@@ -2309,7 +2296,7 @@ int parse_declaration_list() {
   return result;
 }
 
-/* Note: Uses a simplified syntax for definitions */
+// Note: Uses a simplified syntax for definitions
 ast parse_definition(int local) {
 
   ast type;
@@ -2355,7 +2342,7 @@ ast parse_definition(int local) {
         expect_tok(')');
 
         if (tok == ';') {
-          /* forward declaration. Body == -1 */
+          // forward declaration. Body == -1
           body = -1;
           get_tok();
         } else {
@@ -2371,11 +2358,9 @@ ast parse_definition(int local) {
         }
 
         if (tok == '[') {
-          /*
-          if (local) {
-            syntax_error("array declaration only allowed at global level");
-          }
-          */
+          // if (local) {
+          //   syntax_error("array declaration only allowed at global level");
+          // }
           get_tok();
           if (tok == INTEGER) {
             this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
@@ -2902,16 +2887,16 @@ ast parse_comma_expression() {
   ast child;
   ast tail;
 
-  if (tok == ',') { /* List of 1 elements are not boxed in a cons cell */
-    result = new_ast2(',', result, 0); /* Create default cons cell */
+  if (tok == ',') { // List of 1 elements are not boxed in a cons cell
+    result = new_ast2(',', result, 0); // Create default cons cell
     tail = result;
     while (tok == ',') {
 
       get_tok();
       child = parse_assignment_expression();
-      child = new_ast2(',', child, 0); /* New tail cons cell */
-      set_child(tail, 1, child);       /* Add new cons cell at end of list */
-      tail = child;                    /* Advance tail */
+      child = new_ast2(',', child, 0); // New tail cons cell
+      set_child(tail, 1, child);       // Add new cons cell at end of list
+      tail = child;                    // Advance tail
 
     }
   }
@@ -3085,7 +3070,7 @@ ast parse_compound_statement() {
 
   expect_tok('{');
 
-  /* TODO: Simplify this */
+  // TODO: Simplify this
   if ((tok != '}') AND (tok != EOF)) {
     if (is_type_starter(tok)) {
       child1 = parse_definition(1);
