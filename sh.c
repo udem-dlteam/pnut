@@ -41,7 +41,11 @@ void print_string_char(int c) {
 
 #define text int
 #define TEXT_POOL_SIZE 1000000
-void *text_pool[TEXT_POOL_SIZE];
+#ifdef PNUT_CC
+// On pnut, intptr_t is not defined
+#define intptr_t int
+#endif
+intptr_t text_pool[TEXT_POOL_SIZE];
 int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 
 // Text pool nodes
@@ -71,74 +75,70 @@ void handle_enum_struct_union_type_decl(ast node);
   string.
 */
 
-#define wrap_char(c) (-c)
+// A few macros to help us change the representation of text objects
+#define TEXT_FROM_INT(i)  i
+#define TEXT_FROM_CHAR(i) i
+#define TEXT_FROM_PTR(p)  ((intptr_t) (p))
+#define TEXT_TO_INT(p)    ((int)      (p))
+#define TEXT_TO_CHAR(p)   ((char)     (p))
 
-// Cast are slow to parse and pnut ignores them so we define them as empty
-#ifdef PNUT_CC
-#define INT_TO_VOID_PTR
-#define VOID_PTR_TO_INT
-#define VOID_PTR_TO_CHAR
-#else
-#define INT_TO_VOID_PTR(i)  ((void*)(long)(i))
-#define VOID_PTR_TO_INT(p)  ((int)  (long)(p))
-#define VOID_PTR_TO_CHAR(p) ((char) (long)(p))
-#endif
+#define wrap_char(c) (-c)
 
 text wrap_int(int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_INTEGER);
-  text_pool[text_alloc + 1] = INT_TO_VOID_PTR(i);
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
 text escape_text(text t, bool for_printf) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
 
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_ESCAPED);
-  text_pool[text_alloc + 1] = INT_TO_VOID_PTR(t);
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(for_printf);
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_ESCAPED);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(t);
+  text_pool[text_alloc + 2] = TEXT_FROM_INT(for_printf);
   return (text_alloc += 3) - 3;
 }
 
 text string_concat(text t1, text t2) {
   if (text_alloc + 4 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_TREE);
-  text_pool[text_alloc + 1] = INT_TO_VOID_PTR(2);
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(t1);
-  text_pool[text_alloc + 3] = INT_TO_VOID_PTR(t2);
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(2);
+  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
+  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
   return (text_alloc += 4) - 4;
 }
 
 text string_concat3(text t1, text t2, text t3) {
   if (text_alloc + 5 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_TREE);
-  text_pool[text_alloc + 1] = INT_TO_VOID_PTR(3);
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(t1);
-  text_pool[text_alloc + 3] = INT_TO_VOID_PTR(t2);
-  text_pool[text_alloc + 4] = INT_TO_VOID_PTR(t3);
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(3);
+  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
+  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
+  text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
   return (text_alloc += 5) - 5;
 }
 
 text string_concat4(text t1, text t2, text t3, text t4) {
   if (text_alloc + 6 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_TREE);
-  text_pool[text_alloc + 1] = INT_TO_VOID_PTR(4);
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(t1);
-  text_pool[text_alloc + 3] = INT_TO_VOID_PTR(t2);
-  text_pool[text_alloc + 4] = INT_TO_VOID_PTR(t3);
-  text_pool[text_alloc + 5] = INT_TO_VOID_PTR(t4);
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(4);
+  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
+  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
+  text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
+  text_pool[text_alloc + 5] = TEXT_FROM_INT(t4);
   return (text_alloc += 6) - 6;
 }
 
 text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   if (text_alloc + 7 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_TREE);
-  text_pool[text_alloc + 1] = INT_TO_VOID_PTR(5);
-  text_pool[text_alloc + 2] = INT_TO_VOID_PTR(t1);
-  text_pool[text_alloc + 3] = INT_TO_VOID_PTR(t2);
-  text_pool[text_alloc + 4] = INT_TO_VOID_PTR(t3);
-  text_pool[text_alloc + 5] = INT_TO_VOID_PTR(t4);
-  text_pool[text_alloc + 6] = INT_TO_VOID_PTR(t5);
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(5);
+  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
+  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
+  text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
+  text_pool[text_alloc + 5] = TEXT_FROM_INT(t4);
+  text_pool[text_alloc + 6] = TEXT_FROM_INT(t5);
   return (text_alloc += 7) - 7;
 }
 
@@ -146,16 +146,16 @@ text wrap_str(char *s) {
   int i = 0;
   int result = text_alloc;
 
-  text_pool[result] = INT_TO_VOID_PTR(TEXT_TREE);
+  text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
   text_alloc += 2;
   while (s[i] != 0) {
     // Idea: Pack 4 characters at a time?
-    text_pool[text_alloc] = INT_TO_VOID_PTR(-s[i]);
+    text_pool[text_alloc] = TEXT_FROM_INT(-s[i]);
     text_alloc += 1;
     i += 1;
   }
 
-  text_pool[result + 1] = INT_TO_VOID_PTR(i);
+  text_pool[result + 1] = TEXT_FROM_INT(i);
 
   return result;
 }
@@ -163,9 +163,9 @@ text wrap_str(char *s) {
 // Like wrap_str, but assumes that the string is constant and doesn't need to be copied
 text wrap_str_const(char *s, char *end) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = INT_TO_VOID_PTR(TEXT_STRING);
-  text_pool[text_alloc + 1] = s;
-  text_pool[text_alloc + 2] = end; // end of string address. 0 for null-terminated strings
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_STRING);
+  text_pool[text_alloc + 1] = TEXT_FROM_PTR(s);
+  text_pool[text_alloc + 2] = TEXT_FROM_PTR(end); // end of string address. 0 for null-terminated strings
   return (text_alloc += 3) - 3;
 }
 
@@ -223,31 +223,31 @@ void print_escaped_text(text t, bool for_printf) {
 
   if (t < 0) { /* it's a character */
     print_escaped_char(-t, for_printf);
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_TREE)) {
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_TREE)) {
     i = 0;
-    while (INT_TO_VOID_PTR(i) < text_pool[t + 1]) {
+    while (TEXT_FROM_INT(i) < text_pool[t + 1]) {
       if (text_pool[t + i + 2] < 0) {
-        print_escaped_char(-VOID_PTR_TO_CHAR(text_pool[t + i + 2]), for_printf);
+        print_escaped_char(-TEXT_TO_CHAR(text_pool[t + i + 2]), for_printf);
       } else {
-        print_escaped_text(VOID_PTR_TO_INT(text_pool[t + i + 2]), for_printf);
+        print_escaped_text(TEXT_TO_INT(text_pool[t + i + 2]), for_printf);
       }
       i += 1;
     }
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
-    putint(VOID_PTR_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
-    if (VOID_PTR_TO_INT(text_pool[t + 2]) == 0) {
-      print_escaped_string(text_pool[t + 1], for_printf);
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
+    putint(TEXT_TO_INT(text_pool[t + 1]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
+    if (TEXT_TO_INT(text_pool[t + 2]) == 0) {
+      print_escaped_string((char*) text_pool[t + 1], for_printf);
     } else {
       char_bk = *((char*)(text_pool[t + 2]));
       *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
-      print_escaped_string(text_pool[t + 1], for_printf);
+      print_escaped_string((char*) text_pool[t + 1], for_printf);
       *((char*)(text_pool[t + 2])) = char_bk;
     }
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_ESCAPED)) {
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
   } else {
-    printf("\nt=%d %d\n", t, VOID_PTR_TO_INT(text_pool[t]));
+    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
     fatal_error("print_escaped_text: unexpected string tree node");
   }
 }
@@ -259,31 +259,31 @@ void print_text(text t) {
 
   if (t < 0) { /* it's a character */
     putchar(-t);
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_TREE)) {
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_TREE)) {
     i = 0;
-    while (INT_TO_VOID_PTR(i) < text_pool[t + 1]) {
+    while (TEXT_FROM_INT(i) < text_pool[t + 1]) {
       if (text_pool[t + i + 2] < 0) {
-        putchar(-VOID_PTR_TO_CHAR(text_pool[t + i + 2]));
+        putchar(-TEXT_TO_CHAR(text_pool[t + i + 2]));
       } else {
-        print_text(VOID_PTR_TO_INT(text_pool[t + i + 2]));
+        print_text(TEXT_TO_INT(text_pool[t + i + 2]));
       }
       i += 1;
     }
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_INTEGER)) {
-    putint(VOID_PTR_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_STRING)) {
-    if (VOID_PTR_TO_INT(text_pool[t + 2]) == 0) {
-      putstr(text_pool[t + 1]);
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
+    putint(TEXT_TO_INT(text_pool[t + 1]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
+    if (TEXT_TO_INT(text_pool[t + 2]) == 0) {
+      putstr((char*) text_pool[t + 1]);
     } else {
       char_bk = *((char*)(text_pool[t + 2]));
       *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
-      putstr(text_pool[t + 1]);
+      putstr((char*) text_pool[t + 1]);
       *((char*)(text_pool[t + 2])) = char_bk;
     }
-  } else if (text_pool[t] == INT_TO_VOID_PTR(TEXT_ESCAPED)) {
-    print_escaped_text(VOID_PTR_TO_INT(text_pool[t + 1]), VOID_PTR_TO_INT(text_pool[t + 2]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
+    print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
   } else {
-    printf("\nt=%d %d\n", t, VOID_PTR_TO_INT(text_pool[t]));
+    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
     fatal_error("print_text: unexpected string tree node");
   }
 }
