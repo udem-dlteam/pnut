@@ -160,8 +160,8 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 //   return result;
 // }
 
-// Like wrap_str, but assumes that the string is constant and doesn't need to be copied
-text wrap_str_const(char *s, char *end) {
+// Like wrap_str, but assumes that the string is immutable and doesn't need to be copied
+text wrap_str_imm(char *s, char *end) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_STRING);
   text_pool[text_alloc + 1] = TEXT_FROM_PTR(s);
@@ -170,11 +170,11 @@ text wrap_str_const(char *s, char *end) {
 }
 
 text wrap_str_lit(char *s) {
-  return wrap_str_const(s, 0);
+  return wrap_str_imm(s, 0);
 }
 
 text wrap_str_pool(int s) {
-  return wrap_str_const(string_pool + s, 0);
+  return wrap_str_imm(string_pool + s, 0);
 }
 
 text concatenate_strings_with(text t1, text t2, text sep) {
@@ -1557,14 +1557,14 @@ text comp_putchar_inline(ast param) {
 #endif
 
 #ifdef SH_AVOID_PRINTF_USE
-// format_str is from the string pool so constant
+// format_str is from the string pool so immutable
 text printf_call(char *format_str, char *format_str_end, text params_text, bool escape) {
   if (format_str == format_str_end) {
     return 0;
   } else {
     // Some shells interpret leading - as options. In that case, we add -- in front of the format string.
     return string_concat4(wrap_str_lit(format_str[0] == '-' ? "printf -- \"" : "printf \""),
-                          escape_text(wrap_str_const(format_str, format_str_end), escape),
+                          escape_text(wrap_str_imm(format_str, format_str_end), escape),
                           wrap_str_lit("\" "),
                           params_text);
   }
