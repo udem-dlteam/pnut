@@ -52,6 +52,7 @@ int text_alloc = 1; /* Start at 1 because 0 is the empty text */
 enum TEXT_NODES {
   TEXT_TREE,
   TEXT_INTEGER,
+  TEXT_CHAR,
   TEXT_STRING,
   TEXT_ESCAPED
 };
@@ -82,7 +83,13 @@ void handle_enum_struct_union_type_decl(ast node);
 #define TEXT_TO_INT(p)    ((int)      (p))
 #define TEXT_TO_CHAR(p)   ((char)     (p))
 
-#define wrap_char(c) (-c)
+text wrap_char(char c) {
+  // TODO: Cache character objects?
+  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_CHAR);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(c);
+  return (text_alloc += 2) - 2;
+}
 
 text wrap_int(int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
@@ -219,72 +226,84 @@ char char_bk;
 void print_escaped_text(text t, bool for_printf) {
   int i;
 
-  if (t == 0) return;
+  if (t != 0) {
+    switch (TEXT_TO_INT(text_pool[t])) {
+      case TEXT_TREE:
+        i = 0;
+        while (i < TEXT_TO_INT(text_pool[t + 1])) {
+          print_escaped_text(TEXT_TO_INT(text_pool[t + i + 2]), for_printf);
+          i += 1;
+        }
+        break;
 
-  if (t < 0) { /* it's a character */
-    print_escaped_char(-t, for_printf);
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_TREE)) {
-    i = 0;
-    while (TEXT_FROM_INT(i) < text_pool[t + 1]) {
-      if (text_pool[t + i + 2] < 0) {
-        print_escaped_char(-TEXT_TO_CHAR(text_pool[t + i + 2]), for_printf);
-      } else {
-        print_escaped_text(TEXT_TO_INT(text_pool[t + i + 2]), for_printf);
-      }
-      i += 1;
+      case TEXT_INTEGER:
+        putint(TEXT_TO_INT(text_pool[t + 1]));
+        break;
+
+      case TEXT_CHAR:
+        print_escaped_char(TEXT_TO_CHAR(text_pool[t + 1]), for_printf);
+        break;
+
+      case TEXT_STRING:
+        if (text_pool[t + 2]) {
+          char_bk = *((char*)(text_pool[t + 2]));
+          *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
+          print_escaped_string((char*)text_pool[t + 1], for_printf);
+          *((char*)(text_pool[t + 2])) = char_bk;
+        } else { // end is null => null-terminated string
+          print_escaped_string((char*) text_pool[t + 1], for_printf);
+        }
+        break;
+
+      case TEXT_ESCAPED:
+        fatal_error("Cannot escape a string that is already escaped"); break;
+
+      default:
+        fatal_error("print_escaped_text: unexpected string tree node"); break;
     }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
-    putint(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
-    if (TEXT_TO_INT(text_pool[t + 2]) == 0) {
-      print_escaped_string((char*) text_pool[t + 1], for_printf);
-    } else {
-      char_bk = *((char*)(text_pool[t + 2]));
-      *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
-      print_escaped_string((char*) text_pool[t + 1], for_printf);
-      *((char*)(text_pool[t + 2])) = char_bk;
-    }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
-    fatal_error("Cannot escape a string that is already escaped");
-  } else {
-    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
-    fatal_error("print_escaped_text: unexpected string tree node");
   }
 }
 
 void print_text(text t) {
   int i;
 
-  if (t == 0) return;
+  if (t != 0) {
+    switch (TEXT_TO_INT(text_pool[t])) {
+      case TEXT_TREE:
+        i = 0;
+        while (i < TEXT_TO_INT(text_pool[t + 1])) {
+          print_text(TEXT_TO_INT(text_pool[t + i + 2]));
+          i += 1;
+        }
+        break;
 
-  if (t < 0) { /* it's a character */
-    putchar(-t);
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_TREE)) {
-    i = 0;
-    while (TEXT_FROM_INT(i) < text_pool[t + 1]) {
-      if (text_pool[t + i + 2] < 0) {
-        putchar(-TEXT_TO_CHAR(text_pool[t + i + 2]));
-      } else {
-        print_text(TEXT_TO_INT(text_pool[t + i + 2]));
-      }
-      i += 1;
+      case TEXT_INTEGER:
+        putint(TEXT_TO_INT(text_pool[t + 1]));
+        break;
+
+      case TEXT_CHAR:
+        putchar(TEXT_TO_CHAR(text_pool[t + 1]));
+        break;
+
+      case TEXT_STRING:
+        if (text_pool[t + 2]) {
+          char_bk = *((char*)(text_pool[t + 2]));
+          *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
+          putstr((char*)text_pool[t + 1]);
+          *((char*)(text_pool[t + 2])) = char_bk;
+        } else { // end is null => null-terminated string
+          putstr((char*) text_pool[t + 1]);
+        }
+        break;
+
+      case TEXT_ESCAPED:
+        print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
+        break;
+
+      default:
+        printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
+        fatal_error("print_escaped_text: unexpected string tree node"); break;
     }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
-    putint(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
-    if (TEXT_TO_INT(text_pool[t + 2]) == 0) {
-      putstr((char*) text_pool[t + 1]);
-    } else {
-      char_bk = *((char*)(text_pool[t + 2]));
-      *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
-      putstr((char*) text_pool[t + 1]);
-      *((char*)(text_pool[t + 2])) = char_bk;
-    }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
-    print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
-  } else {
-    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
-    fatal_error("print_text: unexpected string tree node");
   }
 }
 
