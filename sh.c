@@ -142,23 +142,23 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
   return (text_alloc += 7) - 7;
 }
 
-text wrap_str(char *s) {
-  int i = 0;
-  int result = text_alloc;
+// Dead code but keeping it around in case we need to wrap mutable strings
+// text wrap_str(char *s) {
+//   int i = 0;
+//   int result = text_alloc;
 
-  text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
-  text_alloc += 2;
-  while (s[i] != 0) {
-    // Idea: Pack 4 characters at a time?
-    text_pool[text_alloc] = TEXT_FROM_INT(-s[i]);
-    text_alloc += 1;
-    i += 1;
-  }
+//   text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
+//   text_alloc += 2;
+//   while (s[i] != 0) {
+//     text_pool[text_alloc] = wrap_char(s[i]);
+//     text_alloc += 1;
+//     i += 1;
+//   }
 
-  text_pool[result + 1] = TEXT_FROM_INT(i);
+//   text_pool[result + 1] = TEXT_FROM_INT(i);
 
-  return result;
-}
+//   return result;
+// }
 
 // Like wrap_str, but assumes that the string is constant and doesn't need to be copied
 text wrap_str_const(char *s, char *end) {
