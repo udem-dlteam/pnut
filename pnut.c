@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <string.h>
+#include <stdint.h> // for intptr_t
 
 #define ast int
 #define true 1
