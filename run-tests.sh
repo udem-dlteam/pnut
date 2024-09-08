@@ -70,26 +70,6 @@ compile_pnut() { # extra pnut compilation options: $1
   fi
 }
 
-compile_pnut_with_opts() { # pnut compilation options: $1
-  pnut_comp_opts="$1"
-  pnut_exe="./tests/pnut-by-gcc-opts.exe"
-  pnut_exe_backend="./tests/pnut-opts.$ext"
-
-  if [ -n "$pnut_comp_opts" ]; then
-    gcc "$pnut_source" $PNUT_EXE_OPTIONS $pnut_comp_opts -o "$pnut_exe" 2> /dev/null
-    if [ "$bootstrap" -eq 1 ]; then
-      $pnut_exe $PNUT_EXE_OPTIONS $pnut_comp_opts "$pnut_source" > "$pnut_exe_backend" || fail "Error: Failed to compile $pnut_source with $pnut_exe (bootstrap)"
-      # exit 1
-      chmod +x "$pnut_exe_backend"
-      echo "$pnut_exe_backend"
-    else
-      echo "$pnut_exe"
-    fi
-  else
-    echo "$pnut_comp" # No options, use the default pnut executable
-  fi
-}
-
 shell_version() {
   case "$1" in
     bash) bash -c 'echo $BASH_VERSION' ;;
@@ -174,7 +154,11 @@ compile_test() { # c file: $1
   # 15s timeout to prevent infinite loops in pnut
   compile_pnut $(test_pnut_comp_options $1)
   if [ $bootstrap -eq 1 ]; then
-    timeout 15 $shell $pnut_comp $PNUT_EXE_OPTIONS "$1" $(test_comp_options $1)
+    if [ "$backend" = "sh" ]; then
+      timeout 15 $shell $pnut_comp "$1" $(test_comp_options $1)
+    else # Use the compiled pnut executable
+      timeout 15 $pnut_comp "$1" $(test_comp_options $1)
+    fi
   else
     timeout 5 $pnut_comp "$1" $(test_comp_options $1)
   fi
