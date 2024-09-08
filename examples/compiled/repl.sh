@@ -10,40 +10,166 @@ _malloc() { # $2 = object size
   : $((__ALLOC += $2 + 1))
 }
 
+__c2i_0=48
+__c2i_1=49
+__c2i_2=50
+__c2i_3=51
+__c2i_4=52
+__c2i_5=53
+__c2i_6=54
+__c2i_7=55
+__c2i_8=56
+__c2i_9=57
+__c2i_a=97
+__c2i_b=98
+__c2i_c=99
+__c2i_d=100
+__c2i_e=101
+__c2i_f=102
+__c2i_g=103
+__c2i_h=104
+__c2i_i=105
+__c2i_j=106
+__c2i_k=107
+__c2i_l=108
+__c2i_m=109
+__c2i_n=110
+__c2i_o=111
+__c2i_p=112
+__c2i_q=113
+__c2i_r=114
+__c2i_s=115
+__c2i_t=116
+__c2i_u=117
+__c2i_v=118
+__c2i_w=119
+__c2i_x=120
+__c2i_y=121
+__c2i_z=122
+__c2i_A=65
+__c2i_B=66
+__c2i_C=67
+__c2i_D=68
+__c2i_E=69
+__c2i_F=70
+__c2i_G=71
+__c2i_H=72
+__c2i_I=73
+__c2i_J=74
+__c2i_K=75
+__c2i_L=76
+__c2i_M=77
+__c2i_N=78
+__c2i_O=79
+__c2i_P=80
+__c2i_Q=81
+__c2i_R=82
+__c2i_S=83
+__c2i_T=84
+__c2i_U=85
+__c2i_V=86
+__c2i_W=87
+__c2i_X=88
+__c2i_Y=89
+__c2i_Z=90
+char_to_int() {
+  case $1 in
+    [[:alnum:]]) __c=$((__c2i_$1)) ;;
+    ' ') __c=32 ;;
+    '!') __c=33 ;;
+    '"') __c=34 ;;
+    '#') __c=35 ;;
+    '$') __c=36 ;;
+    '%') __c=37 ;;
+    '&') __c=38 ;;
+    "'") __c=39 ;;
+    '(') __c=40 ;;
+    ')') __c=41 ;;
+    '*') __c=42 ;;
+    '+') __c=43 ;;
+    ',') __c=44 ;;
+    '-') __c=45 ;;
+    '.') __c=46 ;;
+    '/') __c=47 ;;
+    ':') __c=58 ;;
+    ';') __c=59 ;;
+    '<') __c=60 ;;
+    '=') __c=61 ;;
+    '>') __c=62 ;;
+    '?') __c=63 ;;
+    '@') __c=64 ;;
+    '[') __c=91 ;;
+    '\') __c=92 ;;
+    ']') __c=93 ;;
+    '^') __c=94 ;;
+    '_') __c=95 ;;
+    '`') __c=96 ;;
+    '{') __c=123 ;;
+    '|') __c=124 ;;
+    '}') __c=125 ;;
+    '~') __c=126 ;;
+    *)
+      __c=$(printf "%d" "'$1"); __c=$((__c > 0 ? __c : 256 + __c)) ;;
+  esac
+}
 
 unpack_escaped_string() {
   __buf="$1"
   # Allocates enough space for all characters, assuming that no character is escaped
   _malloc __addr $((${#__buf} + 1))
   __ptr=$__addr
-  while [ -n "$__buf" ] ; do
-    case "$__buf" in
-      '\'*)
-        __buf="${__buf#?}" # Remove the current char from $__buf
-        case "$__buf" in
-          'a'*) __c=7 ;;
-          'b'*) __c=8 ;;
-          'f'*) __c=12 ;;
-          'n'*) __c=10 ;;
-          'r'*) __c=13 ;;
-          't'*) __c=9 ;;
-          'v'*) __c=11 ;;
-          '\'*) __c=92 ;;
-          '"'*) __c=34 ;;
-          "'"*) __c=39 ;;
-          '?'*) __c=63 ;;
-          '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes
-          *) echo "invalid escape in string: $__buf"; exit 1 ;;
-        esac
-        __buf="${__buf#?}" # Remove the current char from $__buf
-        ;;
-      *)
-        __c=$(printf "%d" "'${__buf%"${__buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-        __buf="${__buf#?}" # Remove the current char from $__buf
-        ;;
-    esac
+  __us_buf16=
+  __us_buf256=
+  while [ ! -z "$__buf" ] || [ ! -z "$__us_buf256" ] ; do
+    if [ -z "$__us_buf256" ]; then
+      if [ ${#__buf} -ge 256 ]; then
+        __temp="${__buf#????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????}"
+        __us_buf256="${__buf%"$__temp"}"
+        __buf="$__temp"
+      else
+        __us_buf256="$__buf"
+        __buf=
+      fi
+    fi
+    if [ -z "$__us_buf16" ]; then
+      if [ ${#__us_buf256} -ge 16 ]; then
+        __temp="${__us_buf256#????????????????}"
+        __us_buf16="${__us_buf256%"$__temp"}"
+        __us_buf256="$__temp"
+      else
+        __us_buf16="$__us_buf256"
+        __us_buf256=
+      fi
+    fi
+    while [ ! -z "$__us_buf16" ]; do
+      case "$__us_buf16" in
+        '\'*)
+          __us_buf16="${__us_buf16#?}" # Remove the current char from $__us_buf16
+          case "$__us_buf16" in
+            'a'*) __c=7 ;;
+            'b'*) __c=8 ;;
+            'f'*) __c=12 ;;
+            'n'*) __c=10 ;;
+            'r'*) __c=13 ;;
+            't'*) __c=9 ;;
+            'v'*) __c=11 ;;
+            '\'*) __c=92 ;;
+            '"'*) __c=34 ;;
+            "'"*) __c=39 ;;
+            '?'*) __c=63 ;;
+            '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes
+            *) echo "invalid escape in string: $__us_buf16"; exit 1 ;;
+          esac
+          __us_buf16="${__us_buf16#?}" # Remove the current char from $__us_buf16
+          ;;
+        *)
+          char_to_int "${__us_buf16%"${__us_buf16#?}"}"
+          __us_buf16="${__us_buf16#?}" # Remove the current char from $__us_buf16
+          ;;
+      esac
     : $((_$__ptr = __c))
     : $((__ptr += 1))
+    done
   done
   : $((_$__ptr = 0))
 }
@@ -792,11 +918,59 @@ unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
   __ends_with_eof=$3
-  while [ ! -z "$__fgetc_buf" ]; do
-    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-    : $((_$__buffer = __c))
-    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
-    : $((__buffer += 1))              # Move to the next buffer position
+  __fgetc_buf16=
+  __stdin_buf256=
+  __continue=1
+  while [ $__continue != 0 ] ; do
+    if [ -z "$__stdin_buf256" ]; then
+      if [ ${#__fgetc_buf} -ge 256 ]; then
+        __temp="${__fgetc_buf#????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????}"
+        __stdin_buf256="${__fgetc_buf%"$__temp"}"
+        __fgetc_buf="$__temp"
+      else
+        __stdin_buf256="$__fgetc_buf"
+        __fgetc_buf=
+      fi
+    fi
+    if [ -z "$__fgetc_buf16" ]; then
+      if [ ${#__stdin_buf256} -ge 16 ]; then
+        __temp="${__stdin_buf256#????????????????}"
+        __fgetc_buf16="${__stdin_buf256%"$__temp"}"
+        __stdin_buf256="$__temp"
+      else
+        __fgetc_buf16="$__stdin_buf256"
+        __stdin_buf256=
+        __continue=0
+      fi
+    fi
+    while [ ! -z "$__fgetc_buf16" ]; do
+      case "$__fgetc_buf16" in
+        " "*) : $((_$__buffer = 32))  ;;
+        "e"*) : $((_$__buffer = 101)) ;;
+        "="*) : $((_$__buffer = 61))  ;;
+        "t"*) : $((_$__buffer = 116)) ;;
+        ";"*) : $((_$__buffer = 59))  ;;
+        "i"*) : $((_$__buffer = 105)) ;;
+        ")"*) : $((_$__buffer = 41))  ;;
+        "("*) : $((_$__buffer = 40))  ;;
+        "n"*) : $((_$__buffer = 110)) ;;
+        "s"*) : $((_$__buffer = 115)) ;;
+        "l"*) : $((_$__buffer = 108)) ;;
+        "+"*) : $((_$__buffer = 43))  ;;
+        "p"*) : $((_$__buffer = 112)) ;;
+        "a"*) : $((_$__buffer = 97))  ;;
+        "r"*) : $((_$__buffer = 114)) ;;
+        "f"*) : $((_$__buffer = 102)) ;;
+        "d"*) : $((_$__buffer = 100)) ;;
+        "*"*) : $((_$__buffer = 42))  ;;
+        *)
+          char_to_int "${__fgetc_buf16%"${__fgetc_buf16#?}"}"
+          : $((_$__buffer = __c))
+          ;;
+      esac
+      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character
+      : $((__buffer += 1))              # Move to the next buffer position
+    done
   done
 
   if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
