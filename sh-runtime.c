@@ -308,7 +308,7 @@ DEPENDS_ON(malloc)
   putstr("defarr() { _malloc $1 $2; }\n");
 #else
 DEPENDS_ON(initialize_memory)
-  printf("defarr() { _malloc $1 $2; initialize_memory $(($1)) $2; }\n");
+  putstr("defarr() { _malloc $1 $2; initialize_memory $(($1)) $2; }\n");
 #endif
 END_RUNTIME_FUN(defarr)
 
