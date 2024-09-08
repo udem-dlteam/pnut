@@ -58,6 +58,10 @@
 #undef OPTIMIZE_LONG_LINES
 #endif
 
+// Options that turns Pnut into a C preprocessor or some variant of it
+// DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
+// DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
+
 typedef int bool;
 
 #ifdef PNUT_CC
@@ -239,6 +243,9 @@ void print_hex(int n) {
 // tokenizer
 
 int ch;
+#ifdef DEBUG_EXPAND_INCLUDES
+int prev_ch = EOF;
+#endif
 int tok;
 int val;
 
@@ -623,6 +630,14 @@ void get_ch() {
   // Save C code chars so they can be displayed with the shell code
   declaration_char_buf[declaration_char_buf_ix] = ch;
   declaration_char_buf_ix += 1;
+#endif
+#ifdef DEBUG_EXPAND_INCLUDES
+  // Because ch is always 1 character ahead of the token, we print the character
+  // with a 1 character delay to match this delay. This makes it easy to
+  // annotate certain preprocessor directives so they can be removed in a later
+  // step.
+  if (prev_ch != EOF) putchar(prev_ch);
+  prev_ch = ch;
 #endif
 }
 
@@ -1102,6 +1117,12 @@ int evaluate_if_condition() {
 void handle_include() {
   if (tok == STRING) {
     include_file(string_pool + val, include_stack->dirname);
+#ifdef DEBUG_EXPAND_INCLUDES
+    // When running pnut in "expand includes" mode, we want to annotate the
+    // #include directives that were expanded with a comment so we can remove
+    // them later.
+    putstr(" // INCLUDED");
+#endif
     get_tok_macro(); // Skip the string
   } else if (tok == '<') {
     accum_string_until('>');
@@ -3100,8 +3121,7 @@ ast parse_compound_statement() {
 
 // Select code generator
 
-#ifndef DEBUG_CPP
-#ifndef DEBUG_GETCHAR
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
 #ifdef sh
 #include "sh.c"
 #endif
@@ -3120,7 +3140,6 @@ ast parse_compound_statement() {
 
 #ifdef arm
 #include "arm.c"
-#endif
 #endif
 #endif
 
@@ -3170,18 +3189,17 @@ int main(int argc, char **argv) {
     fatal_error("no input file");
   }
 
-#ifndef DEBUG_CPP
-#ifndef DEBUG_GETCHAR
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
   codegen_begin();
-#endif
 #endif
 
   ch = '\n';
   get_tok();
 
-#ifdef DEBUG_GETCHAR
-  while (ch != EOF) {
-    get_ch();
+#if defined DEBUG_EXPAND_INCLUDES
+  while (tok != EOF) {
+    get_tok();
+  }
 #else
   while (tok != EOF) {
 #ifdef DEBUG_CPP
@@ -3196,14 +3214,12 @@ int main(int argc, char **argv) {
     codegen_glo_decl(decl);
 
 #endif
-
-#endif
   }
-
-#ifndef DEBUG_CPP
-#ifndef DEBUG_GETCHAR
-  codegen_end();
 #endif
+
+
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
+  codegen_end();
 #endif
 
   return 0;
