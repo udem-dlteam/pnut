@@ -70,3 +70,9 @@ test-x86_64-linux:
 
 test-x86_64-mac:
 	./run-tests.sh "x86_64_mac"
+
+pnut-artifact-x86:
+	docker build -t pnut-artifact-x86 . --build-arg PNUT_SOURCE=clone --platform linux/amd64
+
+pnut-artifact-arm:
+	docker build -t pnut-artifact-arm . --build-arg PNUT_SOURCE=clone --platform linux/arm64
