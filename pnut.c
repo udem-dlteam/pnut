@@ -217,9 +217,13 @@ void putintneg(int n) {
 
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  putstr(include_stack->filepath); putchar(':');
-  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-  putstr("  "); putstr(msg); putchar('\n');
+  if (include_stack != 0) {
+    putstr(include_stack->filepath); putchar(':');
+    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+    putstr("  "); putstr(msg); putchar('\n');
+  } else {
+    putstr(msg); putchar('\n');
+  }
 #else
   putstr(msg); putchar('\n');
 #endif
