@@ -20,7 +20,7 @@
 #
 # The
 
-TEMP_DIR="bootstrap-results/measure"
+TEMP_DIR="build/measure"
 mkdir -p "$TEMP_DIR"
 
 expand_includes() { # $1 = output-name, $2 = options

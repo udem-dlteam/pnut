@@ -8,7 +8,7 @@ if [ "$SHELL_TO_TEST" = "" ] ; then
   exit 1
 fi
 
-TEMP_DIR="bootstrap-results"
+TEMP_DIR="build"
 PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh $PNUT_SH_OPTIONS_EXTRA"
 PNUT_I386_OPTIONS="-DRT_NO_INIT_GLOBALS -Dtarget_i386_linux"
 

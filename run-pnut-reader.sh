@@ -1,6 +1,6 @@
 #! /bin/sh
 
-TEMP_DIR="bootstrap-results"
+TEMP_DIR="build"
 PNUT_SH_OPTIONS="-DOPTIMIZE_LONG_LINES -DRT_NO_INIT_GLOBALS -Dsh"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
