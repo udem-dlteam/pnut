@@ -1653,7 +1653,7 @@ void codegen_glo_var_decl(ast node) {
   handle_enum_struct_union_type_decl(type);
 
   if (binding == 0) {
-    cgc_add_global(name, size, type_width_ast(type, true, false), type);
+    cgc_add_global(name, size, type_width_ast(type, true, true), type);
     binding = cgc_globals;
   }
 
