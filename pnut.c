@@ -3183,6 +3183,10 @@ int main(int argc, char **argv) {
           init_ident(MACRO, argv[i] + 2);
           break;
 
+        case 'U':
+          init_ident(IDENTIFIER, argv[i] + 2);
+          break;
+
         case 'I':
           if (include_search_path != 0) {
             fatal_error("only one include path allowed");
