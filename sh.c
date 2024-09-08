@@ -32,8 +32,8 @@ void print_string_char(int c) {
   else if (c == 13) putstr("\\r");
   else if (c == 9)  putstr("\\t");
   else if (c == 11) putstr("\\v");
-  else if ((c == '\\') OR (c == '\'') OR (c == '\"')) { putstr("\\"); putchar(c); }
-  else if ((c < 32) OR (c > 126)) { putstr("\\"); putint(c>>6); putint((c>>3)&7); putint(c&7); }
+  else if (c == '\\' || c == '\'' || c == '\"') { putstr("\\"); putchar(c); }
+  else if (c < 32 || c > 126) { putstr("\\"); putint(c>>6); putint((c>>3)&7); putint(c&7); }
   else putchar(c);
 }
 
@@ -479,7 +479,7 @@ text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
   if (get_op(ident) == IDENTIFIER) {
     var = find_var_in_local_env(get_val(ident));
     if (var != -1) {
-      if (get_child(var, 2) == KIND_PARAM AND get_child(var, 3)) {
+      if (get_child(var, 2) == KIND_PARAM && get_child(var, 3)) {
         res = wrap_int(get_child(var, 1));
         if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
       } else {
@@ -616,7 +616,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 
   // Local variables don't correspond to memory locations, and can't store
   // more than 1 number/pointer.
-  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW AND get_val(type) == 0))) {
+  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW && get_val(type) == 0))) {
     printf("%s ", name);
     fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
   }
@@ -950,7 +950,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
   ast new_tail;
 
   if (nb_children == 0) {
-    if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER) {
+    if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
       return node;
     } else if (op == STRING) {
       // We must initialize strings before the expression
@@ -963,7 +963,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 1) {
-    if ((op == '&') OR (op == '*') OR (op == '+') OR (op == '-') OR (op == '~') OR (op == '!')) {
+    if (op == '&' || op == '*' || op == '+' || op == '-' || op == '~' || op == '!') {
       // TODO: Reuse ast node?
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
@@ -1019,20 +1019,20 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       }
 
       return sub1;
-    } else if ((op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ) OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[')
-      OR (op == '.') OR (op == ARROW) ) {
+    } else if (op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
+      || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == LSHIFT || op == RSHIFT || op == '=' || op == '['
+      || op == '.' || op == ARROW ) {
       // We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
-    } else if ((op == AMP_EQ) OR (op == BAR_EQ) OR (op == CARET_EQ) OR (op == LSHIFT_EQ) OR (op == MINUS_EQ) OR (op == PERCENT_EQ) OR (op == PLUS_EQ) OR (op == RSHIFT_EQ) OR (op == SLASH_EQ) OR (op == STAR_EQ)) {
+    } else if (op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       // Just like previous case, except that we update contains_side_effects
       contains_side_effects = true;
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
-    } else if ((op == AMP_AMP) OR (op == BAR_BAR)) {
+    } else if (op == AMP_AMP || op == BAR_BAR) {
       previous_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
       // The left side is always executed, unless the whole expression is executed conditionally.
@@ -1060,7 +1060,7 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
       conditional_fun_calls = 0;
       sub2 = handle_side_effects_go(get_child(node, 2), true);
       right_conditional_fun_calls = conditional_fun_calls;
-      if (left_conditional_fun_calls != 0 OR right_conditional_fun_calls != 0) {
+      if (left_conditional_fun_calls != 0 || right_conditional_fun_calls != 0) {
         fatal_error("Conditional function calls in ternary operator not allowed");
       }
 
@@ -1188,7 +1188,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
       }
 #endif
-    } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR) {
+    } else if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else if (op == STRING) {
@@ -1258,11 +1258,11 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return 0;
     }
   } else if (nb_children == 2) {
-    if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT) {
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT) {
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
-    } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+    } else if (op == '=' || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       sub1 = comp_lvalue(get_child(node, 0));
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
@@ -1274,7 +1274,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = struct_member_var(get_child(node, 1));
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
-    } else if (op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '<' OR op == '>') {
+    } else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
       if (context == RVALUE_CTX_TEST) {
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0, op);
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_BASE, 0, op);
@@ -1286,7 +1286,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       }
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(get_child(node, 1), context, 0, op);
-    } else if (op == AMP_AMP OR op == BAR_BAR) {
+    } else if (op == AMP_AMP || op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
     } else {
@@ -1306,7 +1306,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return 0;
     }
   } else if (nb_children == 4) {
-    if (op == AMP_AMP OR op == BAR_BAR) {
+    if (op == AMP_AMP || op == BAR_BAR) {
       // Note, this could also be compiled in a single [ ] block using -a and -o,
       // which I think are POSIX compliant but are deprecated.
       if (context == RVALUE_CTX_TEST) {
@@ -1321,15 +1321,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         // the operator is a different comparison operator.
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_TEST, get_child(node, 2), op);
         sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_TEST, get_child(node, 3), op);
-        if ((get_op(get_child(node, 0)) == AMP_AMP OR get_op(get_child(node, 0)) == BAR_BAR) AND get_op(get_child(node, 0)) != op) {
+        if ((get_op(get_child(node, 0)) == AMP_AMP || get_op(get_child(node, 0)) == BAR_BAR) && get_op(get_child(node, 0)) != op) {
           sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
         }
-        if ((get_op(get_child(node, 1)) == AMP_AMP OR get_op(get_child(node, 1)) == BAR_BAR) AND get_op(get_child(node, 1)) != op) {
+        if ((get_op(get_child(node, 1)) == AMP_AMP || get_op(get_child(node, 1)) == BAR_BAR) && get_op(get_child(node, 1)) != op) {
           sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
         }
         return string_concat3(sub1, op_to_str(op), sub2);
       } else {
-        if (test_side_effects != 0 OR get_child(node, 2) != 0 OR get_child(node, 3) != 0) {
+        if (test_side_effects != 0 || get_child(node, 2) != 0 || get_child(node, 3) != 0) {
           fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
         }
         sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
@@ -1379,7 +1379,7 @@ text comp_rvalue(ast node, int context) {
   // When compiling a test, we place the function side effects inline with the condition.
   // That way, any side effect performed in the condition of a while loop is repeated on each iteration.
   // For if statements, it makes things shorter, but not always more readable.
-  if (context == RVALUE_CTX_TEST OR context == RVALUE_CTX_TEST_ELSEIF) {
+  if (context == RVALUE_CTX_TEST || context == RVALUE_CTX_TEST_ELSEIF) {
     undo_glo_decls(fun_call_decl_start);
     result = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
     result = string_concat(result, comp_rvalue_go(simple_ast, RVALUE_CTX_TEST, 0, 0));
@@ -1439,7 +1439,7 @@ text comp_lvalue(ast node) {
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_EMPTY OR op == IDENTIFIER_DOLLAR) {
+  if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_EMPTY || op == IDENTIFIER_DOLLAR) {
     return env_var(node);
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION);
@@ -1728,7 +1728,7 @@ void comp_fun_call(ast node, ast assign_to) {
 
 void comp_assignment(ast lhs, ast rhs) {
   int lhs_op = get_op(lhs);
-  if (lhs_op == IDENTIFIER OR lhs_op == '[' OR lhs_op == '*' OR lhs_op == ARROW) {
+  if (lhs_op == IDENTIFIER || lhs_op == '[' || lhs_op == '*' || lhs_op == ARROW) {
     if (get_op(rhs) == '(') {
       comp_fun_call(rhs, lhs);
     } else {
@@ -1806,7 +1806,7 @@ void comp_switch(ast node) {
   while (get_op(node) == '{') {
     statement = get_child(node, 0);
     node = get_child(node, 1);
-    if (get_op(statement) != CASE_KW AND get_op(statement) != DEFAULT_KW) {
+    if (get_op(statement) != CASE_KW && get_op(statement) != DEFAULT_KW) {
       fatal_error("comp_statement: switch body without case");
     }
 
@@ -1958,11 +1958,11 @@ void comp_statement(ast node, int else_if) {
         ));
       }
     }
-    if (in_tail_position AND loop_nesting_level == 1) {
+    if (in_tail_position && loop_nesting_level == 1) {
       append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
     } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
       append_glo_decl(wrap_str_lit(":")); // Block only contains a return statement so it's not empty
-    } else if (!in_tail_position OR loop_nesting_level != 0) {
+    } else if (!in_tail_position || loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str_lit("return"));
     }
@@ -2035,7 +2035,7 @@ void mark_mutable_variables_statement(ast node) {
   } else if (op == SWITCH_KW) {
     mark_mutable_variables_statement(get_child(node, 0));
     if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == BREAK_KW OR op == CONTINUE_KW OR op == GOTO_KW) {
+  } else if (op == BREAK_KW || op == CONTINUE_KW || op == GOTO_KW) {
     // Do nothing
   } else if (op == ':' || op == CASE_KW || op == DEFAULT_KW) {
     mark_mutable_variables_statement(get_child(node, op == DEFAULT_KW ? 0 : 1));
@@ -2056,17 +2056,17 @@ void mark_mutable_variables_statement(ast node) {
     }
   } else if (op == '{') { // six.compound
     mark_mutable_variables_body(node);
-  } else if (op == IDENTIFIER OR op == IDENTIFIER_INTERNAL OR op == IDENTIFIER_STRING OR op == IDENTIFIER_DOLLAR OR op == INTEGER OR op == CHARACTER OR op == STRING) {
+  } else if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER || op == STRING) {
     // Do nothing
-  } else if (op == '=' OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE OR op == PLUS_PLUS_POST OR op == MINUS_MINUS_POST
-         OR op == PLUS_EQ OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ
-         OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ OR op == SIZEOF_KW) {
+  } else if (op == '=' || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST
+         || op == PLUS_EQ || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ
+         || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ || op == SIZEOF_KW) {
     mark_variable_as_mutable(get_child(node, 0));
     if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if ((op == '~') OR (op == '!')
-      OR (op == '&') OR (op == '|') OR (op == '<') OR (op == '>') OR (op == '+') OR (op == '-') OR (op == '*') OR (op == '/')
-      OR (op == '%') OR (op == '^') OR (op == ',') OR (op == EQ_EQ) OR (op == EXCL_EQ) OR (op == LT_EQ) OR (op == GT_EQ)
-      OR (op == LSHIFT) OR (op == RSHIFT) OR (op == '=') OR (op == '[') OR (op == AMP_AMP) OR (op == BAR_BAR) OR (op == '.') OR (op == ARROW)) {
+  } else if (op == '~' || op == '!'
+      || op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
+      || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ
+      || op == LSHIFT || op == RSHIFT || op == '=' || op == '[' || op == AMP_AMP || op == BAR_BAR || op == '.' || op == ARROW) {
     mark_mutable_variables_statement(get_child(node, 0));
     if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
   } else if (op == CAST) {
@@ -2228,7 +2228,7 @@ text comp_constant(ast node) {
     new_ident = fresh_string_ident();
     comp_defstr(new_ident, get_val(node));
     return format_special_var(new_ident, false);
-  } else if ((op == '-') AND get_nb_children(node) == 1) {
+  } else if (op == '-' && get_nb_children(node) == 1) {
     return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
   } else {
     fatal_error("comp_constant: unknown constant");
@@ -2252,7 +2252,7 @@ void comp_glo_var_decl(ast node) {
   // When we have type information on the local and global variables, we'll
   // be able to generate the correct code for these cases.
   if ((get_op(type) == '[' && get_op(get_child(type, 1)) == STRUCT_KW && get_val(get_child(type, 1)) == 0)
-    || (get_op(type) == STRUCT_KW AND get_val(type) == 0)) {
+    || (get_op(type) == STRUCT_KW && get_val(type) == 0)) {
     printf("%s ", string_pool + get_val(name));
     fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
   }
@@ -2400,7 +2400,7 @@ void comp_glo_decl(ast node) {
     comp_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
     handle_enum_struct_union_type_decl(get_child(node, 1));
-  } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
+  } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
     printf("op=%d %c with %d children\n", op, op, get_nb_children(node));

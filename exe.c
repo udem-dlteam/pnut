@@ -138,7 +138,7 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
 }
 
 int is_power_of_2(int n) {
-  return n != 0 AND (n & (n - 1)) == 0;
+  return n != 0 && (n & (n - 1)) == 0;
 }
 
 int power_of_2_log(int n) {
@@ -571,7 +571,7 @@ int cgc_lookup_enclosing_loop(int env) {
 int cgc_lookup_enclosing_loop_or_switch(int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == BINDING_LOOP OR heap[binding+1] == BINDING_SWITCH) {
+    if (heap[binding+1] == BINDING_LOOP || heap[binding+1] == BINDING_SWITCH) {
       break;
     }
     binding = heap[binding];
@@ -688,7 +688,7 @@ ast canonicalize_type(ast type) {
   ast res = type;
   int binding;
 
-  if (get_op(type) == STRUCT_KW AND get_child(type, 2) == 0) { // struct with empty def => reference
+  if (get_op(type) == STRUCT_KW && get_child(type, 2) == 0) { // struct with empty def => reference
     binding = cgc_lookup_struct(get_val(get_child(type, 1)), cgc_globals);
     if (binding == 0) fatal_error("canonicalize_type: struct type not defined");
     res = heap[binding+3];
@@ -696,7 +696,7 @@ ast canonicalize_type(ast type) {
       res = clone_ast(res);
       set_child(res, 0, get_child(type, 0));
     }
-  } else if (get_op(type) == UNION_KW AND get_child(type, 2) == 0) { // union with empty def => reference
+  } else if (get_op(type) == UNION_KW && get_child(type, 2) == 0) { // union with empty def => reference
     binding = cgc_lookup_union(get_val(get_child(type, 1)), cgc_globals);
     if (binding == 0) fatal_error("canonicalize_type: union type not defined");
     res = heap[binding+3];
@@ -704,7 +704,7 @@ ast canonicalize_type(ast type) {
       res = clone_ast(res);
       set_child(res, 0, get_child(type, 0));
     }
-  } else if (get_op(type) == ENUM_KW AND get_child(type, 1) == 0) { // enum with empty def => reference
+  } else if (get_op(type) == ENUM_KW && get_child(type, 1) == 0) { // enum with empty def => reference
     binding = cgc_lookup_enum(get_val(get_child(type, 0)), cgc_globals);
     if (binding == 0) fatal_error("canonicalize_type: enum type not defined");
     res = heap[binding+3];
@@ -858,7 +858,7 @@ ast value_type(ast node) {
         set_val(left_type, get_val(left_type) + 1); // Increment star by 1
       }
       return left_type;
-    } else if (op == '+' OR op == '-' OR op == '~' OR op == '!' OR op == MINUS_MINUS OR op == PLUS_PLUS OR op == MINUS_MINUS_POST OR op == PLUS_PLUS_POST OR op == PLUS_PLUS_PRE OR op == MINUS_MINUS_PRE) {
+    } else if (op == '+' || op == '-' || op == '~' || op == '!' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else if (op == SIZEOF_KW) {
@@ -871,8 +871,8 @@ ast value_type(ast node) {
 
   } else if (nb_children == 2) {
 
-    if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^'
-     OR op == LSHIFT OR op == RSHIFT OR op == '<' OR op == '>' OR op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ) {
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^'
+     || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ) {
       left_type = value_type(get_child(node, 0));
       right_type = value_type(get_child(node, 1));
       if (is_pointer_type(left_type) && is_pointer_type(right_type) && op == '-') {
@@ -905,9 +905,9 @@ ast value_type(ast node) {
         fatal_error("value_type: non pointer is being dereferenced with *");
         return -1;
       }
-    } else if (op == '=' OR op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+    } else if (op == '=' || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       return value_type(get_child(node, 0)); // Only the left side is relevant here
-    } else if (op == AMP_AMP OR op == BAR_BAR) {
+    } else if (op == AMP_AMP || op == BAR_BAR) {
       // TODO: Check that the operands have compatible types?
       return value_type(get_child(node, 0));
     } else if (op == '(') {
@@ -923,7 +923,7 @@ ast value_type(ast node) {
       }
     } else if (op == '.') {
       left_type = value_type(get_child(node, 0));
-      if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 0) {
+      if (get_op(left_type) == STRUCT_KW && get_val(left_type) == 0) {
         return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: . operator on non-struct pointer type");
@@ -932,7 +932,7 @@ ast value_type(ast node) {
     } else if (op == ARROW) {
       // Same as '.', but left_type must be a pointer
       left_type = value_type(get_child(node, 0));
-      if (get_op(left_type) == STRUCT_KW AND get_val(left_type) == 1) {
+      if (get_op(left_type) == STRUCT_KW && get_val(left_type) == 1) {
         return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
@@ -994,7 +994,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     def_label(lbl2);
 
   } else {
-    if      (op == '+' OR op == PLUS_EQ OR op == PLUS_PLUS_PRE OR  op == PLUS_PLUS_POST) {
+    if (op == '+' || op == PLUS_EQ || op == PLUS_PLUS_PRE || op == PLUS_PLUS_POST) {
       // Check if one of the operands is a pointer
       // If so, multiply the other operand by the width of the pointer target object.
 
@@ -1008,7 +1008,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
 
       add_reg_reg(reg_X, reg_Y);
     }
-    else if (op == '-' OR op == MINUS_EQ OR op == MINUS_MINUS_PRE OR op == MINUS_MINUS_POST) {
+    else if (op == '-' || op == MINUS_EQ || op == MINUS_MINUS_PRE || op == MINUS_MINUS_POST) {
       // Pointer subtraction is only valid if one of the operands is a pointer
       // When both operands are pointers, the result is the difference between the two pointers divided by the width of the target object.
       // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
@@ -1026,20 +1026,20 @@ void codegen_binop(int op, ast lhs, ast rhs) {
         sub_reg_reg(reg_X, reg_Y);
       }
     }
-    else if (op == '*' OR op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
-    else if (op == '/' OR op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);
-    else if (op == '%' OR op == PERCENT_EQ) rem_reg_reg(reg_X, reg_Y);
-    else if (op == '&' OR op == AMP_EQ) and_reg_reg(reg_X, reg_Y);
-    else if (op == '|' OR op == BAR_EQ) or_reg_reg(reg_X, reg_Y);
-    else if (op == '^' OR op == CARET_EQ) xor_reg_reg(reg_X, reg_Y);
-    else if (op == LSHIFT OR op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
-    else if (op == RSHIFT OR op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
+    else if (op == '*' || op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
+    else if (op == '/' || op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);
+    else if (op == '%' || op == PERCENT_EQ) rem_reg_reg(reg_X, reg_Y);
+    else if (op == '&' || op == AMP_EQ) and_reg_reg(reg_X, reg_Y);
+    else if (op == '|' || op == BAR_EQ) or_reg_reg(reg_X, reg_Y);
+    else if (op == '^' || op == CARET_EQ) xor_reg_reg(reg_X, reg_Y);
+    else if (op == LSHIFT || op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
+    else if (op == RSHIFT || op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
     else if (op == '[') {
       // Same as pointer addition for address calculation
-      if (is_pointer_type(left_type) AND is_not_pointer_type(right_type)) {
+      if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
         mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
         width = ref_type_width(left_type);
-      } else if (is_pointer_type(right_type) AND is_not_pointer_type(left_type)) {
+      } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
         mul_for_pointer_arith(reg_X, ref_type_width(right_type));
         width = ref_type_width(right_type);
       } else {
@@ -1066,7 +1066,7 @@ int codegen_param(ast param) {
   int type = value_type(param);
   int left_width;
 
-  if (get_op(type) == STRUCT_KW AND get_val(type) == 0) {
+  if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
@@ -1360,7 +1360,7 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       codegen_binop(EQ_EQ, new_ast0(INTEGER, 0), get_child(node, 0));
       grow_fs(-2);
-    } else if ((op == MINUS_MINUS_POST) OR (op == PLUS_PLUS_POST)){
+    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST){
       codegen_lvalue(get_child(node, 0));
       pop_reg(reg_Y);
       mov_reg_mem(reg_X, reg_Y, 0);
@@ -1374,7 +1374,7 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_Y); // address
       grow_fs(-1);
       mov_mem_reg(reg_Y, 0, reg_X); // Store the result in the address
-    } else if ((op == MINUS_MINUS_PRE) OR (op == PLUS_PLUS_PRE)) {
+    } else if (op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
       codegen_lvalue(get_child(node, 0));
       pop_reg(reg_Y);
       push_reg(reg_Y);
@@ -1406,7 +1406,7 @@ void codegen_rvalue(ast node) {
     }
 
   } else if (nb_children == 2) {
-    if (op == '+' OR op == '-' OR op == '*' OR op == '/' OR op == '%' OR op == '&' OR op == '|' OR op == '^' OR op == LSHIFT OR op == RSHIFT OR op == '<' OR op == '>' OR op == EQ_EQ OR op == EXCL_EQ OR op == LT_EQ OR op == GT_EQ OR op == '[') {
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[') {
       codegen_rvalue(get_child(node, 0));
       codegen_rvalue(get_child(node, 1));
       codegen_binop(op, get_child(node, 0), get_child(node, 1));
@@ -1429,7 +1429,7 @@ void codegen_rvalue(ast node) {
         write_mem_location(reg_Y, 0, reg_X, left_width);
       }
       push_reg(reg_X);
-    } else if (op == AMP_EQ OR op == BAR_EQ OR op == CARET_EQ OR op == LSHIFT_EQ OR op == MINUS_EQ OR op == PERCENT_EQ OR op == PLUS_EQ OR op == RSHIFT_EQ OR op == SLASH_EQ OR op == STAR_EQ) {
+    } else if (op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       left_width = codegen_lvalue(get_child(node, 0));
       pop_reg(reg_Y);
       push_reg(reg_Y);
@@ -1443,7 +1443,7 @@ void codegen_rvalue(ast node) {
       grow_fs(-3);
       write_mem_location(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
-    } else if (op == AMP_AMP OR op == BAR_BAR) {
+    } else if (op == AMP_AMP || op == BAR_BAR) {
       lbl1 = alloc_label();
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_X);
@@ -1609,7 +1609,7 @@ void codegen_struct(ast node) {
 
   if (name != 0 && get_child(node, 2) != 0) { // if struct has a name and members (not a reference to an existing type)
     binding = cgc_lookup_struct(get_val(name), cgc_globals);
-    if (binding != 0 AND heap[binding + 3] != node) { fatal_error("codegen_struct: struct already declared"); }
+    if (binding != 0 && heap[binding + 3] != node) { fatal_error("codegen_struct: struct already declared"); }
     cgc_add_typedef(get_val(name), BINDING_TYPE_STRUCT, node);
   }
 
@@ -1905,7 +1905,7 @@ void codegen_statement(ast node) {
   } else if (op == CONTINUE_KW) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
-    if (binding != 0 AND heap[binding+4] != 0) {
+    if (binding != 0 && heap[binding+4] != 0) {
       grow_stack(heap[binding+2] - cgc_fs);
       jump(heap[binding+4]); // jump to continue label
     } else {
@@ -2042,7 +2042,7 @@ void codegen_glo_decl(ast node) {
     codegen_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
     handle_enum_struct_union_type_decl(get_child(node, 1));
-  } else if (op == ENUM_KW OR op == STRUCT_KW OR op == UNION_KW) {
+  } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
     putstr("op="); putint(op);

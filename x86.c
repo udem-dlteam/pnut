@@ -173,7 +173,7 @@ void mov_memory(int op, int reg, int base, int offset) {
   rex_prefix(reg, base);
   emit_i8(op);
   emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
-  if (base == SP OR base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
+  if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
   emit_i32_le(offset);
 }
 

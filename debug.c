@@ -8,8 +8,8 @@ void print_string_char(int c) {
   else if (c == 13) putstr("\\r");
   else if (c == 9)  putstr("\\t");
   else if (c == 11) putstr("\\v");
-  else if ((c == '\\') OR (c == '\'') OR (c == '"')) { putchar('\\'); putchar(c); }
-  else if ((c < 32) OR (c > 126)) { putchar('\\'); putint(c >> 6); putint((c >> 3) & 7); putint(c & 7); }
+  else if (c == '\\' || c == '\'' || c == '"') { putchar('\\'); putchar(c); }
+  else if (c < 32 || c > 126) { putchar('\\'); putint(c >> 6); putint((c >> 3) & 7); putint(c & 7); }
   else putchar(c);
 }
 #else
