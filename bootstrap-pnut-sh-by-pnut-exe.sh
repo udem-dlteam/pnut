@@ -36,6 +36,14 @@ case $backend in
     ;;
 esac
 
+# Increase the stack because pnut-sh's global variables are initialized on the stack
+ulimit -s 16384
+stack_limit=$(ulimit -s)
+if [ "$stack_limit" = "unlimited" ] || [ "$stack_limit" -lt 16384 ]; then
+  echo "Stack size is too small: $stack_limit"
+  exit 1
+fi
+
 # Compile pnut with gcc
 gcc -o $TEMP_DIR/pnut-exe-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c
 gcc -o $TEMP_DIR/pnut-sh-by-gcc.exe $PNUT_SH_OPTIONS pnut.c
