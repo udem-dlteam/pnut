@@ -14,7 +14,7 @@ should work on any system with a C compiler and a POSIX compliant shell.
 Pnut is also available freely on GitHub https://github.com/udem-dlteam/pnut and
 the website can be accessed at https://pnut.sh. The website allows users to use
 Pnut to compile C code to shell scripts with a nice interface. It is not the
-focus of this artifact and is only provided as a mean to present pnut.
+focus of this artifact and is only provided as a means to present pnut.
 
 ## Docker image
 
