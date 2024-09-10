@@ -49,7 +49,7 @@ The files for pnut-sh are:
 - `sh.c`: Shell compiler backend
 - `sh-runtime.c`: Shell runtime
 
-And for pnut-exe (x86/x86_64):
+And for pnut-exe (i386/x86_64):
 
 - `pnut.c`: Compiler frontend
 - `exe.c` Native compiler backend
@@ -89,7 +89,7 @@ make pnut-exe.sh  # Compile pnut-exe with pnut-sh into pnut-exe.sh
 ```
 
 All files built by the Makefile and other scripts are placed in the `build`
-directory. Pnut's native backend supports both Linux and MacOS, on x86 and
+directory. Pnut's native backend supports both Linux and MacOS, on i386 and
 x86_64 architectures.
 
 <!-- ARM64 support is available on Linux but not on MacOS.
@@ -254,5 +254,5 @@ progress.
 
 ```shell
 ./bootstrap-pnut-sh.sh --shell bash & # Run in the background
-tail -f build/pnut-twice-bootstrapped.sh
+tail -f build/pnut-sh-twice-bootstrapped.sh
 ```
