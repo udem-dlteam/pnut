@@ -13,7 +13,7 @@ void compile(char* file) {
 
   init_pnut_macros();
 
-  include_file(file);
+  include_file(file, 0);
 
   codegen_begin();
 
