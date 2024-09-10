@@ -94,10 +94,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y coreutils ${{ matrix.shell }}
 
-      - name: Bootstrap pnut.sh on ${{ matrix.shell }}
+      - name: Bootstrap pnut-sh.sh on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut.sh --shell ${{ matrix.shell }} --fast
+          ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-exe:
     strategy:
@@ -188,9 +188,9 @@ jobs:
         run: |
           sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./run-tests.sh sh --shell bash"
 
-      - name: Bootstrap pnut.sh with bash 2.05a
+      - name: Bootstrap pnut-sh.sh with bash 2.05a
         run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut.sh --shell bash --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-sh.sh --shell bash --fast"
 
       - name: Bootstrap pnut-exe with bash 2.05a
         run: |

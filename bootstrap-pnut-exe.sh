@@ -2,7 +2,7 @@
 
 set -e -u
 
-TEMP_DIR="bootstrap-results"
+TEMP_DIR="build"
 
 : ${PNUT_OPTIONS:=} # Default to empty options
 

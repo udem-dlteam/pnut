@@ -1,7 +1,8 @@
 // tests for #include "" directives
 
-#ifdef INCLUDE
-#include "include7.h"
-#endif
+// No more includes because shells only supports 7 open file descriptors
+// #ifdef INCLUDE
+// #include "include7.h"
+// #endif
 
 int CONSTANT6 = 6;

@@ -129,13 +129,13 @@ read_byte() { # $2: fd
   : $((__cursor_fd$__fd = __cursor + 1))  # Increment cursor
 }
 
-__state_fd0=0;
 _malloc __buffer_fd0 1000   # Allocate buffer
 : $((_$__buffer_fd0 = 0))   # Init buffer to ""
 : $((__cursor_fd0 = 0))     # Make buffer empty
 : $((__buflen_fd0 = 1000))  # Init buffer length
-__state_fd1=1
-__state_fd2=1
+__state_fd0=0 # stdin
+__state_fd1=1 # stdout
+__state_fd2=2 # stderr
 __state_fd3=-1
 __state_fd4=-1
 __state_fd5=-1
@@ -155,12 +155,12 @@ _open() { # $2: filename, $3: flags, $4: mode
   done
   if [ $__fd -gt 9 ] ; then
     # Some shells don't support fd > 9
-    echo "No more file descriptors available" ; exit 1
+    echo "No more file descriptors available to open $(_put_pstr __ $2)" ; exit 1
   else
     # Because the file must be read line-by-line, and string
     # values can't be assigned to dynamic variables, each line
     # is read and then unpacked in the buffer.
-    _malloc __addr 1000                   # Allocate buffer
+    _malloc __addr 1000                 # Allocate buffer
     : $((_$__addr = 0))                 # Init buffer to ""
     : $((__buffer_fd$__fd = __addr))    # Save buffer address
     : $((__cursor_fd$__fd = 0))         # Make buffer empty

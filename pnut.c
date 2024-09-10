@@ -14,6 +14,25 @@
 #ifdef RELEASE_PNUT_SH
 #define sh
 #define RT_NO_INIT_GLOBALS
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_i386_linux
+#define target_i386_linux
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_x86_64_linux
+#define target_x86_64_linux
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT_x86_64_mac
+#define target_x86_64_mac
+#define RELEASE_PNUT
+#endif
+
+#ifdef RELEASE_PNUT
 #define INCLUDE_LINE_NUMBER_ON_ERROR
 #define NICE_ERR_MSG
 #define OPTIMIZE_LONG_LINES
@@ -36,10 +55,8 @@
 #define SH_INITIALIZE_PARAMS_WITH_LET
 #endif
 // If we use the `set` command and positional parameters to simulate local vars
-#ifndef SH_INITIALIZE_PARAMS_WITH_LET
-#ifndef SH_SAVE_VARS_WITH_SET
+#if !defined(SH_SAVE_VARS_WITH_SET) && !defined(SH_INITIALIZE_PARAMS_WITH_LET)
 #define SH_SAVE_VARS_WITH_SET
-#endif
 #endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
@@ -58,8 +75,9 @@
 #undef OPTIMIZE_LONG_LINES
 #endif
 
-#define AND &&
-#define OR ||
+// Options that turns Pnut into a C preprocessor or some variant of it
+// DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
+// DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
 
 typedef int bool;
 
@@ -199,9 +217,13 @@ void putintneg(int n) {
 
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  putstr(include_stack->filepath); putchar(':');
-  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-  putstr("  "); putstr(msg); putchar('\n');
+  if (include_stack != 0) {
+    putstr(include_stack->filepath); putchar(':');
+    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+    putstr("  "); putstr(msg); putchar('\n');
+  } else {
+    putstr(msg); putchar('\n');
+  }
 #else
   putstr(msg); putchar('\n');
 #endif
@@ -239,9 +261,12 @@ void print_hex(int n) {
   }
 }
 
-/* tokenizer */
+// tokenizer
 
 int ch;
+#ifdef DEBUG_EXPAND_INCLUDES
+int prev_ch = EOF;
+#endif
 int tok;
 int val;
 
@@ -251,7 +276,7 @@ int string_pool_alloc = 0;
 int string_start;
 int hash;
 
-/* These parameters give a perfect hashing of the C keywords */
+// These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1997
 #define HASH_PRIME 53
 #define HEAP_SIZE 200000
@@ -451,8 +476,8 @@ int c2;
 int end_ident_i;
 
 int end_ident() {
-  string_pool[string_pool_alloc] = 0; /* terminate string */
-  string_pool_alloc += 1; /* account for terminator */
+  string_pool[string_pool_alloc] = 0; // terminate string
+  string_pool_alloc += 1; // account for terminator
 
   probe = heap[hash];
 
@@ -463,27 +488,27 @@ int end_ident() {
     c2 = string_pool[probe_start+end_ident_i];
     while (c1 == c2) {
       if (c1 == 0) {
-        string_pool_alloc = string_start; /* undo string allocation */
+        string_pool_alloc = string_start; // undo string allocation
         return probe;
       }
       end_ident_i += 1;
       c1 = string_pool[string_start+end_ident_i];
       c2 = string_pool[probe_start+end_ident_i];
     }
-    hash = probe; /* remember previous ident */
+    hash = probe; // remember previous ident
     probe = heap[probe];
   }
 
-  /* a new ident has been found */
+  // a new ident has been found
 
   probe = alloc_obj(4);
 
-  heap[hash] = probe; /* add new ident at end of chain */
+  heap[hash] = probe; // add new ident at end of chain
 
-  heap[probe] = 0; /* no next ident */
+  heap[probe] = 0; // no next ident
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
-  heap[probe+3] = 0; /* Token tag */
+  heap[probe+3] = 0; // Token tag
 
   return probe;
 }
@@ -627,6 +652,14 @@ void get_ch() {
   declaration_char_buf[declaration_char_buf_ix] = ch;
   declaration_char_buf_ix += 1;
 #endif
+#ifdef DEBUG_EXPAND_INCLUDES
+  // Because ch is always 1 character ahead of the token, we print the character
+  // with a 1 character delay to match this delay. This makes it easy to
+  // annotate certain preprocessor directives so they can be removed in a later
+  // step.
+  if (prev_ch != EOF) putchar(prev_ch);
+  prev_ch = ch;
+#endif
 }
 
 #ifdef PNUT_CC
@@ -714,22 +747,21 @@ void include_file(char *file_name, char *relative_to) {
 
 int accum_digit(int base) {
   int digit = 99;
-  if ('0' <= ch AND ch <= '9') {
+  if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
-  } else if ('A' <= ch AND ch <= 'Z') {
+  } else if ('A' <= ch && ch <= 'Z') {
     digit = ch - 'A' + 10;
-  } else if ('a' <= ch AND ch <= 'z') {
+  } else if ('a' <= ch && ch <= 'z') {
     digit = ch - 'a' + 10;
   }
   if (digit >= base) {
-    return 0; /* character is not a digit in that base */
+    return 0; // character is not a digit in that base
   } else {
-    /*
-    TODO: Put overflow check back
-    if ((val < limit) OR ((val == limit) AND (digit > limit * base - MININT))) {
-      fatal_error("literal integer overflow");
-    }
-    */
+    // TODO: Put overflow check back
+    // if ((val < limit) || ((val == limit) && (digit > limit * base - MININT))) {
+    //   fatal_error("literal integer overflow");
+    // }
+
     val = val * base - digit;
     get_ch();
     return 1;
@@ -742,27 +774,25 @@ void get_string_char() {
   get_ch();
 
   if (val == '\\') {
-    if ('0' <= ch AND ch <= '7') {
-      /*
-      Parse octal character, up to 3 digits.
-      Note that \1111 is parsed as '\111' followed by '1'
-      See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
-      */
+    if ('0' <= ch && ch <= '7') {
+      // Parse octal character, up to 3 digits.
+      // Note that \1111 is parsed as '\111' followed by '1'
+      // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
       val = 0;
       accum_digit(8);
       accum_digit(8);
       accum_digit(8);
-      val = -(val % 256); /* keep low 8 bits, without overflowing */
-    } else if ((ch == 'x') OR (ch == 'X')) {
+      val = -(val % 256); // keep low 8 bits, without overflowing
+    } else if (ch == 'x' || ch == 'X') {
       get_ch();
       val = 0;
-      /* Allow 1 or 2 hex digits. */
+      // Allow 1 or 2 hex digits.
       if (accum_digit(16)) {
         accum_digit(16);
       } else {
         syntax_error("invalid hex escape -- it must have at least one digit");
       }
-      val = -(val % 256); /* keep low 8 bits, without overflowing */
+      val = -(val % 256); // keep low 8 bits, without overflowing
     } else {
       if (ch == 'a') {
         val = 7;
@@ -778,7 +808,7 @@ void get_string_char() {
         val = 9;
       } else if (ch == 'v') {
         val = 11;
-      } else if ((ch == '\\') OR (ch == '\'') OR (ch == '\"')) {
+      } else if (ch == '\\' || ch == '\'' || ch == '\"') {
         val = ch;
       } else {
         syntax_error("unimplemented string character escape");
@@ -789,7 +819,7 @@ void get_string_char() {
 }
 
 void accum_string_until(char end) {
-  while ((ch != end) AND (ch != EOF)) {
+  while (ch != end && ch != EOF) {
     get_string_char();
     tok = ch;
     ch = val;
@@ -898,19 +928,19 @@ int read_macro_tokens(int args) {
   int tail;
 
   // Accumulate tokens so they can be replayed when the macro is used
-  if (tok != '\n' AND tok != EOF) {
+  if (tok != '\n' && tok != EOF) {
     // Append the token/value pair to the replay list
     toks = cons(lookup_macro_token(args, tok, val), 0);
     tail = toks;
     get_tok_macro();
-    while (tok != '\n' AND tok != EOF) {
+    while (tok != '\n' && tok != EOF) {
       heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
       tail = cdr(tail); // Advance tail
       get_tok_macro();
     }
 
     // Check that there are no leading or trailing ##
-    if (car(car(toks)) == HASH_HASH OR car(car(tail)) == HASH_HASH) {
+    if (car(car(toks)) == HASH_HASH || car(car(tail)) == HASH_HASH) {
       syntax_error("'##' cannot appear at either end of a macro expansion");
     }
   }
@@ -940,7 +970,7 @@ void handle_define() {
   int args = 0; // List of arguments for a function-like macro
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
-  if (tok == IDENTIFIER OR tok == MACRO OR (0 <= AUTO_KW AND tok <= WHILE_KW)) {
+  if (tok == IDENTIFIER || tok == MACRO || (0 <= AUTO_KW && tok <= WHILE_KW)) {
     heap[val + 2] = MACRO; // Mark the identifier as a macro
     macro = val;
   } else {
@@ -951,7 +981,7 @@ void handle_define() {
     args_count = 0;
     get_tok_macro(); // Skip macro name
     get_tok_macro(); // Skip '('
-    while (tok != '\n' AND tok != EOF) {
+    while (tok != '\n' && tok != EOF) {
       if (tok == ',') {
         // Allow sequence of commas, this is more lenient than the standard
         get_tok_macro();
@@ -1108,6 +1138,12 @@ int evaluate_if_condition() {
 void handle_include() {
   if (tok == STRING) {
     include_file(string_pool + val, include_stack->dirname);
+#ifdef DEBUG_EXPAND_INCLUDES
+    // When running pnut in "expand includes" mode, we want to annotate the
+    // #include directives that were expanded with a comment so we can remove
+    // them later.
+    putstr(" // INCLUDED");
+#endif
     get_tok_macro(); // Skip the string
   } else if (tok == '<') {
     accum_string_until('>');
@@ -1135,7 +1171,7 @@ void handle_preprocessor_directive() {
   get_tok_macro(); // Get the # token
   get_tok_macro(); // Get the directive
 
-  if (tok == IDENTIFIER AND (val == IFDEF_ID || val == IFNDEF_ID)) {
+  if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
     temp = val;
     get_tok_macro(); // Get the macro name
     if (if_macro_mask) {
@@ -1153,7 +1189,7 @@ void handle_preprocessor_directive() {
       // Keep track of the number of #ifdef so we can skip the corresponding #endif
       if_macro_nest_level += 1;
     }
-  } else if (tok == IDENTIFIER AND val == ELIF_ID) {
+  } else if (tok == IDENTIFIER && val == ELIF_ID) {
     temp = evaluate_if_condition();
     if (if_macro_executed) {
       // The condition is true, but its ignored if one of the conditions before was also true
@@ -1163,30 +1199,30 @@ void handle_preprocessor_directive() {
       if_macro_mask = temp;
     }
   } else if (tok == ELSE_KW) {
-    if (if_macro_mask OR if_macro_nest_level == 0) {
+    if (if_macro_mask || if_macro_nest_level == 0) {
       if_macro_mask = !if_macro_executed;
     }
     get_tok_macro(); // Skip the else keyword
-  } else if (tok == IDENTIFIER AND val == ENDIF_ID) {
-    if (if_macro_mask OR if_macro_nest_level == 0) {
+  } else if (tok == IDENTIFIER && val == ENDIF_ID) {
+    if (if_macro_mask || if_macro_nest_level == 0) {
       pop_if_macro_mask();
     } else {
       if_macro_nest_level -= 1;
     }
     get_tok_macro(); // Skip the else keyword
   } else if (if_macro_mask) {
-    if (tok == IDENTIFIER AND val == INCLUDE_ID) {
+    if (tok == IDENTIFIER && val == INCLUDE_ID) {
       get_tok_macro(); // Get the STRING token
       handle_include();
     }
 #ifdef sh
     // Not standard C, but serves to mix existing shell code with compiled C code
-    else if (tok == IDENTIFIER AND val == INCLUDE_SHELL_ID) {
+    else if (tok == IDENTIFIER && val == INCLUDE_SHELL_ID) {
       get_tok_macro(); // Get the STRING token
       handle_shell_include();
     }
 #endif
-    else if (tok == IDENTIFIER AND val == UNDEF_ID) {
+    else if (tok == IDENTIFIER && val == UNDEF_ID) {
       get_tok_macro(); // Get the macro name
       if (tok == IDENTIFIER || tok == MACRO) {
         // TODO: Doesn't play nice with typedefs, because they are not marked as macros
@@ -1196,14 +1232,14 @@ void handle_preprocessor_directive() {
         putstr("tok="); putint(tok); putchar('\n');
         syntax_error("#undef directive can only be followed by a identifier");
       }
-    } else if (tok == IDENTIFIER AND val == DEFINE_ID) {
+    } else if (tok == IDENTIFIER && val == DEFINE_ID) {
       get_tok_macro(); // Get the macro name
       handle_define();
     } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
       temp = val;
       putstr(temp == WARNING_ID ? "warning:" : "error:");
       // Print the rest of the line, it does not support \ at the end of the line but that's ok
-      while (ch != '\n' AND ch != EOF) {
+      while (ch != '\n' && ch != EOF) {
         putchar(ch); get_ch();
       }
       putchar('\n');
@@ -1215,14 +1251,14 @@ void handle_preprocessor_directive() {
     }
   } else {
     // Skip the rest of the directive
-    while (tok != '\n' AND tok != EOF) get_tok_macro();
+    while (tok != '\n' && tok != EOF) get_tok_macro();
   }
 
-  if (tok != '\n' AND tok != EOF) {
+  if (tok != '\n' && tok != EOF) {
     putstr("tok="); putint(tok); putchar('\n');
     putstr("directive="); putint(tok); putchar('\n');
     putstr("string="); putstr(string_pool + heap[val + 1]); putchar('\n');
-    if (tok == IDENTIFIER OR tok == MACRO) {
+    if (tok == IDENTIFIER || tok == MACRO) {
       putstr("string = ");
       putstr(string_pool + heap[1 + val]);
       putchar('\n');
@@ -1243,9 +1279,9 @@ void get_ident() {
 
   begin_string();
 
-  while (('A' <= ch AND ch <= 'Z') OR
-         ('a' <= ch AND ch <= 'z') OR
-         ('0' <= ch AND ch <= '9') OR
+  while (('A' <= ch && ch <= 'Z') ||
+         ('a' <= ch && ch <= 'z') ||
+         ('0' <= ch && ch <= '9') ||
          (ch == '_')) {
     accum_string();
     get_ch();
@@ -1253,12 +1289,6 @@ void get_ident() {
 
   val = end_ident();
   tok = heap[val+2];
-  /*
-  putstr("tok="); putint(tok);
-  putstr(" val="); putint(val);
-  putstr(" "); putstr(string_pool + heap[val+1]);
-  putchar('\n');
-  */
 }
 
 int init_ident(int tok, char *name) {
@@ -1378,7 +1408,7 @@ int macro_parse_argument() {
   int parens_depth = 0;
   int tail;
 
-  while ((parens_depth > 0 OR (tok != ',' AND tok != ')')) AND tok != EOF) {
+  while ((parens_depth > 0 || (tok != ',' && tok != ')')) && tok != EOF) {
     if (tok == '(') parens_depth += 1; // Enter parenthesis
     if (tok == ')') parens_depth -= 1; // End of parenthesis
 
@@ -1422,7 +1452,7 @@ int get_macro_args_toks(int macro) {
 
   get_tok_macro_expand(); // Skip '('
 
-  while (tok != ')' AND tok != EOF) {
+  while (tok != ')' && tok != EOF) {
     if (tok == ',') {
       get_tok_macro_expand(); // Skip comma
       if (prev_is_comma) { // Push empty arg
@@ -1519,7 +1549,7 @@ void stringify() {
   arg = get_macro_arg(val);
   tok = STRING;
   // Support the case where the argument is a single identifier token
-  if (car(car(arg)) == IDENTIFIER AND cdr(arg) == 0) {
+  if (car(car(arg)) == IDENTIFIER && cdr(arg) == 0) {
     val = heap[cdr(car(arg)) + 1]; // Use the identifier value
   } else {
     val = heap[NOT_SUPPORTED_ID + 1]; // Return string "NOT_SUPPORTED"
@@ -1612,7 +1642,7 @@ void get_tok() {
 #endif
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  while (first_time OR !if_macro_mask) {
+  while (first_time || !if_macro_mask) {
     first_time = false;
 #ifdef SH_INCLUDE_C_CODE
     declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
@@ -1632,8 +1662,8 @@ void get_tok() {
         if (tok >= IDENTIFIER) tok = heap[val + 2];
 
         // Check if the next token is ## for token pasting
-        if (macro_tok_lst != 0 AND car(car(macro_tok_lst)) == HASH_HASH) {
-          if (tok == MACRO OR tok == MACRO_ARG) {
+        if (macro_tok_lst != 0 && car(car(macro_tok_lst)) == HASH_HASH) {
+          if (tok == MACRO || tok == MACRO_ARG) {
             // If the token is a macro or macro arg, it must be expanded before pasting
             macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
             paste_last_token = true;
@@ -1643,7 +1673,7 @@ void get_tok() {
             paste_tokens(tok, val);
             break;
           }
-        } else if (macro_tok_lst == 0 AND paste_last_token) { // We finished expanding the left-hand side of ##
+        } else if (macro_tok_lst == 0 && paste_last_token) { // We finished expanding the left-hand side of ##
           if (macro_stack_ix == 0) {
             // If we are not in a macro expansion, we can't paste the last token
             // This should not happen if the macro is well-formed, which is
@@ -1662,7 +1692,7 @@ void get_tok() {
             continue;
           }
           break;
-        } else if (tok == MACRO_ARG AND expand_macro_arg) {
+        } else if (tok == MACRO_ARG && expand_macro_arg) {
           play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
         } else if (tok == '#') { // Stringizing!
@@ -1682,16 +1712,14 @@ void get_tok() {
           break;
         }
 
-        /*
-          skip whitespace, detecting when it is at start of line.
-          When skip_newlines is false, produces a '\n' token whenever it
-          encounters whitespace containing at least a newline.
-          This condenses multiple newlines into a single '\n' token and serves
-          to end the current preprocessor directive.
-        */
+        // skip whitespace, detecting when it is at start of line.
+        // When skip_newlines is false, produces a '\n' token whenever it
+        // encounters whitespace containing at least a newline.
+        // This condenses multiple newlines into a single '\n' token and serves
+        // to end the current preprocessor directive.
 
-       tok = 0; // Reset the token
-        while (0 <= ch AND ch <= ' ') {
+        tok = 0; // Reset the token
+        while (0 <= ch && ch <= ' ') {
           if (ch == '\n') tok = ch;
           get_ch();
         }
@@ -1702,18 +1730,18 @@ void get_tok() {
           break;
         }
 
-        /* will continue while (1) loop */
+        // will continue while (1) loop
       }
 
-      /* detect '#' at start of line, possibly preceded by whitespace */
+      // detect '#' at start of line, possibly preceded by whitespace
       else if (tok == '\n' && ch == '#') {
         tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
         handle_preprocessor_directive();
-        /* will continue while (1) loop */
+        // will continue while (1) loop
       }
 
-      else if (('a' <= ch AND ch <= 'z') OR
-               ('A' <= ch AND ch <= 'Z') OR
+      else if (('a' <= ch && ch <= 'z') ||
+               ('A' <= ch && ch <= 'Z') ||
                (ch == '_')) {
 
         get_ident();
@@ -1722,7 +1750,7 @@ void get_tok() {
           // We only expand in ifdef true blocks and if the expander is enabled.
           // Since this is the "base case" of the macro expansion, we don't need
           // to disable the other places where macro expansion is done.
-          if (if_macro_mask AND expand_macro) {
+          if (if_macro_mask && expand_macro) {
             if (attempt_macro_expansion(val)) {
               continue;
             }
@@ -1730,14 +1758,14 @@ void get_tok() {
           }
         }
         break;
-      } else if ('0' <= ch AND ch <= '9') {
+      } else if ('0' <= ch && ch <= '9') {
 
         val = '0' - ch;
 
         get_ch();
 
-        if (val == 0) { /* val == 0 <=> ch == '0' */
-          if ((ch == 'x') OR (ch == 'X')) {
+        if (val == 0) { // val == 0 <=> ch == '0'
+          if (ch == 'x' || ch == 'X') {
             get_ch();
             val = 0;
             if (accum_digit(16)) {
@@ -1785,15 +1813,15 @@ void get_tok() {
 
       } else {
 
-        tok = ch; /* fallback for single char tokens */
+        tok = ch; // fallback for single char tokens
 
         if (ch == '/') {
 
           get_ch();
           if (ch == '*') {
             get_ch();
-            tok = ch; /* remember previous char, except first one */
-            while (((tok != '*') OR (ch != '/')) AND (ch != EOF)) {
+            tok = ch; // remember previous char, except first one
+            while ((tok != '*' || ch != '/') && ch != EOF) {
               tok = ch;
               get_ch();
             }
@@ -1801,12 +1829,12 @@ void get_tok() {
               syntax_error("unterminated comment");
             }
             get_ch();
-            /* will continue while (1) loop */
+            // will continue while (1) loop
           } else if (ch == '/') {
-            while ((ch != '\n') AND (ch != EOF)) {
+            while (ch != '\n' && ch != EOF) {
               get_ch();
             }
-            /* will continue while (1) loop */
+            // will continue while (1) loop
           } else {
             if (ch == '=') {
               get_ch();
@@ -1966,7 +1994,7 @@ void get_tok() {
 
           break;
 
-        } else if ((ch == '~') OR (ch == '.') OR (ch == '?') OR (ch == ',') OR (ch == ':') OR (ch == ';') OR (ch == '(') OR (ch == ')') OR (ch == '[') OR (ch == ']') OR (ch == '{') OR (ch == '}')) {
+        } else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
 
           tok = ch;
 
@@ -1977,7 +2005,7 @@ void get_tok() {
         } else if (ch == '\\') {
           get_ch();
 
-          if (ch == '\n') { /* Continues with next token */
+          if (ch == '\n') { // Continues with next token
             get_ch();
           } else {
             putstr("ch="); putint(ch); putchar('\n');
@@ -2000,7 +2028,7 @@ void get_tok() {
 #endif
 }
 
-/* parser */
+// parser
 
 #ifdef NICE_ERR_MSG
 #include "debug.c"
@@ -2035,15 +2063,15 @@ ast parse_type() {
   int type_kw = 0;
 
   while (1) {
-    if ((tok == INT_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW)) {
-      if ((type_kw != 0) AND (type_kw != INT_KW)) syntax_error("inconsistent type");
+    if (tok == INT_KW || tok == SHORT_KW || tok == LONG_KW || tok == SIGNED_KW) {
+      if (type_kw != 0 && type_kw != INT_KW) syntax_error("inconsistent type");
       type_kw = INT_KW;
       get_tok();
     } else if (tok == CHAR_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
       type_kw = CHAR_KW;
       get_tok();
-    } else if ((tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW)) {
+    } else if ((tok == UNSIGNED_KW) || (tok == FLOAT_KW) || (tok == DOUBLE_KW)) {
       syntax_error("unsupported type");
     } else if (tok == VOID_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
@@ -2061,8 +2089,8 @@ ast parse_type() {
       if (type_kw != 0) syntax_error("inconsistent type");
       return parse_union();
     } else if (tok == TYPE) {
-      /* Look in types table. It's a type, not a type_kw, but we reuse the variable */
-      type_kw = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+      // Look in types table. It's a type, not a type_kw, but we reuse the variable
+      type_kw = heap[val + 3]; // For TYPE tokens, the tag is the type
       get_tok();
       return type_kw;
     } else {
@@ -2106,11 +2134,11 @@ int parse_type_with_stars() {
 }
 
 int is_type_starter(int tok) {
-  return (tok == INT_KW) OR (tok == CHAR_KW) OR (tok == SHORT_KW) OR (tok == LONG_KW) OR (tok == SIGNED_KW) // Supported types
-      OR (tok == UNSIGNED_KW) OR (tok == FLOAT_KW) OR (tok == DOUBLE_KW) OR (tok == VOID_KW) // Unsupported types
-      OR (tok == TYPE) // User defined types
-      OR (tok == CONST_KW) // Type attributes
-      OR (tok == ENUM_KW OR tok == STRUCT_KW OR tok == UNION_KW); // Enum, struct, union
+  return tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW || tok == SIGNED_KW // Supported types
+      || tok == UNSIGNED_KW || tok == FLOAT_KW || tok == DOUBLE_KW || tok == VOID_KW  // Unsupported types
+      || tok == TYPE                                                                  // User defined types
+      || tok == CONST_KW                                                              // Type attributes
+      || tok == ENUM_KW || tok == STRUCT_KW || tok == UNION_KW;                       // Enum, struct, union
 }
 
 ast parse_enum() {
@@ -2127,7 +2155,7 @@ ast parse_enum() {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
   } else if (tok == TYPE) {
-    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    result = heap[val + 3]; // For TYPE tokens, the tag is the type
     if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
     get_tok();
     if (tok == '{') syntax_error("enum type cannot be redefined");
@@ -2195,7 +2223,7 @@ ast parse_struct() {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
   } else if (tok == TYPE) {
-    result = heap[val + 3]; /* For TYPE tokens, the tag is the type */
+    result = heap[val + 3]; // For TYPE tokens, the tag is the type
     if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
     get_tok();
     if (tok == '{') syntax_error("struct type cannot be redefined");
@@ -2212,7 +2240,7 @@ ast parse_struct() {
 
       type = parse_type_with_stars();
 
-      if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+      if (get_val(type) == 0 && get_op(type) == VOID_KW)
         syntax_error("variable with void type");
 
       if (tok != IDENTIFIER) {
@@ -2268,12 +2296,10 @@ ast parse_declaration() {
 
     expect_tok(IDENTIFIER);
 
-    if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+    if (get_val(type) == 0 && get_op(type) == VOID_KW)
       syntax_error("variable with void type");
-    /*
-    if (tok == '[')
-      syntax_error("array declaration only allowed at global level");
-    */
+    // if (tok == '[')
+    //   syntax_error("array declaration only allowed at global level");
 
     result = new_ast3(VAR_DECL, name, type, 0);
   } else if (tok == IDENTIFIER) {
@@ -2309,7 +2335,7 @@ int parse_declaration_list() {
   return result;
 }
 
-/* Note: Uses a simplified syntax for definitions */
+// Note: Uses a simplified syntax for definitions
 ast parse_definition(int local) {
 
   ast type;
@@ -2327,7 +2353,7 @@ ast parse_definition(int local) {
 
     // global enum/struct/union declaration
     if (tok == ';') {
-      if (get_op(type) != ENUM_KW AND get_op(type) != STRUCT_KW AND get_op(type) != UNION_KW) {
+      if (get_op(type) != ENUM_KW && get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
         syntax_error("enum/struct/union declaration expected");
       }
       get_tok();
@@ -2355,7 +2381,7 @@ ast parse_definition(int local) {
         expect_tok(')');
 
         if (tok == ';') {
-          /* forward declaration. Body == -1 */
+          // forward declaration. Body == -1
           body = -1;
           get_tok();
         } else {
@@ -2366,16 +2392,14 @@ ast parse_definition(int local) {
 
       } else {
 
-        if ((get_val(this_type) == 0) AND (get_op(this_type) == VOID_KW)) {
+        if (get_val(this_type) == 0 && get_op(this_type) == VOID_KW) {
           syntax_error("variable with void type");
         }
 
         if (tok == '[') {
-          /*
-          if (local) {
-            syntax_error("array declaration only allowed at global level");
-          }
-          */
+          // if (local) {
+          //   syntax_error("array declaration only allowed at global level");
+          // }
           get_tok();
           if (tok == INTEGER) {
             this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
@@ -2434,7 +2458,7 @@ ast parse_definition(int local) {
     // This is not correct, but it's a limitation of the current shell backend where we
     // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
     // don't always have a name.
-    if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW OR get_op(type) == ENUM_KW) {
+    if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW || get_op(type) == ENUM_KW) {
       if (get_child(type, 1) != 0 && get_val(get_child(type, 1)) != val) {
         syntax_error("typedef name must match struct/union/enum name");
       }
@@ -2605,7 +2629,7 @@ ast parse_unary_expression() {
     result = parse_unary_expression();
     result = new_ast1(MINUS_MINUS_PRE, result);
 
-  } else if ((tok == '&') OR (tok == '*') OR (tok == '+') OR (tok == '-') OR (tok == '~') OR (tok == '!')) {
+  } else if (tok == '&' || tok == '*' || tok == '+' || tok == '-' || tok == '~' || tok == '!') {
 
     op = tok;
     get_tok();
@@ -2671,7 +2695,7 @@ ast parse_cast_expression() {
     if (is_type_starter(tok)) {
       type = parse_type_with_stars();
 
-      if ((get_val(type) == 0) AND (get_op(type) == VOID_KW))
+      if (get_val(type) == 0 && get_op(type) == VOID_KW)
         syntax_error("variable with void type");
 
       expect_tok(')');
@@ -2695,7 +2719,7 @@ ast parse_multiplicative_expression() {
   ast child;
   int op;
 
-  while ((tok == '*') OR (tok == '/') OR (tok == '%')) {
+  while (tok == '*' || tok == '/' || tok == '%') {
 
     op = tok;
     get_tok();
@@ -2713,7 +2737,7 @@ ast parse_additive_expression() {
   ast child;
   int op;
 
-  while ((tok == '+') OR (tok == '-')) {
+  while (tok == '+' || tok == '-') {
 
     op = tok;
     get_tok();
@@ -2731,7 +2755,7 @@ ast parse_shift_expression() {
   ast child;
   int op;
 
-  while ((tok == LSHIFT) OR (tok == RSHIFT)) {
+  while (tok == LSHIFT || tok == RSHIFT) {
 
     op = tok;
     get_tok();
@@ -2749,7 +2773,7 @@ ast parse_relational_expression() {
   ast child;
   int op;
 
-  while ((tok == '<') OR (tok == '>') OR (tok == LT_EQ) OR (tok == GT_EQ)) {
+  while (tok == '<' || tok == '>' || tok == LT_EQ || tok == GT_EQ) {
 
     op = tok;
     get_tok();
@@ -2767,7 +2791,7 @@ ast parse_equality_expression() {
   ast child;
   int op;
 
-  while ((tok == EQ_EQ) OR (tok == EXCL_EQ)) {
+  while (tok == EQ_EQ || tok == EXCL_EQ) {
 
     op = tok;
     get_tok();
@@ -2884,7 +2908,10 @@ ast parse_assignment_expression() {
   ast child;
   int op;
 
-  if ((tok == '=') OR (tok == PLUS_EQ) OR (tok == MINUS_EQ) OR (tok == STAR_EQ) OR (tok == SLASH_EQ) OR (tok == PERCENT_EQ) OR (tok == LSHIFT_EQ) OR (tok == RSHIFT_EQ) OR (tok == AMP_EQ) OR (tok == CARET_EQ) OR (tok == BAR_EQ)) {
+  if (   tok == '='       || tok == PLUS_EQ   || tok == MINUS_EQ
+      || tok == STAR_EQ   || tok == SLASH_EQ  || tok == PERCENT_EQ
+      || tok == LSHIFT_EQ || tok == RSHIFT_EQ || tok == AMP_EQ
+      || tok == CARET_EQ  || tok == BAR_EQ) {
 
     op = tok;
     get_tok();
@@ -2902,16 +2929,16 @@ ast parse_comma_expression() {
   ast child;
   ast tail;
 
-  if (tok == ',') { /* List of 1 elements are not boxed in a cons cell */
-    result = new_ast2(',', result, 0); /* Create default cons cell */
+  if (tok == ',') { // List of 1 elements are not boxed in a cons cell
+    result = new_ast2(',', result, 0); // Create default cons cell
     tail = result;
     while (tok == ',') {
 
       get_tok();
       child = parse_assignment_expression();
-      child = new_ast2(',', child, 0); /* New tail cons cell */
-      set_child(tail, 1, child);       /* Add new cons cell at end of list */
-      tail = child;                    /* Advance tail */
+      child = new_ast2(',', child, 0); // New tail cons cell
+      set_child(tail, 1, child);       // Add new cons cell at end of list
+      tail = child;                    // Advance tail
 
     }
   }
@@ -2923,7 +2950,7 @@ ast parse_comma_expression_opt() {
 
   ast result;
 
-  if ((tok == ':') OR (tok == ';') OR (tok == ')')) {
+  if (tok == ':' || tok == ';' || tok == ')') {
     result = 0;
   } else {
     result = parse_comma_expression();
@@ -3059,7 +3086,7 @@ ast parse_statement() {
 
     result = parse_comma_expression_opt();
 
-    if ((tok == ':') AND (start_tok != '(') AND (get_op(result) == IDENTIFIER)) {
+    if (tok == ':' && start_tok != '(' && get_op(result) == IDENTIFIER) {
 
       get_tok(); // Skip :
 
@@ -3085,8 +3112,8 @@ ast parse_compound_statement() {
 
   expect_tok('{');
 
-  /* TODO: Simplify this */
-  if ((tok != '}') AND (tok != EOF)) {
+  // TODO: Simplify this
+  if (tok != '}' && tok != EOF) {
     if (is_type_starter(tok)) {
       child1 = parse_definition(1);
     } else {
@@ -3094,7 +3121,7 @@ ast parse_compound_statement() {
     }
     result = new_ast2('{', child1, 0);
     tail = result;
-    while ((tok != '}') AND (tok != EOF)) {
+    while (tok != '}' && tok != EOF) {
       if (is_type_starter(tok)) {
         child1 = parse_definition(1);
       } else {
@@ -3115,8 +3142,7 @@ ast parse_compound_statement() {
 
 // Select code generator
 
-#ifndef DEBUG_CPP
-#ifndef DEBUG_GETCHAR
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
 #ifdef sh
 #include "sh.c"
 #endif
@@ -3135,7 +3161,6 @@ ast parse_compound_statement() {
 
 #ifdef arm
 #include "arm.c"
-#endif
 #endif
 #endif
 
@@ -3162,6 +3187,10 @@ int main(int argc, char **argv) {
           init_ident(MACRO, argv[i] + 2);
           break;
 
+        case 'U':
+          init_ident(IDENTIFIER, argv[i] + 2);
+          break;
+
         case 'I':
           if (include_search_path != 0) {
             fatal_error("only one include path allowed");
@@ -3185,18 +3214,17 @@ int main(int argc, char **argv) {
     fatal_error("no input file");
   }
 
-#ifndef DEBUG_CPP
-#ifndef DEBUG_GETCHAR
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
   codegen_begin();
-#endif
 #endif
 
   ch = '\n';
   get_tok();
 
-#ifdef DEBUG_GETCHAR
-  while (ch != EOF) {
-    get_ch();
+#if defined DEBUG_EXPAND_INCLUDES
+  while (tok != EOF) {
+    get_tok();
+  }
 #else
   while (tok != EOF) {
 #ifdef DEBUG_CPP
@@ -3211,14 +3239,12 @@ int main(int argc, char **argv) {
     codegen_glo_decl(decl);
 
 #endif
-
-#endif
   }
-
-#ifndef DEBUG_CPP
-#ifndef DEBUG_GETCHAR
-  codegen_end();
 #endif
+
+
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
+  codegen_end();
 #endif
 
   return 0;

@@ -665,13 +665,13 @@ END_RUNTIME_FUN(printf)
 DEFINE_RUNTIME_FUN(open)
 DEPENDS_ON(malloc)
 DEPENDS_ON(put_pstr)
-  putstr("__state_fd0=0;\n");
   putstr("_malloc __buffer_fd0 1000   # Allocate buffer\n");
   putstr(": $((_$__buffer_fd0 = 0))   # Init buffer to \"\"\n");
   putstr(": $((__cursor_fd0 = 0))     # Make buffer empty\n");
   putstr(": $((__buflen_fd0 = 1000))  # Init buffer length\n");
-  putstr("__state_fd1=1\n");
-  putstr("__state_fd2=1\n");
+  putstr("__state_fd0=0 # stdin\n");
+  putstr("__state_fd1=1 # stdout\n");
+  putstr("__state_fd2=2 # stderr\n");
   putstr("__state_fd3=-1\n");
   putstr("__state_fd4=-1\n");
   putstr("__state_fd5=-1\n");
@@ -691,12 +691,12 @@ DEPENDS_ON(put_pstr)
   putstr("  done\n");
   putstr("  if [ $__fd -gt 9 ] ; then\n");
   putstr("    # Some shells don't support fd > 9\n");
-  putstr("    echo \"No more file descriptors available\" ; exit 1\n");
+  putstr("    echo \"No more file descriptors available to open $(_put_pstr __ $2)\" ; exit 1\n");
   putstr("  else\n");
   putstr("    # Because the file must be read line-by-line, and string\n");
   putstr("    # values can't be assigned to dynamic variables, each line\n");
   putstr("    # is read and then unpacked in the buffer.\n");
-  putstr("    _malloc __addr 1000                   # Allocate buffer\n");
+  putstr("    _malloc __addr 1000                 # Allocate buffer\n");
   putstr("    : $((_$__addr = 0))                 # Init buffer to \"\"\n");
   putstr("    : $((__buffer_fd$__fd = __addr))    # Save buffer address\n");
   putstr("    : $((__cursor_fd$__fd = 0))         # Make buffer empty\n");
