@@ -1,11 +1,27 @@
-# Pnut artifacts
+# Pnut artifact
+
+This artifact has the following structure:
+
+- `artifact.pdf`: This file
+- `pnut-artifact-image.tar.gz`: A docker image containing pnut and its dependencies
+- `pnut/`: pnut's source code
+- `pnut.sh/`: Accompanying website's source code
+
+The docker image serves as a self-contained environment to run pnut and this
+document assumes that the reader is using it. However, most of the instructions
+should work on any system with a C compiler and a POSIX compliant shell.
+
+Pnut is also available freely on GitHub https://github.com/udem-dlteam/pnut and
+the website can be accessed at https://pnut.sh. The website allows users to use
+Pnut to compile C code to shell scripts with a nice interface. It is not the
+focus of this artifact and is only provided as a mean to present pnut.
 
 ## Docker image
 
-The artifact is provided as a Docker image, which contains the pnut source files
-and all the necessary tools to compile and run pnut-sh and pnut-exe. The image
-comes with the following shells preinstalled: `bash`, `dash`, `ksh`, `mksh`,
-`yash`, `zsh`.
+The docker image is based on Ubuntu 24.04 (x86-64) and contains the pnut source
+files along with alll the necessary tools to compile and run pnut-sh and
+pnut-exe. It also comes with the following shells preinstalled: `bash`, `dash`,
+`ksh`, `mksh`, `yash`, `zsh`.
 
 To show compatibility with older bash versions, the image contains a Debian
 woody environment from July 2002 with `bash` version 2.05a. The environment
@@ -17,11 +33,9 @@ commands can be run in the woody environment by passing them as arguments to
 To enter the Docker image, run the following command:
 
 ```shell
-cat pnut-image.tar.gz | docker load   # Load the image
-docker run -it --entrypoint bash pnut # Start the container
+cat pnut-artifact-image.tar.gz | docker load # Load the image
+docker run -it pnut-artifact                 # Start the container
 ```
-
-Pnut is also available freely on GitHub https://github.com/udem-dlteam/pnut.
 
 ## Project structure
 
@@ -48,6 +62,20 @@ script can be used. For both pnut-sh and pnut-exe, it computes the size of their
 source files, with and without comments and blank lines, and the ratio between
 the compiled shell script and the original C code.
 
+## How to use Pnut
+
+Pnut's command line options are as follows:
+
+- `-D{macro}`: Define a macro
+- `-U{macro}`: Undefine a macro that was previously defined
+- `-I{path}`: Specify the include path
+
+Arguments that do not start with `-` are treated as files to be compiled.
+
+The compiled program is output to stdout, so it must be redirected to a file to
+be executed. Note that the permission of the generated file must be changed with
+`chmod +x {file}` to make it executable.
+
 ## Building Pnut
 
 The Makefile can be used to compile `pnut-sh` and `pnut-exe`, either with GCC
@@ -62,9 +90,11 @@ make pnut-exe.sh  # Compile pnut-exe with pnut-sh into pnut-exe.sh
 
 All files built by the Makefile and other scripts are placed in the `build`
 directory. Pnut's native backend supports both Linux and MacOS, on x86 and
-x86_64 architectures. ARM64 support is available on Linux but not on MacOS but
-Rosetta emulation can be used to run the x86/x86_64 version on Macs with ARM
-processors.
+x86_64 architectures.
+
+<!-- ARM64 support is available on Linux but not on MacOS.
+However, Rosetta emulation can be used to run the x86/x86_64 version on Macs
+with ARM processors. -->
 
 The Makefile detects the target platform and architecture and sets the right
 compilation options, so it should work out of the box on the systems listed
@@ -81,13 +111,25 @@ cat build/pnut.sh | less
 
 Pnut's main use case is to compile itself. To ensure that the bootstrap process
 works, the `./bootstrap-pnut.sh` script can be used. This script compiles
-pnut-sh to shell twice: once with pnut-sh compiled with GCC (pnut.sh) and then
-with pnut.sh (pnut-twice-bootstrapped.sh). The script then compares the two
-outputs to ensure that they are identical.
+pnut-sh twice: once with pnut-sh compiled with GCC (pnut.sh) and then with
+pnut.sh (pnut-twice-bootstrapped.sh). The script then compares the two generated
+scripts to ensure that they are identical.
+
+Note that the steps running shell versions of pnut can take a while to complete.
 
 ```shell
 # Bootstrap pnut.sh with <shell>
-./bootstrap-pnut.sh --shell ksh # Takes around a minute on ksh
+# For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'` before running the script
+./bootstrap-pnut.sh --shell bash # Takes around a minute on bash
+```
+
+Or you can invoke pnut directly:
+
+```shell
+make pnut.sh
+# Compile pnut.sh to a shell script
+bash ./build/pnut.sh pnut.c -DRELEASE_PNUT_SH > build/pnut-twice-bootstrapped.sh
+sha256sum build/pnut.sh build/pnut-twice-bootstrapped.sh
 ```
 
 To compile pnut-exe with pnut-sh, the `./bootstrap-pnut-exe.sh` script can be
@@ -97,7 +139,27 @@ with GCC (pnut-exe.sh) and then with pnut.sh (pnut-exe-twice-bootstrapped.sh).
 ```shell
 # Bootstrap pnut-exe with <shell>
 # Backends available: x86_64_mac, x86_64_linux, i386_linux
-./bootstrap-pnut-exe.sh --backend x86_64_linux --shell ksh
+# For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'` before running the script
+./bootstrap-pnut-exe.sh --backend x86_64_linux --shell bash
+```
+
+Or manually:
+
+```shell
+# First we compile pnut-exe to pnut-exe.sh using pnut.sh
+make pnut.sh
+bash ./build/pnut.sh pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe.sh
+chmod +x build/pnut-exe.sh
+
+# We then use pnut-exe.sh to compile pnut-exe again, this time creating a binary
+bash ./build/pnut-exe.sh pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe.exe
+chmod +x build/pnut-exe.exe
+
+# Finally, we use pnut-exe to compile pnut-exe to make sure it works
+./build/pnut-exe.exe pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe-twice-bootstrapped.exe
+
+# And we check that the binaries are identical
+sha256sum build/pnut-exe.exe build/pnut-exe-twice-bootstrapped.exe
 ```
 
 <!-- ## Running tests
@@ -111,21 +173,66 @@ live in the `tests` directory, with `test/_sh` containing tests for pnut-sh and
 
 The `examples` directory contains examples that can be compiled with pnut-sh.
 They come precompiled in the `examples/compiled` directory, but can be
-regenerated with `./examples/prepare.sh`.
+regenerated with `./examples/prepare.sh`. Those examples are much smaller than
+`pnut.sh` and we encourage you to inspect the code and run them to get a feeling
+of the capabilities of Pnut and the shell.
 
-Some interesting examples
+Note that certain examples require specific compilation options to work properly
+(mainly for speed). These options are set with a C comment starting with
+`// pnut-options:` at the beginning of the file such as in `examples/repl.c`.
+The `./examples/prepare.sh` script compiles the examples with the correct
+options.
 
-- `examples/base64.c`: Encode and decode base64 data.
+Some examples we find interesting:
+
+- `examples/base64.c`: Encode and decode base64 data (except null bytes).
 - `examples/cat.c`: Output the contents of files passed as arguments or stdin.
-- `examples/empty.c`: Do nothing, demonstrate that the runtime is only included if needed.
+- `examples/empty.c`: Does nothing, demonstrate that the runtime is only
+  included if needed.
 - `examples/fib.c`: Print the first 20 Fibonacci numbers.
-- `examples/repl.c`: A R4RS repl compiled with the Ribbit Scheme Compiler. Includes a bytecode interpreter for the Ribbit Virtual Machine (RVM) and a garbage collector.
-- `examples/select-file.c`: TUI that allows the user to select a file to print (demonstrate how to shell code can be combined with C code).
+- `examples/repl.c`: A R4RS repl compiled with the Ribbit Scheme Compiler.
+  Includes a bytecode interpreter for the Ribbit Virtual Machine (RVM) and a
+  garbage collector.
+- `examples/select-file.c`: TUI that allows the user to select a file to print
+  (demonstrate how to shell code can be combined with C code).
 - `examples/sha256sum.c`: Compute the SHA-256 hash of files passed as arguments.
 - `examples/sum-array.c`: Compute the sum of an array of integers of size 10000.
 - `examples/winterpi.c`: Compute the first 2800 digits of pi.
 
-Other included examples are:
+We quite like the repl.c example so here are 2 example programs to try:
+
+```shell
+# Compute the fibonacci numbers
+$ ksh examples/compiled/repl.sh
+> (define (fib x)
+    (if (< x 2)
+      x
+      (+ (fib (- x 1))
+         (fib (- x 2)))))
+0
+> (fib 10)
+55
+> (apply + (map fib '(0 1 2 3 4 5 6 7 8 9 10))); Sum of the first 11 Fibonacci numbers
+143
+```
+
+```shell
+# Write to a file
+$ ksh examples/compiled/repl.sh
+> (define handle (open-output-file "hello.txt"))
+0
+> (display "Hello, reviewer!\n" handle)
+#f
+> ^D (Ctrl-D)
+$ cat hello.txt
+Hello, reviewer!
+```
+
+It's not very fast, but considering that every command is read and compiled
+before being executed, it shows that pnut-sh can be used in non-bootstrapping
+contexts.
+
+<!-- Other included examples are:
 
 - `examples/all-chars.c`: Print all non-extended ASCII characters.
 - `examples/cp.c`: Copy the contents of one file to another.
@@ -135,37 +242,7 @@ Other included examples are:
 - `examples/reverse.c`: Reverse the order of command-line arguments.
 - `examples/wc-stdin.c`: wc that reads from stdin and count lines, words, and characters.
 - `examples/wc.c`: Read from stdin _or files_ and count lines, words, and characters.
-- `examples/welcome.c`: Ask the user for their name and say hello.
-
-<!--
-To compile an example, run the following command:
-
-```shell
-make pnut-sh
-./build/pnut.sh examples/winterpi.c > examples/compiled/winterpi.sh
-chmod +x examples/compiled/winterpi.sh
-./examples/compiled/winterpi.sh
-``` -->
-
-<!-- TODO: Mention repl example -->
-<!-- (define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) -->
-
-<!-- ## Compiling C4
- -->
-
-## How to use Pnut
-
-Pnut's command line options are as follows:
-
-- `-D{macro}`: Define a macro
-- `-U{macro}`: Undefine a macro that was previously defined
-- `-I{path}`: Specify the include path
-
-Arguments that do not start with `-` are treated as files to be compiled.
-
-The compiled program is output to stdout, so it must be redirected to a file to
-be executed. Note that the permission of the generated file must be changed with
-`chmod +x {file}` to make it executable.
+- `examples/welcome.c`: Ask the user for their name and say hello. -->
 
 ### Watching Pnut's progress
 
@@ -175,6 +252,6 @@ generated as the input is read, so it can be interesting to watch the compiler's
 progress.
 
 ```shell
-./bootstrap-pnut.sh --shell ksh & # Run in the background
+./bootstrap-pnut.sh --shell bash & # Run in the background
 tail -f build/pnut-twice-bootstrapped.sh
 ```
