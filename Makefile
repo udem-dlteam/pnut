@@ -1,4 +1,4 @@
-.PHONY: pnut-sh pnut.sh pnut-bootstrapped.sh install clean test
+.PHONY: pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh pnut-exe pnut-exe.sh pnut-exe-bootstrapped install uninstall clean test-sh test-i386-linux test-x86_64-linux test-x86_64-mac
 
 BUILD_DIR = build
 
@@ -24,13 +24,13 @@ pnut-sh: pnut.c sh.c sh-runtime.c
 	mkdir -p $(BUILD_DIR)
 	gcc $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
 
-pnut.sh: pnut-sh
-	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut.sh
-	chmod +x $(BUILD_DIR)/pnut.sh
+pnut-sh.sh: pnut-sh
+	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
+	chmod +x $(BUILD_DIR)/pnut-sh.sh
 
-pnut-bootstrapped.sh: pnut-sh
-	$$SHELL $(BUILD_DIR)/pnut.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-bootstrapped.sh
-	diff $(BUILD_DIR)/pnut.sh $(BUILD_DIR)/pnut-bootstrapped.sh
+pnut-sh-bootstrapped.sh: pnut-sh
+	$$SHELL $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
+	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 
 pnut-exe: pnut.c x86.c exe.c elf.c mach-o.c
 	mkdir -p $(BUILD_DIR)
@@ -43,16 +43,16 @@ pnut-exe.sh: pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
 pnut-exe-bootstrapped: pnut-exe
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped
 
-install: pnut-sh pnut.sh
+install: pnut-sh pnut-sh.sh
 	sudo cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
-	sudo cp $(BUILD_DIR)/pnut.sh /usr/local/bin/pnut.sh
+	sudo cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
 
 uninstall:
 	sudo $(RM) /usr/local/bin/pnut
 	sudo $(RM) /usr/local/bin/pnut.sh
 
 clean:
-	$(RM) $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut.sh $(BUILD_DIR)/pnut-bootstrapped.shield
+	$(RM) -r $(BUILD_DIR)
 	# Recursively remove .exe files from the tests directory
 	find tests -name "*.exe" -exec $(RM) {} \;
 	find tests -name "*.sh" -exec $(RM) {} \;

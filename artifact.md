@@ -84,7 +84,7 @@ or with Pnut itself (in which case, a shell script is generated).
 ```shell
 make pnut-sh      # Compile pnut-sh with GCC
 make pnut-exe     # Compile pnut-exe with GCC
-make pnut.sh      # Compile pnut-sh with pnut-sh into pnut.sh
+make pnut-sh.sh   # Compile pnut-sh with pnut-sh into pnut-sh.sh
 make pnut-exe.sh  # Compile pnut-exe with pnut-sh into pnut-exe.sh
 ```
 
@@ -100,55 +100,56 @@ The Makefile detects the target platform and architecture and sets the right
 compilation options, so it should work out of the box on the systems listed
 above.
 
-We encourage you to take a look at the `build/pnut.sh` to see the generated
+We encourage you to take a look at the `build/pnut-sh.sh` to see the generated
 shell scripts.
 
 ```shell
-cat build/pnut.sh | less
+cat build/pnut-sh.sh | less
 ```
 
 ### Bootstrapping Pnut
 
 Pnut's main use case is to compile itself. To ensure that the bootstrap process
-works, the `./bootstrap-pnut.sh` script can be used. This script compiles
-pnut-sh twice: once with pnut-sh compiled with GCC (pnut.sh) and then with
-pnut.sh (pnut-twice-bootstrapped.sh). The script then compares the two generated
-scripts to ensure that they are identical.
+works, the `./bootstrap-pnut-sh.sh` script can be used. This script compiles
+pnut-sh twice: once with pnut-sh compiled with GCC (pnut-sh.sh) and then with
+pnut.sh (pnut-sh-twice-bootstrapped.sh). The script then compares the two
+generated scripts to ensure that they are identical.
 
 Note that the steps running shell versions of pnut can take a while to complete.
 
 ```shell
-# Bootstrap pnut.sh with <shell>
+# Bootstrap pnut-sh.sh with <shell>
 # For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'` before running the script
-./bootstrap-pnut.sh --shell bash # Takes around a minute on bash
+./bootstrap-pnut-sh.sh --shell bash # Takes around 1m30 on bash. Faster on ksh/dash
 ```
 
 Or you can invoke pnut directly:
 
 ```shell
-make pnut.sh
-# Compile pnut.sh to a shell script
-bash ./build/pnut.sh pnut.c -DRELEASE_PNUT_SH > build/pnut-twice-bootstrapped.sh
-sha256sum build/pnut.sh build/pnut-twice-bootstrapped.sh
+# Compile pnut-sh to a shell script using GCC
+make pnut-sh.sh
+# Compile pnut-sh to a shell script with pnut-sh.sh
+bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_SH > build/pnut-sh-twice-bootstrapped.sh
+sha256sum build/pnut-sh.sh build/pnut-sh-twice-bootstrapped.sh
 ```
 
 To compile pnut-exe with pnut-sh, the `./bootstrap-pnut-exe.sh` script can be
 used. This script compiles pnut-exe to shell twice: once with pnut-sh compiled
-with GCC (pnut-exe.sh) and then with pnut.sh (pnut-exe-twice-bootstrapped.sh).
+with GCC (pnut-exe.sh) and then with pnut-sh.sh (pnut-exe-twice-bootstrapped.sh).
 
 ```shell
 # Bootstrap pnut-exe with <shell>
 # Backends available: x86_64_mac, x86_64_linux, i386_linux
 # For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'` before running the script
-./bootstrap-pnut-exe.sh --backend x86_64_linux --shell bash
+./bootstrap-pnut-exe.sh --backend x86_64_linux --shell bash # Takes a few minutes
 ```
 
 Or manually:
 
 ```shell
-# First we compile pnut-exe to pnut-exe.sh using pnut.sh
-make pnut.sh
-bash ./build/pnut.sh pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe.sh
+make pnut-sh.sh
+# First we compile pnut-exe to pnut-exe.sh using pnut-sh.sh
+bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe.sh
 chmod +x build/pnut-exe.sh
 
 # We then use pnut-exe.sh to compile pnut-exe again, this time creating a binary
@@ -174,8 +175,8 @@ live in the `tests` directory, with `test/_sh` containing tests for pnut-sh and
 The `examples` directory contains examples that can be compiled with pnut-sh.
 They come precompiled in the `examples/compiled` directory, but can be
 regenerated with `./examples/prepare.sh`. Those examples are much smaller than
-`pnut.sh` and we encourage you to inspect the code and run them to get a feeling
-of the capabilities of Pnut and the shell.
+`pnut-sh.sh` and we encourage you to inspect the code and run them to get a
+feeling of the capabilities of Pnut and the shell.
 
 Note that certain examples require specific compilation options to work properly
 (mainly for speed). These options are set with a C comment starting with
@@ -246,12 +247,12 @@ contexts.
 
 ### Watching Pnut's progress
 
-Compiling large (>100 lines) programs with pnut.sh can take from a few seconds
+Compiling large (>100 lines) programs with pnut-sh.sh can take from a few seconds
 to a few minutes. Due to the single-pass nature of the compiler, the output is
 generated as the input is read, so it can be interesting to watch the compiler's
 progress.
 
 ```shell
-./bootstrap-pnut.sh --shell bash & # Run in the background
+./bootstrap-pnut-sh.sh --shell bash & # Run in the background
 tail -f build/pnut-twice-bootstrapped.sh
 ```
