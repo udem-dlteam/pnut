@@ -124,5 +124,5 @@ Pnut is a research project and contributions are welcome. Please open an issue
 to report any bugs or to discuss new features.
 
 To make sure your changes are good, a good practice is to attempt the bootstrap
-of `pnut.c` using `pnut.sh`. This can be done using the `./bootstrap-pnut.sh`
+of `pnut.c` using `pnut.sh`. This can be done using the `./bootstrap-pnut-sh.sh`
 command. Using `ksh`, this should take around 30s.

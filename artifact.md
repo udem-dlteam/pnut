@@ -112,7 +112,7 @@ cat build/pnut-sh.sh | less
 Pnut's main use case is to compile itself. To ensure that the bootstrap process
 works, the `./bootstrap-pnut-sh.sh` script can be used. This script compiles
 pnut-sh twice: once with pnut-sh compiled with GCC (pnut-sh.sh) and then with
-pnut.sh (pnut-sh-twice-bootstrapped.sh). The script then compares the two
+pnut-sh.sh (pnut-sh-twice-bootstrapped.sh). The script then compares the two
 generated scripts to ensure that they are identical.
 
 Note that the steps running shell versions of pnut can take a while to complete.

@@ -32,7 +32,7 @@ test_with_tcc_using_portable_libc:
 test_with_pnut_using_portable_libc:
 	@echo ======================== pnut with portable_libc
 	cat src/crt1.c src/crti.c portable_libc.c test.c > test-with-libc.c
-	ksh ../bootstrap-results/pnut.sh -DUSE_PORTABLE_LIBC test-with-libc.c > test.sh
+	ksh ../build/pnut-sh.sh -DUSE_PORTABLE_LIBC test-with-libc.c > test.sh
 	ksh test.sh abcdef ; echo $$?
 
 clean:
