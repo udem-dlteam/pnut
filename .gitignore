@@ -8,3 +8,5 @@ tests/**/*.err
 tests/**/*.output
 # Build artifacts
 build/*
+artifact/*
+artifact.zip
