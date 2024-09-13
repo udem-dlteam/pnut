@@ -9,7 +9,7 @@
 
 trap "exit 1" INT
 
-fail() { echo "$1"; exit $2; }
+fail() { echo "❌ $1"; exit 1; }
 
 if [ $# -lt 1 ]; then
   fail "Usage: $0 <backend> --shell shell -m pattern --bootstrap" 1
@@ -271,5 +271,6 @@ run_tests() {
   fi
 }
 
+compile_pnut # Precompile pnut to get an error message if it fails
 find tests -name "*.exe" -exec rm {} \; # Clear cached pnut executables
 run_tests "$pattern"

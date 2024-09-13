@@ -65,6 +65,9 @@ jobs:
     strategy:
       matrix:
         shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
+        include:
+          - shell: dash # Using dash because it's the fastest
+            pnut_opts: "'-DSH_SAVE_VARS_WITH_SET' '-DOPTIMIZE_CONSTANT_PARAM'"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -79,6 +82,10 @@ jobs:
         run: |
           set -e
           ./run-tests.sh sh --shell ${{ matrix.shell }}
+          for pnut_opts in ${{ matrix.pnut_opts }}; do
+            echo "Running tests with pnut options: $pnut_opts"
+            PNUT_OPTIONS="${pnut_opts}" ./run-tests.sh sh --shell ${{ matrix.shell }}
+          done
 
   bootstrap-pnut-sh:
     strategy:
