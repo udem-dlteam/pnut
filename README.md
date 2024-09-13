@@ -116,7 +116,6 @@ Unfortunately, certains C constructs don't map nicely to POSIX shell which means
 - The preprocessor is not perfect and may fail on some edge cases. `#if` and `#elif` are not supported. `#include <...>` are ignored.
 - All local variable declarations must be at the beginning of a function.
 - Aggregate types (arrays and structures) cannot be stack-allocated, passed by value or nested in a structure.
-- `do { ... } while(...)` is not supported at the moment.
 
 ## Contributing
 
