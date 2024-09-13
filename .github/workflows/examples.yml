@@ -22,7 +22,8 @@ jobs:
 
       - name: Diff examples
         run: |
-          files=$(git diff --name-only)
+          git add examples/
+          files=$(git diff HEAD --name-only)
           if [ -n "$files" ]; then
             echo "Examples are out of date. Please run ./examples/prepare.sh"
             echo "The following files are out of date:"
