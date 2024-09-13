@@ -1834,11 +1834,7 @@ void codegen_statement(ast node) {
 
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
     def_label(lbl1);
-
-    if (get_child(node, 0)) {
-      codegen_statement(get_child(node, 0));
-    }
-
+    codegen_statement(get_child(node, 0));
     codegen_rvalue(get_child(node, 1));
     pop_reg(reg_X);
     grow_fs(-1);
