@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int bad_factorial(int num) {
+int factorial(int num) {
   int ret = 1;
   
   do {
@@ -12,6 +12,18 @@ int bad_factorial(int num) {
 }
 
 void main() {
-  printf("Factorial of 5: %d\n", bad_factorial(5));
-  printf("Factorial of 10: %d\n", bad_factorial(10));
+  int fac5 = factorial(5);
+  int fac10 = factorial(10);
+
+  if (fac5 == 120) {
+    putchar('O');
+  } else {
+    putchar('B');
+  }
+
+  if (fac10 == 3628800) {
+    putchar('O');
+  } else {
+    putchar('B');
+  }
 }

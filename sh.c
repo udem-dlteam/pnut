@@ -2044,8 +2044,8 @@ void mark_mutable_variables_statement(ast node) {
     mark_mutable_variables_statement(get_child(node, 0));
     if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
   } else if (op == DO_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
+    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
+    mark_mutable_variables_body(get_child(node, 1));
   } else if (op == FOR_KW) {
     if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
     if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
