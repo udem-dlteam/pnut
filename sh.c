@@ -1898,7 +1898,7 @@ void comp_statement(ast node, int else_if) {
 
     append_glo_decl(wrap_str_lit("done"));
   } else if (op == DO_KW) {
-    append_glo_decl(wrap_str_lit("while"));
+    append_glo_decl(wrap_str_lit("while true; do"));
     loop_nesting_level += 1;
     nest_level += 1;
     
@@ -1908,11 +1908,11 @@ void comp_statement(ast node, int else_if) {
       append_glo_decl(wrap_char(':'));
     }
 
-    append_glo_decl(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST));
+    append_glo_decl(string_concat(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST), wrap_str_lit("|| break")));
 
     nest_level -= 1;
     loop_nesting_level -= 1;
-    append_glo_decl(wrap_str_lit("do :; done"));
+    append_glo_decl(wrap_str_lit("done"));
   } else if (op == FOR_KW) {
     // Save loop end actions from possible outer loop
     start_loop_end_actions_start = loop_end_actions_start;
