@@ -1898,7 +1898,7 @@ void comp_statement(ast node, int else_if) {
 
     append_glo_decl(wrap_str_lit("done"));
   } else if (op == DO_KW) {
-    append_glo_decl(wrap_str_lit("while true; do"));
+    append_glo_decl(wrap_str_lit("while :; do"));
     loop_nesting_level += 1;
     nest_level += 1;
     
