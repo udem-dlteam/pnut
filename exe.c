@@ -1824,6 +1824,28 @@ void codegen_statement(ast node) {
     cgc_fs = save_fs;
     cgc_locals = save_locals;
 
+  } else if (op == DO_KW) {
+
+    lbl1 = alloc_label(); // do statement start
+    lbl2 = alloc_label(); // break point
+
+    save_fs = cgc_fs;
+    save_locals = cgc_locals;
+
+    cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
+    def_label(lbl1);
+    codegen_statement(get_child(node, 0));
+    codegen_rvalue(get_child(node, 1));
+    pop_reg(reg_X);
+    grow_fs(-1);
+    xor_reg_reg(reg_Y, reg_Y);
+    jump_cond_reg_reg(NE, lbl1, reg_X, reg_Y);
+
+    def_label(lbl2);
+
+    cgc_fs = save_fs;
+    cgc_locals = save_locals;
+
   } else if (op == SWITCH_KW) {
 
     save_fs = cgc_fs;

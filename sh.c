@@ -1897,6 +1897,22 @@ void comp_statement(ast node, int else_if) {
     loop_nesting_level -= 1;
 
     append_glo_decl(wrap_str_lit("done"));
+  } else if (op == DO_KW) {
+    append_glo_decl(wrap_str_lit("while :; do"));
+    loop_nesting_level += 1;
+    nest_level += 1;
+    
+    if (get_child(node, 0) != 0) {
+      comp_statement(get_child(node, 0), false);
+    } else {
+      append_glo_decl(wrap_char(':'));
+    }
+
+    append_glo_decl(string_concat(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST), wrap_str_lit("|| break")));
+
+    nest_level -= 1;
+    loop_nesting_level -= 1;
+    append_glo_decl(wrap_str_lit("done"));
   } else if (op == FOR_KW) {
     // Save loop end actions from possible outer loop
     start_loop_end_actions_start = loop_end_actions_start;
@@ -2027,6 +2043,9 @@ void mark_mutable_variables_statement(ast node) {
   } else if (op == WHILE_KW) {
     mark_mutable_variables_statement(get_child(node, 0));
     if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
+  } else if (op == DO_KW) {
+    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
+    mark_mutable_variables_body(get_child(node, 1));
   } else if (op == FOR_KW) {
     if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
     if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
