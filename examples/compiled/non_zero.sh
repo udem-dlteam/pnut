@@ -6,7 +6,7 @@ LC_ALL=C
 _main() {
   let n; let __t1
   n=0
-  while true; do
+  while :; do
     printf "Enter a non-zero single-digit number:\r\n" 
     _getchar n 
     while _getchar __t1 ; [ $__NEWLINE__ != $__t1 ] ; do
