@@ -4,8 +4,8 @@
 // This file was copied from https://github.com/rswier/c4 and is licensed
 // under the GNU General Public License v2.0. The only modification to the file
 // is the addition of the comp-options and pnut-options comments above this
-// comment block, and a memset call in the main function to initialize the
-// virtual machine's stack (sp variable).
+// comment block, a memset call in the main function to initialize the
+// virtual machine's stack (sp variable) and adjusting the poolsz value.
 
 // c4.c - C in four functions
 
@@ -352,7 +352,7 @@ int main(int argc, char **argv)
 
   if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
 
-  poolsz = 256*1024; // arbitrary size
+  poolsz = 32*1024; // arbitrary size
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
   if (!(le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
   if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }

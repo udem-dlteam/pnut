@@ -836,7 +836,7 @@ _main() { # argc: $2, argv: $3
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  poolsz=$((256 * 1024))
+  poolsz=$((32 * 1024))
   if _malloc __t1 $poolsz; [ $((!(_sym = __t1))) != 0 ] ; then
     printf "could not malloc(%d) symbol area\n" $poolsz
     : $(($1 = -1))
