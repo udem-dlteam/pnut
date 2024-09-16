@@ -2412,7 +2412,11 @@ void comp_glo_decl(ast node) {
 
 void prologue() {
   putstr("#!/bin/sh\n");
+#ifdef RT_UNSAFE_HEAP
+  putstr("set -e -f\n");
+#else
   putstr("set -e -u -f\n");
+#endif
   putstr("LC_ALL=C\n\n");
 }
 

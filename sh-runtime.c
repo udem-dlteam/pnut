@@ -454,12 +454,16 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("# If the variable is already defined, this function does nothing.\n");
   putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
   putstr("defstr() { # $1 = variable name, $2 = string\n");
+#ifndef RT_UNSAFE_HEAP
   putstr("  set +u # Necessary to allow the variable to be empty\n");
+#endif
   putstr("  if [ $(($1)) -eq 0 ]; then\n");
   putstr("    unpack_escaped_string \"$2\"\n");
   putstr("    : $(($1 = __addr))\n");
   putstr("  fi\n");
+#ifndef RT_UNSAFE_HEAP
   putstr("  set -u\n");
+#endif
   putstr("}\n");
 END_RUNTIME_FUN(defstr)
 
