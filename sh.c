@@ -144,7 +144,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 // text wrap_str(char *s) {
 //   int i = 0;
 //   int result = text_alloc;
-
+//
 //   text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
 //   text_alloc += 2;
 //   while (s[i] != 0) {
@@ -152,9 +152,9 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 //     text_alloc += 1;
 //     i += 1;
 //   }
-
+//
 //   text_pool[result + 1] = TEXT_FROM_INT(i);
-
+//
 //   return result;
 // }
 
@@ -312,10 +312,12 @@ bool main_returns = false;      // If the main function returns a value
 bool top_level_stmt = true;     // If the current statement is at the top level
 
 // Internal identifier node types. These
-int IDENTIFIER_INTERNAL = 600;
-int IDENTIFIER_STRING = 601;
-int IDENTIFIER_DOLLAR = 602;
-int IDENTIFIER_EMPTY = 603;
+enum IDENTIFIER_TYPE {
+  IDENTIFIER_INTERNAL = 600,
+  IDENTIFIER_STRING,
+  IDENTIFIER_DOLLAR,
+  IDENTIFIER_EMPTY
+};
 
 // Node type for local variable nodes
 int LOCAL_VAR = 0;
@@ -1104,10 +1106,12 @@ void comp_defstr(ast ident, int string_pool_str) {
                                 , wrap_char('\"')));
 }
 
-int RVALUE_CTX_BASE = 0;
-int RVALUE_CTX_ARITH_EXPANSION = 1; // Like base context, except that we're already in $(( ... ))
-int RVALUE_CTX_TEST = 2;
-int RVALUE_CTX_TEST_ELSEIF = 3;
+enum VALUE_CTX {
+  RVALUE_CTX_BASE,            // value is outside of $(( ... ))
+  RVALUE_CTX_ARITH_EXPANSION, // value is already in $(( ... ))
+  RVALUE_CTX_TEST,            // value is inside of a test
+  RVALUE_CTX_TEST_ELSEIF      // value is inside of a elseif test
+};
 
 text with_prefixed_side_effects(ast test_side_effects, text code) {
 
@@ -1232,10 +1236,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" += 1")), outer_op, op);
     } else if (op == MINUS_MINUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_str_lit("("), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
+      return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_str_lit("("), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
+      return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
     } else if (op == SIZEOF_KW) {
       if (get_op(get_child(node, 0)) == INT_KW
        || get_op(get_child(node, 0)) == CHAR_KW
@@ -1822,11 +1826,11 @@ void comp_switch(ast node) {
         statement = get_child(statement, 1);
       }
     } else {
-      str = wrap_str_lit("*");
+      str = wrap_char('*');
       statement = get_child(statement, 0);
     }
 
-    append_glo_decl(string_concat(str, wrap_str_lit(")")));
+    append_glo_decl(string_concat(str, wrap_char(')')));
 
     nest_level += 1;
 
@@ -1901,7 +1905,7 @@ void comp_statement(ast node, int else_if) {
     append_glo_decl(wrap_str_lit("while :; do"));
     loop_nesting_level += 1;
     nest_level += 1;
-    
+
     if (get_child(node, 0) != 0) {
       comp_statement(get_child(node, 0), false);
     } else {
@@ -1977,7 +1981,7 @@ void comp_statement(ast node, int else_if) {
     if (in_tail_position && loop_nesting_level == 1) {
       append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
     } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
-      append_glo_decl(wrap_str_lit(":")); // Block only contains a return statement so it's not empty
+      append_glo_decl(wrap_char(':')); // Block only contains a return statement so it's not empty
     } else if (!in_tail_position || loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str_lit("return"));
@@ -2002,7 +2006,7 @@ void comp_statement(ast node, int else_if) {
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str_lit(": "), str));
     } else if (in_block_head_position && in_tail_position) {
-      append_glo_decl(wrap_str_lit(":")); // Block only contains this statement so we have to make sure it's not empty
+      append_glo_decl(wrap_char(':')); // Block only contains this statement so we have to make sure it's not empty
     }
   }
 }
@@ -2214,7 +2218,7 @@ void comp_glo_fun_decl(ast node) {
   }
 
   if (body == 0) {
-    append_glo_decl(wrap_str_lit(":")); // Empty function
+    append_glo_decl(wrap_char(':')); // Empty function
   } else {
     comp_body(body);
   }
@@ -2232,27 +2236,6 @@ void comp_glo_fun_decl(ast node) {
   nest_level -= 1;
 
   append_glo_decl(wrap_str_lit("}\n"));
-}
-
-text comp_constant(ast node) {
-  int op = get_op(node);
-  ast new_ident;
-
-  if (op == INTEGER) {
-    return wrap_int(-get_val(node));
-  } else if (op == CHARACTER) {
-    return string_concat(wrap_char('$'), character_ident(get_val(node)));
-  } else if (op == STRING) {
-    runtime_use_defstr = true;
-    new_ident = fresh_string_ident();
-    comp_defstr(new_ident, get_val(node));
-    return format_special_var(new_ident, false);
-  } else if (op == '-' && get_nb_children(node) == 1) {
-    return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
-  } else {
-    fatal_error("comp_constant: unknown constant");
-    return 0;
-  }
 }
 
 void comp_glo_var_decl(ast node) {
@@ -2294,7 +2277,7 @@ void comp_glo_var_decl(ast node) {
         wrap_str_lit("defglo "),
         env_var(new_ast0(IDENTIFIER, name)),
         wrap_char(' '),
-        comp_constant(init)
+        comp_rvalue(init, VALUE_CTX_BASE)
       )
     );
 #else
