@@ -13,7 +13,7 @@ should work on any system with a C compiler and a POSIX compliant shell.
 
 Pnut is also available freely on GitHub <https://github.com/udem-dlteam/pnut>
 and the website can be accessed at <https://pnut.sh>. The website allows users
-to use Pnut to compile C code to shell scripts with a nice interface. It is not
+to use pnut to compile C code to shell scripts with a nice interface. It is not
 the focus of this artifact and is only provided as a means to present pnut.
 
 ## Docker image
@@ -57,12 +57,12 @@ And for pnut-exe (i386/x86_64):
 - `elf.c`: ELF file generation (Linux)
 - `mach-o.c`: Mach-O file generation (MacOS)
 
-To measure the size of Pnut's source, the `./analysis/measure-file-size.sh`
+To measure the size of pnut's source, the `./analysis/measure-file-size.sh`
 script can be used. For both pnut-sh and pnut-exe, it computes the size of their
 source files, with and without comments and blank lines, and the ratio between
 the compiled shell script and the original C code.
 
-## How to use Pnut
+## How to use pnut
 
 Pnut's command line options are as follows:
 
@@ -76,10 +76,10 @@ The compiled program is output to stdout, so it must be redirected to a file to
 be executed. Note that the permission of the generated file must be changed with
 `chmod +x {file}` to make it executable.
 
-## Building Pnut
+## Building pnut
 
 The Makefile can be used to compile `pnut-sh` and `pnut-exe`, either with GCC
-or with Pnut itself (in which case, a shell script is generated).
+or with pnut itself (in which case, a shell script is generated).
 
 ```shell
 make pnut-sh      # Compile pnut-sh with GCC
@@ -107,7 +107,7 @@ shell scripts.
 cat build/pnut-sh.sh | less
 ```
 
-### Bootstrapping Pnut
+### Bootstrapping pnut
 
 Pnut's main use case is to compile itself. To ensure that the bootstrap process
 works, the `./bootstrap-pnut-sh.sh` script can be used. This script compiles
@@ -184,7 +184,7 @@ The `examples` directory contains examples that can be compiled with pnut-sh.
 They come precompiled in the `examples/compiled` directory, but can be
 regenerated with `./examples/prepare.sh`. Those examples are much smaller than
 `pnut-sh.sh` and we encourage you to inspect the code and run them to get a
-feeling of the capabilities of Pnut and the shell.
+feeling of the capabilities of pnut and the shell.
 
 Note that certain examples require specific compilation options to work properly
 (mainly for speed). These options are set with a C comment starting with
@@ -280,7 +280,7 @@ contexts.
 - `examples/wc.c`: Read from stdin _or files_ and count lines, words, and characters.
 - `examples/welcome.c`: Ask the user for their name and say hello. -->
 
-### Watching Pnut's progress
+### Watching pnut's progress
 
 Compiling large (>100 lines) programs with pnut-sh.sh can take from a few seconds
 to a few minutes. Due to the single-pass nature of the compiler, the output is
