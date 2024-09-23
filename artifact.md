@@ -8,7 +8,7 @@ This artifact has the following structure:
 - `pnut-website/`: Accompanying website's source code
 
 The docker image serves as a self-contained environment to run pnut and this
-document assumes that the reader is using it. However, most of the instructions
+document assumes that the reader is using it. However, most instructions
 should work on any system with a C compiler and a POSIX compliant shell.
 
 Pnut is also available freely on GitHub <https://github.com/udem-dlteam/pnut>
@@ -19,13 +19,13 @@ the focus of this artifact and is only provided as a means to present pnut.
 ## Docker image
 
 The docker image is based on Ubuntu 24.04 (x86-64) and contains the pnut source
-files along with alll the necessary tools to compile and run pnut-sh and
+files with all the necessary tools to compile and run pnut-sh and
 pnut-exe. It also comes with the following shells preinstalled: `bash`, `dash`,
 `ksh`, `mksh`, `yash`, `zsh`.
 
 To show compatibility with older bash versions, the image contains a Debian
 woody environment from July 2002 with `bash` version 2.05a. The environment
-contains its own pnut repository meaning the instructions below also apply to
+contains its own pnut repository meaning the instructions below apply to
 the woody environment. It can be entered by running `./woody.sh` or individual
 commands can be run in the woody environment by passing them as arguments to
 `./woody.sh` such as `./woody.sh "bash --version"`.
@@ -237,7 +237,7 @@ exit(-1) cycle = 7483170
 ```
 
 ```shell
-# Compute the fibonacci numbers
+# Compute the Fibonacci numbers
 $ ksh examples/compiled/repl.sh
 > (define (fib x)
     (if (< x 2)
