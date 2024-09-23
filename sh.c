@@ -1232,10 +1232,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" += 1")), outer_op, op);
     } else if (op == MINUS_MINUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_str_lit("("), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
+      return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_str_lit("("), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
+      return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
     } else if (op == SIZEOF_KW) {
       if (get_op(get_child(node, 0)) == INT_KW
        || get_op(get_child(node, 0)) == CHAR_KW
@@ -1822,11 +1822,11 @@ void comp_switch(ast node) {
         statement = get_child(statement, 1);
       }
     } else {
-      str = wrap_str_lit("*");
+      str = wrap_char('*');
       statement = get_child(statement, 0);
     }
 
-    append_glo_decl(string_concat(str, wrap_str_lit(")")));
+    append_glo_decl(string_concat(str, wrap_char(')')));
 
     nest_level += 1;
 
@@ -1901,7 +1901,7 @@ void comp_statement(ast node, int else_if) {
     append_glo_decl(wrap_str_lit("while :; do"));
     loop_nesting_level += 1;
     nest_level += 1;
-    
+
     if (get_child(node, 0) != 0) {
       comp_statement(get_child(node, 0), false);
     } else {
@@ -1977,7 +1977,7 @@ void comp_statement(ast node, int else_if) {
     if (in_tail_position && loop_nesting_level == 1) {
       append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
     } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
-      append_glo_decl(wrap_str_lit(":")); // Block only contains a return statement so it's not empty
+      append_glo_decl(wrap_char(':')); // Block only contains a return statement so it's not empty
     } else if (!in_tail_position || loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str_lit("return"));
@@ -2002,7 +2002,7 @@ void comp_statement(ast node, int else_if) {
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str_lit(": "), str));
     } else if (in_block_head_position && in_tail_position) {
-      append_glo_decl(wrap_str_lit(":")); // Block only contains this statement so we have to make sure it's not empty
+      append_glo_decl(wrap_char(':')); // Block only contains this statement so we have to make sure it's not empty
     }
   }
 }
@@ -2214,7 +2214,7 @@ void comp_glo_fun_decl(ast node) {
   }
 
   if (body == 0) {
-    append_glo_decl(wrap_str_lit(":")); // Empty function
+    append_glo_decl(wrap_char(':')); // Empty function
   } else {
     comp_body(body);
   }
