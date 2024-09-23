@@ -3,7 +3,7 @@
 This artifact has the following structure:
 
 - `artifact.pdf`: This file
-- `pnut-artifact-image.tar.gz`: A docker image containing pnut and its dependencies
+- `pnut-artifact-image.tar.gz`: Docker image containing pnut and its dependencies
 - `pnut/`: pnut's source code
 - `pnut-website/`: Accompanying website's source code
 
