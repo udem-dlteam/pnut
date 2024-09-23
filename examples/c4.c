@@ -1,11 +1,11 @@
 // comp-options: -I./examples/c4-libs/
-// pnut-options: -DSH_SAVE_VARS_WITH_SET -URT_COMPACT
+// pnut-options: -DSH_SAVE_VARS_WITH_SET -DRT_UNSAFE_HEAP -URT_COMPACT
 
 // This file was copied from https://github.com/rswier/c4 and is licensed
 // under the GNU General Public License v2.0. The only modification to the file
 // is the addition of the comp-options and pnut-options comments above this
-// comment block, a memset call in the main function to initialize the
-// virtual machine's stack (sp variable) and adjusting the poolsz value.
+// comment block and removing the memset calls in main since memory is already
+// zeroed out when allocated.
 
 // c4.c - C in four functions
 
@@ -352,16 +352,17 @@ int main(int argc, char **argv)
 
   if ((fd = open(*argv, 0)) < 0) { printf("could not open(%s)\n", *argv); return -1; }
 
-  poolsz = 32*1024; // arbitrary size
+  poolsz = 256*1024; // arbitrary size
   if (!(sym = malloc(poolsz))) { printf("could not malloc(%d) symbol area\n", poolsz); return -1; }
   if (!(le = e = malloc(poolsz))) { printf("could not malloc(%d) text area\n", poolsz); return -1; }
   if (!(data = malloc(poolsz))) { printf("could not malloc(%d) data area\n", poolsz); return -1; }
   if (!(sp = malloc(poolsz))) { printf("could not malloc(%d) stack area\n", poolsz); return -1; }
 
-  memset(sym,  0, poolsz);
-  memset(e,    0, poolsz);
-  memset(data, 0, poolsz);
-  memset(sp,   0, poolsz);
+  // MODIFIED: Removed memset calls since memory is already zeroed out when allocated
+  // memset(sym,  0, poolsz);
+  // memset(e,    0, poolsz);
+  // memset(data, 0, poolsz);
+  // memset(sp,   0, poolsz);
 
   p = "char else enum if int return sizeof while "
       "open read close printf malloc free memset memcmp exit void main";
