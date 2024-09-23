@@ -2234,27 +2234,6 @@ void comp_glo_fun_decl(ast node) {
   append_glo_decl(wrap_str_lit("}\n"));
 }
 
-text comp_constant(ast node) {
-  int op = get_op(node);
-  ast new_ident;
-
-  if (op == INTEGER) {
-    return wrap_int(-get_val(node));
-  } else if (op == CHARACTER) {
-    return string_concat(wrap_char('$'), character_ident(get_val(node)));
-  } else if (op == STRING) {
-    runtime_use_defstr = true;
-    new_ident = fresh_string_ident();
-    comp_defstr(new_ident, get_val(node));
-    return format_special_var(new_ident, false);
-  } else if (op == '-' && get_nb_children(node) == 1) {
-    return string_concat(wrap_char('-'), comp_constant(get_child(node, 0)));
-  } else {
-    fatal_error("comp_constant: unknown constant");
-    return 0;
-  }
-}
-
 void comp_glo_var_decl(ast node) {
   ast name = get_child(node, 0);
   ast type = get_child(node, 1);
@@ -2294,7 +2273,7 @@ void comp_glo_var_decl(ast node) {
         wrap_str_lit("defglo "),
         env_var(new_ast0(IDENTIFIER, name)),
         wrap_char(' '),
-        comp_constant(init)
+        comp_rvalue(init, VALUE_CTX_BASE)
       )
     );
 #else
