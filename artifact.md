@@ -187,6 +187,8 @@ options.
 Some examples we find interesting:
 
 - `examples/base64.c`: Encode and decode base64 data (except null bytes).
+- `examples/c4.c`: "C in four functions", a simple C interpreter that can run
+  itself and a bit more.
 - `examples/cat.c`: Output the contents of files passed as arguments or stdin.
 - `examples/empty.c`: Does nothing, demonstrate that the runtime is only
   included if needed.
@@ -200,7 +202,28 @@ Some examples we find interesting:
 - `examples/sum-array.c`: Compute the sum of an array of integers of size 10000.
 - `examples/winterpi.c`: Compute the first 2800 digits of pi.
 
-We quite like the repl.c example so here are 2 example programs to try:
+We quite like the `c4.c` and `repl.c` examples so here are a few things to try:
+
+```shell
+# Interpret fib.c with c4.sh
+$ ksh examples/compiled/c4.sh fib.c
+fib(15) = 610
+fib(16) = 987
+fib(17) = 1597
+fib(18) = 2584
+fib(19) = 4181
+exit(0) cycle = 580148
+```
+
+```shell
+# Invoke c4 compiler by interpreting c4.c with c4.sh
+$ ksh examples/compiled/c4.sh examples/c4.c
+Interpret c4.c with c4.sh
+usage: c4 [-s] [-d] file ...
+exit(-1) cycle = 45
+# This can be nested indefinitely: here we interpret c4.c with c4.c interpreted with c4.sh
+$ ksh examples/compiled/c4.sh examples/c4.c examples/c4.c
+```
 
 ```shell
 # Compute the fibonacci numbers
