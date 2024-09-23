@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e -u -f
+set -e -f
 LC_ALL=C
 
 : $((p = len = c = b = 0))
@@ -836,7 +836,7 @@ _main() { # argc: $2, argv: $3
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  poolsz=$((32 * 1024))
+  poolsz=$((256 * 1024))
   if _malloc __t1 $poolsz; [ $((!(_sym = __t1))) != 0 ] ; then
     printf "could not malloc(%d) symbol area\n" $poolsz
     : $(($1 = -1))
@@ -861,10 +861,6 @@ _main() { # argc: $2, argv: $3
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  _memset __ $_sym 0 $poolsz
-  _memset __ $_e 0 $poolsz
-  _memset __ $_data 0 $poolsz
-  _memset __ $sp 0 $poolsz
   defstr __str_1 "char else enum if int return sizeof while open read close printf malloc free memset memcmp exit void main"
   _p=$__str_1
   i=$_Char
@@ -1421,12 +1417,10 @@ unpack_escaped_string() {
 # If the variable is already defined, this function does nothing.
 # Note that it's up to the caller to ensure that no 2 strings share the same variable.
 defstr() { # $1 = variable name, $2 = string
-  set +u # Necessary to allow the variable to be empty
   if [ $(($1)) -eq 0 ]; then
     unpack_escaped_string "$2"
     : $(($1 = __addr))
   fi
-  set -u
 }
 
 _free() { # $2 = object to free
