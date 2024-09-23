@@ -119,8 +119,10 @@ Note that the steps running shell versions of pnut can take a while to complete.
 
 ```shell
 # Bootstrap pnut-sh.sh with <shell>
-# For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'` before running the script
-./bootstrap-pnut-sh.sh --shell bash # Takes around 1m30 on bash. Faster on ksh/dash
+# For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'`
+# before running the script.
+# This script takes around 1m30 on bash. Faster on ksh/dash
+./bootstrap-pnut-sh.sh --shell bash
 ```
 
 Or you can invoke pnut directly:
@@ -129,7 +131,8 @@ Or you can invoke pnut directly:
 # Compile pnut-sh to a shell script using GCC
 make pnut-sh.sh
 # Compile pnut-sh to a shell script with pnut-sh.sh
-bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_SH > build/pnut-sh-twice-bootstrapped.sh
+bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_SH \
+  > build/pnut-sh-twice-bootstrapped.sh
 sha256sum build/pnut-sh.sh build/pnut-sh-twice-bootstrapped.sh
 ```
 
@@ -140,8 +143,10 @@ with GCC (pnut-exe.sh) and then with pnut-sh.sh (pnut-exe-twice-bootstrapped.sh)
 ```shell
 # Bootstrap pnut-exe with <shell>
 # Backends available: x86_64_mac, x86_64_linux, i386_linux
-# For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'` before running the script
-./bootstrap-pnut-exe.sh --backend x86_64_linux --shell bash # Takes a few minutes
+# For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'`
+# before running the script.
+# This script takes a few minutes.
+./bootstrap-pnut-exe.sh --backend x86_64_linux --shell bash
 ```
 
 Or manually:
@@ -149,15 +154,18 @@ Or manually:
 ```shell
 make pnut-sh.sh
 # First we compile pnut-exe to pnut-exe.sh using pnut-sh.sh
-bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe.sh
+bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_x86_64_linux \
+  > build/pnut-exe.sh
 chmod +x build/pnut-exe.sh
 
 # We then use pnut-exe.sh to compile pnut-exe again, this time creating a binary
-bash ./build/pnut-exe.sh pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe.exe
+bash ./build/pnut-exe.sh pnut.c -DRELEASE_PNUT_x86_64_linux \
+  > build/pnut-exe.exe
 chmod +x build/pnut-exe.exe
 
 # Finally, we use pnut-exe to compile pnut-exe to make sure it works
-./build/pnut-exe.exe pnut.c -DRELEASE_PNUT_x86_64_linux > build/pnut-exe-twice-bootstrapped.exe
+./build/pnut-exe.exe pnut.c -DRELEASE_PNUT_x86_64_linux \
+  > build/pnut-exe-twice-bootstrapped.exe
 
 # And we check that the binaries are identical
 sha256sum build/pnut-exe.exe build/pnut-exe-twice-bootstrapped.exe
@@ -170,7 +178,7 @@ live in the `tests` directory, with `test/_sh` containing tests for pnut-sh and
 `test/_exe` containing tests for pnut-exe. To run pnut-exe's tests,
 `./run-tests.sh <backend>` can be used. -->
 
-## Running examples
+## Code samples
 
 The `examples` directory contains examples that can be compiled with pnut-sh.
 They come precompiled in the `examples/compiled` directory, but can be
@@ -216,13 +224,16 @@ exit(0) cycle = 580148
 ```
 
 ```shell
-# Invoke c4 compiler by interpreting c4.c with c4.sh
+# Invoke c4 by interpreting c4.c with c4.sh
 $ ksh examples/compiled/c4.sh examples/c4.c
-Interpret c4.c with c4.sh
 usage: c4 [-s] [-d] file ...
 exit(-1) cycle = 45
-# This can be nested indefinitely: here we interpret c4.c with c4.c interpreted with c4.sh
+# The interpreter can also be interpreted.
+# Here c4.c is interpreted with c4.c interpreted with c4.sh
 $ ksh examples/compiled/c4.sh examples/c4.c examples/c4.c
+usage: c4 [-s] [-d] file ...
+exit(-1) cycle = 45
+exit(-1) cycle = 7483170
 ```
 
 ```shell
@@ -236,7 +247,8 @@ $ ksh examples/compiled/repl.sh
 0
 > (fib 10)
 55
-> (apply + (map fib '(0 1 2 3 4 5 6 7 8 9 10))); Sum of the first 11 Fibonacci numbers
+# Sum of the first 11 Fibonacci numbers
+> (apply + (map fib '(0 1 2 3 4 5 6 7 8 9 10)))
 143
 ```
 
