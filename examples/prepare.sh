@@ -32,7 +32,6 @@ generate_executable_with() { # $1 = executable, $2 = options
     opt=""
   else
     opt=$2
-    printf "with $opt "
   fi
 
   if ./build/$1 $file $opt > $COMP_DIR/$filename.sh; then
@@ -48,14 +47,13 @@ for file in $(find examples -type f -name "*.c" | sort); do
   filename=$(basename $file .c);
   pnut_opts=$(pnut_compile_options $file)
   file_opts=$(compile_options $file)
-  echo "Compiling $filename with pnut options: $pnut_opts and file options: $file_opts"
 
   # To speed up the compilation process, we only compile pnut.exe if there are specific options
   if [ -z "$pnut_opts" ]; then
-    printf "Compiling $filename: "
+    printf "Compiling1 $filename ${file_opts:+"$file_opts "}"
     generate_executable_with "pnut-sh-base.exe" "$file_opts"
   else
-    printf "Compiling $filename with $pnut_opts: "
+    printf "Compiling2 $filename with $pnut_opts ${file_opts:+"$file_opts "}"
     # Compile pnut.exe with specific options
     gcc -o build/pnut-sh-opt.exe $PNUT_SH_OPTIONS $pnut_opts pnut.c 2> /dev/null || fail "Error: Failed to compile pnut with $pnut_opts"
     generate_executable_with "pnut-sh-opt.exe" "$file_opts"
