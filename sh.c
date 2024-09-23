@@ -144,7 +144,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 // text wrap_str(char *s) {
 //   int i = 0;
 //   int result = text_alloc;
-
+//
 //   text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
 //   text_alloc += 2;
 //   while (s[i] != 0) {
@@ -152,9 +152,9 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 //     text_alloc += 1;
 //     i += 1;
 //   }
-
+//
 //   text_pool[result + 1] = TEXT_FROM_INT(i);
-
+//
 //   return result;
 // }
 
@@ -312,10 +312,12 @@ bool main_returns = false;      // If the main function returns a value
 bool top_level_stmt = true;     // If the current statement is at the top level
 
 // Internal identifier node types. These
-int IDENTIFIER_INTERNAL = 600;
-int IDENTIFIER_STRING = 601;
-int IDENTIFIER_DOLLAR = 602;
-int IDENTIFIER_EMPTY = 603;
+enum IDENTIFIER_TYPE {
+  IDENTIFIER_INTERNAL = 600,
+  IDENTIFIER_STRING,
+  IDENTIFIER_DOLLAR,
+  IDENTIFIER_EMPTY
+};
 
 // Node type for local variable nodes
 int LOCAL_VAR = 0;
@@ -1104,10 +1106,12 @@ void comp_defstr(ast ident, int string_pool_str) {
                                 , wrap_char('\"')));
 }
 
-int RVALUE_CTX_BASE = 0;
-int RVALUE_CTX_ARITH_EXPANSION = 1; // Like base context, except that we're already in $(( ... ))
-int RVALUE_CTX_TEST = 2;
-int RVALUE_CTX_TEST_ELSEIF = 3;
+enum VALUE_CTX {
+  RVALUE_CTX_BASE,            // value is outside of $(( ... ))
+  RVALUE_CTX_ARITH_EXPANSION, // value is already in $(( ... ))
+  RVALUE_CTX_TEST,            // value is inside of a test
+  RVALUE_CTX_TEST_ELSEIF      // value is inside of a elseif test
+};
 
 text with_prefixed_side_effects(ast test_side_effects, text code) {
 
