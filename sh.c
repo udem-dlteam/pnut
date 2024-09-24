@@ -1769,9 +1769,13 @@ void comp_body(ast node) {
 
 // Return if the statement is a break or return statement, meaning that the block should be terminated.
 // A switch conditional block is considered terminated if it ends with a break or return statement.
-bool comp_switch_block_statement(ast node, bool start_in_tail_position) {
+bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_position) {
   ast statement = 0;
+  bool termination_lhs = false;
+  bool termination_rhs = false;
+
   if (get_op(node) == BREAK_KW) {
+    append_glo_decl(wrap_char(':'));
     return true;
   } else if (get_op(node) == RETURN_KW) {
     // A return marks the end of the conditional block, so it's in tail position
@@ -1779,18 +1783,50 @@ bool comp_switch_block_statement(ast node, bool start_in_tail_position) {
     comp_statement(node, false);
     return true;
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
-    fatal_error("comp_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
+    fatal_error("comp_switch_block_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
     return false;
   } else if (get_op(node) == '{') {
     statement = get_child(node, 0);
     while(statement != 0) {
-      if (comp_switch_block_statement(statement, start_in_tail_position)) {
+      if (comp_switch_block_statement(statement, false, start_in_tail_position)) {
         return true;
       }
       statement = get_child(node, 1);
     }
-    fatal_error("Compiled a switch statement block without a break.");
+    fatal_error("comp_switch_block_statement: Compiled a switch statement block without a break.");
     return false;
+  } else if (get_op(node) == IF_KW) {
+    append_glo_decl(string_concat3(
+          wrap_str_lit(else_if ? "elif " : "if "),
+          comp_rvalue(get_child(node, 0), else_if ? RVALUE_CTX_TEST_ELSEIF : RVALUE_CTX_TEST),
+          wrap_str_lit(" ; then")
+    ));
+
+    nest_level += 1;
+    if (get_child(node, 1) != 0) {
+      termination_lhs = comp_switch_block_statement(get_child(node, 1), false, start_in_tail_position); 
+    } else {
+      append_glo_decl(wrap_char(':'));
+    }
+    nest_level -= 1;
+
+    if (get_child(node, 2) != 0) {
+      // Compile sequence of if else if using elif
+      if (get_op(get_child(node, 2)) == IF_KW) {
+        termination_rhs = comp_switch_block_statement(get_child(node, 2), true, start_in_tail_position); // comp_statement with else_if == true emits elif
+      } else {
+        append_glo_decl(wrap_str_lit("else"));
+        nest_level += 1;
+        termination_rhs = comp_switch_block_statement(get_child(node, 2), false, start_in_tail_position);
+        nest_level -= 1;
+      }
+    }
+
+    if (!else_if) {
+       append_glo_decl(wrap_str_lit("fi"));
+    }
+
+    return termination_lhs && termination_rhs;
   } else {
     comp_statement(node, false);
     return false;
@@ -1850,7 +1886,7 @@ void comp_switch(ast node) {
       statement = get_child(node, 0);
       node = get_child(node, 1);
       // If we encounter a break or return statement, we stop processing the block
-      if (comp_switch_block_statement(statement, start_in_tail_position)) break;
+      if (comp_switch_block_statement(statement, false, start_in_tail_position)) break;
     }
 
     nest_level -= 1;
