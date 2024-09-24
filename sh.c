@@ -1770,7 +1770,6 @@ void comp_body(ast node) {
 // Return if the statement is a break or return statement, meaning that the block should be terminated.
 // A switch conditional block is considered terminated if it ends with a break or return statement.
 bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_position) {
-  ast statement = 0;
   bool termination_lhs = false;
   bool termination_rhs = false;
 
@@ -1785,12 +1784,11 @@ bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_posi
     fatal_error("comp_switch_block_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
     return false;
   } else if (get_op(node) == '{') {
-    statement = get_child(node, 0);
-    while(statement != 0) {
-      if (comp_switch_block_statement(statement, false, start_in_tail_position)) {
+    while(node != 0) {
+      if (comp_switch_block_statement(get_child(node, 0), false, start_in_tail_position)) {
         return true;
       }
-      statement = get_child(node, 1);
+      node = get_child(node, 1);
     }
     return false;
   } else if (get_op(node) == IF_KW) {
@@ -1833,6 +1831,10 @@ bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_posi
 
     if (!else_if) {
        append_glo_decl(wrap_str_lit("fi"));
+    }
+
+    if (termination_lhs ^ termination_rhs) {
+      fatal_error("comp_switch_block_statement: detected an early break out of a switch case, unsupported yet.");
     }
 
     return termination_lhs && termination_rhs;
