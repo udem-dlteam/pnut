@@ -1036,16 +1036,18 @@ int eval_constant(ast expr, bool if_macro) {
       op1 = eval_constant(get_child(expr, 0), if_macro);
       if (get_nb_children(expr) == 1) {
         return op == '-' ? -op1 : op1;
+      } else {
+        op2 = eval_constant(get_child(expr, 1), if_macro);
+        return op == '-' ? op1 - op2 : op1 + op2;
       }
-      op2 = eval_constant(get_child(expr, 1), if_macro);
-      return op == '-' ? op1 - op2 : op1 + op2;
 
     case '?':
       op1 = eval_constant(get_child(expr, 0), if_macro);
       if (op1) {
         return eval_constant(get_child(expr, 1), if_macro);
+      } else {
+        return eval_constant(get_child(expr, 2), if_macro);
       }
-      return eval_constant(get_child(expr, 2), if_macro);
 
     case '*':
     case '/':
@@ -1084,30 +1086,31 @@ int eval_constant(ast expr, bool if_macro) {
     case AMP_AMP:
       op1 = eval_constant(get_child(expr, 0), if_macro);
       if (!op1) return 0;
-      return eval_constant(get_child(expr, 1), if_macro);
+      else return eval_constant(get_child(expr, 1), if_macro);
 
     case BAR_BAR:
       op1 = eval_constant(get_child(expr, 0), if_macro);
       if (op1) return 1;
-      return eval_constant(get_child(expr, 1), if_macro);
+      else return eval_constant(get_child(expr, 1), if_macro);
 
     case '(': // defined operators are represented as fun calls
       if (if_macro && get_val(get_child(expr, 0)) == DEFINED_ID) {
         return get_child(expr, 1) == MACRO;
+      } else {
+        fatal_error("unknown function call in constant expressions");
+        return 0;
       }
-
-      fatal_error("unknown function call in constant expressions");
-      return 0;
 
     case IDENTIFIER:
       if (if_macro) {
         // Undefined identifiers are 0
         // At this point, macros have already been expanded so we can't have a macro identifier
         return 0;
+      } else {
+        // TODO: Enums when not not if_macro
+        fatal_error("identifiers are not allowed in constant expression");
+        return 0;
       }
-      // TODO: Enums when not not if_macro
-      fatal_error("identifiers are not allowed in constant expression");
-      return 0;
 
     default:
       putstr("op="); putint(op); putchar('\n');
