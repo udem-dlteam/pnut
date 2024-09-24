@@ -1793,7 +1793,6 @@ bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_posi
       }
       statement = get_child(node, 1);
     }
-    fatal_error("comp_switch_block_statement: Compiled a switch statement block without a break.");
     return false;
   } else if (get_op(node) == IF_KW) {
     append_glo_decl(string_concat3(
