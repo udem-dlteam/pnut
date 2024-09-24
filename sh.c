@@ -1775,7 +1775,6 @@ bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_posi
   bool termination_rhs = false;
 
   if (get_op(node) == BREAK_KW) {
-    append_glo_decl(wrap_char(':'));
     return true;
   } else if (get_op(node) == RETURN_KW) {
     // A return marks the end of the conditional block, so it's in tail position
@@ -1803,12 +1802,18 @@ bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_posi
 
     nest_level += 1;
     if (get_child(node, 1) != 0) {
-      termination_lhs = comp_switch_block_statement(get_child(node, 1), false, start_in_tail_position); 
+      if(get_op(get_child(node, 1)) == BREAK_KW) {
+        append_glo_decl(wrap_char(':'));
+        termination_lhs = true; 
+      } else {
+        termination_lhs = comp_switch_block_statement(get_child(node, 1), false, start_in_tail_position); 
+      }
     } else {
       append_glo_decl(wrap_char(':'));
     }
     nest_level -= 1;
 
+    // else
     if (get_child(node, 2) != 0) {
       // Compile sequence of if else if using elif
       if (get_op(get_child(node, 2)) == IF_KW) {
@@ -1816,7 +1821,12 @@ bool comp_switch_block_statement(ast node, bool else_if, bool start_in_tail_posi
       } else {
         append_glo_decl(wrap_str_lit("else"));
         nest_level += 1;
-        termination_rhs = comp_switch_block_statement(get_child(node, 2), false, start_in_tail_position);
+        if (get_op(get_child(node, 2)) == BREAK_KW)  {
+          append_glo_decl(wrap_char(':'));
+          termination_rhs = true;
+        } else {
+          termination_rhs = comp_switch_block_statement(get_child(node, 2), false, start_in_tail_position);
+        }
         nest_level -= 1;
       }
     }
