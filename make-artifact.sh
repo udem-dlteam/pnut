@@ -24,7 +24,8 @@ pandoc artifact.md -o "$ZIP_DIR/artifact.pdf"
 docker build . \
   -t "$DOCKER_IMAGE_TAG" \
   --build-arg PNUT_SOURCE=clone \
-  --platform linux/amd64
+  --platform linux/amd64 \
+  --no-cache
 
 # Export it
 docker save "$DOCKER_IMAGE_TAG" | gzip > "$ZIP_DIR/$DOCKER_IMAGE_TAG-image.tar.gz"
