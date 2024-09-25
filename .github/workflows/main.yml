@@ -5,6 +5,7 @@ on:
     branches:
       - '**'  # Matches all branches
 
+# Cancel previous runs if a new one is triggered
 concurrency:
   group: "${{ github.ref }}"
   cancel-in-progress: true
