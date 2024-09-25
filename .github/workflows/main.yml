@@ -5,6 +5,10 @@ on:
     branches:
       - '**'  # Matches all branches
 
+concurrency:
+  group: "${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   build-without-warnings:
     runs-on: ubuntu-latest
