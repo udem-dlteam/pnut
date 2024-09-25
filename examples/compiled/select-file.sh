@@ -175,7 +175,7 @@ _read_int() {
   let n; let c
   n=0
   while [ 1 != 0 ] ; do
-    _getchar c 
+    _getchar c
     if [ $c -ge $__0__ ] && [ $c -le $__9__ ] ; then
       n=$((((10 * n) + c) - __0__))
     else
@@ -189,20 +189,20 @@ _read_int() {
 : $((__t1 = len = ix = files = 0))
 _main() {
   let files; let ix; let len; let __t1
-  printf "Files in current directory (" 
-  _pwd __t1 
+  printf "Files in current directory ("
+  _pwd __t1
   _put_pstr __ $__t1
-  printf ")\n" 
-  _ls files 
+  printf ")\n"
+  _ls files
   _array_len len $files
   _print_array __ $files
   while [ 1 != 0 ] ; do
-    printf "Select a file to print: " 
-    _read_int ix 
+    printf "Select a file to print: "
+    _read_int ix
     if [ 0 -le $ix ] && [ $ix -lt $len ] ; then
       break
     fi
-    printf "Invalid index.\n" 
+    printf "Invalid index.\n"
   done
   _cat __ $((_$((files + ix))))
   endlet $1 __t1 len ix files

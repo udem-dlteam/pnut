@@ -1523,10 +1523,10 @@ text printf_call(char *format_str, char *format_str_end, text params_text, bool 
     return 0;
   } else {
     // Some shells interpret leading - as options. In that case, we add -- in front of the format string.
-    return string_concat4(wrap_str_lit(format_str[0] == '-' ? "printf -- \"" : "printf \""),
+    return string_concat3(wrap_str_lit(format_str[0] == '-' ? "printf -- \"" : "printf \""),
                           escape_text(wrap_str_imm(format_str, format_str_end), escape),
-                          wrap_str_lit("\" "),
-                          params_text);
+                          concatenate_strings_with(wrap_char('\"'), params_text, wrap_char(' '))
+                          );
   }
 }
 
@@ -1715,12 +1715,10 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
 
-  return string_concat5(
+  return string_concat3(
     function_name(get_val(name)),
     wrap_char(' '),
-    comp_lvalue(assign_to),
-    wrap_char(' '),
-    fun_call_params(params)
+    concatenate_strings_with(comp_lvalue(assign_to), fun_call_params(params), wrap_char(' '))
   );
 }
 

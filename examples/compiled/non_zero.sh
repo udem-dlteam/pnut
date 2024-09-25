@@ -7,16 +7,16 @@ _main() {
   let n; let __t1
   n=0
   while :; do
-    printf "Enter a non-zero single-digit number:\r\n" 
-    _getchar n 
-    while _getchar __t1 ; [ $__NEWLINE__ != $__t1 ] ; do
+    printf "Enter a non-zero single-digit number:\r\n"
+    _getchar n
+    while _getchar __t1; [ $__NEWLINE__ != $__t1 ] ; do
       :
     done
     [ $n = $__0__ ] || [ $((!((n >= __0__) && (n <= __9__)))) != 0 ]|| break
   done
-  printf "You entered " 
+  printf "You entered "
   printf \\$((n/64))$((n/8%8))$((n%8))
-  printf ": bye bye!\r\n" 
+  printf ": bye bye!\r\n"
   endlet $1 __t1 n
 }
 
