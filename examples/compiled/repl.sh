@@ -450,16 +450,16 @@ _symbol_ref() { # n: $2
   : $((__tmp = $1)) $((n = $3)) $((__t1 = $4)) $(($1 = __tmp))
 }
 
-: $((__t2 = __t1 = root = sym = list = name = 0))
+: $((__t1 = root = sym = list = name = 0))
 _create_sym() { # name: $2
-  set $@ $name $list $sym $root $__t1 $__t2
+  set $@ $name $list $sym $root $__t1
   name=$2
-  _lst_length __t2 $name
-  _alloc_rib list $name $__t2 $(((3 << 1) | 1))
+  _lst_length __t1 $name
+  _alloc_rib list $name $__t1 $(((3 << 1) | 1))
   _alloc_rib sym $_FALSE $list $(((2 << 1) | 1))
   _alloc_rib root $sym $_symbol_table $(((0 << 1) | 1))
   : $(($1 = root))
-  : $((__tmp = $1)) $((name = $3)) $((list = $4)) $((sym = $5)) $((root = $6)) $((__t1 = $7)) $((__t2 = $8)) $(($1 = __tmp))
+  : $((__tmp = $1)) $((name = $3)) $((list = $4)) $((sym = $5)) $((root = $6)) $((__t1 = $7)) $(($1 = __tmp))
 }
 
 : $((__t1 = c = accum = n = 0))
