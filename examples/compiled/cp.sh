@@ -4,9 +4,9 @@ LC_ALL=C
 
 : $((filename = 0))
 _file_error() { let filename $2
-  printf "cp: " 
+  printf "cp: "
   _put_pstr __ $filename
-  printf ": no such file or directory\n" 
+  printf ": no such file or directory\n"
   exit 1
   endlet $1 filename
 }
@@ -26,7 +26,7 @@ defarr _buffer 1024
 _main() { let argc $2; let args $3
   let src; let dst; let c; let len; let __t1
   if [ $argc != 3 ] ; then
-    printf "Usage: cp <source> <destination>\n" 
+    printf "Usage: cp <source> <destination>\n"
     : $(($1 = 1))
     endlet $1 __t1 len c dst src args argc
     return

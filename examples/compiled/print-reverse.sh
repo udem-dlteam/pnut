@@ -27,7 +27,7 @@ _main() { let argc $2; let argv_ $3
   while [ $i -lt $argc ] ; do
     _reverse_str __ $((_$((argv_ + i))))
     _put_pstr __ $i
-    printf "\n" 
+    printf "\n"
     : $((i += 1))
   done
   endlet $1 i argv_ argc

@@ -300,7 +300,7 @@ _push2() { # car: $2, tag: $3
   : $((_$(((_alloc += 1) - 1)) = (0 << 1) | 1))
   _stack=$((_alloc - 4))
   if [ $_alloc = $_alloc_limit ] ; then
-    _gc __ 
+    _gc __
   fi
   : $((__tmp = $1)) $((car = $4)) $((tag = $5)) $(($1 = __tmp))
 }
@@ -416,7 +416,7 @@ _get_byte() {
 : $((__t1 = x = 0))
 _get_code() {
   set $@ $x $__t1
-  _get_byte __t1 
+  _get_byte __t1
   x=$((__t1 - 35))
   : $(($1 = (x < 0) ? 57: x))
   : $((__tmp = $1)) $((x = $2)) $((__t1 = $3)) $(($1 = __tmp))
@@ -426,7 +426,7 @@ _get_code() {
 _get_int() { # n: $2
   set $@ $n $x
   n=$2
-  _get_code x 
+  _get_code x
   : $((n *= (92 / 2)))
   if [ $x -lt $((92 / 2)) ] ; then
     : $(($1 = n + x))
@@ -468,7 +468,7 @@ _build_sym_table() {
   done
   accum=$((_$((_FALSE + __field1))))
   while [ 1 != 0 ] ; do
-    _get_byte c 
+    _get_byte c
     if [ $c = 44 ] ; then
       _create_sym __t1 $accum
       _symbol_table=$__t1
@@ -511,7 +511,7 @@ _init_weights() {
 _decode() {
   set $@ $n $d $op $x $c $__t1
   while [ 1 != 0 ] ; do
-    _get_code x 
+    _get_code x
     n=$x
     op=-1
     while [ $n -gt $((2 + (d = _$((_weights + (op += 1)))))) ] ; do
@@ -519,7 +519,7 @@ _decode() {
     done
     if [ $x -gt 90 ] ; then
       op=4
-      _pop n 
+      _pop n
     else
       if [ $((!op)) != 0 ] ; then
         _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
@@ -542,7 +542,7 @@ _decode() {
         fi
       fi
       if [ $op -gt 4 ] ; then
-        _pop __t1 
+        _pop __t1
         _alloc_rib2 __t1 $n $(((0 << 1) | 1)) $__t1
         _alloc_rib __t1 $__t1 $((_$((_FALSE + __field1)))) $(((1 << 1) | 1))
         n=$__t1
@@ -603,19 +603,19 @@ _prim() { # no: $2
   if [ $no = 0 ] ; then
     _alloc_rib __t1 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((0 << 1) | 1))
     new_rib=$__t1
-    _pop z 
-    _pop y 
-    _pop x 
+    _pop z
+    _pop y
+    _pop x
     : $((_$((new_rib + __field0)) = x))
     : $((_$((new_rib + __field1)) = y))
     : $((_$((new_rib + __field2)) = z))
     _push2 __ $new_rib $(((0 << 1) | 1))
   elif [ $no = 1 ] ; then
-    _pop x 
+    _pop x
     _close __ $((x >> 1))
   elif [ $no = 2 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     : $((_$((buffer + 0)) = (x >> 1)))
     _write success $((y >> 1)) $buffer 1
     if [ $success != 1 ] ; then
@@ -624,7 +624,7 @@ _prim() { # no: $2
     fi
     _push2 __ $((_$((_FALSE + __field0)))) $(((0 << 1) | 1))
   elif [ $no = 3 ] ; then
-    _pop x 
+    _pop x
     _read bytes_read $((x >> 1)) $buffer 1
     if [ $((!bytes_read)) != 0 ] ; then
       _push2 __ $((_$((_FALSE + __field1)))) $(((0 << 1) | 1))
@@ -632,7 +632,7 @@ _prim() { # no: $2
       _push2 __ $(((_$((buffer + 0)) << 1) | 1)) $(((0 << 1) | 1))
     fi
   elif [ $no = 4 ] ; then
-    _pop x 
+    _pop x
     _scm2str filename $x
     _open file $filename 1
     if [ $file -lt 0 ] ; then
@@ -642,7 +642,7 @@ _prim() { # no: $2
     fi
     _free __ $filename
   elif [ $no = 5 ] ; then
-    _pop x 
+    _pop x
     _scm2str filename $x
     _open file $filename 0
     if [ $file -lt 0 ] ; then
@@ -656,8 +656,8 @@ _prim() { # no: $2
   elif [ $no = 7 ] ; then
     _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
   elif [ $no = 8 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     num_args=0
     : $((_$((_$((_FALSE + __field0)) + __field0)) = x))
     arg=$y
@@ -674,13 +674,13 @@ _prim() { # no: $2
     : $((__tmp = $1)) $((no = $3)) $((x = $4)) $((y = $5)) $((z = $6)) $((new_rib = $7)) $((arg = $8)) $((file = $9)) $((buffer = ${10})) $((success = ${11})) $((bytes_read = ${12})) $((num_args = ${13})) $((filename = ${14})) $((__t1 = ${15})) $(($1 = __tmp))
     return
   elif [ $no = 9 ] ; then
-    _pop x 
+    _pop x
     _push2 __ $x $(((0 << 1) | 1))
   elif [ $no = 10 ] ; then
-    _pop __ 
+    _pop __
   elif [ $no = 11 ] ; then
-    _pop x 
-    _pop __ 
+    _pop x
+    _pop __
     _push2 __ $x $(((0 << 1) | 1))
   elif [ $no = 12 ] ; then
     x=$((_$((_$((_stack + __field0)) + __field0))))
@@ -688,62 +688,62 @@ _prim() { # no: $2
     _alloc_rib __t1 $x $y $(((1 << 1) | 1))
     : $((_$((_stack + __field0)) = __t1))
   elif [ $no = 13 ] ; then
-    _pop x 
+    _pop x
     _bool2scm __t1 $((!(x & 1)))
     _push2 __ $__t1 $(((0 << 1) | 1))
   elif [ $no = 14 ] ; then
-    _pop x 
+    _pop x
     _push2 __ $((_$((x + __field0)))) $(((0 << 1) | 1))
   elif [ $no = 15 ] ; then
-    _pop x 
+    _pop x
     _push2 __ $((_$((x + __field1)))) $(((0 << 1) | 1))
   elif [ $no = 16 ] ; then
-    _pop x 
+    _pop x
     _push2 __ $((_$((x + __field2)))) $(((0 << 1) | 1))
   elif [ $no = 17 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _push2 __ $((_$((x + __field0)) = y)) $(((0 << 1) | 1))
   elif [ $no = 18 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _push2 __ $((_$((x + __field1)) = y)) $(((0 << 1) | 1))
   elif [ $no = 19 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _push2 __ $((_$((x + __field2)) = y)) $(((0 << 1) | 1))
   elif [ $no = 20 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _bool2scm __t1 $((x == y))
     _push2 __ $__t1 $(((0 << 1) | 1))
   elif [ $no = 21 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _bool2scm __t1 $(((x >> 1) < (y >> 1)))
     _push2 __ $__t1 $(((0 << 1) | 1))
   elif [ $no = 22 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _push2 __ $(((x + y) - 1)) $(((0 << 1) | 1))
   elif [ $no = 23 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _push2 __ $(((x - y) + 1)) $(((0 << 1) | 1))
   elif [ $no = 24 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     _push2 __ $(((((x >> 1) * (y >> 1)) << 1) | 1)) $(((0 << 1) | 1))
   elif [ $no = 25 ] ; then
-    _pop y 
-    _pop x 
+    _pop y
+    _pop x
     if [ $((y >> 1)) -lt 0 ] ; then
       _push2 __ $(((-(((x >> 1) / -((y >> 1)))) << 1) | 1)) $(((0 << 1) | 1))
     else
       _push2 __ $(((((x >> 1) / (y >> 1)) << 1) | 1)) $(((0 << 1) | 1))
     fi
   elif [ $no = 26 ] ; then
-    _pop x 
+    _pop x
     exit $((x >> 1))
   else
     exit 6
@@ -765,18 +765,18 @@ _run() {
       _get_opnd proc $((_$((_pc + __field1))))
       while [ 1 != 0 ] ; do
         if [ $((_$((proc + __field0)) & 1)) != 0 ] ; then
-          _pop __ 
+          _pop __
           _prim proc $((_$((proc + __field0)) >> 1))
           if [ $((!(proc & 1))) != 0 ] ; then
             continue
           fi
           if [ $jump != 0 ] ; then
-            _get_cont _pc 
+            _get_cont _pc
             : $((_$((_stack + __field1)) = _$((_pc + __field0))))
           fi
           _pc=$((_$((_pc + __field2))))
         else
-          _pop __t1 
+          _pop __t1
           nargs=$((__t1 >> 1))
           _alloc_rib __t1 $(((0 << 1) | 1)) $proc $(((0 << 1) | 1))
           s2=$__t1
@@ -786,7 +786,7 @@ _run() {
           nparams=$((nparams_vari >> 1))
           vari=$((nparams_vari & 1))
           if [ $((vari ? (nparams > nargs): (nparams != nargs))) != 0 ] ; then
-            printf "Unexpected number of arguments\n" 
+            printf "Unexpected number of arguments\n"
             exit 1
           fi
           : $((nargs -= nparams))
@@ -794,7 +794,7 @@ _run() {
             rest=$((_$((_FALSE + __field1))))
             i=0
             while [ $i -lt $nargs ] ; do
-              _pop __t1 
+              _pop __t1
               _alloc_rib __t1 $__t1 $rest $s2
               rest=$__t1
               s2=$((_$((rest + __field2))))
@@ -806,7 +806,7 @@ _run() {
           fi
           i=0
           while [ $i -lt $nparams ] ; do
-            _pop __t1 
+            _pop __t1
             _alloc_rib __t1 $__t1 $s2 $(((0 << 1) | 1))
             s2=$__t1
             : $((i += 1))
@@ -815,7 +815,7 @@ _run() {
           _list_tail __t1 $s2 $nparams
           c2=$__t1
           if [ $jump != 0 ] ; then
-            _get_cont k 
+            _get_cont k
             : $((_$((c2 + __field0)) = _$((k + __field0))))
             : $((_$((c2 + __field2)) = _$((k + __field2))))
           else
@@ -848,7 +848,7 @@ _run() {
       _push2 __ $((_$((_pc + __field1)))) $(((0 << 1) | 1))
       _pc=$((_$((_pc + __field2))))
     elif [ $instr = 4 ] ; then
-      _pop p 
+      _pop p
       if [ $p != $_FALSE ] ; then
         _pc=$((_$((_pc + __field1))))
       else
@@ -878,26 +878,26 @@ _setup_stack() {
 : $((__t2 = __t1 = 0))
 _init() {
   set $@ $__t1 $__t2
-  _init_weights __ 
-  _init_heap __ 
+  _init_weights __
+  _init_heap __
   _alloc_rib __t1 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((5 << 1) | 1))
   _alloc_rib __t2 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((5 << 1) | 1))
   _alloc_rib __t1 $__t1 $__t2 $(((5 << 1) | 1))
   _FALSE=$__t1
-  _build_sym_table __ 
-  _decode __ 
+  _build_sym_table __
+  _decode __
   _alloc_rib __t1 $(((0 << 1) | 1)) $_symbol_table $(((1 << 1) | 1))
   _set_global __ $__t1
   _set_global __ $_FALSE
   _set_global __ $((_$((_FALSE + __field0))))
   _set_global __ $((_$((_FALSE + __field1))))
-  _setup_stack __ 
-  _run __ 
+  _setup_stack __
+  _run __
   : $((__tmp = $1)) $((__t1 = $2)) $((__t2 = $3)) $(($1 = __tmp))
 }
 
 _main() {
-  _init __ 
+  _init __
 }
 
 # Character constants

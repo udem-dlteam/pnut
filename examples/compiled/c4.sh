@@ -155,7 +155,7 @@ _next() {
           if [ $((_$_le)) -le $_ADJ ] ; then
             printf " %d\n" $((_$((_le += 1))))
           else
-            printf "\n" 
+            printf "\n"
           fi
         done
       fi
@@ -328,38 +328,38 @@ _expr() { # lev: $2
   elif [ $_tk = $_Num ] ; then
     : $((_$((_e += 1)) = _IMM))
     : $((_$((_e += 1)) = _ival))
-    _next __ 
+    _next __
     _ty=$_INT
   elif [ $_tk = $__DQUOTE__ ] ; then
     : $((_$((_e += 1)) = _IMM))
     : $((_$((_e += 1)) = _ival))
-    _next __ 
+    _next __
     while [ $_tk = $__DQUOTE__ ] ; do
-      _next __ 
+      _next __
     done
     _data=$(((_data + 1) & -(1)))
     _ty=$_PTR
   elif [ $_tk = $_Sizeof ] ; then
-    _next __ 
+    _next __
     if [ $_tk = $__LPAREN__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: open paren expected in sizeof\n" $_line
       exit -1
     fi
     _ty=$_INT
     if [ $_tk = $_Int ] ; then
-      _next __ 
+      _next __
     elif [ $_tk = $_Char ] ; then
-      _next __ 
+      _next __
       _ty=$_CHAR
     fi
     while [ $_tk = $_Mul ] ; do
-      _next __ 
+      _next __
       _ty=$((_ty + _PTR))
     done
     if [ $_tk = $__RPAREN__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: close paren expected in sizeof\n" $_line
       exit -1
@@ -369,19 +369,19 @@ _expr() { # lev: $2
     _ty=$_INT
   elif [ $_tk = $_Id ] ; then
     d=$_id
-    _next __ 
+    _next __
     if [ $_tk = $__LPAREN__ ] ; then
-      _next __ 
+      _next __
       t=0
       while [ $_tk != $__RPAREN__ ] ; do
         _expr __ $_Assign
         : $((_$((_e += 1)) = _PSH))
         : $((t += 1))
         if [ $_tk = $__COMMA__ ] ; then
-          _next __ 
+          _next __
         fi
       done
-      _next __ 
+      _next __
       if [ $((_$((d + _Class)))) = $_Sys ] ; then
         : $((_$((_e += 1)) = _$((d + _Val))))
       elif [ $((_$((d + _Class)))) = $_Fun ] ; then
@@ -414,16 +414,16 @@ _expr() { # lev: $2
       : $((_$((_e += 1)) = ((_ty = _$((d + _Type))) == _CHAR) ? _LC: _LI))
     fi
   elif [ $_tk = $__LPAREN__ ] ; then
-    _next __ 
+    _next __
     if [ $_tk = $_Int ] || [ $_tk = $_Char ] ; then
       t=$(((_tk == _Int) ? _INT: _CHAR))
-      _next __ 
+      _next __
       while [ $_tk = $_Mul ] ; do
-        _next __ 
+        _next __
         t=$((t + _PTR))
       done
       if [ $_tk = $__RPAREN__ ] ; then
-        _next __ 
+        _next __
       else
         printf "%d: bad cast\n" $_line
         exit -1
@@ -433,14 +433,14 @@ _expr() { # lev: $2
     else
       _expr __ $_Assign
       if [ $_tk = $__RPAREN__ ] ; then
-        _next __ 
+        _next __
       else
         printf "%d: close paren expected\n" $_line
         exit -1
       fi
     fi
   elif [ $_tk = $_Mul ] ; then
-    _next __ 
+    _next __
     _expr __ $_Inc
     if [ $_ty -gt $_INT ] ; then
       _ty=$((_ty - _PTR))
@@ -450,7 +450,7 @@ _expr() { # lev: $2
     fi
     : $((_$((_e += 1)) = (_ty == _CHAR) ? _LC: _LI))
   elif [ $_tk = $_And ] ; then
-    _next __ 
+    _next __
     _expr __ $_Inc
     if [ $((_$_e)) = $_LC ] || [ $((_$_e)) = $_LI ] ; then
       : $((_e -= 1))
@@ -460,7 +460,7 @@ _expr() { # lev: $2
     fi
     _ty=$((_ty + _PTR))
   elif [ $_tk = $__EXCL__ ] ; then
-    _next __ 
+    _next __
     _expr __ $_Inc
     : $((_$((_e += 1)) = _PSH))
     : $((_$((_e += 1)) = _IMM))
@@ -468,7 +468,7 @@ _expr() { # lev: $2
     : $((_$((_e += 1)) = _EQ))
     _ty=$_INT
   elif [ $_tk = $__TILDE__ ] ; then
-    _next __ 
+    _next __
     _expr __ $_Inc
     : $((_$((_e += 1)) = _PSH))
     : $((_$((_e += 1)) = _IMM))
@@ -476,15 +476,15 @@ _expr() { # lev: $2
     : $((_$((_e += 1)) = _XOR))
     _ty=$_INT
   elif [ $_tk = $_Add ] ; then
-    _next __ 
+    _next __
     _expr __ $_Inc
     _ty=$_INT
   elif [ $_tk = $_Sub ] ; then
-    _next __ 
+    _next __
     : $((_$((_e += 1)) = _IMM))
     if [ $_tk = $_Num ] ; then
       : $((_$((_e += 1)) = -(_ival)))
-      _next __ 
+      _next __
     else
       : $((_$((_e += 1)) = -1))
       : $((_$((_e += 1)) = _PSH))
@@ -494,7 +494,7 @@ _expr() { # lev: $2
     _ty=$_INT
   elif [ $_tk = $_Inc ] || [ $_tk = $_Dec ] ; then
     t=$_tk
-    _next __ 
+    _next __
     _expr __ $_Inc
     if [ $((_$_e)) = $_LC ] ; then
       : $((_$_e = _PSH))
@@ -518,7 +518,7 @@ _expr() { # lev: $2
   while [ $_tk -ge $lev ] ; do
     t=$_ty
     if [ $_tk = $_Assign ] ; then
-      _next __ 
+      _next __
       if [ $((_$_e)) = $_LC ] || [ $((_$_e)) = $_LI ] ; then
         : $((_$_e = _PSH))
       else
@@ -528,12 +528,12 @@ _expr() { # lev: $2
       _expr __ $_Assign
       : $((_$((_e += 1)) = ((_ty = t) == _CHAR) ? _SC: _SI))
     elif [ $_tk = $_Cond ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _BZ))
       d=$((_e += 1))
       _expr __ $_Assign
       if [ $_tk = $__COLON__ ] ; then
-        _next __ 
+        _next __
       else
         printf "%d: conditional missing colon\n" $_line
         exit -1
@@ -544,87 +544,87 @@ _expr() { # lev: $2
       _expr __ $_Cond
       : $((_$d = (_e + 1)))
     elif [ $_tk = $_Lor ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _BNZ))
       d=$((_e += 1))
       _expr __ $_Lan
       : $((_$d = (_e + 1)))
       _ty=$_INT
     elif [ $_tk = $_Lan ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _BZ))
       d=$((_e += 1))
       _expr __ $_Or
       : $((_$d = (_e + 1)))
       _ty=$_INT
     elif [ $_tk = $_Or ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Xor
       : $((_$((_e += 1)) = _OR))
       _ty=$_INT
     elif [ $_tk = $_Xor ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_And
       : $((_$((_e += 1)) = _XOR))
       _ty=$_INT
     elif [ $_tk = $_And ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Eq
       : $((_$((_e += 1)) = _AND))
       _ty=$_INT
     elif [ $_tk = $_Eq ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Lt
       : $((_$((_e += 1)) = _EQ))
       _ty=$_INT
     elif [ $_tk = $_Ne ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Lt
       : $((_$((_e += 1)) = _NE))
       _ty=$_INT
     elif [ $_tk = $_Lt ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Shl
       : $((_$((_e += 1)) = _LT))
       _ty=$_INT
     elif [ $_tk = $_Gt ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Shl
       : $((_$((_e += 1)) = _GT))
       _ty=$_INT
     elif [ $_tk = $_Le ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Shl
       : $((_$((_e += 1)) = _LE))
       _ty=$_INT
     elif [ $_tk = $_Ge ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Shl
       : $((_$((_e += 1)) = _GE))
       _ty=$_INT
     elif [ $_tk = $_Shl ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Add
       : $((_$((_e += 1)) = _SHL))
       _ty=$_INT
     elif [ $_tk = $_Shr ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Add
       : $((_$((_e += 1)) = _SHR))
       _ty=$_INT
     elif [ $_tk = $_Add ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Mul
       if [ $((_ty = t)) -gt $_PTR ] ; then
@@ -635,7 +635,7 @@ _expr() { # lev: $2
       fi
       : $((_$((_e += 1)) = _ADD))
     elif [ $_tk = $_Sub ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Mul
       if [ $t -gt $_PTR ] && [ $t = $_ty ] ; then
@@ -655,19 +655,19 @@ _expr() { # lev: $2
         : $((_$((_e += 1)) = _SUB))
       fi
     elif [ $_tk = $_Mul ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Inc
       : $((_$((_e += 1)) = _MUL))
       _ty=$_INT
     elif [ $_tk = $_Div ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Inc
       : $((_$((_e += 1)) = _DIV))
       _ty=$_INT
     elif [ $_tk = $_Mod ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Inc
       : $((_$((_e += 1)) = _MOD))
@@ -692,13 +692,13 @@ _expr() { # lev: $2
       : $((_$((_e += 1)) = _IMM))
       : $((_$((_e += 1)) = (_ty > _PTR) ? 1: 1))
       : $((_$((_e += 1)) = (_tk == _Inc) ? _SUB: _ADD))
-      _next __ 
+      _next __
     elif [ $_tk = $_Brak ] ; then
-      _next __ 
+      _next __
       : $((_$((_e += 1)) = _PSH))
       _expr __ $_Assign
       if [ $_tk = $__RBRACK__ ] ; then
-        _next __ 
+        _next __
       else
         printf "%d: close bracket expected\n" $_line
         exit -1
@@ -726,77 +726,77 @@ _expr() { # lev: $2
 _stmt() {
   set $@ $a $b
   if [ $_tk = $_If ] ; then
-    _next __ 
+    _next __
     if [ $_tk = $__LPAREN__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: open paren expected\n" $_line
       exit -1
     fi
     _expr __ $_Assign
     if [ $_tk = $__RPAREN__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: close paren expected\n" $_line
       exit -1
     fi
     : $((_$((_e += 1)) = _BZ))
     b=$((_e += 1))
-    _stmt __ 
+    _stmt __
     if [ $_tk = $_Else ] ; then
       : $((_$b = (_e + 3)))
       : $((_$((_e += 1)) = _JMP))
       b=$((_e += 1))
-      _next __ 
-      _stmt __ 
+      _next __
+      _stmt __
     fi
     : $((_$b = (_e + 1)))
   elif [ $_tk = $_While ] ; then
-    _next __ 
+    _next __
     a=$((_e + 1))
     if [ $_tk = $__LPAREN__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: open paren expected\n" $_line
       exit -1
     fi
     _expr __ $_Assign
     if [ $_tk = $__RPAREN__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: close paren expected\n" $_line
       exit -1
     fi
     : $((_$((_e += 1)) = _BZ))
     b=$((_e += 1))
-    _stmt __ 
+    _stmt __
     : $((_$((_e += 1)) = _JMP))
     : $((_$((_e += 1)) = a))
     : $((_$b = (_e + 1)))
   elif [ $_tk = $_Return ] ; then
-    _next __ 
+    _next __
     if [ $_tk != $__SEMICOLON__ ] ; then
       _expr __ $_Assign
     fi
     : $((_$((_e += 1)) = _LEV))
     if [ $_tk = $__SEMICOLON__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: semicolon expected\n" $_line
       exit -1
     fi
   elif [ $_tk = $__LBRACE__ ] ; then
-    _next __ 
+    _next __
     while [ $_tk != $__RBRACE__ ] ; do
-      _stmt __ 
+      _stmt __
     done
-    _next __ 
+    _next __
   elif [ $_tk = $__SEMICOLON__ ] ; then
-    _next __ 
+    _next __
   else
     _expr __ $_Assign
     if [ $_tk = $__SEMICOLON__ ] ; then
-      _next __ 
+      _next __
     else
       printf "%d: semicolon expected\n" $_line
       exit -1
@@ -823,15 +823,15 @@ _main() { # argc: $2, argv: $3
     : $((argv_ += 1))
   fi
   if [ $argc -lt 1 ] ; then
-    printf "usage: c4 [-s] [-d] file ...\n" 
+    printf "usage: c4 [-s] [-d] file ...\n"
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
   if _open __t1 $((_$argv_)) 0; [ $((fd = __t1)) -lt 0 ] ; then
-    printf "could not open(" 
+    printf "could not open("
     _put_pstr __ $((_$argv_))
-    printf ")\n" 
+    printf ")\n"
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
@@ -865,19 +865,19 @@ _main() { # argc: $2, argv: $3
   _p=$__str_1
   i=$_Char
   while [ $i -le $_While ] ; do
-    _next __ 
+    _next __
     : $((_$((_id + _Tk)) = (i += 1) - 1))
   done
   i=$_OPEN
   while [ $i -le $_EXIT ] ; do
-    _next __ 
+    _next __
     : $((_$((_id + _Class)) = _Sys))
     : $((_$((_id + _Type)) = _INT))
     : $((_$((_id + _Val)) = (i += 1) - 1))
   done
-  _next __ 
+  _next __
   : $((_$((_id + _Tk)) = _Char))
-  _next __ 
+  _next __
   idmain=$_id
   if _malloc __t1 $poolsz; [ $((!(_lp = _p = __t1))) != 0 ] ; then
     printf "could not malloc(%d) source area\n" $poolsz
@@ -894,21 +894,21 @@ _main() { # argc: $2, argv: $3
   : $((_$((_p + i)) = 0))
   _close __ $fd
   _line=1
-  _next __ 
+  _next __
   while [ $_tk != 0 ] ; do
     bt=$_INT
     if [ $_tk = $_Int ] ; then
-      _next __ 
+      _next __
     elif [ $_tk = $_Char ] ; then
-      _next __ 
+      _next __
       bt=$_CHAR
     elif [ $_tk = $_Enum ] ; then
-      _next __ 
+      _next __
       if [ $_tk != $__LBRACE__ ] ; then
-        _next __ 
+        _next __
       fi
       if [ $_tk = $__LBRACE__ ] ; then
-        _next __ 
+        _next __
         i=0
         while [ $_tk != $__RBRACE__ ] ; do
           if [ $_tk != $_Id ] ; then
@@ -917,9 +917,9 @@ _main() { # argc: $2, argv: $3
             : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
             return
           fi
-          _next __ 
+          _next __
           if [ $_tk = $_Assign ] ; then
-            _next __ 
+            _next __
             if [ $_tk != $_Num ] ; then
               printf "%d: bad enum initializer\n" $_line
               : $(($1 = -1))
@@ -927,22 +927,22 @@ _main() { # argc: $2, argv: $3
               return
             fi
             i=$_ival
-            _next __ 
+            _next __
           fi
           : $((_$((_id + _Class)) = _Num))
           : $((_$((_id + _Type)) = _INT))
           : $((_$((_id + _Val)) = (i += 1) - 1))
           if [ $_tk = $__COMMA__ ] ; then
-            _next __ 
+            _next __
           fi
         done
-        _next __ 
+        _next __
       fi
     fi
     while [ $_tk != $__SEMICOLON__ ] && [ $_tk != $__RBRACE__ ] ; do
       ty=$bt
       while [ $_tk = $_Mul ] ; do
-        _next __ 
+        _next __
         ty=$((ty + _PTR))
       done
       if [ $_tk != $_Id ] ; then
@@ -957,23 +957,23 @@ _main() { # argc: $2, argv: $3
         : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
         return
       fi
-      _next __ 
+      _next __
       : $((_$((_id + _Type)) = ty))
       if [ $_tk = $__LPAREN__ ] ; then
         : $((_$((_id + _Class)) = _Fun))
         : $((_$((_id + _Val)) = (_e + 1)))
-        _next __ 
+        _next __
         i=0
         while [ $_tk != $__RPAREN__ ] ; do
           ty=$_INT
           if [ $_tk = $_Int ] ; then
-            _next __ 
+            _next __
           elif [ $_tk = $_Char ] ; then
-            _next __ 
+            _next __
             ty=$_CHAR
           fi
           while [ $_tk = $_Mul ] ; do
-            _next __ 
+            _next __
             ty=$((ty + _PTR))
           done
           if [ $_tk != $_Id ] ; then
@@ -994,12 +994,12 @@ _main() { # argc: $2, argv: $3
           : $((_$((_id + _Type)) = ty))
           : $((_$((_id + _HVal)) = _$((_id + _Val))))
           : $((_$((_id + _Val)) = (i += 1) - 1))
-          _next __ 
+          _next __
           if [ $_tk = $__COMMA__ ] ; then
-            _next __ 
+            _next __
           fi
         done
-        _next __ 
+        _next __
         if [ $_tk != $__LBRACE__ ] ; then
           printf "%d: bad function definition\n" $_line
           : $(($1 = -1))
@@ -1007,14 +1007,14 @@ _main() { # argc: $2, argv: $3
           return
         fi
         _loc=$((i += 1))
-        _next __ 
+        _next __
         while [ $_tk = $_Int ] || [ $_tk = $_Char ] ; do
           bt=$(((_tk == _Int) ? _INT: _CHAR))
-          _next __ 
+          _next __
           while [ $_tk != $__SEMICOLON__ ] ; do
             ty=$bt
             while [ $_tk = $_Mul ] ; do
-              _next __ 
+              _next __
               ty=$((ty + _PTR))
             done
             if [ $_tk != $_Id ] ; then
@@ -1035,17 +1035,17 @@ _main() { # argc: $2, argv: $3
             : $((_$((_id + _Type)) = ty))
             : $((_$((_id + _HVal)) = _$((_id + _Val))))
             : $((_$((_id + _Val)) = i += 1))
-            _next __ 
+            _next __
             if [ $_tk = $__COMMA__ ] ; then
-              _next __ 
+              _next __
             fi
           done
-          _next __ 
+          _next __
         done
         : $((_$((_e += 1)) = _ENT))
         : $((_$((_e += 1)) = i - _loc))
         while [ $_tk != $__RBRACE__ ] ; do
-          _stmt __ 
+          _stmt __
         done
         : $((_$((_e += 1)) = _LEV))
         _id=$_sym
@@ -1063,13 +1063,13 @@ _main() { # argc: $2, argv: $3
         _data=$((_data + 1))
       fi
       if [ $_tk = $__COMMA__ ] ; then
-        _next __ 
+        _next __
       fi
     done
-    _next __ 
+    _next __
   done
   if [ $((!(pc = _$((idmain + _Val))))) != 0 ] ; then
-    printf "main() not defined\n" 
+    printf "main() not defined\n"
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
@@ -1096,7 +1096,7 @@ _main() { # argc: $2, argv: $3
       if [ $i -le $_ADJ ] ; then
         printf " %d\n" $((_$pc))
       else
-        printf "\n" 
+        printf "\n"
       fi
     fi
     if [ $i = $_LEA ] ; then

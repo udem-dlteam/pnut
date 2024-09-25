@@ -161,8 +161,8 @@ _hex() { let byte $2
 _process_file() { let filename $2
   let i; let fd; let n; let h
   n=64
-  _sha256_setup __ 
-  _sha256_init __ 
+  _sha256_setup __
+  _sha256_init __
   _open fd $filename 0
   while [ $n = 64 ] ; do
     _read n $fd $_buf 64

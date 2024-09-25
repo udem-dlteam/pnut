@@ -7,14 +7,14 @@ _main() {
   let name; let i; let __t1
   _malloc name 100
   i=0
-  printf "What is your name?\n" 
-  while { _getchar __t1 ; [ $((_$((name + i)) = __t1)) != -1 ]; } && [ $((_$((name + i)))) != $__NEWLINE__ ] ; do
+  printf "What is your name?\n"
+  while { _getchar __t1; [ $((_$((name + i)) = __t1)) != -1 ]; } && [ $((_$((name + i)))) != $__NEWLINE__ ] ; do
     : $((i += 1))
   done
   : $((_$((name + i)) = __NUL__))
-  printf "Hello, " 
+  printf "Hello, "
   _put_pstr __ $name
-  printf "\n" 
+  printf "\n"
   endlet $1 __t1 i name
 }
 
