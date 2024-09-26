@@ -1806,7 +1806,7 @@ bool comp_switch_block_statement(ast node, int statements_in_block, bool else_if
 
     nest_level += 1;
     if (get_child(node, 1) != 0) {
-      termination_lhs = comp_switch_block_statement(get_child(node, 1), 0, false, start_in_tail_position); 
+      termination_lhs = comp_switch_block_statement(get_child(node, 1), 0, false, start_in_tail_position);
     } else {
       append_glo_decl(wrap_char(':'));
     }

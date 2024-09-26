@@ -2,7 +2,7 @@
 
 int factorial(int num) {
   int ret = 1;
-  
+
   do {
     ret *= num;
     num--;
