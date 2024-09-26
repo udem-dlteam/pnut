@@ -2,18 +2,18 @@
 #include "exe.c"
 
 #ifdef target_i386_linux
-	#include "elf.c"
-	const int word_size = 4; // generating for i386 Linux
+  #include "elf.c"
+  const int word_size = 4; // generating for i386 Linux
 #endif
 
 #ifdef target_x86_64_linux
-	#include "elf.c"
-	const int word_size = 8; // generating for x86-64 Linux
+  #include "elf.c"
+  const int word_size = 8; // generating for x86-64 Linux
 #endif
 
 #ifdef target_x86_64_mac
-	#include "mach-o.c"
-	const int word_size = 8; // generating for x86-64 Linux
+  #include "mach-o.c"
+  const int word_size = 8; // generating for x86-64 Linux
 #endif
 
 
@@ -574,25 +574,25 @@ void os_close() {
 
 // Both x86_64_linux and x86_64_mac use the System V ABI, the difference is in the system calls.
 #ifdef target_x86_64_linux
-	#define SYSTEM_V_ABI
-	#define SYS_READ 0
-	#define SYS_WRITE 1
-	#define SYS_OPEN 2
-	#define SYS_CLOSE 3
-	#define SYS_MMAP_MAP_TYPE 0x22
-	#define SYS_MMAP 9
-	#define SYS_EXIT 60
+  #define SYSTEM_V_ABI
+  #define SYS_READ 0
+  #define SYS_WRITE 1
+  #define SYS_OPEN 2
+  #define SYS_CLOSE 3
+  #define SYS_MMAP_MAP_TYPE 0x22
+  #define SYS_MMAP 9
+  #define SYS_EXIT 60
 #endif
 
 #ifdef target_x86_64_mac
-	#define SYSTEM_V_ABI
-	#define SYS_READ 0x2000003
-	#define SYS_WRITE 0x2000004
-	#define SYS_OPEN 0x2000005
-	#define SYS_CLOSE 0x2000006
-	#define SYS_MMAP_MAP_TYPE 0x1020
-	#define SYS_MMAP 0x20000C5
-	#define SYS_EXIT 0x2000001
+  #define SYSTEM_V_ABI
+  #define SYS_READ 0x2000003
+  #define SYS_WRITE 0x2000004
+  #define SYS_OPEN 0x2000005
+  #define SYS_CLOSE 0x2000006
+  #define SYS_MMAP_MAP_TYPE 0x1020
+  #define SYS_MMAP 0x20000C5
+  #define SYS_EXIT 0x2000001
 #endif
 
 

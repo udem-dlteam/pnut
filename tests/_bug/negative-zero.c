@@ -9,10 +9,10 @@ int return0() {
 }
 
 void putstring(char *s) {
-	while (*s) {
-		putchar(*s);
-		s = s + 1;
-	}
+  while (*s) {
+    putchar(*s);
+    s = s + 1;
+  }
 }
 
 void main() {

@@ -29,12 +29,12 @@ int arr[1000000];
 char c = 0;
 
 int main(int argc, char **argv) {
-	int i;
-	putint(argc);
-	putstr("\n");
-	for (i = 1; i < argc; ++i) {
-		putstr(argv[i]);
-		putstr("\n");
-	}
-	return 0;
+  int i;
+  putint(argc);
+  putstr("\n");
+  for (i = 1; i < argc; ++i) {
+    putstr(argv[i]);
+    putstr("\n");
+  }
+  return 0;
 }
