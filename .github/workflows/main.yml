@@ -37,6 +37,33 @@ jobs:
           clang-14 -Wall -Werror pnut.c -Dtarget_x86_64_linux
           clang-14 -Wall -Werror pnut.c -Dtarget_i386_linux
 
+  catch-bad-whitespace:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check for trailing whitespace and tab characters
+        run: |
+          set -e
+          check_dir() { # $1 is the file extension, $2 is the directory and $3 the max depth to check
+            result=$(find $2 -maxdepth ${3:-1000} -name "$1" -type f -exec egrep -l " +$" {} \;)
+            if [ -n "$result" ]; then
+              echo "Trailing whitespace found in the following files:"
+              echo "$result"
+              exit 1
+            fi
+
+            result=$(find $2 -maxdepth ${3:-1000} -name "$1" -type f -exec egrep -l "$(printf '\t')" {} \;)
+            if [ -n "$result" ]; then
+              echo "Tab characters found in the following files:"
+              echo "$result"
+              exit 1
+            fi
+          }
+          check_dir "*.c" . 1    # Check pnut source files
+          check_dir "*.c" tests  # and the tests directory recursively
+
   tests-exe: # Run tests for pnut-exe on all supported platforms and architectures
     strategy:
       matrix:
