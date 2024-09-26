@@ -61,8 +61,10 @@ jobs:
               exit 1
             fi
           }
-          check_dir "*.c" . 1    # Check pnut source files
-          check_dir "*.c" tests  # and the tests directory recursively
+
+          check_dir "*.c" . 1         # Check pnut source files
+          check_dir "*.c" tests       # and the tests directory recursively
+          check_dir "*.c" examples 1  # and examples
 
   tests-exe: # Run tests for pnut-exe on all supported platforms and architectures
     strategy:
