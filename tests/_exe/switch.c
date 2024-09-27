@@ -1,4 +1,20 @@
-void simpleSwitch(){
+#include <stdio.h>
+
+void empty_switch() {
+  switch (1) {
+    // Nothing
+  }
+}
+
+void no_case_switch() {
+  switch (1) {
+    putchar('A');
+    putchar('B');
+    putchar('C');
+  }
+}
+
+void basic_switch(){
   int a = 2;
 
   switch (a) {
@@ -17,8 +33,8 @@ void simpleSwitch(){
   }
 }
 
-void complexSwitch(){
-  int a = 3;
+void no_default_break_switch(){
+  int a = 2;
 
   switch (a) {
     case 1:
@@ -29,17 +45,53 @@ void complexSwitch(){
       break;
     case 3:
       putchar('C');
-      goto skip_default;
+      break;
+    default:
+      putchar('D');
+      // break;
+  }
+}
+
+void no_default_switch(){
+  int a = 2;
+
+  switch (a) {
+    case 1:
+      putchar('A');
+      break;
+    case 2:
+      putchar('B');
+      break;
+    case 3:
+      putchar('C');
+      break;
+  }
+}
+
+void goto_switch(int a){
+
+  switch (a) {
+    case 1:
+      putchar('A');
+      break;
+    case 2:
+      putchar('B');
+      break;
+    case 3:
+      putchar('C');
+      goto end;
     default:
       putchar('D');
       break;
   }
 
-  skip_default:
+  return;
+
+  end:
   putchar('E');
 }
 
-void complex2Switch(){
+void gotos_switch(){
   int a = 0;
 
   start:
@@ -60,11 +112,13 @@ void complex2Switch(){
       break;
   }
 
+  return;
+
   end:
   putchar('E');
 }
 
-void switchWhile(){
+void switch_while(){
   int i = 0;
 
   while (i < 5) {
@@ -89,10 +143,82 @@ void switchWhile(){
   }
 }
 
+void nested_switch() {
+  int a = 2;
+  int b = 3;
+
+  switch (a) {
+    case 1:
+      putchar('A');
+      break;
+    case 2:
+      switch (b) {
+        case 1:
+          putchar('B');
+          break;
+        case 2:
+          putchar('C');
+          break;
+        case 3:
+          putchar('D');
+          break;
+        default:
+          putchar('E');
+          break;
+      }
+      putchar('T');
+      break;
+    case 3:
+      putchar('F');
+      break;
+    default:
+      putchar('G');
+      break;
+  }
+}
+
+void duff_device_switch(int n) {
+  int count = (n + 7) / 8;
+  switch (n % 8) {
+    case 0: do { putchar('A');
+    case 7:      putchar('B');
+    case 6:      putchar('C');
+    case 5:      putchar('D');
+    case 4:      putchar('E');
+    case 3:      putchar('F');
+    case 2:      putchar('G');
+    case 1:      putchar('H');
+              } while (--count > 0);
+  }
+}
+
+int state = 0;
+int i;
+void state_machine_switch() {
+  switch (state) {
+    case 0:
+      for (i = 0; i < 10; i++) {
+          state = 1; // Next call will start at case 1
+          putchar('A');
+          return;
+          case 1: putchar('B');
+      }
+  }
+}
+
 int main() {
-  simpleSwitch();
-  complexSwitch();
-  complex2Switch();
-  switchWhile();
+  empty_switch();             putchar('\n');
+  no_case_switch();           putchar('\n');
+  basic_switch();             putchar('\n');
+  no_default_break_switch();  putchar('\n');
+  no_default_switch();        putchar('\n');
+  goto_switch(1);             putchar('\n');
+  goto_switch(3);             putchar('\n');
+  gotos_switch();             putchar('\n');
+  switch_while();             putchar('\n');
+  nested_switch();            putchar('\n');
+  duff_device_switch(15);     putchar('\n');
+  state_machine_switch();
+  state_machine_switch();     putchar('\n');
   return 0;
 }
