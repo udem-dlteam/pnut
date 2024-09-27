@@ -66,6 +66,22 @@ void write_i32_le(int n) {
   write_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
+int cgc_fs = 0;
+// Function bindings that follows lexical scoping rules
+int cgc_locals = 0;
+// Like cgc_locals, but with 1 scope for the entire function. Used for goto labels
+int cgc_locals_fun = 0;
+// Global bindings
+int cgc_globals = 0;
+// Bump allocator used to allocate static objects
+int cgc_global_alloc = 0;
+// If the main function returns a value
+bool main_returns = false;
+
+void grow_fs(int words) {
+  cgc_fs += words;
+}
+
 const int char_width = 1;
 
 const int reg_X;
@@ -100,6 +116,13 @@ void jump(int lbl);
 void jump_rel(int offset);
 void call(int lbl);
 void ret();
+
+void dup(int reg) {
+  pop_reg(reg);
+  push_reg(reg);
+  push_reg(reg);
+  grow_fs(1);
+}
 
 void load_mem_location(int dst, int base, int offset, int width) {
   if (width == 1) {
@@ -259,22 +282,6 @@ int read_lbl;
 int write_lbl;
 int open_lbl;
 int close_lbl;
-
-int cgc_fs = 0;
-// Function bindings that follows lexical scoping rules
-int cgc_locals = 0;
-// Like cgc_locals, but with 1 scope for the entire function. Used for goto labels
-int cgc_locals_fun = 0;
-// Global bindings
-int cgc_globals = 0;
-// Bump allocator used to allocate static objects
-int cgc_global_alloc = 0;
-// If the main function returns a value
-bool main_returns = false;
-
-void grow_fs(int words) {
-  cgc_fs += words;
-}
 
 int round_up_to_word_size(int n) {
   return (n + word_size - 1) / word_size * word_size;
