@@ -1758,14 +1758,13 @@ void comp_body(ast node) {
   in_tail_position = false;
   in_block_head_position = true;
 
-  if (node != 0) {
-    while (get_op(node) == '{') {
+
+  while (node != 0) {
       // Last statement of body is in tail position if the body itself is in tail position
       if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
       comp_statement(get_child(node, 0), false);
       node = get_child(node, 1);
       in_block_head_position = false;
-    }
   }
 }
 
