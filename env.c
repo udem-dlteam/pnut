@@ -1,7 +1,7 @@
 int cgc_fs = 0;
 // Function bindings that follows lexical scoping rules
 int cgc_locals = 0;
-// Like cgc_locals, but with 1 scope for the entire function. Used for goto labels
+// Like cgc_locals, but with 1 scope for the entire function
 int cgc_locals_fun = 0;
 // Global bindings
 int cgc_globals = 0;
@@ -26,32 +26,29 @@ enum BINDING {
   BINDING_TYPE_ENUM,
 };
 
-void cgc_add_local_param(int ident, int size, ast type) {
+int cgc_add_local(enum BINDING binding_type, int ident, int size, ast type) {
   int binding = alloc_obj(6);
   heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_PARAM_LOCAL;
+  heap[binding+1] = binding_type;
   heap[binding+2] = ident;
   heap[binding+3] = size;
   heap[binding+4] = cgc_fs;
   heap[binding+5] = type;
+  return binding;
+}
+
+void cgc_add_local_param(int ident, int size, ast type) {
+  cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, size, type);
 #ifdef sh
   cgc_fs += size;
 #else
   cgc_fs -= size;
 #endif
-  cgc_locals = binding;
 }
 
-void cgc_add_local(int ident, int size, ast type) {
-  int binding = alloc_obj(6);
+void cgc_add_local_var(int ident, int size, ast type) {
   cgc_fs += size;
-  heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_VAR_LOCAL;
-  heap[binding+2] = ident;
-  heap[binding+3] = size;
-  heap[binding+4] = cgc_fs;
-  heap[binding+5] = type;
-  cgc_locals = binding;
+  cgc_locals = cgc_add_local(BINDING_VAR_LOCAL, ident, size, type);
 }
 
 void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {

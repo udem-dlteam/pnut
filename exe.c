@@ -1549,7 +1549,7 @@ void codegen_body(ast node) {
 
             size = 1;
           }
-          cgc_add_local(name, size, type);
+          cgc_add_local_var(name, size, type);
           decls = get_child(decls, 1); // Move to the next declaration in the list
         }
 
