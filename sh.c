@@ -293,7 +293,6 @@ text glo_decls[GLO_DECL_SIZE];  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
 int in_tail_position = false;   // Is the current statement in tail position?
-int in_block_head_position = false;  // Is the current statement in head position for the current block?
 int loop_nesting_level = 0;     // Number of loops surrounding the current statement
 int loop_end_actions_start = 0; // Start position of declarations for the last action in a for loop
 int loop_end_actions_end = 0;   // End position of declarations for the last action in a for loop
@@ -343,17 +342,17 @@ void append_glo_decl(text decl) {
 }
 
 int append_glo_decl_fixup() {
-  glo_decls[glo_decl_ix] = nest_level;
+  glo_decls[glo_decl_ix] = -nest_level; // Negative value to indicate that it's a fixup
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
-  glo_decls[glo_decl_ix + 2] = -1;
+  glo_decls[glo_decl_ix + 2] = 0;
   glo_decl_ix += 3;
   return glo_decl_ix - 3;
 }
 
 void fixup_glo_decl(int fixup_ix, text decl) {
-  if (glo_decls[fixup_ix + 2] != -1)
-    fatal_error("fixup_glo_decl: invalid fixup");
+  if (glo_decls[fixup_ix] >= 0) fatal_error("fixup_glo_decl: invalid fixup");
 
+  glo_decls[fixup_ix] = -glo_decls[fixup_ix]; // Make nest level positive
   glo_decls[fixup_ix + 2] = decl;
 }
 
@@ -369,6 +368,16 @@ void undo_glo_decls(int start) {
     glo_decls[start + 1] -= 1; // To support nested undone declarations
     start += 3;
   }
+}
+
+// Check if there are any active and non-empty declarations since the start index.
+// This is used to determine if a ':' statement must be added to the current block.
+bool any_active_glo_decls(int start) {
+  while (start < glo_decl_ix) {
+    if (glo_decls[start + 1] && glo_decls[start + 2] != 0) return true;
+    start += 3;
+  }
+  return false;
 }
 
 // Replay the declarations betwee start and end. Replayed declarations must first
@@ -1756,15 +1765,12 @@ void comp_assignment(ast lhs, ast rhs) {
 void comp_body(ast node) {
   int start_in_tail_position = in_tail_position;
   in_tail_position = false;
-  in_block_head_position = true;
-
 
   while (node != 0) {
-      // Last statement of body is in tail position if the body itself is in tail position
-      if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
-      comp_statement(get_child(node, 0), false);
-      node = get_child(node, 1);
-      in_block_head_position = false;
+    // Last statement of body is in tail position if the body itself is in tail position
+    if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
+    comp_statement(get_child(node, 0), false);
+    node = get_child(node, 1);
   }
 }
 
@@ -1904,6 +1910,8 @@ void comp_switch(ast node) {
 }
 
 void comp_if(ast node, bool else_if) {
+  int start_glo_decl_idx;
+
   append_glo_decl(string_concat3(
           wrap_str_lit(else_if ? "elif " : "if "),
           comp_rvalue(get_child(node, 0), else_if ? RVALUE_CTX_TEST_ELSEIF : RVALUE_CTX_TEST),
@@ -1911,8 +1919,10 @@ void comp_if(ast node, bool else_if) {
         ));
 
   nest_level += 1;
-  if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
-  else { append_glo_decl(wrap_char(':')); }
+  start_glo_decl_idx = glo_decl_ix;
+  comp_statement(get_child(node, 1), false);
+  // ifs cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
   nest_level -= 1;
 
   if (get_child(node, 2) != 0) {
@@ -1922,7 +1932,9 @@ void comp_if(ast node, bool else_if) {
     } else {
       append_glo_decl(wrap_str_lit("else"));
       nest_level += 1;
+      start_glo_decl_idx = glo_decl_ix;
       comp_statement(get_child(node, 2), false);
+      if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
       nest_level -= 1;
     }
   }
@@ -1937,6 +1949,7 @@ void comp_loop(text cond, ast body, ast loop_end_stmt, text last_line) {
   // Save loop end actions from possible outer loop
   int start_loop_end_actions_start = loop_end_actions_start;
   int start_loop_end_actions_end = loop_end_actions_end;
+  int start_glo_decl_idx;
 
   // This is a little bit of a hack, but it makes things so much simpler.
   // Because we need to capture the code for the end of loop actions
@@ -1955,14 +1968,12 @@ void comp_loop(text cond, ast body, ast loop_end_stmt, text last_line) {
   append_glo_decl(string_concat3(wrap_str_lit("while "), cond ? cond : wrap_char(':'), wrap_str_lit("; do")));
   loop_nesting_level += 1;
   nest_level += 1;
-  if (body != 0) {
-    comp_statement(body, false);
-  } else if (last_line == 0 && loop_end_stmt == 0) {
-    // We can't generate empty loops, so we add a no-op statement
-    append_glo_decl(wrap_char(':'));
-  }
+  start_glo_decl_idx = glo_decl_ix;
+  comp_statement(body, false);
   append_glo_decl(last_line);
   replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
+  // while loops cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
   nest_level -= 1;
   loop_nesting_level -= 1;
   append_glo_decl(wrap_str_lit("done"));
@@ -2033,8 +2044,6 @@ void comp_statement(ast node, int else_if) {
     }
     if (in_tail_position && loop_nesting_level == 1) {
       append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
-    } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
-      append_glo_decl(wrap_char(':')); // Block only contains a return statement so it's not empty
     } else if (!in_tail_position || loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str_lit("return"));
@@ -2058,8 +2067,6 @@ void comp_statement(ast node, int else_if) {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str_lit(": "), str));
-    } else if (in_block_head_position && in_tail_position) {
-      append_glo_decl(wrap_char(':')); // Block only contains this statement so we have to make sure it's not empty
     }
   }
 }
@@ -2177,6 +2184,7 @@ void comp_glo_fun_decl(ast node) {
   int params_ix;
   ast decls, vars, var;
   int save_loc_vars_fixup;
+  int start_glo_decl_idx;
 
   if (body == -1) return; // ignore forward declarations
 
@@ -2230,6 +2238,7 @@ void comp_glo_fun_decl(ast node) {
 
   in_tail_position = true;
   nest_level += 1;
+  start_glo_decl_idx = glo_decl_ix;
 
   save_loc_vars_fixup = append_glo_decl_fixup(); // Fixup is done after compiling body
 
@@ -2270,11 +2279,9 @@ void comp_glo_fun_decl(ast node) {
     local_vars = get_child(local_vars, 1);
   }
 
-  if (body == 0) {
-    append_glo_decl(wrap_char(':')); // Empty function
-  } else {
-    comp_body(body);
-  }
+  comp_body(body);
+  // functions cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
   append_glo_decl(restore_local_vars(params_ix - 1));
 
