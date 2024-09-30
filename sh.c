@@ -2109,6 +2109,8 @@ void mark_mutable_variables_statement(ast node) {
   int op = get_op(node);
   ast params;
 
+  if (node == 0) return;
+
   if (op == IF_KW) {
     mark_mutable_variables_statement(get_child(node, 0));
     if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
