@@ -1436,16 +1436,16 @@ _free() { # $2 = object to free
 _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
-  while [ $((_$__addr)) != 0 ]; do
-    printf \\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))
+  while [ $((__c = _$__addr)) != 0 ]; do
+    printf \\$((__c/64))$((__c/8%8))$((__c%8))
     : $((__addr += 1))
   done
 }
 
 read_int() {
   __int=
-  while [ $((_$__fmt_ptr)) != 0 ] && [ $((_$__fmt_ptr)) -ge 48 ] && [ $((_$__fmt_ptr)) -le 57 ]; do
-    __int="$__int$((_$__fmt_ptr - 48))"
+  while [ $((__c = _$__fmt_ptr)) != 0 ] && [ $__c -ge 48 ] && [ $__c -le 57 ]; do
+    __int="$__int$((__c - 48))"
     : $((__fmt_ptr += 1))
   done
 }
@@ -1476,8 +1476,7 @@ _printf() { # $1 = printf format string, $2... = printf args
   __fmt_ptr=$1; shift
   __mod_start=0
   printf_reset
-  while [ "$((_$__fmt_ptr))" != 0 ] ; do
-    __head=$((_$__fmt_ptr))
+  while [ "$((__head = _$__fmt_ptr))" != 0 ] ; do
     __fmt_ptr=$((__fmt_ptr + 1))
     if [ $__mod -eq 1 ] ; then
       __char=$(printf "\\$(($__head/64))$(($__head/8%8))$(($__head%8))")
