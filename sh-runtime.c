@@ -539,11 +539,11 @@ DEPENDS_ON(putchar)
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
-  putstr("  while [ $((_$__addr)) != 0 ]; do\n");
+  putstr("  while [ $((__c = _$__addr)) != 0 ]; do\n");
 #ifdef RT_INLINE_PUTCHAR
-  putstr("    printf \\\\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))\n");
+  putstr("    printf \\\\$((__c/64))$((__c/8%8))$((__c%8))\n");
 #else
-  putstr("    _putchar __ $((_$__addr))\n");
+  putstr("    _putchar __ $__c\n");
 #endif
   putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
@@ -556,8 +556,8 @@ DEFINE_RUNTIME_FUN(printf)
 DEPENDS_ON(put_pstr)
   putstr("read_int() {\n");
   putstr("  __int=\n");
-  putstr("  while [ $((_$__fmt_ptr)) != 0 ] && [ $((_$__fmt_ptr)) -ge 48 ] && [ $((_$__fmt_ptr)) -le 57 ]; do\n");
-  putstr("    __int=\"$__int$((_$__fmt_ptr - 48))\"\n");
+  putstr("  while [ $((__c = _$__fmt_ptr)) != 0 ] && [ $__c -ge 48 ] && [ $__c -le 57 ]; do\n");
+  putstr("    __int=\"$__int$((__c - 48))\"\n");
   putstr("    : $((__fmt_ptr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
@@ -588,8 +588,7 @@ DEPENDS_ON(put_pstr)
   putstr("  __fmt_ptr=$1; shift\n");
   putstr("  __mod_start=0\n");
   putstr("  printf_reset\n");
-  putstr("  while [ \"$((_$__fmt_ptr))\" != 0 ] ; do\n");
-  putstr("    __head=$((_$__fmt_ptr))\n");
+  putstr("  while [ \"$((__head = _$__fmt_ptr))\" != 0 ] ; do\n");
   putstr("    __fmt_ptr=$((__fmt_ptr + 1))\n");
   putstr("    if [ $__mod -eq 1 ] ; then\n");
   call_int_to_char("      ", "$__head")
