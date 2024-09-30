@@ -246,8 +246,8 @@ _getchar() {
 _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
-  while [ $((_$__addr)) != 0 ]; do
-    printf \\$((_$__addr/64))$((_$__addr/8%8))$((_$__addr%8))
+  while [ $((__c = _$__addr)) != 0 ]; do
+    printf \\$((__c/64))$((__c/8%8))$((__c%8))
     : $((__addr += 1))
   done
 }
