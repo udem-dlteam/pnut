@@ -74,7 +74,7 @@ _codes=$__str_0
 : $((b3 = b2 = b1 = 0))
 _encode() {
   let b1; let b2; let b3
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     _getchar b1
     if [ $b1 -lt 0 ] ; then
       break
@@ -107,7 +107,7 @@ defarr _lut 256
 : $((__t1 = c = 0))
 _get() {
   let c; let __t1
-  while _getchar __t1; [ $((c = __t1)) -ge 0 ] ; do
+  while _getchar __t1; [ $((c = __t1)) -ge 0 ]; do
     if [ $((c = _$((_lut + c)))) -ge 0 ] ; then
       break
     fi
@@ -120,16 +120,16 @@ _get() {
 _decode() {
   let i; let c1; let c2; let c3; let c4; let __t1
   i=0
-  while [ $i -lt 256 ] ; do
+  while [ $i -lt 256 ]; do
     : $((_$((_lut + i)) = -1))
     : $((i += 1))
   done
   i=0
-  while [ $i -lt 64 ] ; do
+  while [ $i -lt 64 ]; do
     : $((_$((_lut + 255 & _$((_codes + i)))) = i))
     : $((i += 1))
   done
-  while _get __t1; [ $((c1 = __t1)) -ge 0 ] ; do
+  while _get __t1; [ $((c1 = __t1)) -ge 0 ]; do
     if _get __t1; [ $((c2 = __t1)) -lt 0 ] ; then
       exit 1
     fi

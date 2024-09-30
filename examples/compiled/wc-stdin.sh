@@ -16,7 +16,7 @@ _main() {
   chars=0
   sep=0
   last_sep=0
-  while _getchar __t1; [ $((c = __t1)) != -1 ] ; do
+  while _getchar __t1; [ $((c = __t1)) != -1 ]; do
     : $((chars += 1))
     if [ $c = $__NEWLINE__ ] ; then
       : $((lines += 1))

@@ -17,7 +17,7 @@ defarr _buf 1024
 _cat_fd() { let fd $2
   let n; let __t1
   n=1024
-  while [ $n = 1024 ] ; do
+  while [ $n = 1024 ]; do
     _read n $fd $_buf 1024
     if [ $n -lt 0 ] || { _write __t1 1 $_buf $n; [ $__t1 != $n ]; } ; then
       exit 1
@@ -43,7 +43,7 @@ _main() { let argc $2; let myargv $3
   let i
   if [ $argc -ge 2 ] ; then
     i=1
-    while [ $i -lt $argc ] ; do
+    while [ $i -lt $argc ]; do
       if [ $((_$((_$((myargv + i)) + 0)))) = $__MINUS__ ] && [ $((_$((_$((myargv + i)) + 1)))) = $__NUL__ ] ; then
         _cat_fd __ 0
       else

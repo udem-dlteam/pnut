@@ -100,7 +100,7 @@ _sha256_init() {
 _sha256_add_block() { let bytes $2
   let b0; let b1; let b2; let b3; let s0; let s1; let i; let ch; let t1; let ma; let t2
   i=0
-  while [ $i -lt 16 ] ; do
+  while [ $i -lt 16 ]; do
     b0=$((255 & _$((bytes + (i * 4)))))
     b1=$((255 & _$((bytes + (i * 4) + 1))))
     b2=$((255 & _$((bytes + (i * 4) + 2))))
@@ -109,19 +109,19 @@ _sha256_add_block() { let bytes $2
     : $((i += 1))
   done
   i=16
-  while [ $i -lt 64 ] ; do
+  while [ $i -lt 64 ]; do
     s0=$(((((_$((_w + (i - 15))) >> 7) & (2147483647 >> (7 - 1))) | ((_$((_w + (i - 15))) << (32 - 7)) & -1)) ^ (((_$((_w + (i - 15))) >> 18) & (2147483647 >> (18 - 1))) | ((_$((_w + (i - 15))) << (32 - 18)) & -1)) ^ ((_$((_w + (i - 15))) >> 3) & 536870911)))
     s1=$(((((_$((_w + (i - 2))) >> 17) & (2147483647 >> (17 - 1))) | ((_$((_w + (i - 2))) << (32 - 17)) & -1)) ^ (((_$((_w + (i - 2))) >> 19) & (2147483647 >> (19 - 1))) | ((_$((_w + (i - 2))) << (32 - 19)) & -1)) ^ ((_$((_w + (i - 2))) >> 10) & 4194303)))
     : $((_$((_w + i)) = (_$((_w + (i - 16))) + s0 + _$((_w + (i - 7))) + s1) & -1))
     : $((i += 1))
   done
   i=0
-  while [ $i -lt 8 ] ; do
+  while [ $i -lt 8 ]; do
     : $((_$((_temp + i)) = _$((_hash + i))))
     : $((i += 1))
   done
   i=0
-  while [ $i -lt 64 ] ; do
+  while [ $i -lt 64 ]; do
     s1=$(((((_$((_temp + 4)) >> 6) & (2147483647 >> (6 - 1))) | ((_$((_temp + 4)) << (32 - 6)) & -1)) ^ (((_$((_temp + 4)) >> 11) & (2147483647 >> (11 - 1))) | ((_$((_temp + 4)) << (32 - 11)) & -1)) ^ (((_$((_temp + 4)) >> 25) & (2147483647 >> (25 - 1))) | ((_$((_temp + 4)) << (32 - 25)) & -1))))
     ch=$(((_$((_temp + 4)) & _$((_temp + 5))) ^ (~(_$((_temp + 4))) & _$((_temp + 6)))))
     t1=$(((_$((_temp + 7)) + s1 + ch + _$((_k + i)) + _$((_w + i))) & -1))
@@ -139,7 +139,7 @@ _sha256_add_block() { let bytes $2
     : $((i += 1))
   done
   i=0
-  while [ $i -lt 8 ] ; do
+  while [ $i -lt 8 ]; do
     : $((_$((_hash + i)) = (_$((_hash + i)) + _$((_temp + i))) & -1))
     : $((i += 1))
   done
@@ -164,7 +164,7 @@ _process_file() { let filename $2
   _sha256_setup __
   _sha256_init __
   _open fd $filename 0
-  while [ $n = 64 ] ; do
+  while [ $n = 64 ]; do
     _read n $fd $_buf 64
     if [ $n -lt 0 ] ; then
       : $(($1 = 1))
@@ -175,20 +175,20 @@ _process_file() { let filename $2
     if [ $n -lt 64 ] ; then
       : $((_$((_buf + n)) = 128))
       i=$((n + 1))
-      while [ $i -lt 64 ] ; do
+      while [ $i -lt 64 ]; do
         : $((_$((_buf + i)) = 0))
         : $((i += 1))
       done
       if [ $n -ge $((64 - 9)) ] ; then
         _sha256_add_block __ $_buf
         i=0
-        while [ $i -lt $((64 - 8)) ] ; do
+        while [ $i -lt $((64 - 8)) ]; do
           : $((_$((_buf + i)) = 0))
           : $((i += 1))
         done
       fi
       i=1
-      while [ $i -le 8 ] ; do
+      while [ $i -le 8 ]; do
         : $((_$((_buf + 64 - i)) = 255 & _nbits))
         : $((_nbits >>= 8))
         : $((i += 1))
@@ -198,7 +198,7 @@ _process_file() { let filename $2
   done
   _close __ $fd
   i=0
-  while [ $i -lt 8 ] ; do
+  while [ $i -lt 8 ]; do
     h=$((_$((_hash + i))))
     _hex __ $((h >> 24))
     _hex __ $((h >> 16))
@@ -208,7 +208,7 @@ _process_file() { let filename $2
   done
   printf \\$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))
   printf \\$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))
-  while [ $((_$filename)) != 0 ] ; do
+  while [ $((_$filename)) != 0 ]; do
     printf \\$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
     : $((filename += 1))
   done
@@ -221,7 +221,7 @@ _process_file() { let filename $2
 _main() { let argc $2; let myargv $3
   let i; let __t1
   i=1
-  while [ $i -lt $argc ] ; do
+  while [ $i -lt $argc ]; do
     if _process_file __t1 $((_$((myargv + i)))); [ $__t1 != 0 ] ; then
       break
     fi

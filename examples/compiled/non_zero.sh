@@ -9,7 +9,7 @@ _main() {
   while :; do
     printf "Enter a non-zero single-digit number:\r\n"
     _getchar n
-    while _getchar __t1; [ $__NEWLINE__ != $__t1 ] ; do
+    while _getchar __t1; [ $__NEWLINE__ != $__t1 ]; do
       :
     done
     [ $n = $__0__ ] || [ $((!((n >= __0__) && (n <= __9__)))) != 0 ]|| break
