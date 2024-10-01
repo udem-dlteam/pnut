@@ -1784,15 +1784,21 @@ void comp_assignment(ast lhs, ast rhs) {
 
 bool comp_body(ast node, STMT_CTX stmt_ctx) {
   int start_in_tail_position = in_tail_position;
+  ast start_local_env = local_env;
+  int start_local_env_size = local_env_size;
+
   in_tail_position = false;
 
   while (node != 0) {
     // Last statement of body is in tail position if the body itself is in tail position
     if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
-    if (comp_statement(get_child(node, 0), stmt_ctx)) return true; // Statement always returns => block is terminated
+    if (comp_statement(get_child(node, 0), stmt_ctx)) break; // Statement always returns => block is terminated
     node = get_child(node, 1);
   }
-  return false;
+
+  local_env = start_local_env;
+  local_env_size = start_local_env_size;
+  return node != 0; // If node is not null, it means the block was terminated early
 }
 
 // Assemble switch pattern from case and default statements.
@@ -1832,6 +1838,8 @@ text make_switch_pattern(ast statement) {
 bool comp_switch(ast node) {
   int start_in_tail_position = in_tail_position;
   ast statement;
+  ast start_local_env = local_env;
+  int start_local_env_size = local_env_size;
 
   append_glo_decl(string_concat3(
       wrap_str_lit("case "),
@@ -1873,6 +1881,9 @@ bool comp_switch(ast node) {
   nest_level -= 1;
   append_glo_decl(wrap_str_lit("esac"));
 
+  local_env = start_local_env;
+  local_env_size = start_local_env_size;
+
   // Returning not-false is only important for nested switch statements.
   // It could be useful to remove the need for the redundant trailing return
   // when nesting switch statements that we know are exhaustive such as in
@@ -1891,6 +1902,8 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
+  ast start_local_env = local_env;
+  int start_local_env_size = local_env_size;
 
   bool else_if = stmt_ctx & STMT_CTX_ELSE_IF;
   stmt_ctx = stmt_ctx & ~STMT_CTX_ELSE_IF; // Clear STMT_CTX_ELSE_IF bit to not pass it to the next if statement
@@ -1927,6 +1940,9 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
     fatal_error("Early break out of a switch case is unsupported");
   }
 
+  local_env = start_local_env;
+  local_env_size = start_local_env_size;
+
   return termination_lhs && termination_rhs;
 }
 
@@ -1938,6 +1954,8 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   // Save loop end actions from possible outer loop
   int start_loop_end_actions_start = loop_end_actions_start;
   int start_loop_end_actions_end = loop_end_actions_end;
+  ast start_local_env = local_env;
+  int start_local_env_size = local_env_size;
   int start_glo_decl_idx;
   bool always_returns = false;
 
@@ -1970,6 +1988,8 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
 
   loop_end_actions_start = start_loop_end_actions_start;
   loop_end_actions_end = start_loop_end_actions_end;
+  local_env = start_local_env;
+  local_env_size = start_local_env_size;
 
   // If the condition is always true and the loop always returns
   return cond == wrap_char(':') && always_returns;
