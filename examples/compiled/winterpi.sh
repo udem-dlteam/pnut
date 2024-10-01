@@ -18,16 +18,16 @@ _main() {
   let i; let k; let b; let d; let c
   c=0
   i=0
-  while [ $i -lt 2800 ] ; do
+  while [ $i -lt 2800 ]; do
     : $((_$((_r + i)) = 2000))
     i=$((i + 1))
   done
   : $((_$((_r + i)) = 0))
   k=2800
-  while [ $k -gt 0 ] ; do
+  while [ $k -gt 0 ]; do
     d=0
     i=$k
-    while [ $i -gt 0 ] ; do
+    while [ $i -gt 0 ]; do
       d=$((d * i))
       d=$((d + (_$((_r + i)) * 10000)))
       b=$(((2 * i) - 1))

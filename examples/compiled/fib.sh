@@ -19,7 +19,7 @@ _fib() { let n $2
 _main() {
   let n; let i
   i=0
-  while [ $i -lt 20 ] ; do
+  while [ $i -lt 20 ]; do
     _fib n $i
     printf "fib(%d) = %d\n" $i $n
     : $((i += 1))

@@ -9,7 +9,7 @@ _memset() { # b: $2, c: $3, len: $4
   c=$3
   len=$4
   p=$b
-  while [ $(((len -= 1) + 1)) != 0 ] ; do
+  while [ $(((len -= 1) + 1)) != 0 ]; do
     : $((_$(((p += 1) - 1)) = c))
   done
   : $(($1 = b))
@@ -24,7 +24,7 @@ _memcmp() { # vl: $2, vr: $3, n: $4
   n=$4
   l=$vl
   r=$vr
-  while [ $n != 0 ] && [ $((_$l)) = $((_$r)) ] ; do
+  while [ $n != 0 ] && [ $((_$l)) = $((_$r)) ]; do
     : $((n -= 1))
     : $((l += 1))
     : $((r += 1))
@@ -143,13 +143,13 @@ readonly _Idsz=9
 : $((__t1 = pp = 0))
 _next() {
   set $@ $pp $__t1
-  while [ $((_tk = _$_p)) != 0 ] ; do
+  while [ $((_tk = _$_p)) != 0 ]; do
     : $((_p += 1))
     if [ $_tk = $__NEWLINE__ ] ; then
       if [ $_src != 0 ] ; then
         printf "%d: (%d - %d = %d) %.*s" $_line $_p $_lp $((_p - _lp)) $((_p - _lp)) "$(_put_pstr __ $_lp)"
         _lp=$_p
-        while [ $_le -lt $_e ] ; do
+        while [ $_le -lt $_e ]; do
           defstr __str_0 "LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"
           printf "%8.4s" "$(_put_pstr __ $((__str_0 + _$((_le += 1)) * 5)))"
           if [ $((_$_le)) -le $_ADJ ] ; then
@@ -161,17 +161,17 @@ _next() {
       fi
       : $((_line += 1))
     elif [ $_tk = $__SHARP__ ] ; then
-      while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__NEWLINE__ ] ; do
+      while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__NEWLINE__ ]; do
         : $((_p += 1))
       done
     elif { [ $_tk -ge $__a__ ] && [ $_tk -le $__z__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__Z__ ]; } || [ $_tk = $__UNDERSCORE__ ] ; then
       pp=$((_p - 1))
-      while { [ $((_$_p)) -ge $__a__ ] && [ $((_$_p)) -le $__z__ ]; } || { [ $((_$_p)) -ge $__A__ ] && [ $((_$_p)) -le $__Z__ ]; } || { [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__9__ ]; } || [ $((_$_p)) = $__UNDERSCORE__ ] ; do
+      while { [ $((_$_p)) -ge $__a__ ] && [ $((_$_p)) -le $__z__ ]; } || { [ $((_$_p)) -ge $__A__ ] && [ $((_$_p)) -le $__Z__ ]; } || { [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__9__ ]; } || [ $((_$_p)) = $__UNDERSCORE__ ]; do
         _tk=$(((_tk * 147) + _$(((_p += 1) - 1))))
       done
       _tk=$(((_tk << 6) + (_p - pp)))
       _id=$_sym
-      while [ $((_$((_id + _Tk)))) != 0 ] ; do
+      while [ $((_$((_id + _Tk)))) != 0 ]; do
         if [ $_tk = $((_$((_id + _Hash)))) ] && { _memcmp __t1 $((_$((_id + _Name)))) $pp $((_p - pp)); [ $((!__t1)) != 0 ]; } ; then
           _tk=$((_$((_id + _Tk))))
           : $((__tmp = $1)) $((pp = $2)) $((__t1 = $3)) $(($1 = __tmp))
@@ -185,15 +185,15 @@ _next() {
       break
     elif [ $_tk -ge $__0__ ] && [ $_tk -le $__9__ ] ; then
       if [ $((_ival = _tk - __0__)) != 0 ] ; then
-        while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__9__ ] ; do
+        while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__9__ ]; do
           _ival=$((((_ival * 10) + _$(((_p += 1) - 1))) - __0__))
         done
       elif [ $((_$_p)) = $__x__ ] || [ $((_$_p)) = $__X__ ] ; then
-        while [ $((_tk = _$((_p += 1)))) != 0 ] && { { [ $_tk -ge $__0__ ] && [ $_tk -le $__9__ ]; } || { [ $_tk -ge $__a__ ] && [ $_tk -le $__f__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__F__ ]; }; } ; do
+        while [ $((_tk = _$((_p += 1)))) != 0 ] && { { [ $_tk -ge $__0__ ] && [ $_tk -le $__9__ ]; } || { [ $_tk -ge $__a__ ] && [ $_tk -le $__f__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__F__ ]; }; }; do
           _ival=$(((_ival * 16) + (_tk & 15) + ((_tk >= __A__) ? 9: 0)))
         done
       else
-        while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__7__ ] ; do
+        while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__7__ ]; do
           _ival=$((((_ival * 8) + _$(((_p += 1) - 1))) - __0__))
         done
       fi
@@ -202,7 +202,7 @@ _next() {
     elif [ $_tk = $__SLASH__ ] ; then
       if [ $((_$_p)) = $__SLASH__ ] ; then
         : $((_p += 1))
-        while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__NEWLINE__ ] ; do
+        while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__NEWLINE__ ]; do
           : $((_p += 1))
         done
       else
@@ -211,7 +211,7 @@ _next() {
       fi
     elif [ $_tk = $__QUOTE__ ] || [ $_tk = $__DQUOTE__ ] ; then
       pp=$_data
-      while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $_tk ] ; do
+      while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $_tk ]; do
         if [ $((_ival = _$(((_p += 1) - 1)))) = $__BACKSLASH__ ] ; then
           if [ $((_ival = _$(((_p += 1) - 1)))) = $__n__ ] ; then
             _ival=$__NEWLINE__
@@ -334,7 +334,7 @@ _expr() { # lev: $2
     : $((_$((_e += 1)) = _IMM))
     : $((_$((_e += 1)) = _ival))
     _next __
-    while [ $_tk = $__DQUOTE__ ] ; do
+    while [ $_tk = $__DQUOTE__ ]; do
       _next __
     done
     _data=$(((_data + 1) & -(1)))
@@ -354,7 +354,7 @@ _expr() { # lev: $2
       _next __
       _ty=$_CHAR
     fi
-    while [ $_tk = $_Mul ] ; do
+    while [ $_tk = $_Mul ]; do
       _next __
       _ty=$((_ty + _PTR))
     done
@@ -373,7 +373,7 @@ _expr() { # lev: $2
     if [ $_tk = $__LPAREN__ ] ; then
       _next __
       t=0
-      while [ $_tk != $__RPAREN__ ] ; do
+      while [ $_tk != $__RPAREN__ ]; do
         _expr __ $_Assign
         : $((_$((_e += 1)) = _PSH))
         : $((t += 1))
@@ -418,7 +418,7 @@ _expr() { # lev: $2
     if [ $_tk = $_Int ] || [ $_tk = $_Char ] ; then
       t=$(((_tk == _Int) ? _INT: _CHAR))
       _next __
-      while [ $_tk = $_Mul ] ; do
+      while [ $_tk = $_Mul ]; do
         _next __
         t=$((t + _PTR))
       done
@@ -515,7 +515,7 @@ _expr() { # lev: $2
     printf "%d: bad expression\n" $_line
     exit -1
   fi
-  while [ $_tk -ge $lev ] ; do
+  while [ $_tk -ge $lev ]; do
     t=$_ty
     if [ $_tk = $_Assign ] ; then
       _next __
@@ -787,7 +787,7 @@ _stmt() {
     fi
   elif [ $_tk = $__LBRACE__ ] ; then
     _next __
-    while [ $_tk != $__RBRACE__ ] ; do
+    while [ $_tk != $__RBRACE__ ]; do
       _stmt __
     done
     _next __
@@ -864,12 +864,12 @@ _main() { # argc: $2, argv: $3
   defstr __str_1 "char else enum if int return sizeof while open read close printf malloc free memset memcmp exit void main"
   _p=$__str_1
   i=$_Char
-  while [ $i -le $_While ] ; do
+  while [ $i -le $_While ]; do
     _next __
     : $((_$((_id + _Tk)) = (i += 1) - 1))
   done
   i=$_OPEN
-  while [ $i -le $_EXIT ] ; do
+  while [ $i -le $_EXIT ]; do
     _next __
     : $((_$((_id + _Class)) = _Sys))
     : $((_$((_id + _Type)) = _INT))
@@ -895,7 +895,7 @@ _main() { # argc: $2, argv: $3
   _close __ $fd
   _line=1
   _next __
-  while [ $_tk != 0 ] ; do
+  while [ $_tk != 0 ]; do
     bt=$_INT
     if [ $_tk = $_Int ] ; then
       _next __
@@ -910,7 +910,7 @@ _main() { # argc: $2, argv: $3
       if [ $_tk = $__LBRACE__ ] ; then
         _next __
         i=0
-        while [ $_tk != $__RBRACE__ ] ; do
+        while [ $_tk != $__RBRACE__ ]; do
           if [ $_tk != $_Id ] ; then
             printf "%d: bad enum identifier %d\n" $_line $_tk
             : $(($1 = -1))
@@ -939,9 +939,9 @@ _main() { # argc: $2, argv: $3
         _next __
       fi
     fi
-    while [ $_tk != $__SEMICOLON__ ] && [ $_tk != $__RBRACE__ ] ; do
+    while [ $_tk != $__SEMICOLON__ ] && [ $_tk != $__RBRACE__ ]; do
       ty=$bt
-      while [ $_tk = $_Mul ] ; do
+      while [ $_tk = $_Mul ]; do
         _next __
         ty=$((ty + _PTR))
       done
@@ -964,7 +964,7 @@ _main() { # argc: $2, argv: $3
         : $((_$((_id + _Val)) = (_e + 1)))
         _next __
         i=0
-        while [ $_tk != $__RPAREN__ ] ; do
+        while [ $_tk != $__RPAREN__ ]; do
           ty=$_INT
           if [ $_tk = $_Int ] ; then
             _next __
@@ -972,7 +972,7 @@ _main() { # argc: $2, argv: $3
             _next __
             ty=$_CHAR
           fi
-          while [ $_tk = $_Mul ] ; do
+          while [ $_tk = $_Mul ]; do
             _next __
             ty=$((ty + _PTR))
           done
@@ -1008,12 +1008,12 @@ _main() { # argc: $2, argv: $3
         fi
         _loc=$((i += 1))
         _next __
-        while [ $_tk = $_Int ] || [ $_tk = $_Char ] ; do
+        while [ $_tk = $_Int ] || [ $_tk = $_Char ]; do
           bt=$(((_tk == _Int) ? _INT: _CHAR))
           _next __
-          while [ $_tk != $__SEMICOLON__ ] ; do
+          while [ $_tk != $__SEMICOLON__ ]; do
             ty=$bt
-            while [ $_tk = $_Mul ] ; do
+            while [ $_tk = $_Mul ]; do
               _next __
               ty=$((ty + _PTR))
             done
@@ -1044,12 +1044,12 @@ _main() { # argc: $2, argv: $3
         done
         : $((_$((_e += 1)) = _ENT))
         : $((_$((_e += 1)) = i - _loc))
-        while [ $_tk != $__RBRACE__ ] ; do
+        while [ $_tk != $__RBRACE__ ]; do
           _stmt __
         done
         : $((_$((_e += 1)) = _LEV))
         _id=$_sym
-        while [ $((_$((_id + _Tk)))) != 0 ] ; do
+        while [ $((_$((_id + _Tk)))) != 0 ]; do
           if [ $((_$((_id + _Class)))) = $_Loc ] ; then
             : $((_$((_id + _Class)) = _$((_id + _HClass))))
             : $((_$((_id + _Type)) = _$((_id + _HType))))
@@ -1087,7 +1087,7 @@ _main() { # argc: $2, argv: $3
   : $((_$((sp -= 1)) = argv_))
   : $((_$((sp -= 1)) = t))
   cycle=0
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     i=$((_$(((pc += 1) - 1))))
     : $((cycle += 1))
     if [ $_debug != 0 ] ; then

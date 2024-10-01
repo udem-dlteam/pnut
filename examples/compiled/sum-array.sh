@@ -7,7 +7,7 @@ _sum_array() { let n $2; let size $3
   let i; let sum
   i=0
   sum=0
-  while [ $i -lt $size ] ; do
+  while [ $i -lt $size ]; do
     : $((sum += _$((n + i))))
     : $(((i += 1) - 1))
   done
@@ -21,12 +21,12 @@ _main() {
   _malloc n 10000
   i=0
   sum=0
-  while [ $i -lt 10000 ] ; do
+  while [ $i -lt 10000 ]; do
     : $((_$((n + i)) = i))
     : $(((i += 1) - 1))
   done
   i=0
-  while [ $i -lt 10000 ] ; do
+  while [ $i -lt 10000 ]; do
     : $((sum += _$((n + i))))
     : $(((i += 1) - 1))
   done

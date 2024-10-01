@@ -192,7 +192,7 @@ _input=$__str_0
 _putstr() { # s: $2
   set $@ $s
   s=$2
-  while [ $((_$s)) != 0 ] ; do
+  while [ $((_$s)) != 0 ]; do
     printf \\$(((_$s)/64))$(((_$s)/8%8))$(((_$s)%8))
     : $(((s += 1) - 1))
   done
@@ -273,7 +273,7 @@ _gc() {
   _copy _pc $_pc
   _copy _FALSE $_FALSE
   _scan=$to_space
-  while [ $_scan != $_alloc ] ; do
+  while [ $_scan != $_alloc ]; do
     _copy _$_scan $((_$_scan))
     : $(((_scan += 1) - 1))
   done
@@ -341,7 +341,7 @@ _list_tail() { # lst: $2, i: $3
   set $@ $lst $i
   lst=$2
   i=$3
-  while [ $(((i -= 1) + 1)) != 0 ] ; do
+  while [ $(((i -= 1) + 1)) != 0 ]; do
     lst=$((_$((lst + __field1))))
   done
   : $(($1 = lst))
@@ -353,7 +353,7 @@ _inst_tail() { # lst: $2, i: $3
   set $@ $lst $i
   lst=$2
   i=$3
-  while [ $(((i -= 1) + 1)) != 0 ] ; do
+  while [ $(((i -= 1) + 1)) != 0 ]; do
     lst=$((_$((lst + __field2))))
   done
   : $(($1 = lst))
@@ -388,7 +388,7 @@ _get_opnd() { # o: $2
 _get_cont() {
   set $@ $s
   s=$_stack
-  while [ $((!(_$((s + __field2)) >> 1))) != 0 ] ; do
+  while [ $((!(_$((s + __field2)) >> 1))) != 0 ]; do
     s=$((_$((s + __field1))))
   done
   : $(($1 = s))
@@ -400,7 +400,7 @@ _lst_length() { # list: $2
   set $@ $list $l
   list=$2
   l=0
-  while [ $((!(list & 1))) != 0 ] && [ $((_$((list + __field2)) >> 1)) = 0 ] ; do
+  while [ $((!(list & 1))) != 0 ] && [ $((_$((list + __field2)) >> 1)) = 0 ]; do
     : $((l += 1))
     list=$((_$((list + __field1))))
   done
@@ -461,13 +461,13 @@ _create_sym() { # name: $2
 _build_sym_table() {
   set $@ $n $accum $c $__t1
   _get_int n 0
-  while [ $n -gt 0 ] ; do
+  while [ $n -gt 0 ]; do
     : $(((n -= 1) + 1))
     _create_sym __t1 $((_$((_FALSE + __field1))))
     _symbol_table=$__t1
   done
   accum=$((_$((_FALSE + __field1))))
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     _get_byte c
     if [ $c = 44 ] ; then
       _create_sym __t1 $accum
@@ -510,11 +510,11 @@ _init_weights() {
 : $((__t1 = c = x = op = d = n = 0))
 _decode() {
   set $@ $n $d $op $x $c $__t1
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     _get_code x
     n=$x
     op=-1
-    while [ $n -gt $((2 + (d = _$((_weights + (op += 1)))))) ] ; do
+    while [ $n -gt $((2 + (d = _$((_weights + (op += 1)))))) ]; do
       : $((n -= (d + 3)))
     done
     if [ $x -gt 90 ] ; then
@@ -573,7 +573,7 @@ _scm2str() { # s: $2
   current=$((_$((s + __field0))))
   _malloc str $((length + 1))
   i=0
-  while [ $i -lt $length ] ; do
+  while [ $i -lt $length ]; do
     : $((_$((str + i)) = (_$((current + __field0)) >> 1)))
     current=$((_$((current + __field1))))
     : $(((i += 1) - 1))
@@ -661,7 +661,7 @@ _prim() { # no: $2
     num_args=0
     : $((_$((_$((_FALSE + __field0)) + __field0)) = x))
     arg=$y
-    while [ $arg != $((_$((_FALSE + __field1)))) ] ; do
+    while [ $arg != $((_$((_FALSE + __field1)))) ]; do
       _push2 __ $arg $(((0 << 1) | 1))
       arg=$((_$((_stack + __field0))))
       : $((_$((_stack + __field0)) = _$((arg + __field0))))
@@ -756,14 +756,14 @@ _prim() { # no: $2
 : $((__t1 = opnd = x = p = rest = new_pc = k = c2 = s2 = proc = jump = vari = nparams = nparams_vari = nargs = instr = i = 0))
 _run() {
   set $@ $i $instr $nargs $nparams_vari $nparams $vari $jump $proc $s2 $c2 $k $new_pc $rest $p $x $opnd $__t1
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     instr=$((_$((_pc + __field0)) >> 1))
     if [ $instr = 5 ] ; then
       exit 0
     elif [ $instr = 0 ] ; then
       jump=$((_$((_pc + __field2)) == ((0 << 1) | 1)))
       _get_opnd proc $((_$((_pc + __field1))))
-      while [ 1 != 0 ] ; do
+      while [ 1 != 0 ]; do
         if [ $((_$((proc + __field0)) & 1)) != 0 ] ; then
           _pop __
           _prim proc $((_$((proc + __field0)) >> 1))
@@ -793,7 +793,7 @@ _run() {
           if [ $vari != 0 ] ; then
             rest=$((_$((_FALSE + __field1))))
             i=0
-            while [ $i -lt $nargs ] ; do
+            while [ $i -lt $nargs ]; do
               _pop __t1
               _alloc_rib __t1 $__t1 $rest $s2
               rest=$__t1
@@ -805,7 +805,7 @@ _run() {
             s2=$__t1
           fi
           i=0
-          while [ $i -lt $nparams ] ; do
+          while [ $i -lt $nparams ]; do
             _pop __t1
             _alloc_rib __t1 $__t1 $s2 $(((0 << 1) | 1))
             s2=$__t1

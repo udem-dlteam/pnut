@@ -6,7 +6,7 @@ LC_ALL=C
 _main() { let argc $2; let argv_ $3
   let i
   i=1
-  while [ $i -lt $argc ] ; do
+  while [ $i -lt $argc ]; do
     _put_pstr __ $((_$((argv_ + (argc - i)))))
     printf " "
     : $((i += 1))

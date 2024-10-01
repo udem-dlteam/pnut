@@ -39,7 +39,7 @@ _main() { let argc $2; let args $3
   if [ $dst = 0 ] ; then
     _file_error __ $((_$((args + 2))))
   fi
-  while _read __t1 $src $_buffer 1024; [ $((len = __t1)) != 0 ] ; do
+  while _read __t1 $src $_buffer 1024; [ $((len = __t1)) != 0 ]; do
     _write __ $dst $_buffer $len
   done
   endlet $1 __t1 len c dst src args argc

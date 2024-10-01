@@ -150,7 +150,7 @@ _wc() { # $2 = file (char*), $3 = lines addr (int*), $4 = words addr (int*), $5 
 _print_array() { let arr $2
   let i
   i=0
-  while [ $((_$((arr + i)))) != 0 ] ; do
+  while [ $((_$((arr + i)))) != 0 ]; do
     printf "%d: " $i
     _put_pstr __ $((_$((arr + i))))
     printf "\n" $i
@@ -163,7 +163,7 @@ _print_array() { let arr $2
 _array_len() { let arr $2
   let i
   i=0
-  while [ $((_$((arr + i)))) != 0 ] ; do
+  while [ $((_$((arr + i)))) != 0 ]; do
     : $((i += 1))
   done
   : $(($1 = i))
@@ -174,7 +174,7 @@ _array_len() { let arr $2
 _read_int() {
   let n; let c
   n=0
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     _getchar c
     if [ $c -ge $__0__ ] && [ $c -le $__9__ ] ; then
       n=$((((10 * n) + c) - __0__))
@@ -196,7 +196,7 @@ _main() {
   _ls files
   _array_len len $files
   _print_array __ $files
-  while [ 1 != 0 ] ; do
+  while [ 1 != 0 ]; do
     printf "Select a file to print: "
     _read_int ix
     if [ 0 -le $ix ] && [ $ix -lt $len ] ; then

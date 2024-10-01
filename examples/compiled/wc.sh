@@ -28,10 +28,10 @@ _wc_fd() { let fd $2; let filename $3
   sep=0
   last_sep=0
   n=1024
-  while [ $n = 1024 ] ; do
+  while [ $n = 1024 ]; do
     _read n $fd $_buf 1024
     i=0
-    while [ $i -lt $n ] ; do
+    while [ $i -lt $n ]; do
       : $((chars += 1))
       if [ $((_$((_buf + i)))) = $__NEWLINE__ ] ; then
         : $((lines += 1))
@@ -71,7 +71,7 @@ _main() { let argc $2; let argv_ $3
   let i
   if [ $argc -ge 2 ] ; then
     i=1
-    while [ $i -lt $argc ] ; do
+    while [ $i -lt $argc ]; do
       _wc_file __ $((_$((argv_ + i))))
       : $((i += 1))
     done

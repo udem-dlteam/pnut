@@ -58,12 +58,26 @@ enum TEXT_NODES {
 
 // Place prototype of mutually recursive functions here
 
+typedef enum STMT_CTX {
+  // Default context
+  STMT_CTX_DEFAULT      = 0,
+  // Indicates that the parent statement was a else statement so that if
+  // statement uses elif instead of if.
+  STMT_CTX_ELSE_IF      = 1,
+  // Indicates that we are in a switch statement where breaks mean the end of
+  // the conditional block.
+  STMT_CTX_SWITCH       = 2,
+  // Because we don't know in advance where the conditional block ends, this
+  // indicates to returns/breaks that they are in a switch in tail position
+  STMT_CTX_SWITCH_TAIL  = 4,
+} STMT_CTX;
+
 text comp_lvalue_address(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
-void comp_body(ast node);
-void comp_statement(ast node, int else_if);
+bool comp_body(ast node, STMT_CTX stmt_ctx);
+bool comp_statement(ast node, STMT_CTX stmt_ctx);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 
@@ -293,7 +307,6 @@ text glo_decls[GLO_DECL_SIZE];  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
 int in_tail_position = false;   // Is the current statement in tail position?
-int in_block_head_position = false;  // Is the current statement in head position for the current block?
 int loop_nesting_level = 0;     // Number of loops surrounding the current statement
 int loop_end_actions_start = 0; // Start position of declarations for the last action in a for loop
 int loop_end_actions_end = 0;   // End position of declarations for the last action in a for loop
@@ -343,17 +356,17 @@ void append_glo_decl(text decl) {
 }
 
 int append_glo_decl_fixup() {
-  glo_decls[glo_decl_ix] = nest_level;
+  glo_decls[glo_decl_ix] = -nest_level; // Negative value to indicate that it's a fixup
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
-  glo_decls[glo_decl_ix + 2] = -1;
+  glo_decls[glo_decl_ix + 2] = 0;
   glo_decl_ix += 3;
   return glo_decl_ix - 3;
 }
 
 void fixup_glo_decl(int fixup_ix, text decl) {
-  if (glo_decls[fixup_ix + 2] != -1)
-    fatal_error("fixup_glo_decl: invalid fixup");
+  if (glo_decls[fixup_ix] >= 0) fatal_error("fixup_glo_decl: invalid fixup");
 
+  glo_decls[fixup_ix] = -glo_decls[fixup_ix]; // Make nest level positive
   glo_decls[fixup_ix + 2] = decl;
 }
 
@@ -369,6 +382,16 @@ void undo_glo_decls(int start) {
     glo_decls[start + 1] -= 1; // To support nested undone declarations
     start += 3;
   }
+}
+
+// Check if there are any active and non-empty declarations since the start index.
+// This is used to determine if a ':' statement must be added to the current block.
+bool any_active_glo_decls(int start) {
+  while (start < glo_decl_ix) {
+    if (glo_decls[start + 1] && glo_decls[start + 2] != 0) return true;
+    start += 3;
+  }
+  return false;
 }
 
 // Replay the declarations betwee start and end. Replayed declarations must first
@@ -1753,97 +1776,56 @@ void comp_assignment(ast lhs, ast rhs) {
   }
 }
 
-void comp_body(ast node) {
+bool comp_body(ast node, STMT_CTX stmt_ctx) {
   int start_in_tail_position = in_tail_position;
   in_tail_position = false;
-  in_block_head_position = true;
 
-  if (node != 0) {
-    while (get_op(node) == '{') {
-      // Last statement of body is in tail position if the body itself is in tail position
-      if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
-      comp_statement(get_child(node, 0), false);
-      node = get_child(node, 1);
-      in_block_head_position = false;
+  while (node != 0) {
+    // Last statement of body is in tail position if the body itself is in tail position
+    if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
+    if (comp_statement(get_child(node, 0), stmt_ctx)) return true; // Statement always returns => block is terminated
+    node = get_child(node, 1);
+  }
+  return false;
+}
+
+// Assemble switch pattern from case and default statements.
+// Case and default statements are like labelled statements, meaning that they
+// wrap the next statement. This function unwraps the next statements until a
+// non-case statement is found.
+// Because the non-case statement must be compiled as well, it is returned via
+// the last_stmt global variable.
+ast last_stmt;
+text make_switch_pattern(ast statement) {
+  text str = 0;
+
+  while (1) { // statement will never be null
+    switch (get_op(statement)) {
+      case DEFAULT_KW:
+        str = wrap_char('*');
+        statement = get_child(statement, 0);
+        break;
+
+      case CASE_KW:
+        // This is much more permissive than what a C compiler would allow,
+        // but Shell allows matching on arbitrary expression in case
+        // patterns so it's fine. If we wanted to do this right, we'd check
+        // that the pattern is a numeric literal or an enum identifier.
+        str = concatenate_strings_with(str, comp_rvalue(get_child(statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
+        statement = get_child(statement, 1);
+        break;
+
+      default:
+        if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
+        last_stmt = statement;
+        return string_concat(str, wrap_char(')'));
     }
   }
 }
 
-// Return if the statement is a break or return statement, meaning that the block should be terminated.
-// A switch conditional block is considered terminated if it ends with a break or return statement.
-bool comp_switch_block_statement(ast node, int statements_in_block, bool else_if, bool start_in_tail_position) {
-  bool termination_lhs = false;
-  bool termination_rhs = false;
-
-  if (get_op(node) == BREAK_KW) {
-    if (statements_in_block == 0) {
-      append_glo_decl(wrap_char(':'));
-    }
-    return true;
-  } else if (get_op(node) == RETURN_KW) {
-    // A return marks the end of the conditional block, so it's in tail position
-    in_tail_position = start_in_tail_position;
-    comp_statement(node, false);
-    return true;
-  } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
-    fatal_error("comp_switch_block_statement: case must be at the beginning of a switch block, and each block must end with a break or return statement");
-    return false;
-  } else if (get_op(node) == '{') {
-    while(node != 0) {
-      if (comp_switch_block_statement(get_child(node, 0), statements_in_block, false, start_in_tail_position)) {
-        return true;
-      }
-      statements_in_block += 1;
-      node = get_child(node, 1);
-    }
-    return false;
-  } else if (get_op(node) == IF_KW) {
-    append_glo_decl(string_concat3(
-          wrap_str_lit(else_if ? "elif " : "if "),
-          comp_rvalue(get_child(node, 0), else_if ? RVALUE_CTX_TEST_ELSEIF : RVALUE_CTX_TEST),
-          wrap_str_lit(" ; then")
-    ));
-
-    nest_level += 1;
-    if (get_child(node, 1) != 0) {
-      termination_lhs = comp_switch_block_statement(get_child(node, 1), 0, false, start_in_tail_position);
-    } else {
-      append_glo_decl(wrap_char(':'));
-    }
-    nest_level -= 1;
-
-    // else
-    if (get_child(node, 2) != 0) {
-      // Compile sequence of if else if using elif
-      if (get_op(get_child(node, 2)) == IF_KW) {
-        termination_rhs = comp_switch_block_statement(get_child(node, 2), 0, true, start_in_tail_position); // comp_statement with else_if == true emits elif
-      } else {
-        append_glo_decl(wrap_str_lit("else"));
-        nest_level += 1;
-        termination_rhs = comp_switch_block_statement(get_child(node, 2), 0, false, start_in_tail_position);
-        nest_level -= 1;
-      }
-    }
-
-    if (!else_if) {
-       append_glo_decl(wrap_str_lit("fi"));
-    }
-
-    if (termination_lhs ^ termination_rhs) {
-      fatal_error("comp_switch_block_statement: detected an early break out of a switch case, unsupported yet.");
-    }
-
-    return termination_lhs && termination_rhs;
-  } else {
-    comp_statement(node, false);
-    return false;
-  }
-}
-
-void comp_switch(ast node) {
+bool comp_switch(ast node) {
   int start_in_tail_position = in_tail_position;
   ast statement;
-  text str;
 
   append_glo_decl(string_concat3(
       wrap_str_lit("case "),
@@ -1860,40 +1842,22 @@ void comp_switch(ast node) {
   while (get_op(node) == '{') {
     statement = get_child(node, 0);
     node = get_child(node, 1);
-    if (get_op(statement) != CASE_KW && get_op(statement) != DEFAULT_KW) {
-      fatal_error("comp_statement: switch body without case");
-    }
 
-    // Assemble the patterns
-    if (get_op(statement) == CASE_KW) {
-      str = 0;
-      while (get_op(statement) == CASE_KW) {
-        // This is much more permissive than what a C compiler would allow,
-        // but Shell allows matching on arbitrary expression in case
-        // patterns so it's fine. If we wanted to do this right, we'd check
-        // that the pattern is a numeric literal or an enum identifier.
-        str = concatenate_strings_with(str, comp_rvalue(get_child(statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
-        statement = get_child(statement, 1);
-      }
-    } else {
-      str = wrap_char('*');
-      statement = get_child(statement, 0);
-    }
-
-    append_glo_decl(string_concat(str, wrap_char(')')));
+    append_glo_decl(make_switch_pattern(statement));
+    statement = last_stmt; // last_stmt is set by make_switch_pattern
 
     nest_level += 1;
 
     in_tail_position = false;
 
-    // case and default nodes contain the first statement of the block. We add it to the list of statements to process.
-    node = new_ast2('{', statement, node); // Allocating memory isn't ideal but it makes the code tidier
-
-    while (get_op(node) == '{') {
-      statement = get_child(node, 0);
-      node = get_child(node, 1);
-      // If we encounter a break or return statement, we stop processing the block
-      if (comp_switch_block_statement(statement, 0, false, start_in_tail_position)) break;
+    // We keep compiling statements until we encounter a statement that returns or breaks
+    // Case and default nodes contain the first statement of the block so we process that one first.
+    if (!comp_statement(statement, STMT_CTX_SWITCH | (start_in_tail_position ? STMT_CTX_SWITCH_TAIL : 0))) {
+      while (get_op(node) == '{') {
+        statement = get_child(node, 0);
+        node = get_child(node, 1);
+        if (comp_statement(statement, STMT_CTX_SWITCH | (start_in_tail_position ? STMT_CTX_SWITCH_TAIL : 0))) break;
+      }
     }
 
     nest_level -= 1;
@@ -1902,121 +1866,167 @@ void comp_switch(ast node) {
 
   nest_level -= 1;
   append_glo_decl(wrap_str_lit("esac"));
+
+  // Returning not-false is only important for nested switch statements.
+  // It could be useful to remove the need for the redundant trailing return
+  // when nesting switch statements that we know are exhaustive such as in
+  // eval_constant.
+  //
+  // I tried to make it return true if all cases of a switch end with a return
+  // but it wasn't working well because we don't know if the switch delimits the
+  // conditional block until it ends and so in_tail_position must be set to
+  // false which defeats the point of removing the trailing return (since the
+  // switch is not compiled in tail position mode even if it turns out to be the
+  // case.
+  return false;
 }
 
-void comp_statement(ast node, int else_if) {
-  int op = get_op(node);
-  text str;
-  int start_loop_end_actions_start;
-  int start_loop_end_actions_end;
+bool comp_if(ast node, STMT_CTX stmt_ctx) {
+  int start_glo_decl_idx;
+  bool termination_lhs = false;
+  bool termination_rhs = false;
 
-  gensym_ix = 0;
+  bool else_if = stmt_ctx & STMT_CTX_ELSE_IF;
+  stmt_ctx = stmt_ctx & ~STMT_CTX_ELSE_IF; // Clear STMT_CTX_ELSE_IF bit to not pass it to the next if statement
 
-  if (op == IF_KW) {
-    append_glo_decl(string_concat3(
+  append_glo_decl(string_concat3(
           wrap_str_lit(else_if ? "elif " : "if "),
           comp_rvalue(get_child(node, 0), else_if ? RVALUE_CTX_TEST_ELSEIF : RVALUE_CTX_TEST),
           wrap_str_lit(" ; then")
         ));
 
-    nest_level += 1;
-    if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
-    else { append_glo_decl(wrap_char(':')); }
-    nest_level -= 1;
+  nest_level += 1;
+  start_glo_decl_idx = glo_decl_ix;
+  termination_lhs = comp_statement(get_child(node, 1), stmt_ctx);
+  // ifs cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
+  nest_level -= 1;
 
-    if (get_child(node, 2) != 0) {
-      // Compile sequence of if else if using elif
-      if (get_op(get_child(node, 2)) == IF_KW) {
-        comp_statement(get_child(node, 2), true); // comp_statement with else_if == true emits elif
-      } else {
-        append_glo_decl(wrap_str_lit("else"));
-        nest_level += 1;
-        comp_statement(get_child(node, 2), false);
-        nest_level -= 1;
-      }
-    }
-    if (!else_if) append_glo_decl(wrap_str_lit("fi"));
-  } else if (op == WHILE_KW) {
-    append_glo_decl(string_concat3(
-      wrap_str_lit("while "),
-      comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
-      wrap_str_lit(" ; do")
-    ));
-
-    loop_nesting_level += 1;
-    nest_level += 1;
-    if (get_child(node, 1) != 0) { comp_statement(get_child(node, 1), false); }
-    else { append_glo_decl(wrap_char(':')); }
-    nest_level -= 1;
-    loop_nesting_level -= 1;
-
-    append_glo_decl(wrap_str_lit("done"));
-  } else if (op == DO_KW) {
-    append_glo_decl(wrap_str_lit("while :; do"));
-    loop_nesting_level += 1;
-    nest_level += 1;
-
-    if (get_child(node, 0) != 0) {
-      comp_statement(get_child(node, 0), false);
+  if (get_child(node, 2) != 0) {
+    // Compile sequence of if else if using elif
+    if (get_op(get_child(node, 2)) == IF_KW) {
+      termination_rhs = comp_if(get_child(node, 2), stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
     } else {
-      append_glo_decl(wrap_char(':'));
+      append_glo_decl(wrap_str_lit("else"));
+      nest_level += 1;
+      start_glo_decl_idx = glo_decl_ix;
+      termination_rhs = comp_statement(get_child(node, 2), stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
+      if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
+      nest_level -= 1;
     }
+  }
+  if (!else_if) append_glo_decl(wrap_str_lit("fi"));
 
-    append_glo_decl(string_concat(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST), wrap_str_lit("|| break")));
+  if (stmt_ctx & STMT_CTX_SWITCH && termination_lhs ^ termination_rhs) {
+    fatal_error("Early break out of a switch case is unsupported");
+  }
 
-    nest_level -= 1;
-    loop_nesting_level -= 1;
-    append_glo_decl(wrap_str_lit("done"));
+  return termination_lhs && termination_rhs;
+}
+
+// Function for compiling while, do_while and for loops
+// last_line and loop_end_stmt are mutually exclusive
+// last_line is the last line of the loop
+// loop_end_stmt is the statement that should be executed at the end of the for loop (increment, etc.)
+bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX stmt_ctx) {
+  // Save loop end actions from possible outer loop
+  int start_loop_end_actions_start = loop_end_actions_start;
+  int start_loop_end_actions_end = loop_end_actions_end;
+  int start_glo_decl_idx;
+  bool always_returns = false;
+
+  // This is a little bit of a hack, but it makes things so much simpler.
+  // Because we need to capture the code for the end of loop actions
+  // (increment, etc.), and those can be any statement expression, we somehow
+  // need to get the text generated by the comp_statement call. Instead of
+  // modifying comp_statement to accomodate this, we just remove the code
+  // generated by comp_statement using undo_glo_decls and save the indices of
+  // the declarations of the loop end actions so they can replayed later.
+  if (loop_end_stmt) {
+    loop_end_actions_start = glo_decl_ix;
+    comp_statement(loop_end_stmt, stmt_ctx);
+    undo_glo_decls(loop_end_actions_start);
+    loop_end_actions_end = glo_decl_ix;
+  }
+
+  append_glo_decl(string_concat3(wrap_str_lit("while "), cond ? cond : wrap_char(':'), wrap_str_lit("; do")));
+  loop_nesting_level += 1;
+  nest_level += 1;
+  start_glo_decl_idx = glo_decl_ix;
+  always_returns = comp_statement(body, stmt_ctx);
+  append_glo_decl(last_line);
+  replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
+  // while loops cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
+  nest_level -= 1;
+  loop_nesting_level -= 1;
+  append_glo_decl(wrap_str_lit("done"));
+
+  loop_end_actions_start = start_loop_end_actions_start;
+  loop_end_actions_end = start_loop_end_actions_end;
+
+  // If the condition is always true and the loop always returns
+  return cond == wrap_char(':') && always_returns;
+}
+
+// Returns whether the statement always returns/breaks.
+// This is used to delimit the end of conditional blocks of switch statements.
+bool comp_statement(ast node, STMT_CTX stmt_ctx) {
+  int op;
+  text str;
+
+  if (node == 0) return false; // Empty statement never returns
+
+  op = get_op(node);
+
+  gensym_ix = 0; // Reuse gensym names for each statement
+
+  if (op == IF_KW) {
+    return comp_if(node, stmt_ctx);
+  } else if (op == WHILE_KW) {
+    return comp_loop(comp_rvalue(get_child(node, 0), RVALUE_CTX_TEST),
+                     get_child(node, 1),
+                     0, // No loop end statement
+                     0, // No last line
+                     stmt_ctx
+                     );
+  } else if (op == DO_KW) {
+    return comp_loop(wrap_str_lit(":"),
+                     get_child(node, 0),
+                     0, // No loop end statement
+                     string_concat(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST), wrap_str_lit("|| break")),
+                     stmt_ctx
+                     );
   } else if (op == FOR_KW) {
-    // Save loop end actions from possible outer loop
-    start_loop_end_actions_start = loop_end_actions_start;
-    start_loop_end_actions_end = loop_end_actions_end;
-
-    if (get_child(node, 0)) comp_statement(get_child(node, 0), false);
+    comp_statement(get_child(node, 0), STMT_CTX_DEFAULT); // Assuming this statement never returns...
 
     str = wrap_char(':'); // Empty statement
     if (get_child(node, 1)) {
       str = comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST);
     }
 
-    append_glo_decl(string_concat3(wrap_str_lit("while "), str, wrap_str_lit(" ; do")));
-
-    // This is a little bit of a hack, but it makes things so much simpler.
-    // Because we need to capture the code for the end of loop actions
-    // (increment, etc.), and those can be any statement expression, we somehow
-    // need to get the text generated by the call to comp_statement. Instead of
-    // modifying comp_statement to accomodate this, we just remove the code
-    // generated by comp_statement using undo_glo_decls and save the indices of
-    // the declarations of the loop end actions so they can replayed later.
-    loop_end_actions_start = glo_decl_ix;
-    if (get_child(node, 2)) comp_statement(get_child(node, 2), false);
-    undo_glo_decls(loop_end_actions_start);
-    loop_end_actions_end = glo_decl_ix;
-
-    loop_nesting_level += 1;
-    nest_level += 1;
-    if (get_child(node, 3) != 0) { comp_statement(get_child(node, 3), false); }
-    else if (get_child(node, 2) == 0) { append_glo_decl(wrap_char(':')); }
-    replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
-
-    nest_level -= 1;
-    loop_nesting_level -= 1;
-    loop_end_actions_start = start_loop_end_actions_start;
-    loop_end_actions_end = start_loop_end_actions_end;
-
-    append_glo_decl(wrap_str_lit("done"));
+    return comp_loop(str,
+                     get_child(node, 3), // Body
+                     get_child(node, 2), // End of loop statement
+                     0, // No last line
+                     stmt_ctx
+                     );
   } else if (op == SWITCH_KW) {
-    comp_switch(node);
+    return comp_switch(node);
   } else if (op == BREAK_KW) {
-    if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
-    // TODO: What's the semantic of break? Should we run the end of loop action before breaking?
-    append_glo_decl(wrap_str_lit("break"));
+    if ((stmt_ctx & STMT_CTX_SWITCH) == 0) {
+      if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
+      append_glo_decl(wrap_str_lit("break"));
+    }
+    return true; // Break out of switch statement
   } else if (op == CONTINUE_KW) {
     if (loop_nesting_level == 0) fatal_error("comp_statement: continue not in loop");
     replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
     // We could remove the continue when in tail position, but it's not worth doing
     append_glo_decl(wrap_str_lit("continue"));
+    return false;
   } else if (op == RETURN_KW) {
+    // First we assign the return value...
     if (get_child(node, 0) != 0) {
       if (get_op(get_child(node, 0)) == '(') { // Check if function call
         comp_fun_call(get_child(node, 0), new_ast0(IDENTIFIER_DOLLAR, 1));
@@ -2028,36 +2038,45 @@ void comp_statement(ast node, int else_if) {
         ));
       }
     }
+
+    in_tail_position |= stmt_ctx & STMT_CTX_SWITCH_TAIL;
+
+    // ...and then we take care of the control flow part of the return statement
     if (in_tail_position && loop_nesting_level == 1) {
       append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
-    } else if (in_tail_position && in_block_head_position && get_child(node, 0) == 0) {
-      append_glo_decl(wrap_char(':')); // Block only contains a return statement so it's not empty
     } else if (!in_tail_position || loop_nesting_level != 0) {
       rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
       append_glo_decl(wrap_str_lit("return"));
     }
+    return true;
   } else if (op == '(') { // six.call
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); // Reuse IDENTIFIER_EMPTY ast?
+    return false;
   } else if (op == '{') { // six.compound
-    comp_body(node);
+    return comp_body(node, stmt_ctx);
   } else if (op == '=') { // six.x=y
     comp_assignment(get_child(node, 0), get_child(node, 1));
+    return false;
   } else if (op == ':') {
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
     append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val(get_val(get_child(node, 0)))), wrap_char(':')));
-    comp_statement(get_child(node, 1), false);
+    return comp_statement(get_child(node, 1), stmt_ctx);
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
+    return false;
+  } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
+    fatal_error("case/default must be at the beginning of a switch conditional block");
+    return false;
   } else if (op == VAR_DECLS) {
     fatal_error("variable declaration must be at the beginning of a function");
+    return false;
   } else {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
     if (contains_side_effects) {
       append_glo_decl(string_concat(wrap_str_lit(": "), str));
-    } else if (in_block_head_position && in_tail_position) {
-      append_glo_decl(wrap_char(':')); // Block only contains this statement so we have to make sure it's not empty
     }
+    return false;
   }
 }
 
@@ -2089,6 +2108,8 @@ ast get_leading_var_declarations(ast node) {
 void mark_mutable_variables_statement(ast node) {
   int op = get_op(node);
   ast params;
+
+  if (node == 0) return;
 
   if (op == IF_KW) {
     mark_mutable_variables_statement(get_child(node, 0));
@@ -2174,6 +2195,7 @@ void comp_glo_fun_decl(ast node) {
   int params_ix;
   ast decls, vars, var;
   int save_loc_vars_fixup;
+  int start_glo_decl_idx;
 
   if (body == -1) return; // ignore forward declarations
 
@@ -2227,6 +2249,7 @@ void comp_glo_fun_decl(ast node) {
 
   in_tail_position = true;
   nest_level += 1;
+  start_glo_decl_idx = glo_decl_ix;
 
   save_loc_vars_fixup = append_glo_decl_fixup(); // Fixup is done after compiling body
 
@@ -2267,11 +2290,9 @@ void comp_glo_fun_decl(ast node) {
     local_vars = get_child(local_vars, 1);
   }
 
-  if (body == 0) {
-    append_glo_decl(wrap_char(':')); // Empty function
-  } else {
-    comp_body(body);
-  }
+  comp_body(body, STMT_CTX_DEFAULT);
+  // functions cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
   append_glo_decl(restore_local_vars(params_ix - 1));
 
