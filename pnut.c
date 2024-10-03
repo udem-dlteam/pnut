@@ -2939,7 +2939,9 @@ ast parse_comma_expression() {
 
       get_tok();
       child = parse_assignment_expression();
-      child = new_ast2(',', child, 0); // New tail cons cell
+      if (tok == ',') {
+        child = new_ast2(',', child, 0); // New tail cons cell
+      }
       set_child(tail, 1, child);       // Add new cons cell at end of list
       tail = child;                    // Advance tail
 

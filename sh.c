@@ -1157,8 +1157,8 @@ text with_prefixed_side_effects(ast test_side_effects, text code) {
 // Return true if the operator is associative.
 // Associative operators can be chained without parentheses.
 bool is_associative_operator(int op) {
-  return (op == '+')   | (op == '*')     | (op == '&')    | (op == '|')    | (op == '^')
-      |  (op == EQ_EQ) | (op == AMP_AMP) | (op == BAR_BAR);
+  return (op == '+')   | (op == '*')      | (op == '&')     | (op == '|')    | (op == '^')      | (op == ',')
+      |  (op == EQ_EQ) | (op == AMP_AMP)  | (op == BAR_BAR);
 }
 
 // Wrap code in $((...)) if it's not already and if it's already in $(( )), wrap
@@ -1285,7 +1285,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return 0;
     }
   } else if (nb_children == 2) {
-    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT) {
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == ',' || op == LSHIFT || op == RSHIFT) {
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
