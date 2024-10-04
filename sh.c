@@ -1994,7 +1994,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     return comp_loop(wrap_str_lit(":"),
                      get_child(node, 0),
                      0, // No loop end statement
-                     string_concat(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST), wrap_str_lit("|| break")),
+                     string_concat(comp_rvalue(get_child(node, 1), RVALUE_CTX_TEST), wrap_str_lit(" || break")),
                      stmt_ctx
                      );
   } else if (op == FOR_KW) {
