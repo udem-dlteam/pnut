@@ -1630,7 +1630,6 @@ void paste_tokens(int left_tok, int left_val) {
 
 void get_tok() {
 
-  bool first_time = true; // Used to simulate a do-while loop
 #ifdef SH_INCLUDE_C_CODE
   int prev_char_buf_ix = declaration_char_buf_ix;
   // Save the cursor in a local variable so we can restore it when the token is
@@ -1645,8 +1644,7 @@ void get_tok() {
 #endif
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  while (first_time || !if_macro_mask) {
-    first_time = false;
+  do {
 #ifdef SH_INCLUDE_C_CODE
     declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
 #endif
@@ -2020,7 +2018,8 @@ void get_tok() {
         }
       }
     }
-  }
+  } while (!if_macro_mask);
+
 #ifdef SH_INCLUDE_C_CODE
   last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
 #endif
