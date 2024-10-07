@@ -509,7 +509,7 @@ int end_ident() {
 
   // a new ident has been found
 
-  probe = alloc_obj(4);
+  probe = alloc_obj(5);
 
   heap[hash] = probe; // add new ident at end of chain
 
@@ -517,6 +517,7 @@ int end_ident() {
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
   heap[probe+3] = 0; // Token tag
+  heap[probe+4] = string_pool_alloc - string_start - 1; // string length
 
   return probe;
 }
@@ -838,9 +839,6 @@ void accum_string_until(char end) {
   if (ch != end) {
     syntax_error("unterminated string literal");
   }
-
-  ch = 0;
-  accum_string();
 
   get_ch();
 }
@@ -2514,8 +2512,6 @@ ast parse_primary_expression() {
         accum_string_string(heap[car(result)+1]);
         result = cdr(result);
       }
-
-      accum_string_char(0); // Null terminate the string
 
       result = new_ast0(STRING, end_string());
     }
