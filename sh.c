@@ -24,19 +24,6 @@ void handle_shell_include() {
   }
 }
 
-void print_string_char(int c) {
-  if (c == 7)       putstr("\\a");
-  else if (c == 8)  putstr("\\b");
-  else if (c == 12) putstr("\\f");
-  else if (c == 10) putstr("\\n");
-  else if (c == 13) putstr("\\r");
-  else if (c == 9)  putstr("\\t");
-  else if (c == 11) putstr("\\v");
-  else if (c == '\\' || c == '\'' || c == '\"') { putstr("\\"); putchar(c); }
-  else if (c < 32 || c > 126) { putstr("\\"); putint(c>>6); putint((c>>3)&7); putint(c&7); }
-  else putchar(c);
-}
-
 // codegen
 
 #define text int

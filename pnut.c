@@ -76,8 +76,10 @@
 #endif
 
 // Options that turns Pnut into a C preprocessor or some variant of it
+// DEBUG_GETCHAR: Read and print the input character by character.
 // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
 // DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
+// DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
 
 typedef int bool;
 
@@ -948,19 +950,6 @@ int read_macro_tokens(int args) {
   return toks;
 }
 
-#ifdef DEBUG_CPP
-void print_macro_raw_tokens(int tokens) {
-  int i = 0;
-  while (tokens != 0) {
-    // print_tok(car(car(tokens)), cdr(car(tokens)));
-    putchar(car(car(tokens))); putchar('('); putint(car(car(tokens))); putchar(')');
-    tokens = cdr(tokens);
-    i += 1;
-  }
-  putstr("("); putint(i); putstr(" tokens)");
-}
-#endif
-
 // A few things that are different from the standard:
 // - We allow sequence of commas in the argument list
 // - Function-like macros with 0 arguments can be called either without parenthesis or with ().
@@ -1003,22 +992,6 @@ void handle_define() {
   // Accumulate tokens so they can be replayed when the macro is used
   heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
-#ifdef DEBUG_CPP
-  putstr("# ");
-  putstr(string_pool + heap[macro + 1]);
-  if (args_count != -1) putchar('('); // Function-like macro
-
-  while (args_count > 0) {
-    putstr(string_pool + heap[car(args) + 1]);
-    args = cdr(args);
-    args_count -= 1;
-    if (args_count > 0) putstr(", ");
-  }
-
-  if (args_count != -1) putstr(") ");
-  print_macro_raw_tokens(car(heap[macro + 3]));
-  putchar('\n');
-#endif
 }
 
 int eval_constant(ast expr, bool if_macro) {
@@ -1630,7 +1603,6 @@ void paste_tokens(int left_tok, int left_val) {
 
 void get_tok() {
 
-  bool first_time = true; // Used to simulate a do-while loop
 #ifdef SH_INCLUDE_C_CODE
   int prev_char_buf_ix = declaration_char_buf_ix;
   // Save the cursor in a local variable so we can restore it when the token is
@@ -1645,8 +1617,7 @@ void get_tok() {
 #endif
 
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  while (first_time || !if_macro_mask) {
-    first_time = false;
+  do {
 #ifdef SH_INCLUDE_C_CODE
     declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
 #endif
@@ -2020,7 +1991,8 @@ void get_tok() {
         }
       }
     }
-  }
+  } while (!if_macro_mask);
+
 #ifdef SH_INCLUDE_C_CODE
   last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
 #endif
@@ -3145,7 +3117,7 @@ ast parse_compound_statement() {
 
 // Select code generator
 
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES) && !(defined DEBUG_PARSER) && !(defined DEBUG_GETCHAR)
 #ifdef sh
 #include "sh.c"
 #endif
@@ -3217,36 +3189,35 @@ int main(int argc, char **argv) {
     fatal_error("no input file");
   }
 
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
-  codegen_begin();
-#endif
-
   ch = '\n';
+
+#if defined DEBUG_GETCHAR // Read input
+  while (ch != EOF) {
+    get_ch();
+  }
+#elif defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES // Tokenize input, output tokens
   get_tok();
 
-#if defined DEBUG_EXPAND_INCLUDES
   while (tok != EOF) {
-    get_tok();
-  }
-#else
-  while (tok != EOF) {
-#ifdef DEBUG_CPP
+    skip_newlines = false; // Don't skip newlines so print_tok knows where to break lines
     print_tok(tok, val);
     get_tok();
+  }
+#elif defined DEBUG_PARSER // Parse input, output nothing
+    get_tok();
+  while (tok != EOF) {
+    decl = parse_definition(0);
+  }
 #else
-
+  codegen_begin();
+  get_tok();
+  while (tok != EOF) {
     decl = parse_definition(0);
 #ifdef SH_INCLUDE_C_CODE
     output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == VAR_DECLS);
 #endif
     codegen_glo_decl(decl);
-
-#endif
   }
-#endif
-
-
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
   codegen_end();
 #endif
 

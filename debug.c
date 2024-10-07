@@ -1,5 +1,3 @@
-// Shell backend already defines a print_string_char
-#ifndef sh
 void print_string_char(int c) {
   if (c == 7)       putstr("\\a");
   else if (c == 8)  putstr("\\b");
@@ -12,12 +10,9 @@ void print_string_char(int c) {
   else if (c < 32 || c > 126) { putchar('\\'); putint(c >> 6); putint((c >> 3) & 7); putint(c & 7); }
   else putchar(c);
 }
-#else
-void print_string_char(int c);
-#endif
 
+int print_tok_indent = 0;
 void print_tok(int tok, int val) {
-
   int i;
 
   if      (tok == AUTO_KW)      putstr("auto");
@@ -101,15 +96,20 @@ void print_tok(int tok, int val) {
     putchar('"');
   } else if (tok == MACRO_ARG) {
     putstr("ARG["); putint(val); putstr("]");
+  } else if (tok == '{') {
+    putchar(tok);
+    print_tok_indent += 2;
+  } else if (tok == '}') {
+    print_tok_indent -= 2;
+    putchar(tok);
+  } else if (tok == '\n') {
+    putchar(tok);
+    for (i = 0; i < print_tok_indent; i++) putchar(' ');
   } else {
     putchar(tok);
   }
 
-  if (tok == ';') { // Simple heuristic to print newlines. This makes the output more readable.
-    putchar('\n');
-  } else {
-    putchar(' ');
-  }
+  if (tok != '\n') putchar(' ');
 }
 
 // Show the type of a token.
@@ -181,6 +181,7 @@ void print_tok_type(int tok) {
   else if (tok == MACRO)            putstr("macro");
   else if (tok == MACRO_ARG)        putstr("macro argument");
   else if (tok == EOF)              putstr("end of file");
+  else if (tok == '\n')             putstr("newline");
   else                              { putchar('\''); putchar(tok); putchar('\''); }
 }
 
