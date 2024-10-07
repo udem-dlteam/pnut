@@ -1,5 +1,3 @@
-// Shell backend already defines a print_string_char
-#ifndef sh
 void print_string_char(int c) {
   if (c == 7)       putstr("\\a");
   else if (c == 8)  putstr("\\b");
@@ -12,12 +10,8 @@ void print_string_char(int c) {
   else if (c < 32 || c > 126) { putchar('\\'); putint(c >> 6); putint((c >> 3) & 7); putint(c & 7); }
   else putchar(c);
 }
-#else
-void print_string_char(int c);
-#endif
 
 void print_tok(int tok, int val) {
-
   int i;
 
   if      (tok == AUTO_KW)      putstr("auto");
