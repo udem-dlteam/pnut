@@ -279,8 +279,8 @@ int string_start;
 int hash;
 
 // These parameters give a perfect hashing of the C keywords
-#define HASH_PARAM 1997
-#define HASH_PRIME 53
+#define HASH_PARAM 1026
+#define HASH_PRIME 1009
 #define HEAP_SIZE 200000
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
