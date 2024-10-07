@@ -5,7 +5,7 @@
  *
  * For more details about ribbit, see the repository: https://github.com/udem-dlteam/ribbit
  *
- * Author : Léonard Oest O'Leary (github.com/leo-ard)
+ * Author : Leonard Oest O'Leary (github.com/leo-ard)
  */
 
 // This repl has been tested against R4RS compliance tests that can be found here :
