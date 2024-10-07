@@ -950,19 +950,6 @@ int read_macro_tokens(int args) {
   return toks;
 }
 
-#ifdef DEBUG_CPP
-void print_macro_raw_tokens(int tokens) {
-  int i = 0;
-  while (tokens != 0) {
-    // print_tok(car(car(tokens)), cdr(car(tokens)));
-    putchar(car(car(tokens))); putchar('('); putint(car(car(tokens))); putchar(')');
-    tokens = cdr(tokens);
-    i += 1;
-  }
-  putstr("("); putint(i); putstr(" tokens)");
-}
-#endif
-
 // A few things that are different from the standard:
 // - We allow sequence of commas in the argument list
 // - Function-like macros with 0 arguments can be called either without parenthesis or with ().
@@ -1005,22 +992,6 @@ void handle_define() {
   // Accumulate tokens so they can be replayed when the macro is used
   heap[macro + 3] = cons(read_macro_tokens(args), args_count);
 
-#ifdef DEBUG_CPP
-  putstr("# ");
-  putstr(string_pool + heap[macro + 1]);
-  if (args_count != -1) putchar('('); // Function-like macro
-
-  while (args_count > 0) {
-    putstr(string_pool + heap[car(args) + 1]);
-    args = cdr(args);
-    args_count -= 1;
-    if (args_count > 0) putstr(", ");
-  }
-
-  if (args_count != -1) putstr(") ");
-  print_macro_raw_tokens(car(heap[macro + 3]));
-  putchar('\n');
-#endif
 }
 
 int eval_constant(ast expr, bool if_macro) {
