@@ -76,8 +76,10 @@
 #endif
 
 // Options that turns Pnut into a C preprocessor or some variant of it
+// DEBUG_GETCHAR: Read and print the input character by character.
 // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
 // DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
+// DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
 
 typedef int bool;
 
@@ -3144,7 +3146,7 @@ ast parse_compound_statement() {
 
 // Select code generator
 
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
+#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES) && !(defined DEBUG_PARSER) && !(defined DEBUG_GETCHAR)
 #ifdef sh
 #include "sh.c"
 #endif
@@ -3216,36 +3218,35 @@ int main(int argc, char **argv) {
     fatal_error("no input file");
   }
 
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
-  codegen_begin();
-#endif
-
   ch = '\n';
+
+#if defined DEBUG_GETCHAR // Read input
+  while (ch != EOF) {
+    get_ch();
+  }
+#elif defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES // Tokenize input, output tokens
   get_tok();
 
-#if defined DEBUG_EXPAND_INCLUDES
   while (tok != EOF) {
-    get_tok();
-  }
-#else
-  while (tok != EOF) {
-#ifdef DEBUG_CPP
+    skip_newlines = false; // Don't skip newlines so print_tok knows where to break lines
     print_tok(tok, val);
     get_tok();
+  }
+#elif defined DEBUG_PARSER // Parse input, output nothing
+    get_tok();
+  while (tok != EOF) {
+    decl = parse_definition(0);
+  }
 #else
-
+  codegen_begin();
+  get_tok();
+  while (tok != EOF) {
     decl = parse_definition(0);
 #ifdef SH_INCLUDE_C_CODE
     output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == VAR_DECLS);
 #endif
     codegen_glo_decl(decl);
-
-#endif
   }
-#endif
-
-
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES)
   codegen_end();
 #endif
 
