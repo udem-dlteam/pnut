@@ -60,7 +60,7 @@ with_method() {
   # print_time $((TIME_MS - TIME_MS_INIT)) "for: $SHELL_TO_TEST $method.sh (500000 vars)"
 }
 
-methods="lookup_table"
+methods="subshell case lookup_table"
 shells="ksh dash bash yash zsh"
 
 for shell in $shells; do
