@@ -389,11 +389,14 @@ DEPENDS_ON(unpack_string)
   putstr("}\n");
 END_RUNTIME_FUN(make_argv)
 
+// TODO: Support all C escape sequences.
+// For now, the shell backend only produces these sequences so it's fine.
 #define handle_escaped_chars(prefix, buf_var, res_var) \
   putstr(prefix "case \"$" buf_var "\" in\n"); \
   putstr(prefix "  '\\'*)\n"); \
   putstr(prefix "    " buf_var "=\"${" buf_var "#?}\" # Remove the current char from $" buf_var "\n"); \
   putstr(prefix "    case \"$" buf_var "\" in\n"); \
+  putstr(prefix "      '0'*) " res_var "=0 ;;\n"); \
   putstr(prefix "      'a'*) " res_var "=7 ;;\n"); \
   putstr(prefix "      'b'*) " res_var "=8 ;;\n"); \
   putstr(prefix "      'f'*) " res_var "=12 ;;\n"); \
