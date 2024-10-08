@@ -7,7 +7,7 @@ void handle_shell_include() {
   int c;
   if (tok == STRING) {
     // Include the shell code from the file
-    shell_include_fp = fopen(string_pool + val, "r");
+    shell_include_fp = fopen(STRING_BUF(val), "r");
     // Include pack_string and unpack_string functions
     // since they will likely be used in the included file
     runtime_use_put_pstr = true;
@@ -184,7 +184,8 @@ text concatenate_strings_with(text t1, text t2, text sep) {
 
 void print_escaped_char(char c, int for_printf) {
   // C escape sequences
-  if      (c == '\a') { putchar('\\');  putchar('a'); }
+  if      (c == '\0') { putchar('\\');  putchar('0'); }
+  else if (c == '\a') { putchar('\\');  putchar('a'); }
   else if (c == '\b') { putchar('\\');  putchar('b'); }
   else if (c == '\f') { putchar('\\');  putchar('f'); }
   else if (c == '\n') { putchar('\\');  putchar('n'); }
@@ -206,15 +207,20 @@ void print_escaped_char(char c, int for_printf) {
   else                putchar(c);
 }
 
-void print_escaped_string(char *s, int for_printf) {
-  int i = 0;
-  while (s[i] != 0) {
-    print_escaped_char(s[i], for_printf);
-    i += 1;
+void print_escaped_string(char *string_start, char *string_end, int for_printf) {
+  if (string_end) {
+    while (string_start < string_end) {
+      print_escaped_char(*string_start, for_printf);
+      string_start += 1;
+    }
+  } else {
+    while (*string_start != 0) {
+      print_escaped_char(*string_start, for_printf);
+      string_start += 1;
+    }
   }
 }
 
-char char_bk;
 void print_escaped_text(text t, bool for_printf) {
   int i;
 
@@ -235,14 +241,7 @@ void print_escaped_text(text t, bool for_printf) {
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
-    if (TEXT_TO_INT(text_pool[t + 2]) == 0) {
-      print_escaped_string((char*) text_pool[t + 1], for_printf);
-    } else {
-      char_bk = *((char*)(text_pool[t + 2]));
-      *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
-      print_escaped_string((char*) text_pool[t + 1], for_printf);
-      *((char*)(text_pool[t + 2])) = char_bk;
-    }
+    print_escaped_string((char*) text_pool[t + 1],  (char*) text_pool[t + 2], for_printf);
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
   } else {
@@ -274,10 +273,11 @@ void print_text(text t) {
     if (TEXT_TO_INT(text_pool[t + 2]) == 0) {
       putstr((char*) text_pool[t + 1]);
     } else {
-      char_bk = *((char*)(text_pool[t + 2]));
-      *((char*)(text_pool[t + 2])) = 0; // Null-terminate the string
-      putstr((char*) text_pool[t + 1]);
-      *((char*)(text_pool[t + 2])) = char_bk;
+      i = text_pool[t + 1]; // start
+      while (i < TEXT_TO_INT(text_pool[t + 2])) {
+        putchar(string_pool[i]);
+        i += 1;
+      }
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
@@ -530,10 +530,15 @@ ast fresh_ident() {
   return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
 }
 
-// TODO: Reuse identifier for strings used in multiple places
-ast fresh_string_ident() {
-  string_counter += 1;
-  return new_ast0(IDENTIFIER_STRING, wrap_int(string_counter - 1));
+ast fresh_string_ident(int string_probe) {
+  // Strings are interned, meaning that the same string used twice will have the
+  // same address. We use the token tag to mark the string as already defined.
+  // This allows comp_defstr to use the same string variable for the same string.
+  if (heap[string_probe + 3] == 0) { // tag defaults to 0
+    string_counter += 1;
+    heap[string_probe + 3] = string_counter - 1;
+  }
+  return new_ast0(IDENTIFIER_STRING, wrap_int(heap[string_probe + 3]));
 }
 
 // The local environment is a list of variables represented using ',' nodes.
@@ -965,8 +970,8 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
       return node;
     } else if (op == STRING) {
-      // We must initialize strings before the expression
-      sub1 = fresh_string_ident();
+      /* We must initialize strings before the expression */
+      sub1 = fresh_string_ident(get_val(node));
       literals_inits = new_ast2(',', new_ast2(',', sub1, get_val(node)), literals_inits);
       return sub1;
     } else {
@@ -1101,7 +1106,10 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-void comp_defstr(ast ident, int string_pool_str) {
+void comp_defstr(ast ident, int string_probe) {
+  char *string_start = string_pool + heap[string_probe + 1];
+  char *string_end = string_start + heap[string_probe + 4];
+
   if (top_level_stmt) {
     // If defstr is used at the top level, it needs to be included beforehand
     runtime_defstr();
@@ -1112,7 +1120,7 @@ void comp_defstr(ast ident, int string_pool_str) {
   append_glo_decl(string_concat5( wrap_str_lit("defstr ")
                                 , format_special_var(ident, false)
                                 , wrap_str_lit(" \"")
-                                , escape_text(wrap_str_pool(string_pool_str), false)
+                                , escape_text(wrap_str_imm(string_start, string_end), false)
                                 , wrap_char('\"')));
 }
 
@@ -1692,10 +1700,10 @@ text comp_fun_call_code(ast node, ast assign_to) {
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && params != 0 && get_op(params) == STRING)) { // puts("..."), putstr("..."), printf("...")
-      return printf_call(string_pool + get_val(params), 0, 0, true);
-    } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) { // printf("...", ...)
-      handle_printf_call(string_pool + get_val(get_child(params, 0)), get_child(params, 1));
-      return 0; // This generates no code. I guess we could return the last printf call?
+      return printf_call(STRING_BUF(get_val(params)), 0, 0, true);
+    } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) {
+      handle_printf_call(STRING_BUF(get_val(get_child(params, 0))), get_child(params, 1));
+      return 0;
     }
 #ifdef SH_INLINE_PUTCHAR
     else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param

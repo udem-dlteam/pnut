@@ -1246,20 +1246,21 @@ int codegen_lvalue(ast node) {
   return lvalue_width;
 }
 
-void codegen_string(int start) {
+void codegen_string(int string_probe) {
 
   int lbl = alloc_label();
-  int i = start;
+  char *string_start = string_pool + heap[string_probe + 1];
+  char *string_end = string_start + heap[string_probe + 4];
 
   call(lbl);
 
-  while (string_pool[i] != 0) {
+  while (string_start != string_end) {
     if (char_width == 1) {
-      emit_i8(string_pool[i]);
+      emit_i8(*string_start);
     } else {
-      emit_word_le(string_pool[i]);
+      emit_word_le(*string_start);
     }
-    i += 1;
+    string_start += 1;
   }
 
 

@@ -279,8 +279,8 @@ int string_start;
 int hash;
 
 // These parameters give a perfect hashing of the C keywords
-#define HASH_PARAM 1997
-#define HASH_PRIME 53
+#define HASH_PARAM 1026
+#define HASH_PRIME 1009
 #define HEAP_SIZE 200000
 int heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
@@ -477,6 +477,12 @@ int c1;
 int c2;
 int end_ident_i;
 
+// Like end_ident, but for strings instead of identifiers
+// We want to deduplicate strings to reuse memory if possible.
+#define end_string end_ident
+// Simple accessor to get the string from the string pool
+#define STRING_BUF(string_val) (string_pool + heap[string_val+1])
+
 int end_ident() {
   string_pool[string_pool_alloc] = 0; // terminate string
   string_pool_alloc += 1; // account for terminator
@@ -503,7 +509,7 @@ int end_ident() {
 
   // a new ident has been found
 
-  probe = alloc_obj(4);
+  probe = alloc_obj(5);
 
   heap[hash] = probe; // add new ident at end of chain
 
@@ -511,6 +517,7 @@ int end_ident() {
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
   heap[probe+3] = 0; // Token tag
+  heap[probe+4] = string_pool_alloc - string_start - 1; // string length
 
   return probe;
 }
@@ -833,9 +840,6 @@ void accum_string_until(char end) {
     syntax_error("unterminated string literal");
   }
 
-  ch = 0;
-  accum_string();
-
   get_ch();
 }
 
@@ -1113,7 +1117,7 @@ int evaluate_if_condition() {
 
 void handle_include() {
   if (tok == STRING) {
-    include_file(string_pool + val, include_stack->dirname);
+    include_file(STRING_BUF(val), include_stack->dirname);
 #ifdef DEBUG_EXPAND_INCLUDES
     // When running pnut in "expand includes" mode, we want to annotate the
     // #include directives that were expanded with a comment so we can remove
@@ -1123,10 +1127,11 @@ void handle_include() {
     get_tok_macro(); // Skip the string
   } else if (tok == '<') {
     accum_string_until('>');
+    val = end_string();
     // #include <file> directives only take effect if the search path is provided
     // TODO: Issue a warning to stderr when skipping the directive
     if (include_search_path != 0) {
-      include_file(string_pool + string_start, include_search_path);
+      include_file(STRING_BUF(val), include_search_path);
     }
     get_tok_macro(); // Skip the string
   } else {
@@ -1526,9 +1531,9 @@ void stringify() {
   tok = STRING;
   // Support the case where the argument is a single identifier token
   if (car(car(arg)) == IDENTIFIER && cdr(arg) == 0) {
-    val = heap[cdr(car(arg)) + 1]; // Use the identifier value
+    val = cdr(car(arg)); // Use the identifier probe
   } else {
-    val = heap[NOT_SUPPORTED_ID + 1]; // Return string "NOT_SUPPORTED"
+    val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
   }
 }
 
@@ -1780,7 +1785,7 @@ void get_tok() {
         begin_string();
         accum_string_until('\"');
 
-        val = string_start;
+        val = end_string();
         tok = STRING;
 
         break;
@@ -2492,10 +2497,10 @@ ast parse_primary_expression() {
     get_tok();
 
     if (tok == STRING) { // Contiguous strings
-      result = cons(result, 0);
+      result = cons(get_val(result), 0); // Result is now a list of string values
       tail = result;
       while (tok == STRING) {
-        set_cdr(tail, cons(new_ast0(STRING, val), 0));
+        set_cdr(tail, cons(val, 0));
         tail = cdr(tail);
         get_tok();
       }
@@ -2504,13 +2509,11 @@ ast parse_primary_expression() {
       begin_string();
 
       while (result != 0) {
-        accum_string_string(get_val(car(result)));
+        accum_string_string(heap[car(result)+1]);
         result = cdr(result);
       }
 
-      accum_string_char(0); // Null terminate the string
-
-      result = new_ast0(STRING, string_start);
+      result = new_ast0(STRING, end_string());
     }
 
   } else if (tok == '(') {

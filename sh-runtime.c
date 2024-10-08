@@ -389,11 +389,21 @@ DEPENDS_ON(unpack_string)
   putstr("}\n");
 END_RUNTIME_FUN(make_argv)
 
+#ifdef OPTIMIZE_LONG_LINES
+#define handle_empty_buffer(prefix, buf_var) putstr(prefix "    if [ -z \"$" buf_var "\" ]; then next_sub_buffer; fi\n");
+#else
+#define handle_empty_buffer(prefix, buf_var)
+#endif
+
+// TODO: Support all C escape sequences.
+// For now, the shell backend only produces these sequences so it's fine.
 #define handle_escaped_chars(prefix, buf_var, res_var) \
   putstr(prefix "case \"$" buf_var "\" in\n"); \
   putstr(prefix "  '\\'*)\n"); \
   putstr(prefix "    " buf_var "=\"${" buf_var "#?}\" # Remove the current char from $" buf_var "\n"); \
+  handle_empty_buffer(prefix, buf_var) \
   putstr(prefix "    case \"$" buf_var "\" in\n"); \
+  putstr(prefix "      '0'*) " res_var "=0 ;;\n"); \
   putstr(prefix "      'a'*) " res_var "=7 ;;\n"); \
   putstr(prefix "      'b'*) " res_var "=8 ;;\n"); \
   putstr(prefix "      'f'*) " res_var "=12 ;;\n"); \
@@ -420,6 +430,12 @@ END_RUNTIME_FUN(make_argv)
 DEFINE_RUNTIME_FUN(unpack_escaped_string)
 DEPENDS_ON(malloc)
 DEPENDS_ON(char_to_int)
+#ifdef OPTIMIZE_LONG_LINES
+  putstr("next_sub_buffer() {\n");
+    extract_line_head("  ", "__us_buf256", "__buf", ANY_STRING_256, "256", "")
+    extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
+  putstr("}\n");
+#endif
   putstr("unpack_escaped_string() {\n");
   putstr("  __buf=\"$1\"\n");
   putstr("  # Allocates enough space for all characters, assuming that no character is escaped\n");
@@ -429,8 +445,7 @@ DEPENDS_ON(char_to_int)
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");
   putstr("  while [ ! -z \"$__buf\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
-  extract_line_head("    ", "__us_buf256", "__buf", ANY_STRING_256, "256", "")
-  extract_line_head("    ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
+  putstr("    next_sub_buffer\n");
   putstr("    while [ ! -z \"$__us_buf16\" ]; do\n");
   handle_escaped_chars("      ", "__us_buf16", "__c")
   putstr("    : $((_$__ptr = __c))\n");

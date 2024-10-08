@@ -246,6 +246,7 @@ unpack_escaped_string() {
       '\'*)
         __buf="${__buf#?}" # Remove the current char from $__buf
         case "$__buf" in
+          '0'*) __c=0 ;;
           'a'*) __c=7 ;;
           'b'*) __c=8 ;;
           'f'*) __c=12 ;;
