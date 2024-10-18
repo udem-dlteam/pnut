@@ -1045,6 +1045,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       return handle_fun_call_side_effect(node, 0, executes_conditionally);
     } else if (op == '=') {
       if (get_op(get_child(node, 1)) == '(') { // Function call
+        // In that case, we reuse the left hand side of the assignment as the result location
         return handle_fun_call_side_effect(get_child(node, 1), get_child(node, 0), executes_conditionally);
       } else {
         sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
