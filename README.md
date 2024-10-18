@@ -110,12 +110,13 @@ Unfortunately, certains C constructs don't map nicely to POSIX shell which means
 - No support for floating point numbers and unsigned integers.
 - `goto` and `switch` fallthrough are not supported.
 - The address of (`&`) operator on local variables is not supported.
+- Arrays and structures cannot be stack-allocated or passed by value.
+- Function pointers and indirect calls.
 
 ## Known issues
 
-- The preprocessor is not perfect and may fail on some edge cases. `#if` and `#elif` are not supported. `#include <...>` are ignored.
 - All local variable declarations must be at the beginning of a function.
-- Aggregate types (arrays and structures) cannot be stack-allocated, passed by value or nested in a structure.
+- Arrays and structures cannot be nested in a structure.
 
 ## Contributing
 
