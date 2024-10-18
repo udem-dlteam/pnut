@@ -22,13 +22,13 @@ _malloc() { # $2 = object size
 defarr() { _malloc $1 $2; }
 
 defarr _buffer 1024
-: $((__t1 = len = c = dst = src = args = argc = 0))
+: $((len = c = dst = src = args = argc = 0))
 _main() { let argc $2; let args $3
-  let src; let dst; let c; let len; let __t1
+  let src; let dst; let c; let len
   if [ $argc != 3 ] ; then
     printf "Usage: cp <source> <destination>\n"
     : $(($1 = 1))
-    endlet $1 __t1 len c dst src args argc
+    endlet $1 len c dst src args argc
     return
   fi
   _open src $((_$((args + 1)))) 0
@@ -39,10 +39,10 @@ _main() { let argc $2; let args $3
   if [ $dst = 0 ] ; then
     _file_error __ $((_$((args + 2))))
   fi
-  while _read __t1 $src $_buffer 1024; [ $((len = __t1)) != 0 ]; do
+  while _read len $src $_buffer 1024; [ $len != 0 ]; do
     _write __ $dst $_buffer $len
   done
-  endlet $1 __t1 len c dst src args argc
+  endlet $1 len c dst src args argc
 }
 
 # Runtime library

@@ -105,21 +105,21 @@ _encode() {
 }
 
 defarr _lut 256
-: $((__t1 = c = 0))
+: $((c = 0))
 _get() {
-  let c; let __t1
-  while _getchar __t1; [ $((c = __t1)) -ge 0 ]; do
+  let c
+  while _getchar c; [ $c -ge 0 ]; do
     if [ $((c = _$((_lut + c)))) -ge 0 ] ; then
       break
     fi
   done
   : $(($1 = c))
-  endlet $1 __t1 c
+  endlet $1 c
 }
 
-: $((__t1 = c4 = c3 = c2 = c1 = i = 0))
+: $((c4 = c3 = c2 = c1 = i = 0))
 _decode() {
-  let i; let c1; let c2; let c3; let c4; let __t1
+  let i; let c1; let c2; let c3; let c4
   i=0
   while [ $i -lt 256 ]; do
     : $((_$((_lut + i)) = -1))
@@ -130,21 +130,21 @@ _decode() {
     : $((_$((_lut + 255 & _$((_codes + i)))) = i))
     : $((i += 1))
   done
-  while _get __t1; [ $((c1 = __t1)) -ge 0 ]; do
-    if _get __t1; [ $((c2 = __t1)) -lt 0 ] ; then
+  while _get c1; [ $c1 -ge 0 ]; do
+    if _get c2; [ $c2 -lt 0 ] ; then
       exit 1
     fi
     printf \\$((((c1 << 2) | (c2 >> 4))/64))$((((c1 << 2) | (c2 >> 4))/8%8))$((((c1 << 2) | (c2 >> 4))%8))
-    if _get __t1; [ $((c3 = __t1)) -lt 0 ] ; then
+    if _get c3; [ $c3 -lt 0 ] ; then
       break
     fi
     printf \\$(((255 & ((c2 << 4) | (c3 >> 2)))/64))$(((255 & ((c2 << 4) | (c3 >> 2)))/8%8))$(((255 & ((c2 << 4) | (c3 >> 2)))%8))
-    if _get __t1; [ $((c4 = __t1)) -lt 0 ] ; then
+    if _get c4; [ $c4 -lt 0 ] ; then
       break
     fi
     printf \\$(((255 & ((c3 << 6) | c4))/64))$(((255 & ((c3 << 6) | c4))/8%8))$(((255 & ((c3 << 6) | c4))%8))
   done
-  endlet $1 __t1 c4 c3 c2 c1 i
+  endlet $1 c4 c3 c2 c1 i
 }
 
 : $((myargv = argc = 0))
