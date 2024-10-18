@@ -8,15 +8,15 @@ _is_word_separator() { let c $2
   endlet $1 c
 }
 
-: $((__t1 = last_sep = sep = c = chars = words = lines = 0))
+: $((last_sep = sep = c = chars = words = lines = 0))
 _main() {
-  let lines; let words; let chars; let c; let sep; let last_sep; let __t1
+  let lines; let words; let chars; let c; let sep; let last_sep
   lines=0
   words=0
   chars=0
   sep=0
   last_sep=0
-  while _getchar __t1; [ $((c = __t1)) != -1 ]; do
+  while _getchar c; [ $c != -1 ]; do
     : $((chars += 1))
     if [ $c = $__NEWLINE__ ] ; then
       : $((lines += 1))
@@ -28,7 +28,7 @@ _main() {
     last_sep=$sep
   done
   printf "%d %d %d\n" $lines $words $chars
-  endlet $1 __t1 last_sep sep c chars words lines
+  endlet $1 last_sep sep c chars words lines
 }
 
 # Character constants

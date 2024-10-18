@@ -828,7 +828,7 @@ _main() { # argc: $2, argv: $3
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _open __t1 $((_$argv_)) 0; [ $((fd = __t1)) -lt 0 ] ; then
+  if _open fd $((_$argv_)) 0; [ $fd -lt 0 ] ; then
     printf "could not open("
     _put_pstr __ $((_$argv_))
     printf ")\n"
@@ -837,25 +837,25 @@ _main() { # argc: $2, argv: $3
     return
   fi
   poolsz=$((256 * 1024))
-  if _malloc __t1 $poolsz; [ $((!(_sym = __t1))) != 0 ] ; then
+  if _malloc _sym $poolsz; [ $((!_sym)) != 0 ] ; then
     printf "could not malloc(%d) symbol area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc __t1 $poolsz; [ $((!(_le = _e = __t1))) != 0 ] ; then
+  if _malloc _e $poolsz; [ $((!(_le = _e))) != 0 ] ; then
     printf "could not malloc(%d) text area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc __t1 $poolsz; [ $((!(_data = __t1))) != 0 ] ; then
+  if _malloc _data $poolsz; [ $((!_data)) != 0 ] ; then
     printf "could not malloc(%d) data area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc __t1 $poolsz; [ $((!(sp = __t1))) != 0 ] ; then
+  if _malloc sp $poolsz; [ $((!sp)) != 0 ] ; then
     printf "could not malloc(%d) stack area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
@@ -879,13 +879,13 @@ _main() { # argc: $2, argv: $3
   : $((_$((_id + _Tk)) = _Char))
   _next __
   idmain=$_id
-  if _malloc __t1 $poolsz; [ $((!(_lp = _p = __t1))) != 0 ] ; then
+  if _malloc _p $poolsz; [ $((!(_lp = _p))) != 0 ] ; then
     printf "could not malloc(%d) source area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _read __t1 $fd $_p $((poolsz - 1)); [ $((i = __t1)) -le 0 ] ; then
+  if _read i $fd $_p $((poolsz - 1)); [ $i -le 0 ] ; then
     printf "read() returned %d\n" $i
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
