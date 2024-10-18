@@ -131,11 +131,8 @@ refill_buffer() { # $1: fd
   __buffer=$((__buffer_fd$__fd))
 
   IFS=
-  if read -r __temp_buf <&$__fd ; then  # read next line into $__temp_buf
-    __ends_with_eof=0
-  else
-    __ends_with_eof=1
-  fi
+  __ends_with_eof=0
+  read -r __temp_buf <&$__fd || __ends_with_eof=1
 
   # Check that the buffer is large enough to unpack the line
   __buflen=$((__buflen_fd$__fd - 2)) # Minus 2 to account for newline and \0
@@ -203,9 +200,9 @@ _open() { # $2: filename, $3: flags, $4: mode
     # is read and then unpacked in the buffer.
     _malloc __addr 1000                 # Allocate buffer
     : $((_$__addr = 0))                 # Init buffer to ""
-    : $((__buffer_fd$__fd = __addr))    # Save buffer address
-    : $((__cursor_fd$__fd = 0))         # Make buffer empty
-    : $((__buflen_fd$__fd = 1000))      # Init buffer length
+    : $((__buffer_fd$__fd = __addr))    # Buffer address
+    : $((__cursor_fd$__fd = 0))         # Buffer cursor
+    : $((__buflen_fd$__fd = 1000))      # Buffer length
     : $((__state_fd$__fd = $3))         # Mark the fd as opened
     __res=$(_put_pstr __ $2)
     if [ $3 = 0 ] ; then
@@ -230,7 +227,7 @@ _open() { # $2: filename, $3: flags, $4: mode
         9) exec 9>> "$__res" ;;
       esac
     else
-      echo "Unknow file mode" ; exit 1
+      echo "Unknown file mode" ; exit 1
     fi
   fi
   : $(($1 = __fd))
@@ -240,9 +237,7 @@ _read() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))
   : $((__i = 0))
   while [ $__i -lt $__count ] ; do
     read_byte __byte $__fd
-    if [ $__byte -lt 0 ] ; then
-      break
-    fi
+    if [ $__byte -lt 0 ] ; then break; fi
     : $((_$((__buf + __i)) = __byte))
     : $((__i += 1))
   done
