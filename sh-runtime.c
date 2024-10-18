@@ -716,9 +716,9 @@ DEPENDS_ON(put_pstr)
   putstr("    # is read and then unpacked in the buffer.\n");
   putstr("    _malloc __addr 1000                 # Allocate buffer\n");
   putstr("    : $((_$__addr = 0))                 # Init buffer to \"\"\n");
-  putstr("    : $((__buffer_fd$__fd = __addr))    # Save buffer address\n");
-  putstr("    : $((__cursor_fd$__fd = 0))         # Make buffer empty\n");
-  putstr("    : $((__buflen_fd$__fd = 1000))      # Init buffer length\n");
+  putstr("    : $((__buffer_fd$__fd = __addr))    # Buffer address\n");
+  putstr("    : $((__cursor_fd$__fd = 0))         # Buffer cursor\n");
+  putstr("    : $((__buflen_fd$__fd = 1000))      # Buffer length\n");
   putstr("    : $((__state_fd$__fd = $3))         # Mark the fd as opened\n");
   putstr("    __res=$(_put_pstr __ $2)\n");
   putstr("    if [ $3 = 0 ] ; then\n");
@@ -743,7 +743,7 @@ DEPENDS_ON(put_pstr)
   putstr("        9) exec 9>> \"$__res\" ;;\n");
   putstr("      esac\n");
   putstr("    else\n");
-  putstr("      echo \"Unknow file mode\" ; exit 1\n");
+  putstr("      echo \"Unknown file mode\" ; exit 1\n");
   putstr("    fi\n");
   putstr("  fi\n");
   putstr("  : $(($1 = __fd))\n");
@@ -791,11 +791,8 @@ DEPENDS_ON(char_to_int)
   putstr("  __buffer=$((__buffer_fd$__fd))\n");
   putstr("\n");
   putstr("  IFS=\n");
-  putstr("  if read -r __temp_buf <&$__fd ; then  # read next line into $__temp_buf\n");
-  putstr("    __ends_with_eof=0\n");
-  putstr("  else\n");
-  putstr("    __ends_with_eof=1\n");
-  putstr("  fi\n");
+  putstr("  __ends_with_eof=0\n");
+  putstr("  read -r __temp_buf <&$__fd || __ends_with_eof=1\n");
   putstr("\n");
   putstr("  # Check that the buffer is large enough to unpack the line\n");
   putstr("  __buflen=$((__buflen_fd$__fd - 2)) # Minus 2 to account for newline and \\0\n");
@@ -838,9 +835,7 @@ DEPENDS_ON(open)
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    read_byte __byte $__fd\n");
-  putstr("    if [ $__byte -lt 0 ] ; then\n");
-  putstr("      break\n");
-  putstr("    fi\n");
+  putstr("    if [ $__byte -lt 0 ] ; then break; fi\n");
   putstr("    : $((_$((__buf + __i)) = __byte))\n");
   putstr("    : $((__i += 1))\n");
   putstr("  done\n");
