@@ -67,6 +67,7 @@ bool comp_body(ast node, STMT_CTX stmt_ctx);
 bool comp_statement(ast node, STMT_CTX stmt_ctx);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
+ast handle_side_effects_go(ast node, int executes_conditionally);
 
 // Because concatenating strings is very expensive and a common operation, we
 // use a tree structure to represent the concatenated strings. That way, the
@@ -948,23 +949,69 @@ ast replaced_fun_calls_tail = 0;
 ast conditional_fun_calls = 0;
 ast conditional_fun_calls_tail = 0;
 ast literals_inits = 0;
-int executes_conditionally = 0;
-int contains_side_effects = 0;
+bool contains_side_effects = 0;
+
+ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_conditionally) {
+  int start_gensym_ix = gensym_ix;
+  ast new_tail;
+  ast sub2;
+
+  if (assign_to == 0) {
+    assign_to = fresh_ident(); // Unique identifier for the function call
+    start_gensym_ix = gensym_ix;
+
+    // At this point, the temporary identifier of the variable is not live and
+    // can be used to evaluate the function arguments. This reduces the number
+    // of temporary variables.
+    gensym_ix -= 1;
+  }
+
+  // Traverse the arguments and replace them with the result of handle_side_effects_go
+  sub2 = get_child(node, 1);
+  if (sub2 != 0) { // Check if not an empty list
+    if (get_op(sub2) == ',') {
+      while (get_op(sub2) == ',') {
+        set_child(sub2, 0, handle_side_effects_go(get_child(sub2, 0), executes_conditionally));
+        sub2 = get_child(sub2, 1);
+      }
+    } else { // sub2 is the first argument, not wrapped in a cons cell
+      sub2 = handle_side_effects_go(sub2, executes_conditionally);
+      set_child(node, 1, sub2);
+    }
+  }
+
+  // All the temporary variables used for the function parameters can be
+  // reused after the function call, so resetting the gensym counter.
+  gensym_ix = start_gensym_ix;
+
+  new_tail = new_ast2(',', assign_to, node);
+  new_tail = new_ast2(',', new_tail, 0);
+  if (executes_conditionally) {
+    if (conditional_fun_calls == 0) { conditional_fun_calls = new_tail; }
+    else { set_child(conditional_fun_calls_tail, 1, new_tail); }
+    conditional_fun_calls_tail = new_tail;
+  }
+  else {
+    if (replaced_fun_calls == 0) { replaced_fun_calls = new_tail; }
+    else { set_child(replaced_fun_calls_tail, 1, new_tail); }
+    replaced_fun_calls_tail = new_tail;
+  }
+
+  return assign_to;
+}
 
 // We can't have function calls and other side effects in $(( ... )), so we need to handle them separately.
 // For unconditional function calls, they are replaced with unique identifiers and returned as a list with their new identifiers.
 // For pre/post-increments/decrements, we map them to a pre-side-effects and replace with the corresponding operation.
 // Note that pre/post-increments/decrements of function calls are not supported.
-ast handle_side_effects_go(ast node, int executes_conditionally) {
+ast handle_side_effects_go(ast node, bool executes_conditionally) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
-  int start_gensym_ix;
   ast sub1;
   ast sub2;
   ast previous_conditional_fun_calls;
   ast left_conditional_fun_calls;
   ast right_conditional_fun_calls;
-  ast new_tail;
 
   if (nb_children == 0) {
     if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
@@ -995,51 +1042,19 @@ ast handle_side_effects_go(ast node, int executes_conditionally) {
     }
   } else if (nb_children == 2) {
     if (op == '(') { // Function call
-      sub1 = fresh_ident(); // Unique identifier for the function call
-
-      start_gensym_ix = gensym_ix;
-
-      // At this point, the temporary identifier of the variable is not live and
-      // can be used to evaluate the function arguments. This reduces the number
-      // of temporary variables.
-      gensym_ix -= 1;
-
-      // Traverse the arguments and replace them with the result of handle_side_effects_go
-      sub2 = get_child(node, 1);
-      if (sub2 != 0) { // Check if not an empty list
-        if (get_op(sub2) == ',') {
-          while (get_op(sub2) == ',') {
-            set_child(sub2, 0, handle_side_effects_go(get_child(sub2, 0), executes_conditionally));
-            sub2 = get_child(sub2, 1);
-          }
-        } else { // sub2 is the first argument, not wrapped in a cons cell
-          sub2 = handle_side_effects_go(sub2, executes_conditionally);
-          set_child(node, 1, sub2);
-        }
+      return handle_fun_call_side_effect(node, 0, executes_conditionally);
+    } else if (op == '=') {
+      if (get_op(get_child(node, 1)) == '(') { // Function call
+        // In that case, we reuse the left hand side of the assignment as the result location
+        return handle_fun_call_side_effect(get_child(node, 1), get_child(node, 0), executes_conditionally);
+      } else {
+        sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
+        sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
+        return new_ast2(op, sub1, sub2);
       }
-
-      // All the temporary variables used for the function parameters can be
-      // reused after the function call, so resetting the gensym counter.
-      gensym_ix = start_gensym_ix;
-
-      new_tail = new_ast2(',', sub1, node);
-      new_tail = new_ast2(',', new_tail, 0);
-      if (executes_conditionally) {
-        if (conditional_fun_calls == 0) { conditional_fun_calls = new_tail; }
-        else { set_child(conditional_fun_calls_tail, 1, new_tail); }
-        conditional_fun_calls_tail = new_tail;
-      }
-      else {
-        if (replaced_fun_calls == 0) { replaced_fun_calls = new_tail; }
-        else { set_child(replaced_fun_calls_tail, 1, new_tail); }
-        replaced_fun_calls_tail = new_tail;
-      }
-
-      return sub1;
     } else if (op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
-      || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == LSHIFT || op == RSHIFT || op == '=' || op == '['
+      || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == LSHIFT || op == RSHIFT || op == '['
       || op == '.' || op == ARROW ) {
-      // We can't place handle_side_effects_go directly in new_ast2 call because six-cc creates a global variable that gets overwritten in the other handle_side_effects_go calls
       sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
       sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
