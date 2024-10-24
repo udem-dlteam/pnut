@@ -118,6 +118,12 @@ Unfortunately, certains C constructs don't map nicely to POSIX shell which means
 - All local variable declarations must be at the beginning of a function.
 - Arrays and structures cannot be nested in a structure.
 
+## Presentation
+
+You can find my slides from my presentation at the Software Language Engineering
+(SLE24) conference and the paper the presentation is based in the `doc/`
+directory.
+
 ## Contributing
 
 Pnut is a research project and contributions are welcome. Please open an issue
