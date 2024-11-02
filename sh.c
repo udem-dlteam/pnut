@@ -1550,7 +1550,7 @@ text comp_putchar_inline(ast param) {
     ident = fresh_ident();
     append_glo_decl(string_concat4(comp_lvalue(ident), wrap_str_lit("=$(("), res, wrap_str_lit("))")));
     res = comp_lvalue(ident);
-  } else if (get_op(param) != IDENTIFIER) {
+  } else if (get_op(param) != IDENTIFIER && get_op(param) != INTEGER && get_op(param) != CHARACTER) {
     res = string_concat3(wrap_char('('), res, wrap_char(')'));
   }
 
