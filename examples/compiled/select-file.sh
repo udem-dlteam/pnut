@@ -177,7 +177,7 @@ _read_int() {
   while [ 1 != 0 ]; do
     _getchar c
     if [ $c -ge $__0__ ] && [ $c -le $__9__ ] ; then
-      n=$((((10 * n) + c) - __0__))
+      n=$((10 * n + c - __0__))
     else
       break
     fi

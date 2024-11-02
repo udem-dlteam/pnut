@@ -10,11 +10,11 @@ _reverse_str() { let str $2
   while [ $((_$(((end += 1) - 1)))) != 0 ]; do
     :
   done
-  len=$(((end - str) - 1))
+  len=$((end - str - 1))
   while [ $i -lt $((len / 2)) ]; do
     tmp=$((_$((str + i))))
-    : $((_$((str + i)) = _$((str + ((len - 1) - i)))))
-    : $((_$((str + (len - 1) - i)) = tmp))
+    : $((_$((str + i)) = _$((str + len - 1 - i))))
+    : $((_$((str + len - 1 - i)) = tmp))
     : $((i += 1))
   done
   endlet $1 i len tmp end str

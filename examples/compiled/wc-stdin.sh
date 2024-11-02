@@ -4,7 +4,7 @@ LC_ALL=C
 
 : $((c = 0))
 _is_word_separator() { let c $2
-  : $(($1 = (c == __SPACE__) || (c == __NEWLINE__) || (c == __TAB__)))
+  : $(($1 = c == __SPACE__ || c == __NEWLINE__ || c == __TAB__))
   endlet $1 c
 }
 

@@ -12,7 +12,7 @@ _main() {
     while _getchar __t1; [ $__NEWLINE__ != $__t1 ]; do
       :
     done
-    [ $n = $__0__ ] || [ $((!((n >= __0__) && (n <= __9__)))) != 0 ] || break
+    [ $n = $__0__ ] || [ $((!(n >= __0__ && n <= __9__))) != 0 ] || break
   done
   printf "You entered "
   printf \\$((n/64))$((n/8%8))$((n%8))

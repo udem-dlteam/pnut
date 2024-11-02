@@ -29,7 +29,7 @@ _memcmp() { # vl: $2, vr: $3, n: $4
     : $((l += 1))
     : $((r += 1))
   done
-  : $(($1 = n ? ((_$l & 255) - (_$r & 255)): 0))
+  : $(($1 = n ? (_$l & 255) - (_$r & 255): 0))
   : $((__tmp = $1)) $((vl = $5)) $((vr = $6)) $((n = $7)) $((l = $8)) $((r = $9)) $(($1 = __tmp))
 }
 
@@ -167,7 +167,7 @@ _next() {
     elif { [ $_tk -ge $__a__ ] && [ $_tk -le $__z__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__Z__ ]; } || [ $_tk = $__UNDERSCORE__ ] ; then
       pp=$((_p - 1))
       while { [ $((_$_p)) -ge $__a__ ] && [ $((_$_p)) -le $__z__ ]; } || { [ $((_$_p)) -ge $__A__ ] && [ $((_$_p)) -le $__Z__ ]; } || { [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__9__ ]; } || [ $((_$_p)) = $__UNDERSCORE__ ]; do
-        _tk=$(((_tk * 147) + _$(((_p += 1) - 1))))
+        _tk=$((_tk * 147 + _$(((_p += 1) - 1))))
       done
       _tk=$(((_tk << 6) + (_p - pp)))
       _id=$_sym
@@ -186,15 +186,15 @@ _next() {
     elif [ $_tk -ge $__0__ ] && [ $_tk -le $__9__ ] ; then
       if [ $((_ival = _tk - __0__)) != 0 ] ; then
         while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__9__ ]; do
-          _ival=$((((_ival * 10) + _$(((_p += 1) - 1))) - __0__))
+          _ival=$((_ival * 10 + _$(((_p += 1) - 1)) - __0__))
         done
       elif [ $((_$_p)) = $__x__ ] || [ $((_$_p)) = $__X__ ] ; then
         while [ $((_tk = _$((_p += 1)))) != 0 ] && { { [ $_tk -ge $__0__ ] && [ $_tk -le $__9__ ]; } || { [ $_tk -ge $__a__ ] && [ $_tk -le $__f__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__F__ ]; }; }; do
-          _ival=$(((_ival * 16) + (_tk & 15) + ((_tk >= __A__) ? 9: 0)))
+          _ival=$((_ival * 16 + (_tk & 15) + (_tk >= __A__ ? 9: 0)))
         done
       else
         while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__7__ ]; do
-          _ival=$((((_ival * 8) + _$(((_p += 1) - 1))) - __0__))
+          _ival=$((_ival * 8 + _$(((_p += 1) - 1)) - __0__))
         done
       fi
       _tk=$_Num
@@ -337,7 +337,7 @@ _expr() { # lev: $2
     while [ $_tk = $__DQUOTE__ ]; do
       _next __
     done
-    _data=$(((_data + 1) & -(1)))
+    _data=$((_data + 1 & -(1)))
     _ty=$_PTR
   elif [ $_tk = $_Sizeof ] ; then
     _next __
@@ -812,12 +812,12 @@ _main() { # argc: $2, argv: $3
   argv_=$3
   : $((argc -= 1))
   : $((argv_ += 1))
-  if [ $argc -gt 0 ] && [ $((_$((_$argv_)))) = $__MINUS__ ] && [ $((_$((_$argv_ + 1)))) = $__s__ ] ; then
+  if [ $argc -gt 0 ] && [ $((_$((_$argv_)))) = $__MINUS__ ] && [ $((_$(((_$argv_) + 1)))) = $__s__ ] ; then
     _src=1
     : $((argc -= 1))
     : $((argv_ += 1))
   fi
-  if [ $argc -gt 0 ] && [ $((_$((_$argv_)))) = $__MINUS__ ] && [ $((_$((_$argv_ + 1)))) = $__d__ ] ; then
+  if [ $argc -gt 0 ] && [ $((_$((_$argv_)))) = $__MINUS__ ] && [ $((_$(((_$argv_) + 1)))) = $__d__ ] ; then
     _debug=1
     : $((argc -= 1))
     : $((argv_ += 1))
@@ -837,7 +837,7 @@ _main() { # argc: $2, argv: $3
     return
   fi
   poolsz=$((256 * 1024))
-  if _malloc _sym $poolsz; [ $((!_sym)) != 0 ] ; then
+  if _malloc _sym $poolsz; [ $((!(_sym))) != 0 ] ; then
     printf "could not malloc(%d) symbol area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
@@ -849,13 +849,13 @@ _main() { # argc: $2, argv: $3
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc _data $poolsz; [ $((!_data)) != 0 ] ; then
+  if _malloc _data $poolsz; [ $((!(_data))) != 0 ] ; then
     printf "could not malloc(%d) data area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc sp $poolsz; [ $((!sp)) != 0 ] ; then
+  if _malloc sp $poolsz; [ $((!(sp))) != 0 ] ; then
     printf "could not malloc(%d) stack area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
@@ -1109,9 +1109,9 @@ _main() { # argc: $2, argv: $3
       : $((_$((sp -= 1)) = (pc + 1)))
       pc=$((_$pc))
     elif [ $i = $_BZ ] ; then
-      pc=$((a ? (pc + 1): _$pc))
+      pc=$((a ? pc + 1: _$pc))
     elif [ $i = $_BNZ ] ; then
-      pc=$((a ? _$pc: (pc + 1)))
+      pc=$((a ? _$pc: pc + 1))
     elif [ $i = $_ENT ] ; then
       : $((_$((sp -= 1)) = bp))
       bp=$sp
