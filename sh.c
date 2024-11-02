@@ -1164,30 +1164,16 @@ text with_prefixed_side_effects(ast test_side_effects, text code) {
   }
 }
 
-// Return true if the operator is associative.
-// Associative operators can be chained without parentheses.
-bool is_associative_operator(int op) {
-  return (op == '+')   | (op == '*')     | (op == '&')    | (op == '|')    | (op == '^')
-      |  (op == EQ_EQ) | (op == AMP_AMP) | (op == BAR_BAR);
-}
-
 // Wrap code in $((...)) if it's not already and if it's already in $(( )), wrap
 // it in parentheses if parens_otherwise is true. If it's not in an arithmetic
 // expansion and we're compiling tests, we also add the test condition to make it
 // a valid test.
-text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, text code, int outer_op, int inner_op) {
+text wrap_if_needed(int context, ast test_side_effects, text code) {
   // Rough heuristic to determine if we need to wrap in parentheses. If we
   // wanted to do this right, we'd track the left and right operators and
   // use this information to determine if parentheses are needed.
   if (context == RVALUE_CTX_ARITH_EXPANSION) {
-    if ( parens_otherwise
-      && outer_op != 0
-      && outer_op != '=' // Assignment has the lowest precedence so we never use parentheses
-      && (!is_associative_operator(inner_op) || inner_op != outer_op) // Adjacent associative operations don't need parentheses
-      ) {
-      return string_concat3(wrap_char('('), code, wrap_char(')'));
-    }
-    else return code;
+    return code;
   } else if (context == RVALUE_CTX_TEST) {
     return with_prefixed_side_effects(test_side_effects, string_concat3(wrap_str_lit("[ $(("), code, wrap_str_lit(")) != 0 ]")));
   } else {
@@ -1213,7 +1199,7 @@ text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) 
   }
 }
 
-text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) {
+text comp_rvalue_go(ast node, int context, ast test_side_effects) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   text sub1;
@@ -1249,38 +1235,38 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // Setting context to RVALUE_CTX_BASE even if it's wrapped in $(( ... )) because we
       // need another layer of wrapping if it's a complex expression, i.e. not a
       // literal or a variable.
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0, op);
-      return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('_'), sub1), outer_op, op);
-    } else if (op == '+' || op == PARENS) {
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat(wrap_char('_'), sub1));
+    } else if (op == '+') {
       // +x is equivalent to x
-      return comp_rvalue_go(get_child(node, 0), context, test_side_effects, op);
+      return comp_rvalue_go(get_child(node, 0), context, test_side_effects);
     } else if (op == '-') {
       // Check if the rest of ast is a literal, if so directly return the negated value.
       // Note: I think this can be simplified by not wrapped in () in the else case.
       if (get_op(get_child(node, 0)) == INTEGER) {
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(get_child(node, 0))));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("-("), sub1, wrap_char(')')), outer_op, op);
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+        return wrap_if_needed(context, test_side_effects, string_concat3(wrap_str_lit("-("), sub1, wrap_char(')')));
       }
     } else if (op == '~') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("~("), sub1, wrap_char(')')), outer_op, op);
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat3(wrap_str_lit("~("), sub1, wrap_char(')')));
     } else if (op == '!') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat(wrap_char('!'), sub1), outer_op, op);
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat(wrap_char('!'), sub1));
     } else if (op == MINUS_MINUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" -= 1")), outer_op, op);
+      return wrap_if_needed(context, test_side_effects, string_concat(sub1, wrap_str_lit(" -= 1")));
     } else if (op == PLUS_PLUS_PRE) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" += 1")), outer_op, op);
+      return wrap_if_needed(context, test_side_effects, string_concat(sub1, wrap_str_lit(" += 1")));
     } else if (op == MINUS_MINUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
+      return wrap_if_needed(context, test_side_effects,string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")));
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(get_child(node, 0));
-      return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
+      return wrap_if_needed(context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")));
     } else if (op == SIZEOF_KW) {
       if (get_op(get_child(node, 0)) == INT_KW
        || get_op(get_child(node, 0)) == CHAR_KW
@@ -1290,13 +1276,23 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
           && get_child(get_child(node, 0), 0) >= 1)) { // If it's a pointer
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
       } else if (get_op(get_child(node, 0)) == STRUCT_KW) {
-        return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)), outer_op, op);
+        return wrap_if_needed(context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)));
       } else {
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
     } else if (op == '&') {
-      return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(get_child(node, 0)), outer_op, op);
+      return wrap_if_needed(context, test_side_effects, comp_lvalue_address(get_child(node, 0)));
+    } else if (op == PARENS) {
+      if (context == RVALUE_CTX_ARITH_EXPANSION) {
+        return wrap_if_needed(context, test_side_effects, string_concat3(wrap_str_lit("("), comp_rvalue_go(non_parenthesized_operand(node), RVALUE_CTX_ARITH_EXPANSION, 0), wrap_str_lit(")")));
+      } else {
+        // In base context, there are no surrounding operators so parentheses
+        // are not needed. For test contexts, the priority of && and || is not
+        // the same as in C and parenthesis are added automatically in the
+        // AMP_AMP/BAR_BAR cases of this function.
+        return comp_rvalue_go(non_parenthesized_operand(node), context, test_side_effects);
+      }
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
@@ -1304,33 +1300,33 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     }
   } else if (nb_children == 2) {
     if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT) {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == '=' || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       sub1 = comp_lvalue(get_child(node, 0));
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
     } else if (op == '[') { // array indexing
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, '+');
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, '+');
-      return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")));
     } else if (op == ARROW) { // member access is implemented like array access
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
       sub2 = struct_member_var(get_child(node, 1));
-      return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
+      return wrap_if_needed(context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")));
     } else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
       if (context == RVALUE_CTX_TEST) {
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0, op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_BASE, 0, op);
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_BASE, 0);
         return with_prefixed_side_effects(test_side_effects, string_concat5(wrap_str_lit("[ "), sub1, test_op_to_str(op), sub2, wrap_str_lit(" ]")));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+        return wrap_if_needed(context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else if (op == CAST) { // Casts are no-op
-      return comp_rvalue_go(get_child(node, 1), context, 0, op);
+      return comp_rvalue_go(get_child(node, 1), context, 0);
     } else if (op == AMP_AMP || op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
@@ -1340,10 +1336,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     }
   } else if (nb_children == 3) {
     if (op == '?') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub3 = comp_rvalue_go(get_child(node, 2), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
+      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+      sub3 = comp_rvalue_go(get_child(node, 2), RVALUE_CTX_ARITH_EXPANSION, 0);
+      return wrap_if_needed(context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3));
       return 0;
     } else {
       printf("op=%d %c\n", op, op);
@@ -1370,27 +1366,27 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
 
         // if lhs is && or ||, and different from the current operator
         if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2), op);
+          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2));
           sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
         } else {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2), op);
+          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2));
         }
 
         // if rhs is && or ||, and different from the current operator
         if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3), op);
+          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3));
           sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
         } else {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3), op);
+          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3));
         }
         return string_concat3(sub1, op_to_str(op), sub2);
       } else {
         if (test_side_effects != 0 || get_child(node, 2) != 0 || get_child(node, 3) != 0) {
           fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
         }
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
+        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
+        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
+        return wrap_if_needed(context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
       }
     } else {
       printf("op=%d %c\n", op, op);
@@ -1438,9 +1434,9 @@ text comp_rvalue(ast node, int context) {
   if (context == RVALUE_CTX_TEST || context == RVALUE_CTX_TEST_ELSEIF) {
     undo_glo_decls(fun_call_decl_start);
     result = replay_glo_decls_inline(fun_call_decl_start, glo_decl_ix);
-    result = string_concat(result, comp_rvalue_go(simple_ast, RVALUE_CTX_TEST, 0, 0));
+    result = string_concat(result, comp_rvalue_go(simple_ast, RVALUE_CTX_TEST, 0));
   } else {
-    result = comp_rvalue_go(simple_ast, context, 0, 0);
+    result = comp_rvalue_go(simple_ast, context, 0);
   }
   contains_side_effects |= contains_side_effects2;
   return result;
