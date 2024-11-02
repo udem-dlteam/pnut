@@ -179,6 +179,7 @@ enum {
   MINUS_MINUS_PRE,
   PLUS_PLUS_POST,
   MINUS_MINUS_POST,
+  PARENS,
 
   // Other tokens
   MACRO_ARG = 499,
@@ -1004,6 +1005,7 @@ int eval_constant(ast expr, bool if_macro) {
   int op2;
 
   switch (op) {
+    case PARENS:    return eval_constant(get_child(expr, 0), if_macro);
     case INTEGER:   return -get_val(expr);
     case CHARACTER: return get_val(expr);
     case '~':       return !eval_constant(get_child(expr, 0), if_macro);
@@ -2469,7 +2471,7 @@ ast parse_parenthesized_expression() {
 
   expect_tok(')');
 
-  return result;
+  return new_ast1(PARENS, result);
 }
 
 ast parse_primary_expression() {

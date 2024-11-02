@@ -870,7 +870,7 @@ ast value_type(ast node) {
         set_val(left_type, get_val(left_type) + 1); // Increment star by 1
       }
       return left_type;
-    } else if (op == '+' || op == '-' || op == '~' || op == '!' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
+    } else if (op == '+' || op == '-' || op == '~' || op == '!' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PARENS) {
       // Unary operation don't change the type
       return value_type(get_child(node, 0));
     } else if (op == SIZEOF_KW) {
@@ -1186,6 +1186,9 @@ int codegen_lvalue(ast node) {
       codegen_rvalue(get_child(node, 0));
       grow_fs(-1);
       lvalue_width = ref_type_width(value_type(get_child(node, 0)));
+    } else if (op == PARENS) {
+      lvalue_width = codegen_lvalue(get_child(node, 0));
+      grow_fs(-1);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unexpected operator");
@@ -1347,11 +1350,9 @@ void codegen_rvalue(ast node) {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
       }
       push_reg(reg_X);
-    } else if (op == '+') {
+    } else if (op == '+' || op == PARENS) {
       codegen_rvalue(get_child(node, 0));
-      pop_reg(reg_X);
       grow_fs(-1);
-      push_reg(reg_X);
     } else if (op == '-') {
       codegen_rvalue(get_child(node, 0));
       pop_reg(reg_Y);

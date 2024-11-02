@@ -1027,7 +1027,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 1) {
-    if (op == '&' || op == '*' || op == '+' || op == '-' || op == '~' || op == '!') {
+    if (op == '&' || op == '*' || op == '+' || op == '-' || op == '~' || op == '!' || op == PARENS) {
       // TODO: Reuse ast node?
       return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
     } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
@@ -1195,6 +1195,14 @@ text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, te
   }
 }
 
+int non_parenthesized_operand(ast node) {
+  while (get_op(node) == PARENS) {
+    node = get_child(node, 0);
+  }
+
+  return node;
+}
+
 // Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
 // This is otherwise handled by wrap-if-needed, but we don't want to wrap in $(( ... )) here.
 text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) {
@@ -1243,7 +1251,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // literal or a variable.
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0, op);
       return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('_'), sub1), outer_op, op);
-    } else if (op == '+') {
+    } else if (op == '+' || op == PARENS) {
       // +x is equivalent to x
       return comp_rvalue_go(get_child(node, 0), context, test_side_effects, op);
     } else if (op == '-') {
@@ -1344,25 +1352,36 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     }
   } else if (nb_children == 4) {
     if (op == AMP_AMP || op == BAR_BAR) {
-      // Note, this could also be compiled in a single [ ] block using -a and -o,
-      // which I think are POSIX compliant but are deprecated.
+      // Note, this could also be compiled in a single [ ] block using -a and
+      // -o, which I think are POSIX compliant but are deprecated.
       if (context == RVALUE_CTX_TEST) {
-        // When compiling in a test context, && and || can be compiled to Shell's
-        // && and || with [ ... ] blocks.
+        // When compiling in a test context, && and || can be compiled to
+        // Shell's && and || with [ ... ] blocks.
         //
-        // A notable difference between these operators in Shell and C is that in
-        // Shell, they have equal precedence while in C, && has higher precedence.
-        // This means that we need to add parenthesis that would not be needed in C.
+        // A notable difference between these operators in Shell and C is that
+        // in Shell, they have equal precedence while in C, && has higher
+        // precedence. This means that we need to add parenthesis that would not
+        // be needed in C.
         //
         // As a heuristic, we add parenthesis whenever the left or right side of
         // the operator is a different comparison operator.
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_TEST, get_child(node, 2), op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_TEST, get_child(node, 3), op);
-        if ((get_op(get_child(node, 0)) == AMP_AMP || get_op(get_child(node, 0)) == BAR_BAR) && get_op(get_child(node, 0)) != op) {
+        sub1 = non_parenthesized_operand(get_child(node, 0)); // un-parenthesized lhs
+        sub2 = non_parenthesized_operand(get_child(node, 1)); // un-parenthesized rhs
+
+        // if lhs is && or ||, and different from the current operator
+        if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
+          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2), op);
           sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
+        } else {
+          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2), op);
         }
-        if ((get_op(get_child(node, 1)) == AMP_AMP || get_op(get_child(node, 1)) == BAR_BAR) && get_op(get_child(node, 1)) != op) {
+
+        // if rhs is && or ||, and different from the current operator
+        if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
+          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3), op);
           sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
+        } else {
+          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3), op);
         }
         return string_concat3(sub1, op_to_str(op), sub2);
       } else {
@@ -2170,7 +2189,8 @@ void mark_mutable_variables_statement(ast node) {
   } else if (op == '~' || op == '!'
       || op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
       || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ
-      || op == LSHIFT || op == RSHIFT || op == '=' || op == '[' || op == AMP_AMP || op == BAR_BAR || op == '.' || op == ARROW) {
+      || op == LSHIFT || op == RSHIFT || op == '=' || op == '[' || op == AMP_AMP || op == BAR_BAR || op == '.' || op == ARROW
+      || op == PARENS) {
     mark_mutable_variables_statement(get_child(node, 0));
     if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
   } else if (op == CAST) {
