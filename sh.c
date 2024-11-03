@@ -953,7 +953,7 @@ bool contains_side_effects = 0;
 
 ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_conditionally) {
   int start_gensym_ix = gensym_ix;
-  ast new_tail;
+  ast sub1;
   ast sub2;
 
   if (assign_to == 0) {
@@ -967,34 +967,35 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
   }
 
   // Traverse the arguments and replace them with the result of handle_side_effects_go
+  // sub1 is the parent node of the current argument
   sub2 = get_child(node, 1);
   if (sub2 != 0) { // Check if not an empty list
-    if (get_op(sub2) == ',') {
-      while (get_op(sub2) == ',') {
-        set_child(sub2, 0, handle_side_effects_go(get_child(sub2, 0), executes_conditionally));
-        sub2 = get_child(sub2, 1);
-      }
-    } else { // sub2 is the first argument, not wrapped in a cons cell
-      sub2 = handle_side_effects_go(sub2, executes_conditionally);
-      set_child(node, 1, sub2);
+    sub1 = node;   // For 1 param, the parent node is the fun call node
+    // If there are 2 or more params, we traverse the ',' nodes ...
+    while (get_op(sub2) == ',') {
+      sub1 = sub2; // ... and the parent node is the ',' node
+      set_child(sub1, 0, handle_side_effects_go(get_child(sub2, 0), executes_conditionally));
+      sub2 = get_child(sub2, 1);
     }
+    // Handle the last argument
+    set_child(sub1, 1, handle_side_effects_go(sub2, executes_conditionally));
   }
 
   // All the temporary variables used for the function parameters can be
   // reused after the function call, so resetting the gensym counter.
   gensym_ix = start_gensym_ix;
 
-  new_tail = new_ast2(',', assign_to, node);
-  new_tail = new_ast2(',', new_tail, 0);
+  sub1 = new_ast2(',', assign_to, node);
+  sub1 = new_ast2(',', sub1, 0);
   if (executes_conditionally) {
-    if (conditional_fun_calls == 0) { conditional_fun_calls = new_tail; }
-    else { set_child(conditional_fun_calls_tail, 1, new_tail); }
-    conditional_fun_calls_tail = new_tail;
+    if (conditional_fun_calls == 0) { conditional_fun_calls = sub1; }
+    else { set_child(conditional_fun_calls_tail, 1, sub1); }
+    conditional_fun_calls_tail = sub1;
   }
   else {
-    if (replaced_fun_calls == 0) { replaced_fun_calls = new_tail; }
-    else { set_child(replaced_fun_calls_tail, 1, new_tail); }
-    replaced_fun_calls_tail = new_tail;
+    if (replaced_fun_calls == 0) { replaced_fun_calls = sub1; }
+    else { set_child(replaced_fun_calls_tail, 1, sub1); }
+    replaced_fun_calls_tail = sub1;
   }
 
   return assign_to;
@@ -1299,7 +1300,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects) {
       return 0;
     }
   } else if (nb_children == 2) {
-    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT) {
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == ',') {
       sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0);
       sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0);
       return wrap_if_needed(context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2));
@@ -1518,15 +1519,13 @@ text fun_call_params(ast params) {
   text code_params = 0;
 
   if (params != 0) { // Check if not an empty list
-    if (get_op(params) == ',') {
-      while (get_op(params) == ',') {
-        param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
-        code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
-        params = get_child(params, 1);
-      }
-    } else {
-      code_params = comp_rvalue(params, RVALUE_CTX_BASE);
+    while (get_op(params) == ',') {
+      param = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
+      code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
+      params = get_child(params, 1);
     }
+    param = comp_rvalue(params, RVALUE_CTX_BASE); // Last parameter
+    code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
   }
 
   return code_params;
@@ -1590,6 +1589,7 @@ enum PRINTF_STATE {
 // using the shell's printf instead. This function generates a sequence of shell
 // printf and put_pstr equivalent to the given printf call.
 void handle_printf_call(char *format_str, ast params) {
+  ast param = 0; // Next parameter, if any
   char *format_start = format_str;
   char *specifier_start;
   // compiled parameters to be passed to printf
@@ -1602,6 +1602,19 @@ void handle_printf_call(char *format_str, ast params) {
   enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
 
   while (*format_str != '\0') {
+    // Param is consumed, get the next one
+    // printf("param=%d, params=%d\n", get_op(param), get_op(params));
+    // printf("param=%d %d, params=%d %d\n", get_op(param), param, get_op(params), params);
+    if (param == 0 && params != 0) {
+      if (get_op(params) == ',') {
+        param = get_child(params, 0);
+        params = get_child(params, 1);
+      } else {
+        param = params;
+        params = 0;
+      }
+    }
+
     if (mod) {
       switch (*format_str) {
         case ' ': case '#': case '+': case '-': case '0': // Flags
@@ -1629,17 +1642,17 @@ void handle_printf_call(char *format_str, ast params) {
           break;
 
         case '*':
-          if (params == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("Not enough parameters for printf");
           if (state == PRINTF_STATE_FLAGS) {
-            width_text = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
+            width_text = comp_rvalue(param, RVALUE_CTX_BASE);
             has_width = true;
           } else if (state == PRINTF_STATE_PRECISION) {
-            precision_text = comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE);
+            precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
             has_precision = true;
           } else {
             fatal_error("Width or precision already specified by a number");
           }
-          params = get_child(params, 1); // Consume * parameter
+          param = 0;
           break;
 
         case '%':
@@ -1649,11 +1662,11 @@ void handle_printf_call(char *format_str, ast params) {
 
         // The following options are the same between the shell's printf and C's printf
         case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
-          if (params == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("Not enough parameters for printf");
           params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
           params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
-          params_text = concatenate_strings_with(params_text, comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
-          params = get_child(params, 1);
+          params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
+          param = 0; // Consume param
           mod = false;
           break;
 
@@ -1662,7 +1675,7 @@ void handle_printf_call(char *format_str, ast params) {
         // shells, so we make a separate printf call using the \\ooo format.
         // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
         case 'c':
-          if (params == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("Not enough parameters for printf");
           // TODO: Find way to support width that's not too verbose
           if (has_width)   fatal_error("Width not supported for %c");
           // Generate printf call with what we have so far
@@ -1670,15 +1683,15 @@ void handle_printf_call(char *format_str, ast params) {
           // New format string starts after the %
           format_start = format_str + 1;
           // Generate the printf call for the character
-          append_glo_decl(comp_putchar_inline(get_child(params, 0)));
-          params = get_child(params, 1);
+          append_glo_decl(comp_putchar_inline(param));
+          param = 0; // Consume param
           params_text = 0; // Reset the parameters
           mod = false;
           break;
 
         // We can't a string to printf directly, it needs to be unpacked first.
         case 's':
-          if (params == 0)       fatal_error("Not enough parameters for printf");
+          if (param == 0)       fatal_error("Not enough parameters for printf");
           runtime_use_put_pstr = true;
           // If the format specifier has width or precision, we have to pack the string and call then printf.
           // Otherwise, we can call _put_pstr directly and avoid the subshell.
@@ -1692,9 +1705,9 @@ void handle_printf_call(char *format_str, ast params) {
             // New format string starts after the %
             format_start = format_str + 1;
             // Compile printf("...%s...", str) to _put_pstr str
-            append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(get_child(params, 0), RVALUE_CTX_BASE)));
+            append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE)));
           }
-          params = get_child(params, 1);
+          param = 0; // Consume param
           mod = false;
           break;
 
@@ -2164,14 +2177,11 @@ void mark_mutable_variables_statement(ast node) {
     params = get_child(node, 1);
 
     if (params != 0) { // Check if not an empty list
-      if (get_op(params) == ',') {
-        while (get_op(params) == ',') {
-          mark_mutable_variables_statement(get_child(params, 0));
-          params = get_child(params, 1);
-        }
-      } else { // params is the first argument, not wrapped in a cons cell
-        mark_mutable_variables_statement(params);
+      while (get_op(params) == ',') {
+        mark_mutable_variables_statement(get_child(params, 0));
+        params = get_child(params, 1);
       }
+      mark_mutable_variables_statement(params); // Last parameter
     }
   } else if (op == '{') { // six.compound
     mark_mutable_variables_body(node);

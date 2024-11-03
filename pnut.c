@@ -2906,21 +2906,11 @@ ast parse_assignment_expression() {
 ast parse_comma_expression() {
 
   ast result = parse_assignment_expression();
-  ast child;
-  ast tail;
 
-  if (tok == ',') { // List of 1 elements are not boxed in a cons cell
-    result = new_ast2(',', result, 0); // Create default cons cell
-    tail = result;
-    while (tok == ',') {
-
+  if (tok == ',') { // "comma expressions" without , don't need to be wrapped in a comma node
       get_tok();
-      child = parse_assignment_expression();
-      child = new_ast2(',', child, 0); // New tail cons cell
-      set_child(tail, 1, child);       // Add new cons cell at end of list
-      tail = child;                    // Advance tail
-
-    }
+    result = new_ast2(',', result, 0);
+    set_child(result, 1, parse_comma_expression());
   }
 
   return result;
