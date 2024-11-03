@@ -896,6 +896,8 @@ ast value_type(ast node) {
         // if left is not a pointer, the type is the type of the right operand
         return right_type;
       }
+    } else if (op == ',') {
+      return value_type(get_child(node, 1)); // The type of the right operand
     } else if (op == '[') {
       left_type = value_type(get_child(node, 0));
       right_type = value_type(get_child(node, 1));
@@ -1038,14 +1040,15 @@ void codegen_binop(int op, ast lhs, ast rhs) {
         sub_reg_reg(reg_X, reg_Y);
       }
     }
-    else if (op == '*' || op == STAR_EQ) mul_reg_reg(reg_X, reg_Y);
-    else if (op == '/' || op == SLASH_EQ) div_reg_reg(reg_X, reg_Y);
-    else if (op == '%' || op == PERCENT_EQ) rem_reg_reg(reg_X, reg_Y);
-    else if (op == '&' || op == AMP_EQ) and_reg_reg(reg_X, reg_Y);
-    else if (op == '|' || op == BAR_EQ) or_reg_reg(reg_X, reg_Y);
-    else if (op == '^' || op == CARET_EQ) xor_reg_reg(reg_X, reg_Y);
+    else if (op == '*' || op == STAR_EQ)      mul_reg_reg(reg_X, reg_Y);
+    else if (op == '/' || op == SLASH_EQ)     div_reg_reg(reg_X, reg_Y);
+    else if (op == '%' || op == PERCENT_EQ)   rem_reg_reg(reg_X, reg_Y);
+    else if (op == '&' || op == AMP_EQ)       and_reg_reg(reg_X, reg_Y);
+    else if (op == '|' || op == BAR_EQ)       or_reg_reg(reg_X, reg_Y);
+    else if (op == '^' || op == CARET_EQ)     xor_reg_reg(reg_X, reg_Y);
     else if (op == LSHIFT || op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
     else if (op == RSHIFT || op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
+    else if (op == ',')                       mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
     else if (op == '[') {
       // Same as pointer addition for address calculation
       if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
@@ -1420,7 +1423,7 @@ void codegen_rvalue(ast node) {
     }
 
   } else if (nb_children == 2) {
-    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[') {
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[' || op == ',') {
       codegen_rvalue(get_child(node, 0));
       codegen_rvalue(get_child(node, 1));
       codegen_binop(op, get_child(node, 0), get_child(node, 1));
