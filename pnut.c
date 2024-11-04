@@ -179,6 +179,7 @@ enum {
   MINUS_MINUS_PRE,
   PLUS_PLUS_POST,
   MINUS_MINUS_POST,
+  ELLIPSIS,
   PARENS,
 
   // Other tokens
@@ -1975,6 +1976,20 @@ void get_tok() {
 
           break;
 
+        } else if (ch == '.') {
+          get_ch();
+          if (ch == '.') {
+            get_ch();
+            if (ch == '.') {
+              get_ch();
+              tok = ELLIPSIS;
+            } else {
+              syntax_error("invalid token");
+            }
+          } else {
+            tok = '.';
+          }
+          break;
         } else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
 
           tok = ch;
@@ -2264,25 +2279,17 @@ ast parse_union() {
   return 0;
 }
 
-ast parse_declaration() {
+ast parse_param_decl() {
 
   ast type;
   int name;
   ast result = 0;
 
   if (is_type_starter(tok)) {
-
     type = parse_type_with_stars();
-
     name = val;
-
     expect_tok(IDENTIFIER);
-
-    if (get_val(type) == 0 && get_op(type) == VOID_KW)
-      syntax_error("variable with void type");
-    // if (tok == '[')
-    //   syntax_error("array declaration only allowed at global level");
-
+    if (get_val(type) == 0 && get_op(type) == VOID_KW) syntax_error("variable with void type");
     result = new_ast3(VAR_DECL, name, type, 0);
   } else if (tok == IDENTIFIER) {
     // Support K&R param syntax in function definition
@@ -2290,13 +2297,16 @@ ast parse_declaration() {
     expect_tok(IDENTIFIER);
     type = new_ast0(INT_KW, 0);
     result = new_ast3(VAR_DECL, name, type, 0);
+  } else if (tok == ELLIPSIS) {
+    // ignore ELLIPSIS nodes for now
+    get_tok();
   }
 
   return result;
 }
 
-int parse_declaration_list() {
-  ast decl = parse_declaration();
+int parse_param_list() {
+  ast decl = parse_param_decl();
   ast result = 0;
   ast tail;
   if (decl != 0) {
@@ -2305,7 +2315,7 @@ int parse_declaration_list() {
 
     while (tok == ',') {
       get_tok();
-      decl = parse_declaration();
+      decl = parse_param_decl();
       if (decl == 0) { break; }
 
       decl = new_ast2(',', decl, 0);
@@ -2358,7 +2368,7 @@ ast parse_definition(int local) {
 
         get_tok();
 
-        params = parse_declaration_list();
+        params = parse_param_list();
 
         expect_tok(')');
 
@@ -2908,7 +2918,7 @@ ast parse_comma_expression() {
   ast result = parse_assignment_expression();
 
   if (tok == ',') { // "comma expressions" without , don't need to be wrapped in a comma node
-      get_tok();
+    get_tok();
     result = new_ast2(',', result, 0);
     set_child(result, 1, parse_comma_expression());
   }
