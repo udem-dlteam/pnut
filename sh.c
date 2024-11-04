@@ -1254,7 +1254,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('_'), sub1), outer_op, op);
     } else if (op == '+' || op == PARENS) {
       // +x is equivalent to x
-      return comp_rvalue_go(get_child(node, 0), context, test_side_effects, op);
+      return comp_rvalue_go(get_child(node, 0), context, test_side_effects, outer_op);
     } else if (op == '-') {
       // Check if the rest of ast is a literal, if so directly return the negated value.
       // Note: I think this can be simplified by not wrapped in () in the else case.
