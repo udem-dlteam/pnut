@@ -1,4 +1,6 @@
 #include <stdio.h>
+// expect_failure_for: dash
+// expect_failure_for: yash
 
 int a = 1;
 int b = 2;

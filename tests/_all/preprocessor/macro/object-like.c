@@ -26,7 +26,7 @@
 // opening parenthesis.
 // We define the macros in reverse order so that the nature of PARENS_EXPR is
 // not known when PARENS_PARENS_EXPR2 is defined.
-#define PARENS_PARENS_EXPR2 (PARENS_EXPR, PARENS_EXPR)
+#define PARENS_PARENS_EXPR2 (PARENS_EXPR + PARENS_EXPR)
 #define PARENS_PARENS_EXPR (PARENS_EXPR)
 #define PARENS_EXPR (1 + 1)
 
