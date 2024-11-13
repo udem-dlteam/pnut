@@ -165,6 +165,16 @@ void add_reg_imm(int dst, int imm) {
   emit_i32_le(imm);
 }
 
+void add_reg_lbl(int dst, int lbl) {
+
+  // ADD dst_reg, rel addr  ;; Add 32 bit displacement between next instruction and label to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
+  rex_prefix(0, dst);
+  emit_i8(0x81);
+  mod_rm(0, dst);
+  use_label(lbl); // 32 bit placeholder for distance
+}
+
 void mov_memory(int op, int reg, int base, int offset) {
 
   // Move word between register and memory
@@ -318,16 +328,6 @@ void push_reg(int src) {
   emit_i8(0x50 + src);
 }
 
-void push_imm32_le(int imm) {
-
-  // PUSH imm32  ;; Push 32 bit immediate value to stack
-  // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
-
-  emit_i8(0x68);
-  emit_i32_le(imm);
-}
-
-
 void pop_reg (int dst) {
 
   // POP dst_reg  ;; Pop word from stack to register
@@ -361,6 +361,15 @@ void call(int lbl) {
 
   emit_i8(0xe8);
   use_label(lbl);
+}
+
+void call_reg(int reg) {
+
+  // CALL reg  ;; Indirect call to address in register
+  // See: https://web.archive.org/web/20240323052931/https://www.felixcloutier.com/x86/call
+
+  emit_i8(0xff);
+  mod_rm(2, reg);
 }
 
 void ret() {
@@ -439,6 +448,21 @@ void setup_proc_args(int global_vars_size) {
 
   mov_reg_mem(reg_Y, reg_X, -word_size); // load argc
   push_reg(reg_Y); // push argc
+}
+
+void mov_reg_rel_abs(int reg, int lbl) {
+  // Since we can't do rip-relative addressing in 32 bit mode, we need to push
+  // the address to the stack and then some arithmetic to get the address in a
+  // register.
+
+  int lbl_for_pc = alloc_label();
+
+  call(lbl_for_pc);        // call lbl
+  def_label(lbl_for_pc);   // end label
+                           // <--- The stack now has the address of the next instruction
+  pop_reg(reg);            // pop reg_X (1 byte)
+  add_reg_lbl(reg_X, lbl); // load address of label to reg_X (6 or 7 bytes if 32 or 64 bit)
+  add_reg_imm(reg_X, word_size == 8 ? 8 : 7); // adjust for the pop and add instructions
 }
 
 // For 32 bit linux.
