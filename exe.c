@@ -92,6 +92,7 @@ void mov_reg_mem(int dst, int base, int offset);
 void mov_reg_mem8(int dst, int base, int offset);
 
 void add_reg_imm(int dst, int imm);
+void add_reg_lbl(int dst, int lbl);
 void add_reg_reg(int dst, int src);
 void or_reg_reg (int dst, int src);
 void and_reg_reg(int dst, int src);
@@ -102,6 +103,7 @@ void div_reg_reg(int dst, int src);
 void rem_reg_reg(int dst, int src);
 void shl_reg_reg(int dst, int src);
 void sar_reg_reg(int dst, int src);
+void mov_reg_rel_abs(int reg, int lbl);
 
 void push_reg(int src);
 void pop_reg (int dst);
@@ -109,6 +111,7 @@ void pop_reg (int dst);
 void jump(int lbl);
 void jump_rel(int offset);
 void call(int lbl);
+void call_reg(int reg);
 void ret();
 
 void dup(int reg) {
@@ -965,20 +968,24 @@ int codegen_params(ast params) {
 void codegen_call(ast node) {
 
   ast fun = get_child(node, 0);
-  ast name = get_val(fun);
   ast params = get_child(node, 1);
   ast nb_params = codegen_params(params);
+  int binding;
 
-  int binding = cgc_lookup_fun(name, cgc_globals);
-  int lbl;
-
-  if (binding == 0) {
-    lbl = alloc_label();
-    cgc_add_global_fun(name, lbl, 0);
-    binding = cgc_globals;
+  if (get_op(fun) == IDENTIFIER) {
+    // TODO: Can local variables shadow functions?
+    binding = cgc_lookup_fun(get_val(fun), cgc_globals);
+    if (binding == 0) {
+      cgc_add_global_fun(get_val(fun), alloc_label(), 0);
+      binding = cgc_globals;
+    }
+    mov_reg_rel_abs(reg_X, heap[binding+4]);
+    call_reg(reg_X);
   }
-
-  call(heap[binding+4]);
+  else {
+    codegen_rvalue(fun);
+    call_reg(reg_X);
+  }
 
   grow_stack(-nb_params);
   grow_fs(-nb_params);
@@ -2000,7 +2007,7 @@ void codegen_end() {
   add_reg_imm(reg_glo, word_size);    // Move to next entry
   jump_cond_reg_reg(LT, glo_setup_loop_lbl, reg_glo, reg_Y);
 
-  mov_reg_reg(reg_glo, reg_SP); // Reset global variables pointer
+  mov_reg_reg(reg_glo, reg_SP);       // Reset global variables pointer
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // init heap start
@@ -2010,6 +2017,7 @@ void codegen_end() {
 
   def_label(init_next_lbl);
   setup_proc_args(cgc_global_alloc);
+  // emit_i8(0xcc);
   call(main_lbl);
   if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main
