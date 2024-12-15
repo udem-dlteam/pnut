@@ -33,8 +33,7 @@ enum BINDING {
 #define binding_kind(binding)  heap[binding+1]
 #define binding_ident(binding) heap[binding+2]
 
-int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
-  int binding = env;
+int cgc_lookup_binding_ident(int binding_type, int ident, int binding) {
   while (binding != 0) {
     if (binding_kind(binding) == binding_type && binding_ident(binding) == ident) {
       break;
@@ -44,8 +43,7 @@ int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
   return binding;
 }
 
-int cgc_lookup_last_binding(int binding_type, int env) {
-  int binding = env;
+int cgc_lookup_last_binding(int binding_type, int binding) {
   while (binding != 0) {
     if (binding_kind(binding) == binding_type) {
       break;
@@ -55,8 +53,7 @@ int cgc_lookup_last_binding(int binding_type, int env) {
   return binding;
 }
 
-int cgc_lookup_var(int ident, int env) {
-  int binding = env;
+int cgc_lookup_var(int ident, int binding) {
   while (binding != 0) {
     if (binding_kind(binding) <= BINDING_VAR_GLOBAL && binding_ident(binding) == ident) {
       break;
@@ -78,8 +75,7 @@ int cgc_lookup_enclosing_switch(int env) {
   return cgc_lookup_last_binding(BINDING_SWITCH, env);
 }
 
-int cgc_lookup_enclosing_loop_or_switch(int env) {
-  int binding = env;
+int cgc_lookup_enclosing_loop_or_switch(int binding) {
   while (binding != 0) {
     if (binding_kind(binding) == BINDING_LOOP || binding_kind(binding) == BINDING_SWITCH) {
       break;
