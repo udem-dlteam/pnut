@@ -26,13 +26,20 @@ enum BINDING {
   BINDING_TYPE_ENUM,
 };
 
+// Some small accessor for the bindings
+// All bindings have a next pointer and a kind.
+// Most have an identifier, but not all
+#define binding_next(binding)  heap[binding]
+#define binding_kind(binding)  heap[binding+1]
+#define binding_ident(binding) heap[binding+2]
+
 int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == binding_type && heap[binding+2] == ident) {
+    if (binding_kind(binding) == binding_type && binding_ident(binding) == ident) {
       break;
     }
-    binding = heap[binding];
+    binding = binding_next(binding);
   }
   return binding;
 }
@@ -40,10 +47,10 @@ int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
 int cgc_lookup_last_binding(int binding_type, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == binding_type) {
+    if (binding_kind(binding) == binding_type) {
       break;
     }
-    binding = heap[binding];
+    binding = binding_next(binding);
   }
   return binding;
 }
@@ -51,10 +58,10 @@ int cgc_lookup_last_binding(int binding_type, int env) {
 int cgc_lookup_var(int ident, int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] <= BINDING_VAR_GLOBAL && heap[binding+2] == ident) {
+    if (binding_kind(binding) <= BINDING_VAR_GLOBAL && binding_ident(binding) == ident) {
       break;
     }
-    binding = heap[binding];
+    binding = binding_next(binding);
   }
   return binding;
 }
@@ -74,10 +81,10 @@ int cgc_lookup_enclosing_switch(int env) {
 int cgc_lookup_enclosing_loop_or_switch(int env) {
   int binding = env;
   while (binding != 0) {
-    if (heap[binding+1] == BINDING_LOOP || heap[binding+1] == BINDING_SWITCH) {
+    if (binding_kind(binding) == BINDING_LOOP || binding_kind(binding) == BINDING_SWITCH) {
       break;
     }
-    binding = heap[binding];
+    binding = binding_next(binding);
   }
   return binding;
 }
