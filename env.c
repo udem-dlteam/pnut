@@ -26,6 +26,82 @@ enum BINDING {
   BINDING_TYPE_ENUM,
 };
 
+int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == binding_type && heap[binding+2] == ident) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_last_binding(int binding_type, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == binding_type) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_var(int ident, int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] <= BINDING_VAR_GLOBAL && heap[binding+2] == ident) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_fun(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_FUN, ident, env);
+}
+
+int cgc_lookup_enclosing_loop(int env) {
+  return cgc_lookup_last_binding(BINDING_LOOP, env);
+}
+
+int cgc_lookup_enclosing_switch(int env) {
+  return cgc_lookup_last_binding(BINDING_SWITCH, env);
+}
+
+int cgc_lookup_enclosing_loop_or_switch(int env) {
+  int binding = env;
+  while (binding != 0) {
+    if (heap[binding+1] == BINDING_LOOP || heap[binding+1] == BINDING_SWITCH) {
+      break;
+    }
+    binding = heap[binding];
+  }
+  return binding;
+}
+
+int cgc_lookup_goto_label(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
+}
+
+int cgc_lookup_struct(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_STRUCT, ident, env);
+}
+
+int cgc_lookup_union(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_UNION, ident, env);
+}
+
+int cgc_lookup_enum(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_ENUM, ident, env);
+}
+
+int cgc_lookup_enum_value(int ident, int env) {
+  return cgc_lookup_binding_ident(BINDING_ENUM_CST, ident, env);
+}
+
 int cgc_add_local(enum BINDING binding_type, int ident, int size, ast type) {
   int binding = alloc_obj(6);
   heap[binding+0] = cgc_locals;
@@ -119,80 +195,4 @@ void cgc_add_typedef(int ident, enum BINDING struct_or_union_or_enum, ast type) 
   heap[binding+2] = ident;
   heap[binding+3] = type;
   cgc_globals = binding;
-}
-
-int cgc_lookup_binding_ident(int binding_type, int ident, int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == binding_type && heap[binding+2] == ident) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
-}
-
-int cgc_lookup_last_binding(int binding_type, int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == binding_type) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
-}
-
-int cgc_lookup_var(int ident, int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] <= BINDING_VAR_GLOBAL && heap[binding+2] == ident) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
-}
-
-int cgc_lookup_fun(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_FUN, ident, env);
-}
-
-int cgc_lookup_enclosing_loop(int env) {
-  return cgc_lookup_last_binding(BINDING_LOOP, env);
-}
-
-int cgc_lookup_enclosing_switch(int env) {
-  return cgc_lookup_last_binding(BINDING_SWITCH, env);
-}
-
-int cgc_lookup_enclosing_loop_or_switch(int env) {
-  int binding = env;
-  while (binding != 0) {
-    if (heap[binding+1] == BINDING_LOOP || heap[binding+1] == BINDING_SWITCH) {
-      break;
-    }
-    binding = heap[binding];
-  }
-  return binding;
-}
-
-int cgc_lookup_goto_label(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
-}
-
-int cgc_lookup_struct(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPE_STRUCT, ident, env);
-}
-
-int cgc_lookup_union(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPE_UNION, ident, env);
-}
-
-int cgc_lookup_enum(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPE_ENUM, ident, env);
-}
-
-int cgc_lookup_enum_value(int ident, int env) {
-  return cgc_lookup_binding_ident(BINDING_ENUM_CST, ident, env);
 }
