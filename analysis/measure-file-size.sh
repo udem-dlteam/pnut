@@ -1,24 +1,24 @@
 #! /bin/bash
 #
-# With pnut split accross multiple files with many compilation targets and
+# With pnut split across multiple files with many compilation targets and
 # options, the size of the compiler is not trivial to measure. gcc's -E option
 # can be used to expand the preprocessor directives, but it also includes all
 # the code from the #include <> directives which is not code pnut sees and so we
 # need something in between that only expands the active #include "" directives.
 #
 # This script uses the DEBUG_EXPAND_INCLUDES option that preprocess the input
-# and prints the characters that are read. Active #include directive are followed
-# meaning that the included file is printed as well. The output is then filtered
-# to remove the lines that correspond to the included files.
+# and prints the characters that are read. Active #include directive are
+# expanded meaning that the included file is printed as well. The output is then
+# filtered to remove the lines that correspond to the included files.
 #
-# The result is as if someone had manually replaced the active #include directives
-# with the content of the included files.
+# The result is as if someone had manually replaced the active #include
+# directives with the content of the included files.
 #
 # We then run a few tests to make sure the result is correct:
 # - The expanded file still compiles with gcc
 # - The result of pnut on the expanded file is the same as the result of pnut on the original file
-#
-# The
+
+set -e # Exit on error
 
 TEMP_DIR="build/measure"
 mkdir -p "$TEMP_DIR"

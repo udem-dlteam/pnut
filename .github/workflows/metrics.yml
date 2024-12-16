@@ -1,0 +1,27 @@
+name: metrics
+
+on:
+  pull_request: # Should trigger on pull requests for all branches
+    branches:
+      - '**'  # Matches all branches
+
+jobs:
+  measure-file-size:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install gcc and clang
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc
+
+      - name: Measure file size
+        run: |
+          sh analysis/measure-file-size.sh
+          if [ $? -ne 0 ]; then
+            echo "Failed to measure file size"
+            exit 1
+          fi
