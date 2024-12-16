@@ -105,9 +105,9 @@ int cgc_lookup_enum_value(int ident, int env) {
   return cgc_lookup_binding_ident(BINDING_ENUM_CST, ident, env);
 }
 
-int cgc_add_local(enum BINDING binding_type, int ident, int size, ast type) {
+int cgc_add_local(enum BINDING binding_type, int ident, int size, ast type, int env) {
   int binding = alloc_obj(6);
-  heap[binding+0] = cgc_locals;
+  heap[binding+0] = env;
   heap[binding+1] = binding_type;
   heap[binding+2] = ident;
   heap[binding+3] = size;
@@ -116,19 +116,26 @@ int cgc_add_local(enum BINDING binding_type, int ident, int size, ast type) {
   return binding;
 }
 
-void cgc_add_local_param(int ident, int size, ast type) {
-  cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, size, type);
 #ifdef sh
-  cgc_fs += size;
+void cgc_add_local_var(enum BINDING binding_type, int ident, ast type) {
+  cgc_fs += 1;
+  cgc_locals = cgc_add_local(binding_type, ident, 1, type, cgc_locals);
+  // Add to cgc_locals_fun as well, if not already there
+  if (cgc_lookup_var(ident, cgc_locals_fun) == 0) {
+    cgc_locals_fun = cgc_add_local(binding_type, ident, 1, type, cgc_locals_fun);
+  }
+}
 #else
+void cgc_add_local_param(int ident, int size, ast type) {
+  cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, size, type, cgc_locals);
   cgc_fs -= size;
-#endif
 }
 
 void cgc_add_local_var(int ident, int size, ast type) {
   cgc_fs += size;
-  cgc_locals = cgc_add_local(BINDING_VAR_LOCAL, ident, size, type);
+  cgc_locals = cgc_add_local(BINDING_VAR_LOCAL, ident, size, type, cgc_locals);
 }
+#endif
 
 void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
   int binding = alloc_obj(5);

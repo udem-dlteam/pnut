@@ -298,9 +298,6 @@ int in_tail_position = false;   // Is the current statement in tail position?
 int loop_nesting_level = 0;     // Number of loops surrounding the current statement
 int loop_end_actions_start = 0; // Start position of declarations for the last action in a for loop
 int loop_end_actions_end = 0;   // End position of declarations for the last action in a for loop
-ast local_env = 0;              // List of local variables (following local scoping rules)
-ast local_env_commulative = 0;  // List of local variables (cummulative for the whole function)
-ast local_env_size = 0;         // Size of the environment
 int gensym_ix = 0;              // Counter for fresh_ident
 int fun_gensym_ix = 0;          // Maximum value of gensym_ix for the current function
 int max_gensym_ix = 0;          // Maximum value of gensym_ix for all functions
@@ -320,13 +317,6 @@ enum IDENTIFIER_TYPE {
   IDENTIFIER_DOLLAR,
   IDENTIFIER_EMPTY
 };
-
-// Node type for local variable nodes
-int LOCAL_VAR = 0;
-
-// Kind of variable (local or function parameter)
-int KIND_LOCAL = 0;
-int KIND_PARAM = 1;
 
 void init_comp_context() {
   int i = 0;
@@ -429,17 +419,8 @@ void print_glo_decls() {
   }
 }
 
-ast find_var_in_local_env(ast ident_tok, ast env) {
-  ast var;
-  while (env != 0) {
-    var = get_child(env, 0);
-    // Because identifier tokens are unique, we can compare their address to check if they are the same.
-    if (get_child(var, 0) == ident_tok) return var;
-
-    env = get_child(env, 1);
-  }
-  return -1;
-}
+// Environment tracking
+#include "env.c"
 
 // Similar to env_var, but doesn't use the local environment and assumes that the
 // identifier is internal or global. This is faster than env_var when we know that
@@ -487,7 +468,7 @@ text global_var(ast ident_tok) {
 
 text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
   if (get_op(ident) == IDENTIFIER) {
-    if (find_var_in_local_env(get_val(ident), local_env) != -1) {
+    if (cgc_lookup_var(get_val(ident), cgc_locals)) {
       // TODO: Constant param optimization
       // if (get_child(var, 2) == KIND_PARAM) {
       //   res = wrap_int(get_child(var, 1));
@@ -537,46 +518,27 @@ ast fresh_string_ident(int string_probe) {
   return new_ast0(IDENTIFIER_STRING, wrap_int(heap[string_probe + 3]));
 }
 
-// The local environment is a list of variables represented using ',' nodes.
-// A variable is a LOCAL_VAR node with 4 children:
-//   1. Ident
-//   2. Position of the variable in the shell environment ($1, $2, ...)
-//   3. Kind of variable (function param or local var)
-//   4. Constant: if the variable is never assigned to
-void add_var_to_local_env(ast ident_tok, int kind) {
-  ast var;
-  // Check if the variable is not in env. This should always do nothing
-  if (find_var_in_local_env(ident_tok, local_env) != -1) {
-    fatal_error("add_var_to_local_env: variable already in local environment");
+void add_var_to_local_env(ast decl, enum BINDING kind) {
+  int ident_tok = get_child(decl, 0);
+
+  // Make sure we're not shadowing an existing local variable
+  if (cgc_lookup_var(ident_tok, cgc_locals)) {
+    putstr("var="); putstr(string_pool + get_val(ident_tok)); putchar('\n');
+    fatal_error("Variable is already in local environment");
   }
 
   // The var is not part of the environment, so we add it.
-  local_env_size += 1; // Pre-increment the size because positions are 1-indexed
-  var = new_ast3(LOCAL_VAR, ident_tok, local_env_size, kind);
-  local_env = new_ast2(',', var, local_env);
-
-  // Add the variable to the commulative environment
-  if (find_var_in_local_env(ident_tok, local_env_commulative) == -1) {
-    local_env_commulative = new_ast2(',', var, local_env_commulative);
-  }
+  cgc_add_local_var(kind, ident_tok, get_child(decl, 1));
 }
 
 void add_fun_params_to_local_env(ast lst) {
   ast decl;
   while (lst != 0) {
     decl = get_child(lst, 0);
-    add_var_to_local_env(get_child(decl, 0), KIND_PARAM);
+    add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = get_child(lst, 1);
   }
 }
-
-// int variable_is_constant_param(ast local_var) {
-//   if (local_var != -1 && get_child(local_var, 2) == KIND_PARAM && get_child(local_var, 3)) {
-//     return true;
-//   } else {
-//     return false;
-//   }
-// }
 
 // Since global and internal variables are prefixed with _, we restrict the name
 // of variables to not start with _. Also, because some shells treat some
@@ -616,38 +578,20 @@ void check_param_decls(ast lst) {
   }
 }
 
-int num_vars_to_save() {
-  ast env = local_env_commulative;
-  int counter = fun_gensym_ix;
-
-  while (env != 0) {
-    counter += 1;
-    env = get_child(env, 1);
-  }
-
-  return counter;
-}
-
 #ifdef SH_SAVE_VARS_WITH_SET
 // Save the value of local variables to positional parameters
 text save_local_vars() {
-  ast env = local_env_commulative;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
 
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
-
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
     // TODO: Constant param optimization
     // if (variable_is_constant_param(local_var)) continue;
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    ident = new_ast0(IDENTIFIER, binding_ident(env));
     res = concatenate_strings_with(string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), res, wrap_char(' '));
+    env = binding_next(env);
   }
 
   while (counter > 0) {
@@ -656,13 +600,18 @@ text save_local_vars() {
     counter -= 1;
   }
 
-  return string_concat(wrap_str_lit("set $@ "), res);
+
+  if (res) {
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str_lit("set $@ "), res);
+  } else {
+    return 0;
+  }
 }
 
 // Restore the previous value of local variables from positional parameters
 text restore_local_vars(int params_count) {
-  ast env = local_env_commulative;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   // Position of the saved local vars, starting from 0
   int local_var_pos = 0;
@@ -672,30 +621,23 @@ text restore_local_vars(int params_count) {
   // Used to account for traversal of local env in reverse order.
   int env_non_cst_size = 0;
 
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
-
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
+    env_non_cst_size += 1;
+    env = binding_next(env);
 
     // TODO: Constant param optimization
     // if(variable_is_constant_param(local_var)) continue;
-    env_non_cst_size += 1;
   }
 
-  env = local_env_commulative;
+  env = cgc_locals_fun;
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
-
     // TODO: Constant param optimization
     // if (variable_is_constant_param(local_var)) continue;
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    ident = new_ast0(IDENTIFIER, binding_ident(env));
     res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
     local_var_pos += 1;
+    env = binding_next(env);
   }
 
   while (counter > 0) {
@@ -705,7 +647,12 @@ text restore_local_vars(int params_count) {
     counter -= 1;
   }
 
-  return string_concat3(wrap_str_lit(": $((__tmp = $1)) "), res, wrap_str_lit(" $(($1 = __tmp))"));
+  if (res) {
+    runtime_use_local_vars = true;
+    return string_concat3(wrap_str_lit(": $((__tmp = $1)) "), res, wrap_str_lit(" $(($1 = __tmp))"));
+  } else {
+    return 0;
+  }
 }
 
 #else
@@ -716,10 +663,6 @@ text let_params(int params) {
   ast ident;
   text res = 0;
   int params_ix = 2;
-
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
 
   while (params != 0) {
     // TODO: Constant param optimization
@@ -732,20 +675,17 @@ text let_params(int params) {
     params_ix += 1;
   }
 
+  runtime_use_local_vars |= res != 0;
+
   return res;
 }
 #endif
 
 text save_local_vars() {
-  ast env = local_env_commulative;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
-
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
@@ -754,22 +694,22 @@ text save_local_vars() {
   }
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-    if (local_var != -1 && get_child(local_var, 2) != KIND_PARAM) { // Skip params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
 #else
     // TODO: Constant param optimization
     // Constant function parameters are assigned to $1, $2, ... and don't need to be saved
     if (true)
     // if (!variable_is_constant_param(local_var)) {
 #endif
-      ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+      ident = new_ast0(IDENTIFIER, binding_ident(env));
       res = concatenate_strings_with(string_concat(wrap_str_lit("let "), env_var_with_prefix(ident, true)), res, wrap_str_lit("; "));
     }
 
-    env = get_child(env, 1);
+    env = binding_next(env);
   }
+
+  runtime_use_local_vars |= res != 0;
 
   return res;
 }
@@ -777,15 +717,10 @@ text save_local_vars() {
 // The only difference between save_local_vars and restore_local_vars is the
 // order of the arguments and the call to unsave_vars instead of save_vars.
 text restore_local_vars(int params_count) {
-  ast env = local_env_commulative;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
-
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
@@ -794,19 +729,22 @@ text restore_local_vars(int params_count) {
   }
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-
     // Constant function parameters are assigned to $1, $2, ... and don't need to be saved
     // TODO: Constant param optimization
     // if (!variable_is_constant_param(local_var)) {
-      ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+      ident = new_ast0(IDENTIFIER, binding_ident(env));
       res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
     // }
 
-    env = get_child(env, 1);
+    env = binding_next(env);
   }
 
-  return string_concat(wrap_str_lit("endlet $1 "), res);
+  if (res) {
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str_lit("endlet $1 "), res);
+  } else {
+    return 0;
+  }
 }
 #endif
 
@@ -1784,8 +1722,7 @@ void comp_assignment(ast lhs, ast rhs) {
 
 bool comp_body(ast node, STMT_CTX stmt_ctx) {
   int start_in_tail_position = in_tail_position;
-  ast start_local_env = local_env;
-  int start_local_env_size = local_env_size;
+  int start_cgc_locals = cgc_locals;
 
   in_tail_position = false;
 
@@ -1796,8 +1733,7 @@ bool comp_body(ast node, STMT_CTX stmt_ctx) {
     node = get_child(node, 1);
   }
 
-  local_env = start_local_env;
-  local_env_size = start_local_env_size;
+  cgc_locals = start_cgc_locals;
   return node != 0; // If node is not null, it means the block was terminated early
 }
 
@@ -1838,8 +1774,7 @@ text make_switch_pattern(ast statement) {
 bool comp_switch(ast node) {
   int start_in_tail_position = in_tail_position;
   ast statement;
-  ast start_local_env = local_env;
-  int start_local_env_size = local_env_size;
+  int start_cgc_locals = cgc_locals;
 
   append_glo_decl(string_concat3(
       wrap_str_lit("case "),
@@ -1881,8 +1816,7 @@ bool comp_switch(ast node) {
   nest_level -= 1;
   append_glo_decl(wrap_str_lit("esac"));
 
-  local_env = start_local_env;
-  local_env_size = start_local_env_size;
+  cgc_locals = start_cgc_locals;
 
   // Returning not-false is only important for nested switch statements.
   // It could be useful to remove the need for the redundant trailing return
@@ -1902,8 +1836,7 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
-  ast start_local_env = local_env;
-  int start_local_env_size = local_env_size;
+  int start_cgc_locals = cgc_locals;
 
   bool else_if = stmt_ctx & STMT_CTX_ELSE_IF;
   stmt_ctx = stmt_ctx & ~STMT_CTX_ELSE_IF; // Clear STMT_CTX_ELSE_IF bit to not pass it to the next if statement
@@ -1940,8 +1873,7 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
     fatal_error("Early break out of a switch case is unsupported");
   }
 
-  local_env = start_local_env;
-  local_env_size = start_local_env_size;
+  cgc_locals = start_cgc_locals;
 
   return termination_lhs && termination_rhs;
 }
@@ -1954,8 +1886,7 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   // Save loop end actions from possible outer loop
   int start_loop_end_actions_start = loop_end_actions_start;
   int start_loop_end_actions_end = loop_end_actions_end;
-  ast start_local_env = local_env;
-  int start_local_env_size = local_env_size;
+  int start_cgc_locals = cgc_locals;
   int start_glo_decl_idx;
   bool always_returns = false;
 
@@ -1988,8 +1919,7 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
 
   loop_end_actions_start = start_loop_end_actions_start;
   loop_end_actions_end = start_loop_end_actions_end;
-  local_env = start_local_env;
-  local_env_size = start_local_env_size;
+  cgc_locals = start_cgc_locals;
 
   // If the condition is always true and the loop always returns
   return cond == wrap_char(':') && always_returns;
@@ -2003,7 +1933,7 @@ void comp_var_decls(ast node) {
     // Add to local env and cummulative env, then initialize
     var_decl = get_child(node, 0);
     // printf("Adding var %s\n", string_pool + get_val(get_child(var_decl, 0)));
-    add_var_to_local_env(get_child(var_decl, 0), KIND_LOCAL);
+    add_var_to_local_env(var_decl, BINDING_VAR_LOCAL);
     if (get_child(var_decl, 2) != 0) {
       comp_assignment(new_ast0(IDENTIFIER, get_child(var_decl, 0)), get_child(var_decl, 2));
     }
@@ -2141,8 +2071,6 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == -1) return; // ignore forward declarations
 
-  local_env_size = 1; // Start at 1 because $1 is assigned to the return location
-
   top_level_stmt = false;
 
   check_param_decls(params);
@@ -2208,7 +2136,7 @@ void comp_glo_fun_decl(ast node) {
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
   // Set local environment to cummulative for the save_local_vars/restore_local_vars
-  local_env = local_env_commulative;
+  cgc_locals = cgc_locals_fun;
 
   append_glo_decl(restore_local_vars(params_ix - 1));
 
@@ -2445,8 +2373,7 @@ void epilogue() {
 
 // Initialize local and synthetic variables used by function
 void initialize_function_variables() {
-  ast env = local_env_commulative;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
@@ -2458,15 +2385,13 @@ void initialize_function_variables() {
   }
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
-
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    ident = new_ast0(IDENTIFIER, binding_ident(env));
 
     // TODO: Constant param optimization
     // if (!variable_is_constant_param(local_var)) {
       res = concatenate_strings_with(res, env_var(ident), wrap_str_lit(" = "));
     // }
+    env = binding_next(env);
   }
 
   if (res != 0) {
@@ -2489,7 +2414,7 @@ void codegen_glo_decl(ast decl) {
   print_glo_decls();
   // Reset state
   glo_decl_ix = 0;
-  local_env = local_env_commulative = 0; // Reset local environment
+  cgc_locals = cgc_locals_fun = 0; // Reset local environment
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
   cumul_text_alloc += text_alloc;
   text_alloc = 1;
