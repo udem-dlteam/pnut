@@ -54,9 +54,6 @@ typedef enum STMT_CTX {
   // Indicates that we are in a switch statement where breaks mean the end of
   // the conditional block.
   STMT_CTX_SWITCH       = 2,
-  // Because we don't know in advance where the conditional block ends, this
-  // indicates to returns/breaks that they are in a switch in tail position
-  STMT_CTX_SWITCH_TAIL  = 4,
 } STMT_CTX;
 
 text comp_lvalue_address(ast node);
@@ -295,11 +292,6 @@ text glo_decls[GLO_DECL_SIZE];  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
 int in_tail_position = false;   // Is the current statement in tail position?
-int loop_nesting_level = 0;     // Number of loops surrounding the current statement
-int loop_end_actions_start = 0; // Start position of declarations for the last action in a for loop
-int loop_end_actions_end = 0;   // End position of declarations for the last action in a for loop
-ast local_env = 0;              // List of local variables
-ast local_env_size = 0;         // Size of the environment
 int gensym_ix = 0;              // Counter for fresh_ident
 int fun_gensym_ix = 0;          // Maximum value of gensym_ix for the current function
 int max_gensym_ix = 0;          // Maximum value of gensym_ix for all functions
@@ -319,13 +311,6 @@ enum IDENTIFIER_TYPE {
   IDENTIFIER_DOLLAR,
   IDENTIFIER_EMPTY
 };
-
-// Node type for local variable nodes
-int LOCAL_VAR = 0;
-
-// Kind of variable (local or function parameter)
-int KIND_LOCAL = 0;
-int KIND_PARAM = 1;
 
 void init_comp_context() {
   int i = 0;
@@ -428,18 +413,8 @@ void print_glo_decls() {
   }
 }
 
-ast find_var_in_local_env(ast ident_tok) {
-  ast env = local_env;
-  ast var;
-  while (env != 0) {
-    var = get_child(env, 0);
-    // Because identifier tokens are unique, we can compare their address to check if they are the same.
-    if (get_child(var, 0) == ident_tok) return var;
-
-    env = get_child(env, 1);
-  }
-  return -1;
-}
+// Environment tracking
+#include "env.c"
 
 // Similar to env_var, but doesn't use the local environment and assumes that the
 // identifier is internal or global. This is faster than env_var when we know that
@@ -486,30 +461,25 @@ text global_var(ast ident_tok) {
 }
 
 text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
-  ast var;
-  text res;
-
   if (get_op(ident) == IDENTIFIER) {
-    var = find_var_in_local_env(get_val(ident));
-    if (var != -1) {
-      if (get_child(var, 2) == KIND_PARAM && get_child(var, 3)) {
-        res = wrap_int(get_child(var, 1));
-        if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
-      } else {
+    if (cgc_lookup_var(get_val(ident), cgc_locals)) {
+      // TODO: Constant param optimization
+      // if (get_child(var, 2) == KIND_PARAM) {
+      //   res = wrap_int(get_child(var, 1));
+      //   if (!prefixed_with_dollar) res = string_concat(wrap_char('$'), res);
+      // } else {
         if (get_val(ident) == ARGV_ID) {
-          res = wrap_str_lit("argv_");
+          return wrap_str_lit("argv_");
         } else {
-          res = wrap_str_pool(get_val(get_val(ident)));
+          return wrap_str_pool(get_val(get_val(ident)));
         }
-      }
+      // }
     } else {
-      res = global_var(get_val(ident));
+      return global_var(get_val(ident));
     }
   } else {
-    res = format_special_var(ident, prefixed_with_dollar);
+    return format_special_var(ident, prefixed_with_dollar);
   }
-
-  return res;
 }
 
 text env_var(ast ident) {
@@ -542,70 +512,25 @@ ast fresh_string_ident(int string_probe) {
   return new_ast0(IDENTIFIER_STRING, wrap_int(heap[string_probe + 3]));
 }
 
-// The local environment is a list of variables represented using ',' nodes.
-// A variable is a LOCAL_VAR node with 4 children:
-//   1. Ident
-//   2. Position of the variable in the shell environment ($1, $2, ...)
-//   3. Kind of variable (function param or local var)
-//   4. Constant: if the variable is never assigned to
-void add_var_to_local_env(ast ident_tok, int position, int kind) {
-  ast var;
-  // Check if the variable is not in env. This should always do nothing
-  if (find_var_in_local_env(ident_tok) != -1) {
-    fatal_error("add_var_to_local_env: variable already in local environment");
+void add_var_to_local_env(ast decl, enum BINDING kind) {
+  int ident_tok = get_child(decl, 0);
+
+  // Make sure we're not shadowing an existing local variable
+  if (cgc_lookup_var(ident_tok, cgc_locals)) {
+    putstr("var="); putstr(string_pool + get_val(ident_tok)); putchar('\n');
+    fatal_error("Variable is already in local environment");
   }
 
   // The var is not part of the environment, so we add it.
-  // Variables start as constant, and are marked as mutable by mark_mutable_variables_body.
-#ifdef OPTIMIZE_CONSTANT_PARAM
-  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, true);
-#else
-  var = new_ast4(LOCAL_VAR, ident_tok, position, kind, false);
-#endif
-  local_env = new_ast2(',', var, local_env);
-  local_env_size += 1;
+  cgc_add_local_var(kind, ident_tok, get_child(decl, 1));
 }
 
-void add_vars_to_local_env(ast lst, int position, int kind) {
-  ast decls;
-  ast variables;
-  ast variable;
-  while (lst != 0) {
-    decls = get_child(lst, 0); // VAR_DECLS node
-    variables = get_child(decls, 0); // List of variables
-    while(variables != 0){ // Loop through the list of variables
-      variable = get_child(variables, 0); // Variable node
-      add_var_to_local_env(get_child(variable, 0), position, kind);
-      variables = get_child(variables, 1);
-      position += 1; // Increment position
-    }
-    lst = get_child(lst, 1);
-  }
-}
-
-void add_fun_params_to_local_env(ast lst, int position, int kind) {
+void add_fun_params_to_local_env(ast lst) {
   ast decl;
   while (lst != 0) {
     decl = get_child(lst, 0);
-    add_var_to_local_env(get_child(decl, 0), position, kind);
+    add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = get_child(lst, 1);
-    position += 1;
-  }
-}
-
-void mark_variable_as_mutable(ast ident) {
-  ast var;
-  if (get_op(ident) == IDENTIFIER) {
-    var = find_var_in_local_env(get_val(ident));
-    if (var != -1) { set_child(var, 3, false); }
-  }
-}
-
-int variable_is_constant_param(ast local_var) {
-  if (local_var != -1 && get_child(local_var, 2) == KIND_PARAM && get_child(local_var, 3)) {
-    return true;
-  } else {
-    return false;
   }
 }
 
@@ -640,57 +565,27 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   }
 }
 
-void assert_vars_are_safe(ast lst, bool local) {
-  ast decls;
-  ast variables;
-  ast variable;
-  while(lst != 0){
-    if(get_op(get_child(lst, 0)) == VAR_DECLS){ // If it's a list of declarations
-      decls = get_child(lst, 0);
-      variables = get_child(decls, 0);
-      while(variables != 0) { // Loop through the list of variables
-        variable = get_child(variables, 0);
-        assert_var_decl_is_safe(variable, local); // Check the variables
-        variables = get_child(variables, 1);
-      }
-    } else{
-      assert_var_decl_is_safe(get_child(lst, 0), local); // Check the variable
-    }
+void check_param_decls(ast lst) {
+  while (lst != 0) {
+    assert_var_decl_is_safe(get_child(lst, 0), true);
     lst = get_child(lst, 1);
   }
 }
 
-int num_vars_to_save() {
-  ast env = local_env;
-  int counter = fun_gensym_ix;
-
-  while (env != 0) {
-    if (!variable_is_constant_param(get_child(env, 0))) counter += 1;
-    env = get_child(env, 1);
-  }
-
-  return counter;
-}
-
 #ifdef SH_SAVE_VARS_WITH_SET
 // Save the value of local variables to positional parameters
-text save_local_vars(int params_count) {
-  ast env = local_env;
-  ast local_var;
+text save_local_vars() {
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
 
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
-
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
-    if (variable_is_constant_param(local_var)) continue;
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    // TODO: Constant param optimization
+    // if (variable_is_constant_param(local_var)) continue;
+    ident = new_ast0(IDENTIFIER, binding_ident(env));
     res = concatenate_strings_with(string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), res, wrap_char(' '));
+    env = binding_next(env);
   }
 
   while (counter > 0) {
@@ -699,13 +594,18 @@ text save_local_vars(int params_count) {
     counter -= 1;
   }
 
-  return string_concat(wrap_str_lit("set $@ "), res);
+
+  if (res) {
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str_lit("set $@ "), res);
+  } else {
+    return 0;
+  }
 }
 
 // Restore the previous value of local variables from positional parameters
 text restore_local_vars(int params_count) {
-  ast env = local_env;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   // Position of the saved local vars, starting from 0
   int local_var_pos = 0;
@@ -715,26 +615,23 @@ text restore_local_vars(int params_count) {
   // Used to account for traversal of local env in reverse order.
   int env_non_cst_size = 0;
 
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
-
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
-    if(variable_is_constant_param(local_var)) continue;
     env_non_cst_size += 1;
+    env = binding_next(env);
+
+    // TODO: Constant param optimization
+    // if(variable_is_constant_param(local_var)) continue;
   }
 
-  env = local_env;
+  env = cgc_locals_fun;
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-    env = get_child(env, 1);
-    if (variable_is_constant_param(local_var)) continue;
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    // TODO: Constant param optimization
+    // if (variable_is_constant_param(local_var)) continue;
+    ident = new_ast0(IDENTIFIER, binding_ident(env));
     res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
     local_var_pos += 1;
+    env = binding_next(env);
   }
 
   while (counter > 0) {
@@ -744,7 +641,12 @@ text restore_local_vars(int params_count) {
     counter -= 1;
   }
 
-  return string_concat3(wrap_str_lit(": $((__tmp = $1)) "), res, wrap_str_lit(" $(($1 = __tmp))"));
+  if (res) {
+    runtime_use_local_vars = true;
+    return string_concat3(wrap_str_lit(": $((__tmp = $1)) "), res, wrap_str_lit(" $(($1 = __tmp))"));
+  } else {
+    return 0;
+  }
 }
 
 #else
@@ -753,38 +655,31 @@ text restore_local_vars(int params_count) {
 // Save the value of local variables to positional parameters
 text let_params(int params) {
   ast ident;
-  ast local_var;
   text res = 0;
   int params_ix = 2;
 
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
-
   while (params != 0) {
-    local_var = find_var_in_local_env(get_child(get_child(params, 0), 0));
-    if (!variable_is_constant_param(local_var)) {
-      ident = new_ast0(IDENTIFIER, get_child(get_child(params, 0), 0));
-      res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str_lit("; "));
-    }
+    // TODO: Constant param optimization
+    // local_var = find_var_in_local_env(get_child(get_child(params, 0), 0), local_env);
+    // if (!variable_is_constant_param(local_var)) {
+    ident = new_ast0(IDENTIFIER, get_child(get_child(params, 0), 0));
+    res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str_lit("; "));
+    // }
     params = get_child(params, 1);
     params_ix += 1;
   }
+
+  runtime_use_local_vars |= res != 0;
 
   return res;
 }
 #endif
 
-text save_local_vars(int params_count) {
-  ast env = local_env;
-  ast local_var;
+text save_local_vars() {
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
-
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
@@ -793,20 +688,22 @@ text save_local_vars(int params_count) {
   }
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-    if (local_var != -1 && get_child(local_var, 2) != KIND_PARAM) { // Skip params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
 #else
+    // TODO: Constant param optimization
     // Constant function parameters are assigned to $1, $2, ... and don't need to be saved
-    if (!variable_is_constant_param(local_var)) {
+    if (true)
+    // if (!variable_is_constant_param(local_var)) {
 #endif
-      ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+      ident = new_ast0(IDENTIFIER, binding_ident(env));
       res = concatenate_strings_with(string_concat(wrap_str_lit("let "), env_var_with_prefix(ident, true)), res, wrap_str_lit("; "));
     }
 
-    env = get_child(env, 1);
+    env = binding_next(env);
   }
+
+  runtime_use_local_vars |= res != 0;
 
   return res;
 }
@@ -814,15 +711,10 @@ text save_local_vars(int params_count) {
 // The only difference between save_local_vars and restore_local_vars is the
 // order of the arguments and the call to unsave_vars instead of save_vars.
 text restore_local_vars(int params_count) {
-  ast env = local_env;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
-
-  if (num_vars_to_save() == 0) return 0;
-
-  runtime_use_local_vars = true;
 
   while (counter > 0) {
     ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
@@ -831,18 +723,22 @@ text restore_local_vars(int params_count) {
   }
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-
     // Constant function parameters are assigned to $1, $2, ... and don't need to be saved
-    if (!variable_is_constant_param(local_var)) {
-      ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    // TODO: Constant param optimization
+    // if (!variable_is_constant_param(local_var)) {
+      ident = new_ast0(IDENTIFIER, binding_ident(env));
       res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
-    }
+    // }
 
-    env = get_child(env, 1);
+    env = binding_next(env);
   }
 
-  return string_concat(wrap_str_lit("endlet $1 "), res);
+  if (res) {
+    runtime_use_local_vars = true;
+    return string_concat(wrap_str_lit("endlet $1 "), res);
+  } else {
+    return 0;
+  }
 }
 #endif
 
@@ -1820,15 +1716,19 @@ void comp_assignment(ast lhs, ast rhs) {
 
 bool comp_body(ast node, STMT_CTX stmt_ctx) {
   int start_in_tail_position = in_tail_position;
+  int start_cgc_locals = cgc_locals;
+
   in_tail_position = false;
 
   while (node != 0) {
     // Last statement of body is in tail position if the body itself is in tail position
     if (get_op(get_child(node, 1)) != '{') in_tail_position = start_in_tail_position;
-    if (comp_statement(get_child(node, 0), stmt_ctx)) return true; // Statement always returns => block is terminated
+    if (comp_statement(get_child(node, 0), stmt_ctx)) break; // Statement always returns => block is terminated
     node = get_child(node, 1);
   }
-  return false;
+
+  cgc_locals = start_cgc_locals;
+  return node != 0; // If node is not null, it means the block was terminated early
 }
 
 // Assemble switch pattern from case and default statements.
@@ -1866,8 +1766,8 @@ text make_switch_pattern(ast statement) {
 }
 
 bool comp_switch(ast node) {
-  int start_in_tail_position = in_tail_position;
   ast statement;
+  int start_cgc_locals = cgc_locals;
 
   append_glo_decl(string_concat3(
       wrap_str_lit("case "),
@@ -1875,6 +1775,7 @@ bool comp_switch(ast node) {
       wrap_str_lit(" in")
     ));
 
+  cgc_add_enclosing_switch(in_tail_position);
   nest_level += 1;
 
   node = get_child(node, 1);
@@ -1890,15 +1791,17 @@ bool comp_switch(ast node) {
 
     nest_level += 1;
 
+    // Since we don't know if the switch is exhaustive, we can't compile in tail
+    // position mode, see comment below.
     in_tail_position = false;
 
-    // We keep compiling statements until we encounter a statement that returns or breaks
+    // We keep compiling statements until we encounter a statement that returns or breaks.
     // Case and default nodes contain the first statement of the block so we process that one first.
-    if (!comp_statement(statement, STMT_CTX_SWITCH | (start_in_tail_position ? STMT_CTX_SWITCH_TAIL : 0))) {
+    if (!comp_statement(statement, STMT_CTX_SWITCH)) {
       while (get_op(node) == '{') {
         statement = get_child(node, 0);
         node = get_child(node, 1);
-        if (comp_statement(statement, STMT_CTX_SWITCH | (start_in_tail_position ? STMT_CTX_SWITCH_TAIL : 0))) break;
+        if (comp_statement(statement, STMT_CTX_SWITCH)) break;
       }
     }
 
@@ -1908,6 +1811,8 @@ bool comp_switch(ast node) {
 
   nest_level -= 1;
   append_glo_decl(wrap_str_lit("esac"));
+
+  cgc_locals = start_cgc_locals;
 
   // Returning not-false is only important for nested switch statements.
   // It could be useful to remove the need for the redundant trailing return
@@ -1927,6 +1832,7 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
+  int start_cgc_locals = cgc_locals;
 
   bool else_if = stmt_ctx & STMT_CTX_ELSE_IF;
   stmt_ctx = stmt_ctx & ~STMT_CTX_ELSE_IF; // Clear STMT_CTX_ELSE_IF bit to not pass it to the next if statement
@@ -1963,6 +1869,8 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
     fatal_error("Early break out of a switch case is unsupported");
   }
 
+  cgc_locals = start_cgc_locals;
+
   return termination_lhs && termination_rhs;
 }
 
@@ -1972,10 +1880,14 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
 // loop_end_stmt is the statement that should be executed at the end of the for loop (increment, etc.)
 bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX stmt_ctx) {
   // Save loop end actions from possible outer loop
-  int start_loop_end_actions_start = loop_end_actions_start;
-  int start_loop_end_actions_end = loop_end_actions_end;
+  int start_cgc_locals = cgc_locals;
   int start_glo_decl_idx;
   bool always_returns = false;
+  int loop_binding;
+
+  cgc_add_enclosing_loop();
+
+  loop_binding = cgc_locals;
 
   // This is a little bit of a hack, but it makes things so much simpler.
   // Because we need to capture the code for the end of loop actions
@@ -1985,30 +1897,111 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   // generated by comp_statement using undo_glo_decls and save the indices of
   // the declarations of the loop end actions so they can replayed later.
   if (loop_end_stmt) {
-    loop_end_actions_start = glo_decl_ix;
+    heap[loop_binding + 2] = glo_decl_ix;
     comp_statement(loop_end_stmt, stmt_ctx);
-    undo_glo_decls(loop_end_actions_start);
-    loop_end_actions_end = glo_decl_ix;
+    undo_glo_decls(heap[loop_binding + 2]);
+    heap[loop_binding + 3] = glo_decl_ix;
   }
 
   append_glo_decl(string_concat3(wrap_str_lit("while "), cond ? cond : wrap_char(':'), wrap_str_lit("; do")));
-  loop_nesting_level += 1;
   nest_level += 1;
   start_glo_decl_idx = glo_decl_ix;
   always_returns = comp_statement(body, stmt_ctx);
   append_glo_decl(last_line);
-  replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
+  replay_glo_decls(heap[loop_binding + 2], heap[loop_binding + 3], true);
   // while loops cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
   nest_level -= 1;
-  loop_nesting_level -= 1;
   append_glo_decl(wrap_str_lit("done"));
-
-  loop_end_actions_start = start_loop_end_actions_start;
-  loop_end_actions_end = start_loop_end_actions_end;
+  cgc_locals = start_cgc_locals;
 
   // If the condition is always true and the loop always returns
   return cond == wrap_char(':') && always_returns;
+}
+
+bool comp_break() {
+  int binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
+  if (binding == 0) fatal_error("comp_statement: break not in loop or switch");
+  if (binding_kind(binding) == BINDING_LOOP) {
+    append_glo_decl(wrap_str_lit("break"));
+  }
+  return true;
+}
+
+bool comp_continue() {
+  int binding = cgc_lookup_enclosing_loop(cgc_locals);
+  if (binding == 0) fatal_error("comp_statement: continue not in loop");
+  replay_glo_decls(heap[binding + 2], heap[binding + 3], true);
+  // We could remove the continue when in tail position, but it's not worth doing
+  append_glo_decl(wrap_str_lit("continue"));
+  return false;
+}
+
+bool comp_return(ast return_value) {
+  int binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
+  int loop_depth = cgc_loop_depth(binding);
+
+  // First we assign the return value...
+  if (return_value != 0) {
+    if (get_op(return_value) == '(') { // Check if function call
+      comp_fun_call(return_value, new_ast0(IDENTIFIER_DOLLAR, 1));
+    } else {
+      append_glo_decl(string_concat3(
+        wrap_str_lit(": $(($1 = "),
+        comp_rvalue(return_value, RVALUE_CTX_ARITH_EXPANSION),
+        wrap_str_lit("))")
+      ));
+    }
+  }
+
+  // ...and then we take care of the control flow part of the return statement
+  // SWITCH blocks specify if they are in tail position
+  if (binding != 0 && binding_kind(binding) == BINDING_SWITCH) {
+    in_tail_position |= heap[binding + 2];
+  }
+
+  if (in_tail_position && binding != 0) {
+    // If in a loop or switch in tail position, we may be able to redirect the
+    // control flow to the functions prologue and avoid having to endlet the
+    // local variables. The cases where this is possible are:
+    //  - When in a loop, using break (loop_depth > 0).
+    //  - When in a switch surrounded by a loop, using break (loop_depth > 1).
+    //  - For switch with no outer loop, by doing nothing (;; will break out of the switch) (loop_depth == 0).
+    //
+    // This means we only need a break statement when loop_depth != 0
+    if (loop_depth >= 2) {
+      append_glo_decl(string_concat(wrap_str_lit("break "), wrap_int(loop_depth)));
+    } else if (loop_depth == 1) {
+      append_glo_decl(wrap_str_lit("break"));
+    }
+  } else if (!in_tail_position) {
+    rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
+    append_glo_decl(wrap_str_lit("return"));
+  }
+
+  return true;
+}
+
+void comp_var_decls(ast node) {
+  ast var_decl;
+
+  node = get_child(node, 0);
+  while (node != 0) {
+    // Add to local env and cummulative env, then initialize
+    var_decl = get_child(node, 0);
+    // printf("Adding var %s\n", string_pool + get_val(get_child(var_decl, 0)));
+    add_var_to_local_env(var_decl, BINDING_VAR_LOCAL);
+    if (get_child(var_decl, 2) != 0) {
+      comp_assignment(new_ast0(IDENTIFIER, get_child(var_decl, 0)), get_child(var_decl, 2));
+    }
+#ifdef INITIALIZE_LOCAL_VARS_WITH_ZERO
+    else {
+      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0));
+    }
+#endif
+    // TODO: Cummulative env
+    node = get_child(node, 1); // Next variable
+  }
 }
 
 // Returns whether the statement always returns/breaks.
@@ -2056,41 +2049,11 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == SWITCH_KW) {
     return comp_switch(node);
   } else if (op == BREAK_KW) {
-    if ((stmt_ctx & STMT_CTX_SWITCH) == 0) {
-      if (loop_nesting_level == 0) fatal_error("comp_statement: break not in loop");
-      append_glo_decl(wrap_str_lit("break"));
-    }
-    return true; // Break out of switch statement
+    return comp_break(); // Break out of switch statement
   } else if (op == CONTINUE_KW) {
-    if (loop_nesting_level == 0) fatal_error("comp_statement: continue not in loop");
-    replay_glo_decls(loop_end_actions_start, loop_end_actions_end, true);
-    // We could remove the continue when in tail position, but it's not worth doing
-    append_glo_decl(wrap_str_lit("continue"));
-    return false;
+    return comp_continue(); // Continue to next iteration of loop
   } else if (op == RETURN_KW) {
-    // First we assign the return value...
-    if (get_child(node, 0) != 0) {
-      if (get_op(get_child(node, 0)) == '(') { // Check if function call
-        comp_fun_call(get_child(node, 0), new_ast0(IDENTIFIER_DOLLAR, 1));
-      } else {
-        append_glo_decl(string_concat3(
-          wrap_str_lit(": $(($1 = "),
-          comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
-          wrap_str_lit("))")
-        ));
-      }
-    }
-
-    in_tail_position |= stmt_ctx & STMT_CTX_SWITCH_TAIL;
-
-    // ...and then we take care of the control flow part of the return statement
-    if (in_tail_position && loop_nesting_level == 1) {
-      append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
-    } else if (!in_tail_position || loop_nesting_level != 0) {
-      rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
-      append_glo_decl(wrap_str_lit("return"));
-    }
-    return true;
+    return comp_return(get_child(node, 0));
   } else if (op == '(') { // six.call
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); // Reuse IDENTIFIER_EMPTY ast?
     return false;
@@ -2111,7 +2074,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;
   } else if (op == VAR_DECLS) {
-    fatal_error("variable declaration must be at the beginning of a function");
+    comp_var_decls(node);
     return false;
   } else {
     str = comp_rvalue(node, RVALUE_CTX_BASE);
@@ -2122,131 +2085,23 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   }
 }
 
-ast get_leading_var_declarations(ast node) {
-  ast result = 0;
-  ast local_var;
-  ast tail;
-  ast new_tail;
-
-  if (get_op(node) == '{') {
-    while (get_op(node) == '{') {
-      local_var = get_child(node, 0);
-      if (get_op(local_var) != VAR_DECLS) break;
-
-      // Initialize list
-      new_tail = new_ast2(',', local_var, 0);
-      if (result == 0) { result = new_tail; }
-      else { set_child(tail, 1, new_tail); }
-      tail = new_tail;
-
-      node = get_child(node, 1);
-    }
-  }
-
-  return new_ast2(',', result, node);
-}
-
-#ifdef OPTIMIZE_CONSTANT_PARAM
-void mark_mutable_variables_statement(ast node) {
-  int op = get_op(node);
-  ast params;
-
-  if (node == 0) return;
-
-  if (op == IF_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
-    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
-  } else if (op == WHILE_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_body(get_child(node, 1));
-  } else if (op == DO_KW) {
-    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
-    mark_mutable_variables_body(get_child(node, 1));
-  } else if (op == FOR_KW) {
-    if (get_child(node, 0)) mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
-    if (get_child(node, 2)) mark_mutable_variables_statement(get_child(node, 2));
-    if (get_child(node, 3)) mark_mutable_variables_body(get_child(node, 2));
-  } else if (op == SWITCH_KW) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_child(node, 1)) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == BREAK_KW || op == CONTINUE_KW || op == GOTO_KW) {
-    // Do nothing
-  } else if (op == ':' || op == CASE_KW || op == DEFAULT_KW) {
-    mark_mutable_variables_statement(get_child(node, op == DEFAULT_KW ? 0 : 1));
-  } else if (op == RETURN_KW) {
-    if (get_child(node, 0) != 0) mark_mutable_variables_statement(get_child(node, 0));
-  } else if (op == '(') {
-    params = get_child(node, 1);
-
-    if (params != 0) { // Check if not an empty list
-      while (get_op(params) == ',') {
-        mark_mutable_variables_statement(get_child(params, 0));
-        params = get_child(params, 1);
-      }
-      mark_mutable_variables_statement(params); // Last parameter
-    }
-  } else if (op == '{') { // six.compound
-    mark_mutable_variables_body(node);
-  } else if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER || op == STRING) {
-    // Do nothing
-  } else if (op == '=' || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST
-         || op == PLUS_EQ || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ
-         || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ || op == SIZEOF_KW) {
-    mark_variable_as_mutable(get_child(node, 0));
-    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == '~' || op == '!'
-      || op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
-      || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ
-      || op == LSHIFT || op == RSHIFT || op == '=' || op == '[' || op == AMP_AMP || op == BAR_BAR || op == '.' || op == ARROW
-      || op == PARENS) {
-    mark_mutable_variables_statement(get_child(node, 0));
-    if (get_nb_children(node) == 2) mark_mutable_variables_statement(get_child(node, 1));
-  } else if (op == CAST) {
-    mark_mutable_variables_statement(get_child(node, 1)); // child 0 is the type
-  } else if (op == '?') {
-    mark_mutable_variables_statement(get_child(node, 0));
-    mark_mutable_variables_statement(get_child(node, 1));
-    mark_mutable_variables_statement(get_child(node, 2));
-  } else {
-    printf("op=%d %c\n", op, op);
-    fatal_error("mark_mutable_variables_statement: unknown statement");
-  }
-}
-
-void mark_mutable_variables_body(ast node) {
-  if (node != 0) {
-    while (get_op(node) == '{') {
-      mark_mutable_variables_statement(get_child(node, 0));
-      node = get_child(node, 1);
-    }
-  }
-}
-#endif
-
 void comp_glo_fun_decl(ast node) {
   ast name = get_child(node, 0);
   ast fun_type = get_child(node, 1);
   ast params = get_child(node, 2);
   ast body = get_child(node, 3);
-  ast local_vars_and_body, local_vars;
   text trailing_txt = 0;
-  int params_ix;
-  ast decls, vars, var;
+  int params_ix = 2; // Start at 2 because $1 is assigned to the return location
+  ast var;
   int save_loc_vars_fixup;
   int start_glo_decl_idx;
 
   if (body == -1) return; // ignore forward declarations
 
-  local_vars_and_body = get_leading_var_declarations(get_child(node, 3));
-  local_vars = get_child(local_vars_and_body, 0);
-  body = get_child(local_vars_and_body, 1);
-
   top_level_stmt = false;
 
-  assert_vars_are_safe(params, true);
-  assert_vars_are_safe(local_vars, true);
+  check_param_decls(params);
+  add_fun_params_to_local_env(params);
 
   // If the function is main
   if (name == MAIN_ID) {
@@ -2257,13 +2112,6 @@ void comp_glo_fun_decl(ast node) {
     if (get_op(fun_type) != VOID_KW) main_returns = true;
   }
 
-  add_fun_params_to_local_env(params, 2, KIND_PARAM); // Start position at 2 because 1 is taken by result_loc
-  add_vars_to_local_env(local_vars, local_env_size + 2, KIND_LOCAL);
-
-#ifdef OPTIMIZE_CONSTANT_PARAM
-  mark_mutable_variables_body(body);
-#endif
-
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
   trailing_txt = let_params(params);
   if (trailing_txt != 0) trailing_txt = string_concat(wrap_char(' '), trailing_txt);
@@ -2271,7 +2119,6 @@ void comp_glo_fun_decl(ast node) {
 
   if (trailing_txt == 0) {
     // Show the mapping between the function parameters and $1, $2, etc.
-    params_ix = 2; // Start at 2 because $1 is assigned to result location
     while (params != 0) {
       var = get_child(params, 0);
       trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
@@ -2300,45 +2147,29 @@ void comp_glo_fun_decl(ast node) {
   while (params != 0) {
     var = get_child(params, 0);
 
+    // TODO: Constant param optimization
     // Constant parameters don't need to be initialized
-    if (!variable_is_constant_param(find_var_in_local_env(get_val(var)))) {
+    // if (!variable_is_constant_param(find_var_in_local_env(get_val(var)), local_env)) {
       comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, params_ix));
-    }
+    // }
 
     params = get_child(params, 1);
     params_ix += 1;
   }
 #endif
 
-  // Initialize local vars
-  while (local_vars != 0) {
-    decls = get_child(local_vars, 0); // List of VAR_DECLS
-    vars = get_child(decls, 0); // VAR_DECL list
-    while(vars != 0) {
-      var = get_child(vars, 0); // Single VAR_DECL
-      // TODO: Replace with ternary expression?
-      if (get_child(var, 2) != 0) {
-        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), get_child(var, 2));
-      }
-#ifdef INITIALIZE_LOCAL_VARS_WITH_ZERO
-      else {
-        comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(INTEGER, 0));
-      }
-#endif
-      vars = get_child(vars, 1); // Next VAR_DECL
-    }
-    local_vars = get_child(local_vars, 1);
-  }
-
   comp_body(body, STMT_CTX_DEFAULT);
   // functions cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
+
+  // Set local environment to cummulative for the save_local_vars/restore_local_vars
+  cgc_locals = cgc_locals_fun;
 
   append_glo_decl(restore_local_vars(params_ix - 1));
 
   // We only know the full set of temporary variables after compiling the function body.
   // So we fixup the calls to save_vars and unsave_vars at the end.
-  fixup_glo_decl(save_loc_vars_fixup, save_local_vars(params_ix - 1));
+  fixup_glo_decl(save_loc_vars_fixup, save_local_vars());
   while (rest_loc_var_fixups != 0) {
     fixup_glo_decl(get_child(rest_loc_var_fixups, 0), restore_local_vars(params_ix - 1));
     rest_loc_var_fixups = get_child(rest_loc_var_fixups, 1);
@@ -2569,8 +2400,7 @@ void epilogue() {
 
 // Initialize local and synthetic variables used by function
 void initialize_function_variables() {
-  ast env = local_env;
-  ast local_var;
+  int env = cgc_locals_fun;
   ast ident;
   text res = 0;
   int counter = fun_gensym_ix;
@@ -2582,14 +2412,13 @@ void initialize_function_variables() {
   }
 
   while (env != 0) {
-    local_var = get_child(env, 0);
-    ident = new_ast0(IDENTIFIER, get_child(local_var, 0));
+    ident = new_ast0(IDENTIFIER, binding_ident(env));
 
-    if (!variable_is_constant_param(local_var)) {
+    // TODO: Constant param optimization
+    // if (!variable_is_constant_param(local_var)) {
       res = concatenate_strings_with(res, env_var(ident), wrap_str_lit(" = "));
-    }
-
-    env = get_child(env, 1);
+    // }
+    env = binding_next(env);
   }
 
   if (res != 0) {
@@ -2612,8 +2441,7 @@ void codegen_glo_decl(ast decl) {
   print_glo_decls();
   // Reset state
   glo_decl_ix = 0;
-  local_env_size = 0;
-  local_env = 0;
+  cgc_locals = cgc_locals_fun = 0; // Reset local environment
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
   cumul_text_alloc += text_alloc;
   text_alloc = 1;
