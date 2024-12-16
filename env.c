@@ -182,7 +182,6 @@ void cgc_add_enclosing_switch(int loop_fs, int break_lbl, int next_case_lbl) {
   heap[binding+4] = next_case_lbl;
   cgc_locals = binding;
 }
-#endif
 
 void cgc_add_global(int ident, int size, int width, ast type) {
   int binding = alloc_obj(6);
@@ -233,3 +232,4 @@ void cgc_add_typedef(int ident, enum BINDING struct_or_union_or_enum, ast type) 
   heap[binding+3] = type;
   cgc_globals = binding;
 }
+#endif
