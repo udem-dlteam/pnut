@@ -1963,18 +1963,16 @@ bool comp_return(ast return_value) {
   if (in_tail_position && binding != 0) {
     // If in a loop or switch in tail position, we may be able to redirect the
     // control flow to the functions prologue and avoid having to endlet the
-    // local variables.
+    // local variables. The cases where this is possible are:
+    //  - When in a loop, using break (loop_depth > 0).
+    //  - When in a switch surrounded by a loop, using break (loop_depth > 1).
+    //  - For switch with no outer loop, by doing nothing (;; will break out of the switch) (loop_depth == 0).
     //
-    // When in a loop, we can simply break out of the loop.
-    // When in a switch surrounded by a loop, break can also be used.
-    // For switch with no outer loop, doing nothing as the switch is in tail position.
-    if (binding_kind(binding) == BINDING_LOOP
-      || (binding_kind(binding) == BINDING_SWITCH && loop_depth != 0)) { // Switch enclosed in a loop
-      if (loop_depth > 1) {
-        append_glo_decl(string_concat(wrap_str_lit("break "), wrap_int(loop_depth)));
-      } else {
-        append_glo_decl(wrap_str_lit("break"));
-      }
+    // This means we only need a break statement when loop_depth != 0
+    if (loop_depth >= 2) {
+      append_glo_decl(string_concat(wrap_str_lit("break "), wrap_int(loop_depth)));
+    } else if (loop_depth == 1) {
+      append_glo_decl(wrap_str_lit("break"));
     }
   } else if (!in_tail_position) {
     rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
