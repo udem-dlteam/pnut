@@ -20,6 +20,8 @@
 #
 # The
 
+set -e # Exit on error
+
 TEMP_DIR="build/measure"
 mkdir -p "$TEMP_DIR"
 
