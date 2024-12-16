@@ -1925,6 +1925,32 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   return cond == wrap_char(':') && always_returns;
 }
 
+bool comp_return(ast return_value, STMT_CTX stmt_ctx) {
+  // First we assign the return value...
+  if (return_value != 0) {
+    if (get_op(return_value) == '(') { // Check if function call
+      comp_fun_call(return_value, new_ast0(IDENTIFIER_DOLLAR, 1));
+    } else {
+      append_glo_decl(string_concat3(
+        wrap_str_lit(": $(($1 = "),
+        comp_rvalue(return_value, RVALUE_CTX_ARITH_EXPANSION),
+        wrap_str_lit("))")
+      ));
+    }
+  }
+
+  in_tail_position |= stmt_ctx & STMT_CTX_SWITCH_TAIL;
+
+  // ...and then we take care of the control flow part of the return statement
+  if (in_tail_position && loop_nesting_level == 1) {
+    append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
+  } else if (!in_tail_position || loop_nesting_level != 0) {
+    rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
+    append_glo_decl(wrap_str_lit("return"));
+  }
+  return true;
+}
+
 void comp_var_decls(ast node) {
   ast var_decl;
 
@@ -2004,29 +2030,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     append_glo_decl(wrap_str_lit("continue"));
     return false;
   } else if (op == RETURN_KW) {
-    // First we assign the return value...
-    if (get_child(node, 0) != 0) {
-      if (get_op(get_child(node, 0)) == '(') { // Check if function call
-        comp_fun_call(get_child(node, 0), new_ast0(IDENTIFIER_DOLLAR, 1));
-      } else {
-        append_glo_decl(string_concat3(
-          wrap_str_lit(": $(($1 = "),
-          comp_rvalue(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION),
-          wrap_str_lit("))")
-        ));
-      }
-    }
-
-    in_tail_position |= stmt_ctx & STMT_CTX_SWITCH_TAIL;
-
-    // ...and then we take care of the control flow part of the return statement
-    if (in_tail_position && loop_nesting_level == 1) {
-      append_glo_decl(wrap_str_lit("break")); // Break out of the loop, and the function prologue will do the rest
-    } else if (!in_tail_position || loop_nesting_level != 0) {
-      rest_loc_var_fixups = new_ast2(',', append_glo_decl_fixup(), rest_loc_var_fixups);
-      append_glo_decl(wrap_str_lit("return"));
-    }
-    return true;
+    return comp_return(get_child(node, 0), stmt_ctx);
   } else if (op == '(') { // six.call
     comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); // Reuse IDENTIFIER_EMPTY ast?
     return false;
