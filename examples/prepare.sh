@@ -2,6 +2,8 @@
 
 set -e -u
 
+fail() { echo "$1"; exit $2; }
+
 DIR="examples/"
 COMP_DIR="$DIR/compiled"
 
@@ -22,8 +24,6 @@ pnut_compile_options() {
 compile_options() {
   echo `sed -n -e "/\/\/ comp-options:/p" "$1" | sed -e "s/^\/\/ comp-options://" |  tr '\n' ',' | sed -e 's/,$//'`
 }
-
-fail() { echo "$1"; exit $2; }
 
 failed=0
 
