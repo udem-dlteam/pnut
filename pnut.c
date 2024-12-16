@@ -2027,7 +2027,7 @@ void get_tok() {
 
 // parser
 
-#ifdef NICE_ERR_MSG
+#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG
 #include "debug.c"
 #endif
 
@@ -3146,13 +3146,7 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
-#ifdef DEBUG_CPP
-#include "debug.c"
-#endif
-
 int main(int argc, char **argv) {
-
-
   int i;
   ast decl;
 
@@ -3200,12 +3194,14 @@ int main(int argc, char **argv) {
   while (ch != EOF) {
     get_ch();
   }
-#elif defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES // Tokenize input, output tokens
+#elif defined DEBUG_EXPAND_INCLUDES || defined DEBUG_CPP // Tokenize input, output tokens
   get_tok();
 
   while (tok != EOF) {
     skip_newlines = false; // Don't skip newlines so print_tok knows where to break lines
+#if defined DEBUG_CPP
     print_tok(tok, val);
+#endif
     get_tok();
   }
 #elif defined DEBUG_PARSER // Parse input, output nothing
