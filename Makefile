@@ -34,7 +34,7 @@ all: $(BUILD_DIR)/pnut-sh \
 
 $(BUILD_DIR)/pnut-sh: pnut.c sh.c sh-runtime.c
 	mkdir -p $(BUILD_DIR)
-	$(CC) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
+	$(CC) $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
 
 $(BUILD_DIR)/pnut-sh.sh: $(BUILD_DIR)/pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
@@ -46,7 +46,7 @@ $(BUILD_DIR)/pnut-sh-bootstrapped.sh: $(BUILD_DIR)/pnut-sh.sh pnut.c sh.c sh-run
 
 $(BUILD_DIR)/pnut-exe: pnut.c x86.c exe.c elf.c mach-o.c
 	mkdir -p $(BUILD_DIR)
-	$(CC) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
+	$(CC) $(CFLAGS) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
 
 $(BUILD_DIR)/pnut-exe.sh: $(BUILD_DIR)/pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
 	$(BUILD_DIR)/pnut-sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.sh
