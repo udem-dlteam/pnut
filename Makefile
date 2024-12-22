@@ -7,6 +7,9 @@ BUILD_OPT_EXE.Linux.x86_64 = -DRELEASE_PNUT_x86_64_linux $(BUILD_OPT)
 BUILD_OPT_EXE.Darwin.x86_64 = -DRELEASE_PNUT_x86_64_mac $(BUILD_OPT)
 BUILD_OPT_EXE.Darwin.arm64 = -DRELEASE_PNUT_x86_64_mac $(BUILD_OPT) # no arm64 backend yet, x86 is emulated on ARM Macs
 
+# Shell for building
+BUILD_SHELL=sh
+
 # Detect the operating system and architecture
 UNAME_S := $(shell uname -s)
 UNAME_M := $(shell uname -m)
@@ -38,7 +41,7 @@ $(BUILD_DIR)/pnut-sh.sh: $(BUILD_DIR)/pnut-sh
 	chmod +x $(BUILD_DIR)/pnut-sh.sh
 
 $(BUILD_DIR)/pnut-sh-bootstrapped.sh: $(BUILD_DIR)/pnut-sh.sh pnut.c sh.c sh-runtime.c
-	$$SHELL $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
+	$(BUILD_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 
 $(BUILD_DIR)/pnut-exe: pnut.c x86.c exe.c elf.c mach-o.c
