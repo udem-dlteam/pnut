@@ -56,12 +56,12 @@ $(BUILD_DIR)/pnut-exe-bootstrapped: $(BUILD_DIR)/pnut-exe
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped
 
 install: $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut-sh.sh
-	sudo cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
-	sudo cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
+	cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
+	cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
 
 uninstall:
-	sudo $(RM) /usr/local/bin/pnut
-	sudo $(RM) /usr/local/bin/pnut.sh
+	$(RM) /usr/local/bin/pnut
+	$(RM) /usr/local/bin/pnut.sh
 
 clean:
 	$(RM) -r $(BUILD_DIR)
