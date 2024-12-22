@@ -32,6 +32,11 @@ all: $(BUILD_DIR)/pnut-sh \
 	$(BUILD_DIR)/pnut-exe.sh \
 	$(BUILD_DIR)/pnut-exe-bootstrapped
 
+$(BUILD_DIR)/config.mk:
+	./configure
+
+include $(BUILD_DIR)/config.mk
+
 $(BUILD_DIR)/pnut-sh: pnut.c sh.c sh-runtime.c
 	mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
@@ -55,13 +60,13 @@ $(BUILD_DIR)/pnut-exe.sh: $(BUILD_DIR)/pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
 $(BUILD_DIR)/pnut-exe-bootstrapped: $(BUILD_DIR)/pnut-exe
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped
 
-install: $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut-sh.sh
-	cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
-	cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
+install: $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/config.mk
+	install -D $(BUILD_DIR)/pnut-sh $(DESTDIR)$(prefix)/bin/pnut
+	install -D $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(prefix)/bin/pnut.sh
 
 uninstall:
-	$(RM) /usr/local/bin/pnut
-	$(RM) /usr/local/bin/pnut.sh
+	$(RM) $(DESTDIR)$(prefix)/bin/pnut
+	$(RM) $(DESTDIR)$(prefix)/bin/pnut.sh
 
 clean:
 	$(RM) -r $(BUILD_DIR)

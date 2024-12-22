@@ -1,0 +1,35 @@
+#!/bin/sh
+
+help='
+Configure a pnut compilation.
+
+--help              display help and exit
+--prefix=PATH       installation prefix
+'
+
+set -e
+
+# Defaults
+prefix="/usr/local"
+
+# read options
+for opt in "$@" ; do
+	case "$opt" in
+	--help)
+		echo "$help"
+		exit 0
+		;;
+	--prefix=*)
+		prefix="${opt#--prefix=}"
+		;;
+	*)
+		echo "Error:  option \"$opt\" unknown." 1>&2
+		exit 1
+	esac
+done
+
+# Create config.mk
+mkdir -p build
+cat > build/config.mk <<EOF
+prefix=${prefix}
+EOF
