@@ -2051,8 +2051,7 @@ ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
 ast parse_enum();
-ast parse_struct();
-ast parse_union();
+ast parse_struct_or_union(int struct_or_union_tok);
 #endif
 
 ast parse_type() {
@@ -2079,12 +2078,9 @@ ast parse_type() {
     } else if (tok == ENUM_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
       return parse_enum();
-    } else if (tok == STRUCT_KW) {
+    } else if (tok == STRUCT_KW || tok == UNION_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_struct();
-    } else if (tok == UNION_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_union();
+      return parse_struct_or_union(tok);
     } else if (tok == TYPE) {
       // Look in types table. It's a type, not a type_kw, but we reuse the variable
       type_kw = heap[val + 3]; // For TYPE tokens, the tag is the type
@@ -2207,21 +2203,21 @@ ast parse_enum() {
   return new_ast3(ENUM_KW, 0, name, result); // 0 is number of stars
 }
 
-ast parse_struct() {
+ast parse_struct_or_union(int struct_or_union_tok) {
   ast name;
   ast ident;
   ast type;
   ast result = 0;
   ast tail;
 
-  expect_tok(STRUCT_KW);
+  expect_tok(struct_or_union_tok);
 
   if (tok == IDENTIFIER) {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
   } else if (tok == TYPE) {
     result = heap[val + 3]; // For TYPE tokens, the tag is the type
-    if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
+    if (get_op(result) != struct_or_union_tok) syntax_error("struct type expected");
     get_tok();
     if (tok == '{') syntax_error("struct type cannot be redefined");
     return result;
@@ -2271,12 +2267,7 @@ ast parse_struct() {
 
   }
 
-  return new_ast3(STRUCT_KW, 0, name, result); // 0 is number of stars
-}
-
-ast parse_union() {
-  syntax_error("union not supported");
-  return 0;
+  return new_ast3(struct_or_union_tok, 0, name, result); // 0 is number of stars
 }
 
 ast parse_param_decl() {
