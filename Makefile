@@ -37,25 +37,28 @@ $(BUILD_DIR)/config.mk:
 
 include $(BUILD_DIR)/config.mk
 
-$(BUILD_DIR)/pnut-sh: pnut.c sh.c sh-runtime.c
+PNUT_SH_DEPS=pnut.c debug.c sh.c sh-runtime.c env.c
+PNUT_EXE_DEPS= pnut.c debug.c x86.c exe.c env.c elf.c mach-o.c
+
+$(BUILD_DIR)/pnut-sh: $(PNUT_SH_DEPS)
 	$(CC) $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
 
-$(BUILD_DIR)/pnut-sh.sh: $(BUILD_DIR)/pnut-sh
+$(BUILD_DIR)/pnut-sh.sh: $(BUILD_DIR)/pnut-sh $(PNUT_SH_DEPS)
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
 	chmod +x $(BUILD_DIR)/pnut-sh.sh
 
-$(BUILD_DIR)/pnut-sh-bootstrapped.sh: $(BUILD_DIR)/pnut-sh.sh pnut.c sh.c sh-runtime.c
+$(BUILD_DIR)/pnut-sh-bootstrapped.sh: $(BUILD_DIR)/pnut-sh.sh $(PNUT_SH_DEPS)
 	$(BUILD_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 
-$(BUILD_DIR)/pnut-exe: pnut.c x86.c exe.c elf.c mach-o.c
+$(BUILD_DIR)/pnut-exe: $(PNUT_EXE_DEPS)
 	$(CC) $(CFLAGS) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
 
-$(BUILD_DIR)/pnut-exe.sh: $(BUILD_DIR)/pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
+$(BUILD_DIR)/pnut-exe.sh: $(BUILD_DIR)/pnut-sh $(PNUT_EXE_DEPS)
 	$(BUILD_DIR)/pnut-sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.sh
 	chmod +x $(BUILD_DIR)/pnut-exe.sh
 
-$(BUILD_DIR)/pnut-exe-bootstrapped: $(BUILD_DIR)/pnut-exe
+$(BUILD_DIR)/pnut-exe-bootstrapped: $(BUILD_DIR)/pnut-exe $(PNUT_EXE_DEPS)
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped
 
 install: $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/config.mk
