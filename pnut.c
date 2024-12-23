@@ -2144,15 +2144,10 @@ ast parse_enum() {
 
   expect_tok(ENUM_KW);
 
-  if (tok == IDENTIFIER) {
+  if (tok == IDENTIFIER || tok == TYPE) {
+    // When the enum keyword is used with an identifier that's typedefed, the typedef is ignored.
     name = new_ast0(IDENTIFIER, val);
     get_tok();
-  } else if (tok == TYPE) {
-    result = heap[val + 3]; // For TYPE tokens, the tag is the type
-    if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
-    get_tok();
-    if (tok == '{') syntax_error("enum type cannot be redefined");
-    return result;
   } else {
     name = 0;
   }
@@ -2170,9 +2165,7 @@ ast parse_enum() {
       if (tok == '=') {
         get_tok();
 
-        if (tok != INTEGER) {
-          syntax_error("integer expected");
-        }
+        if (tok != INTEGER) syntax_error("integer expected");
         value = new_ast0(INTEGER, val);
         next_value = val - 1; // Next value is the current value + 1, but val is negative
         get_tok(); // skip
@@ -2212,15 +2205,10 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
   expect_tok(struct_or_union_tok);
 
-  if (tok == IDENTIFIER) {
+  if (tok == IDENTIFIER || tok == TYPE) {
+    // When the struct/union keyword is used with an identifier that's typedefed, the typedef is ignored.
     name = new_ast0(IDENTIFIER, val);
     get_tok();
-  } else if (tok == TYPE) {
-    result = heap[val + 3]; // For TYPE tokens, the tag is the type
-    if (get_op(result) != struct_or_union_tok) syntax_error("struct type expected");
-    get_tok();
-    if (tok == '{') syntax_error("struct type cannot be redefined");
-    return result;
   } else {
     name = 0;
   }
