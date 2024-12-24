@@ -418,19 +418,25 @@ void def_goto_label(int lbl) {
   }
 }
 
+// Type, structure and union handling
+int type_width_ast(ast type, bool array_value, bool word_align);
+int struct_union_size(ast struct_type);
+
 // A pointer type is either an array type or a type with at least one star
 bool is_pointer_type(ast type) {
-  if (get_op(type) == '[' || get_val(type) != 0) {
-    return true;
-  } else {
-    return false;
-  }
+  bool op = get_op(type);
+  bool stars = get_val(type);
+  return op == '[' || stars > 0;
+}
+
+bool is_struct_or_union_type(ast type) {
+  int op = get_op(type);
+  return op == STRUCT_KW || op == UNION_KW;
 }
 
 // An aggregate type is either an array type or a struct/union type (that's not a reference)
 bool is_aggregate_type(ast type) {
-  if ( ((get_op(type) == STRUCT_KW || get_op(type) == UNION_KW) && get_val(type) == 0)
-    || get_op(type) == '[') {
+  if ((is_struct_or_union_type(type) && get_val(type) == 0) || get_op(type) == '[') {
     return true;
   } else {
     return false;
@@ -455,9 +461,6 @@ bool is_type(ast type) {
 bool is_not_pointer_type(ast type) {
   return !is_pointer_type(type);
 }
-
-int struct_size(ast struct_type);
-int type_width_ast(ast type, bool array_value, bool word_align);
 
 // Size an object of the given type would occupy in memory (in bytes).
 // If array_value is true, the size of the array is returned, otherwise the
@@ -484,7 +487,8 @@ int type_width(ast type, int stars, bool array_value, bool word_align) {
     case CHAR_KW:
       return word_align ? word_size : char_width;
     case STRUCT_KW:
-      return struct_size(type);
+    case UNION_KW:
+      return struct_union_size(type);
     case VOID_KW:
       fatal_error("type_width_ast: void type");
       return 0;
@@ -536,58 +540,98 @@ ast canonicalize_type(ast type) {
   return res;
 }
 
-// Size of a struct type, rounded up to the word size
-int struct_size(ast struct_type) {
+// Size of a struct or union type, rounded up to the word size
+int struct_union_size(ast type) {
   ast members;
   ast member_type;
+  int member_size;
   int size = 0;
 
-  if (get_op(struct_type) != STRUCT_KW) fatal_error("struct_size: not a struct type");
+  type = canonicalize_type(type);
+  members = get_child(type, 2);
 
-  members = get_child(canonicalize_type(struct_type), 2);
-
+  switch (get_op(type)) {
+    case STRUCT_KW:
   while (get_op(members) == ',') {
     member_type = get_child(members, 1);
     members = get_child(members, 2);
-    size += type_width_ast(member_type, true, true);
+        member_size = type_width_ast(member_type, true, true);
+        size += member_size;
+      }
+      break;
+    case UNION_KW:
+      while (get_op(members) == ',') {
+        member_type = get_child(members, 1);
+        members = get_child(members, 2);
+        member_size = type_width_ast(member_type, true, true);
+        // Union size is the max of its members
+        if (member_size > size) size = member_size;
+      }
+      break;
+    default:
+      fatal_error("struct_union_size: not a struct or union type");
   }
 
   return round_up_to_word_size(size);
 }
 
-// Return offset of struct member
-int struct_member_offset(ast struct_type, ast member_ident) {
+// Find offset of struct member
+int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast members = get_child(canonicalize_type(struct_type), 2);
-  ast member_type;
-  int size = 0;
+  int offset = 0;
+  int sub_offset;
+  ast ident;
 
   while (get_op(members) == ',') {
-    if (get_val(member_ident) == get_val(get_child(members, 0))) {
-      return size;
+    ident = get_val(get_child(members, 0));
+    if (ident == 0) { // Anonymous struct member, search that struct
+      sub_offset = struct_member_offset_go(get_child(members, 1), member_ident);
+      if (sub_offset != -1) return offset + sub_offset;
+    } else if (get_val(member_ident) == get_val(get_child(members, 0))) {
+      return offset;
     }
 
-    member_type = get_child(members, 1);
+    if (get_op(struct_type) == STRUCT_KW) {
+      // For unions, fields are always at offset 0. We must still iterate
+      // because the field may be in an anonymous struct.
+    offset += round_up_to_word_size(type_width_ast(get_child(members, 1), true, true));
+    }
     members = get_child(members, 2);
-    size += round_up_to_word_size(type_width_ast(member_type, true, true));
   }
 
-  fatal_error("struct_member_offset: member not found");
-  return 0;
+  return -1;
+}
+
+int struct_member_offset(ast struct_type, ast member_ident) {
+  int offset = struct_member_offset_go(struct_type, member_ident);
+  if (offset == -1) fatal_error("struct_member_offset: member not found");
+  return offset;
 }
 
 // Find a struct member
-ast struct_member(ast struct_type, ast member_ident) {
+ast struct_member_go(ast struct_type, ast member_ident) {
   ast members = get_child(canonicalize_type(struct_type), 2);
+  ast ident;
 
-  while (get_op(members) == ',') {
-    if (get_val(member_ident) == get_val(get_child(members, 0)))
+  while (members != 0) {
+    ident = get_val(get_child(members, 0));
+    if (ident == 0) { // Anonymous struct member, search that struct
+      ident = struct_member_go(get_child(members, 1), member_ident);
+      if (ident != 0) return ident; // Found member in the anonymous struct
+    } else if (get_val(member_ident) == ident) {
       return members;
+    }
 
     members = get_child(members, 2);
   }
 
-  fatal_error("struct_member: member not found");
-  return 0;
+  return -1;
+}
+
+ast struct_member(ast struct_type, ast member_ident) {
+  ast member = struct_member_go(struct_type, member_ident);
+  if (member == -1) fatal_error("struct_member: member not found");
+  return member;
 }
 
 // Width of an object pointed to by a reference type.
@@ -744,7 +788,7 @@ ast value_type(ast node) {
       }
     } else if (op == '.') {
       left_type = value_type(get_child(node, 0));
-      if (get_op(left_type) == STRUCT_KW && get_val(left_type) == 0) {
+      if (is_struct_or_union_type(left_type) && get_val(left_type) == 0) {
         return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: . operator on non-struct pointer type");
@@ -753,7 +797,7 @@ ast value_type(ast node) {
     } else if (op == ARROW) {
       // Same as '.', but left_type must be a pointer
       left_type = value_type(get_child(node, 0));
-      if (get_op(left_type) == STRUCT_KW && get_val(left_type) == 1) {
+      if (is_struct_or_union_type(left_type) && get_val(left_type) == 1) {
         return get_child(struct_member(left_type, get_child(node, 1)), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
@@ -888,7 +932,7 @@ int codegen_param(ast param) {
   int type = value_type(param);
   int left_width;
 
-  if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+  if (is_struct_or_union_type(type) && get_val(type) == 0) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
@@ -1015,23 +1059,29 @@ int codegen_lvalue(ast node) {
       lvalue_width = ref_type_width(type);
     } else if (op == '.') {
       type = value_type(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
+      if (is_struct_or_union_type(type) && get_val(type) == 0) {
         codegen_lvalue(get_child(node, 0));
         pop_reg(reg_X);
+        // union members are at the same offset: 0
+        if (get_op(type) == STRUCT_KW) {
         add_reg_imm(reg_X, struct_member_offset(type, get_child(node, 1)));
+        }
         push_reg(reg_X);
         grow_fs(-1);
         lvalue_width = type_width_ast(get_child(struct_member(type, get_child(node, 1)), 1), true, true); // child 1 of member is the type
       } else {
-        fatal_error("codegen_lvalue: -> operator on non-struct type");
+        fatal_error("codegen_lvalue: . operator on non-struct type");
       }
     } else if (op == ARROW) {
       // Same as '.', but type must be a pointer
       type = value_type(get_child(node, 0));
-      if (get_op(type) == STRUCT_KW && get_val(type) == 1) {
+      if (is_struct_or_union_type(type) && get_val(type) == 1) {
         codegen_rvalue(get_child(node, 0));
         pop_reg(reg_X);
+        // union members are at the same offset: 0
+        if (get_op(type) == STRUCT_KW) {
         add_reg_imm(reg_X, struct_member_offset(type, get_child(node, 1)));
+        }
         push_reg(reg_X);
         grow_fs(-1);
         lvalue_width = type_width_ast(get_child(struct_member(type, get_child(node, 1)), 1), true, true); // child 1 of member is the type
@@ -1238,7 +1288,7 @@ void codegen_rvalue(ast node) {
     } else if (op == '=') {
       type1 = value_type(get_child(node, 0));
       left_width = codegen_lvalue(get_child(node, 0));
-      if (get_op(type1) == STRUCT_KW && get_val(type1) == 0) {
+      if (is_struct_or_union_type(type1) && get_val(type1) == 0) {
         // Struct assignment, we copy the struct.
         codegen_lvalue(get_child(node, 1));
         pop_reg(reg_X);
@@ -1286,30 +1336,37 @@ void codegen_rvalue(ast node) {
       codegen_call(node);
     } else if (op == '.') {
       type1 = value_type(get_child(node, 0));
-      if (get_op(type1) == STRUCT_KW && get_val(type1) == 0) {
+      if (is_struct_or_union_type(type1) && get_val(type1) == 0) {
         type2 = get_child(struct_member(type1, get_child(node, 1)), 1);
         codegen_lvalue(get_child(node, 0));
         pop_reg(reg_Y);
-        add_reg_imm(reg_Y, struct_member_offset(type1, get_child(node, 1)));
         grow_fs(-1);
-        if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_X, reg_Y, 0, word_size);
-          push_reg(reg_X);
+        // union members are at the same offset: 0
+        if (get_op(type1) == STRUCT_KW) {
+          add_reg_imm(reg_Y, struct_member_offset(type1, get_child(node, 1)));
         }
+        if (!is_aggregate_type(type2)) {
+          load_mem_location(reg_Y, reg_Y, 0, type_width_ast(type2, false, false));
+        }
+        push_reg(reg_Y);
       } else {
-        fatal_error("codegen_rvalue: -> operator on non-struct type");
+        fatal_error("codegen_rvalue: . operator on non-struct type");
       }
     } else if (op == ARROW) {
       type1 = value_type(get_child(node, 0));
-      if (get_op(type1) == STRUCT_KW && get_val(type1) == 1) {
+      if (is_struct_or_union_type(type1) && get_val(type1) == 1) {
         type2 = get_child(struct_member(type1, get_child(node, 1)), 1);
         codegen_rvalue(get_child(node, 0));
         pop_reg(reg_Y);
         grow_fs(-1);
-        if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_X, reg_Y, struct_member_offset(type1, get_child(node, 1)), word_size);
+        // union members are at the same offset: 0
+        if (get_op(type1) == STRUCT_KW) {
+          add_reg_imm(reg_Y, struct_member_offset(type1, get_child(node, 1)));
         }
-        push_reg(reg_X);
+        if (!is_aggregate_type(type2)) {
+          load_mem_location(reg_Y, reg_Y, 0, word_size);
+        }
+        push_reg(reg_Y);
       } else {
         fatal_error("codegen_rvalue: -> operator on non-struct pointer type");
       }
@@ -1412,6 +1469,8 @@ void codegen_begin() {
   jump(setup_lbl);
 }
 
+void handle_enum_struct_union_type_decl(ast type);
+
 void codegen_enum(ast node) {
   ast name = get_child(node, 1);
   ast cases = get_child(node, 2);
@@ -1429,23 +1488,22 @@ void codegen_enum(ast node) {
   }
 }
 
-void codegen_struct(ast node) {
+void codegen_struct_or_union(ast node, enum BINDING kind) {
   ast name = get_child(node, 1);
   ast members = get_child(node, 2);
   int binding;
 
   if (name != 0 && get_child(node, 2) != 0) { // if struct has a name and members (not a reference to an existing type)
-    binding = cgc_lookup_struct(get_val(name), cgc_globals);
-    if (binding != 0 && heap[binding + 3] != node) { fatal_error("codegen_struct: struct already declared"); }
-    cgc_add_typedef(get_val(name), BINDING_TYPE_STRUCT, node);
+    binding = cgc_lookup_binding_ident(kind, get_val(name), cgc_globals);
+    if (binding != 0 && heap[binding + 3] != node) { fatal_error("codegen_struct_or_union: struct/union/enum already declared"); }
+    cgc_add_typedef(get_val(name), kind, node);
   }
 
-  // Traverse the structure to find any other structure declarations
-  members = get_child(node, 2);
+  // Traverse the structure to find any other declarations.
+  // This is not the right semantic because inner declarations are scoped to
+  // this declaration, but it's probably good enough for TCC.
   while (members != 0 && get_op(members) == ',') {
-    if (get_op(get_child(members, 1)) == STRUCT_KW) {
-      codegen_struct(get_child(members, 1));
-    }
+    handle_enum_struct_union_type_decl(get_child(members, 1));
     members = get_child(members, 2);
   }
 }
@@ -1454,9 +1512,9 @@ void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
     codegen_enum(type);
   } else if (get_op(type) == STRUCT_KW) {
-    codegen_struct(type);
+    codegen_struct_or_union(type, BINDING_TYPE_STRUCT);
   } else if (get_op(type) == UNION_KW) {
-    fatal_error("handle_enum_struct_union_type_decl: union not supported");
+    codegen_struct_or_union(type, BINDING_TYPE_UNION);
   }
 
   // If not an enum, struct, or union, do nothing
@@ -1533,8 +1591,8 @@ void codegen_body(ast node) {
             size = type_width_ast(type, true, true);  // size in bytes (word aligned)
             grow_stack_bytes(size);
             size /= word_size; // size in words
-          } else if (get_op(type) == STRUCT_KW && get_val(type) == 0) {
-            size = struct_size(type); // size in bytes (word aligned)
+          } else if (is_struct_or_union_type(type) && get_val(type) == 0) {
+            size = struct_union_size(type); // size in bytes (word aligned)
             grow_stack_bytes(size);
             size /= word_size; // size in words
           } else {
@@ -1817,7 +1875,7 @@ void codegen_glo_fun_decl(ast node) {
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
-  if (get_op(fun_type) == STRUCT_KW && get_val(fun_type) == 0) {
+  if (is_struct_or_union_type(fun_type) && get_val(fun_type) == 0) {
     fatal_error("add_params: returning structs from function not supported");
   } else if (get_op(fun_type) == '[') {
     fatal_error("add_params: returning arrays from function not supported");
