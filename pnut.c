@@ -2152,7 +2152,9 @@ ast parse_enum() {
     name = 0;
   }
 
-  if (tok == '{') { // TODO: Distinguish between enum type and enum definition
+  // Note: The parser doesn't distinguish between a reference to an enum type and a declaration.
+  // If child#2 is 0, it's either a reference to a type or a forward declaration.
+  if (tok == '{') {
     get_tok();
 
     while (tok != '}') {
@@ -2210,10 +2212,12 @@ ast parse_struct_or_union(int struct_or_union_tok) {
     name = new_ast0(IDENTIFIER, val);
     get_tok();
   } else {
-    name = 0;
+    name = 0; // Unnamed struct
   }
 
-  if (tok == '{') { // TODO: Distinguish between struct type and struct definition
+  // Note: The parser doesn't distinguish between a reference to a struct/union type and a declaration.
+  // If child#2 is 0, it's either a reference to a type or a forward declaration.
+  if (tok == '{') {
     get_tok();
 
     while (tok != '}') {
@@ -2224,10 +2228,8 @@ ast parse_struct_or_union(int struct_or_union_tok) {
       if (get_val(type) == 0 && get_op(type) == VOID_KW)
         syntax_error("variable with void type");
 
-      if (tok != IDENTIFIER) {
-        syntax_error("identifier expected");
-      }
-
+      ident = 0; // Anonymous struct
+      if (tok == IDENTIFIER) {
       ident = new_ast0(IDENTIFIER, val);
       get_tok();
 
@@ -2238,6 +2240,9 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         type = new_ast2('[', new_ast0(INTEGER, -val), type);
         get_tok();
         expect_tok(']');
+        }
+      } else if (get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
+        syntax_error("Anonymous struct/union member must have be a struct or union type");
       }
 
       expect_tok(';');
