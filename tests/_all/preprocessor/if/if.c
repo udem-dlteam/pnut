@@ -1,11 +1,12 @@
 // tests for #if* preprocessor directive
+#include <stdio.h>
 
 void putdigit(int n) {
   putchar('0' + n);
   putchar('\n');
 }
 
-void main() {
+int main() {
 
 // Basic if works
 #if 1
@@ -80,6 +81,12 @@ void main() {
   putdigit(1);
 #endif
 
+#if ~(0) + 1 == 0
+  putdigit(1);
+#else
+  putdigit(0);
+#endif
+
 #define BUFSIZE 10000
 #if defined BUFSIZE && BUFSIZE >= 1024
   putdigit(2);
@@ -119,4 +126,6 @@ void main() {
 #else
   putdigit(0);
 #endif
+
+  return 0;
 }
