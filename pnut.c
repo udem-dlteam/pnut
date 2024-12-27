@@ -1009,7 +1009,7 @@ int eval_constant(ast expr, bool if_macro) {
     case PARENS:    return eval_constant(get_child(expr, 0), if_macro);
     case INTEGER:   return -get_val(expr);
     case CHARACTER: return get_val(expr);
-    case '~':       return !eval_constant(get_child(expr, 0), if_macro);
+    case '~':       return ~eval_constant(get_child(expr, 0), if_macro);
     case '!':       return !eval_constant(get_child(expr, 0), if_macro);
     case '-':
     case '+':
