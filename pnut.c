@@ -1087,7 +1087,7 @@ int eval_constant(ast expr, bool if_macro) {
         // At this point, macros have already been expanded so we can't have a macro identifier
         return 0;
       } else {
-        // TODO: Enums when not not if_macro
+        // TODO: Enums when outside of if_macro
         fatal_error("identifiers are not allowed in constant expression");
         return 0;
       }
