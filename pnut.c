@@ -2204,6 +2204,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
   ast type;
   ast result = 0;
   ast tail;
+  bool ends_in_flex_array = false;
 
   expect_tok(struct_or_union_tok);
 
@@ -2222,6 +2223,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
     while (tok != '}') {
       if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
+      if (ends_in_flex_array)    syntax_error("flexible array member must be last");
 
       type = parse_type_with_stars();
 
@@ -2235,11 +2237,20 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
       if (tok == '[') { // Array
         get_tok();
-        if (tok != INTEGER) syntax_error("array size must be an integer constant");
-
+          if (tok == ']') {
+            if (struct_or_union_tok != STRUCT_KW) syntax_error("flexible array member must be in a struct");
+            ends_in_flex_array = true;
+            val = 0; // Flex array are arrays with no size, using 0 for now
+            type = new_ast2('[', new_ast0(INTEGER, 0), type);
+            get_tok();
+          } else if (tok == INTEGER) {
         type = new_ast2('[', new_ast0(INTEGER, -val), type);
         get_tok();
         expect_tok(']');
+          } else {
+            syntax_error("array size must be an integer constant");
+          }
+
         }
       } else if (get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
         syntax_error("Anonymous struct/union member must have be a struct or union type");
