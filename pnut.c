@@ -2051,8 +2051,7 @@ ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
 ast parse_enum();
-ast parse_struct();
-ast parse_union();
+ast parse_struct_or_union(int struct_or_union_tok);
 #endif
 
 ast parse_type() {
@@ -2079,12 +2078,9 @@ ast parse_type() {
     } else if (tok == ENUM_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
       return parse_enum();
-    } else if (tok == STRUCT_KW) {
+    } else if (tok == STRUCT_KW || tok == UNION_KW) {
       if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_struct();
-    } else if (tok == UNION_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
-      return parse_union();
+      return parse_struct_or_union(tok);
     } else if (tok == TYPE) {
       // Look in types table. It's a type, not a type_kw, but we reuse the variable
       type_kw = heap[val + 3]; // For TYPE tokens, the tag is the type
@@ -2148,20 +2144,17 @@ ast parse_enum() {
 
   expect_tok(ENUM_KW);
 
-  if (tok == IDENTIFIER) {
+  if (tok == IDENTIFIER || tok == TYPE) {
+    // When the enum keyword is used with an identifier that's typedefed, the typedef is ignored.
     name = new_ast0(IDENTIFIER, val);
     get_tok();
-  } else if (tok == TYPE) {
-    result = heap[val + 3]; // For TYPE tokens, the tag is the type
-    if (get_op(result) != ENUM_KW) syntax_error("enum type expected");
-    get_tok();
-    if (tok == '{') syntax_error("enum type cannot be redefined");
-    return result;
   } else {
     name = 0;
   }
 
-  if (tok == '{') { // TODO: Distinguish between enum type and enum definition
+  // Note: The parser doesn't distinguish between a reference to an enum type and a declaration.
+  // If child#2 is 0, it's either a reference to a type or a forward declaration.
+  if (tok == '{') {
     get_tok();
 
     while (tok != '}') {
@@ -2174,9 +2167,7 @@ ast parse_enum() {
       if (tok == '=') {
         get_tok();
 
-        if (tok != INTEGER) {
-          syntax_error("integer expected");
-        }
+        if (tok != INTEGER) syntax_error("integer expected");
         value = new_ast0(INTEGER, val);
         next_value = val - 1; // Next value is the current value + 1, but val is negative
         get_tok(); // skip
@@ -2207,53 +2198,62 @@ ast parse_enum() {
   return new_ast3(ENUM_KW, 0, name, result); // 0 is number of stars
 }
 
-ast parse_struct() {
+ast parse_struct_or_union(int struct_or_union_tok) {
   ast name;
   ast ident;
   ast type;
   ast result = 0;
   ast tail;
+  bool ends_in_flex_array = false;
 
-  expect_tok(STRUCT_KW);
+  expect_tok(struct_or_union_tok);
 
-  if (tok == IDENTIFIER) {
+  if (tok == IDENTIFIER || tok == TYPE) {
+    // When the struct/union keyword is used with an identifier that's typedefed, the typedef is ignored.
     name = new_ast0(IDENTIFIER, val);
     get_tok();
-  } else if (tok == TYPE) {
-    result = heap[val + 3]; // For TYPE tokens, the tag is the type
-    if (get_op(result) != STRUCT_KW) syntax_error("struct type expected");
-    get_tok();
-    if (tok == '{') syntax_error("struct type cannot be redefined");
-    return result;
   } else {
-    name = 0;
+    name = 0; // Unnamed struct
   }
 
-  if (tok == '{') { // TODO: Distinguish between struct type and struct definition
+  // Note: The parser doesn't distinguish between a reference to a struct/union type and a declaration.
+  // If child#2 is 0, it's either a reference to a type or a forward declaration.
+  if (tok == '{') {
     get_tok();
 
     while (tok != '}') {
       if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
+      if (ends_in_flex_array)    syntax_error("flexible array member must be last");
 
       type = parse_type_with_stars();
 
       if (get_val(type) == 0 && get_op(type) == VOID_KW)
         syntax_error("variable with void type");
 
-      if (tok != IDENTIFIER) {
-        syntax_error("identifier expected");
-      }
-
+      ident = 0; // Anonymous struct
+      if (tok == IDENTIFIER) {
       ident = new_ast0(IDENTIFIER, val);
       get_tok();
 
       if (tok == '[') { // Array
         get_tok();
-        if (tok != INTEGER) syntax_error("array size must be an integer constant");
-
+          if (tok == ']') {
+            if (struct_or_union_tok != STRUCT_KW) syntax_error("flexible array member must be in a struct");
+            ends_in_flex_array = true;
+            val = 0; // Flex array are arrays with no size, using 0 for now
+            type = new_ast2('[', new_ast0(INTEGER, 0), type);
+            get_tok();
+          } else if (tok == INTEGER) {
         type = new_ast2('[', new_ast0(INTEGER, -val), type);
         get_tok();
         expect_tok(']');
+          } else {
+            syntax_error("array size must be an integer constant");
+          }
+
+        }
+      } else if (get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
+        syntax_error("Anonymous struct/union member must have be a struct or union type");
       }
 
       expect_tok(';');
@@ -2271,12 +2271,7 @@ ast parse_struct() {
 
   }
 
-  return new_ast3(STRUCT_KW, 0, name, result); // 0 is number of stars
-}
-
-ast parse_union() {
-  syntax_error("union not supported");
-  return 0;
+  return new_ast3(struct_or_union_tok, 0, name, result); // 0 is number of stars
 }
 
 ast parse_param_decl() {
