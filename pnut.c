@@ -429,6 +429,10 @@ ast clone_ast(ast orig) {
   return ast_result;
 }
 
+// Simple accessor to get the string from the string pool
+#define STRING_BUF(string_val) (string_pool + heap[string_val+1])
+#define STRING_LEN(string_val) (heap[string_val+4])
+
 void begin_string() {
   string_start = string_pool_alloc;
   hash = 0;
@@ -482,8 +486,6 @@ int end_ident_i;
 // Like end_ident, but for strings instead of identifiers
 // We want to deduplicate strings to reuse memory if possible.
 #define end_string end_ident
-// Simple accessor to get the string from the string pool
-#define STRING_BUF(string_val) (string_pool + heap[string_val+1])
 
 int end_ident() {
   string_pool[string_pool_alloc] = 0; // terminate string
