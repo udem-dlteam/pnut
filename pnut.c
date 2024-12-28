@@ -1201,6 +1201,7 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the macro name
       handle_define();
     } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
+#ifndef DEBUG_EXPAND_INCLUDES
       temp = val;
       putstr(temp == WARNING_ID ? "warning:" : "error:");
       // Print the rest of the line, it does not support \ at the end of the line but that's ok
@@ -1210,6 +1211,9 @@ void handle_preprocessor_directive() {
       putchar('\n');
       tok = '\n';
       if (temp == ERROR_ID) exit(1);
+#else
+      tok = '\n';
+#endif
     } else {
       putstr("tok="); putint(tok); putstr(": "); putstr(STRING_BUF(val)); putchar('\n');
       syntax_error("unsupported preprocessor directive");
