@@ -108,6 +108,7 @@ struct IncludeStack {
 };
 struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
+char* fp_filepath = 0; // The path of the current file being read
 char* include_search_path = 0; // Search path for include files
 
 // Tokens and AST nodes
@@ -728,21 +729,28 @@ char *file_parent_directory(char *path) {
   return path;
 }
 
-void include_file(char *file_name, char *relative_to) {
+FILE *fopen_source_file(char *file_name, char *relative_to) {
+  FILE *fp;
+  fp_filepath = file_name;
   if (relative_to) {
-    file_name = str_concat(relative_to, file_name);
+    fp_filepath = str_concat(relative_to, fp_filepath);
   }
-  fp = fopen(file_name, "r");
+  fp = fopen(fp_filepath, "r");
   if (fp == 0) {
-    putstr("Could not open file: "); putstr(file_name); putchar('\n');
+    putstr("Could not open file: "); putstr(fp_filepath); putchar('\n');
     exit(1);
   }
+  return fp;
+}
+
+void include_file(char *file_name, char *relative_to) {
+  fp = fopen_source_file(file_name, relative_to);
   include_stack2 = malloc(sizeof(struct IncludeStack));
   include_stack2->next = include_stack;
   include_stack2->fp = fp;
-  include_stack2->dirname = file_parent_directory(file_name);
+  include_stack2->dirname = file_parent_directory(fp_filepath);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  include_stack2->filepath = file_name;
+  include_stack2->filepath = fp_filepath;
   include_stack2->line_number = 1;
   include_stack2->column_number = 0;
   // Save the current file position so we can return to it after the included file is done
