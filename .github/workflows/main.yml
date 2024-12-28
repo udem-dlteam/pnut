@@ -238,6 +238,25 @@ jobs:
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --fast"
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast"
 
+  pnut-variants-run:
+    strategy:
+      matrix:
+        variant: ["reader", "tokenizer", "parser"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install ksh shell
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y coreutils time ksh
+
+      - name: Build with warnings
+        run: |
+          set -e
+          bash ./run-pnut-variant.sh --${{ matrix.variant }} --shell ksh
 
   success-message:
     runs-on: ubuntu-latest
