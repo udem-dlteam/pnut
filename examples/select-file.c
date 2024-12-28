@@ -4,7 +4,7 @@
   contents of a selected file.
 */
 
-#include_shell "../posix-utils.sh"
+#include_shell "posix-utils.sh"
 
 #define NULL 0
 
