@@ -945,13 +945,13 @@ void handle_define() {
   int args = 0; // List of arguments for a function-like macro
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
-  if (tok == IDENTIFIER || tok == MACRO || (0 <= AUTO_KW && tok <= WHILE_KW)) {
-    heap[val + 2] = MACRO; // Mark the identifier as a macro
-    macro = val;
-  } else {
+  if (tok != IDENTIFIER && tok != MACRO && (tok < AUTO_KW || tok > WHILE_KW)) {
     putstr("tok="); putint(tok); putchar('\n');
     syntax_error("#define directive can only be followed by a identifier");
   }
+
+  heap[val + 2] = MACRO; // Mark the identifier as a macro
+  macro = val;
   if (ch == '(') { // Function-like macro
     args_count = 0;
     get_tok_macro(); // Skip macro name
