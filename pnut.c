@@ -211,15 +211,6 @@ void putint(int n) {
   }
 }
 
-void putintneg(int n) {
-  if (n > 0) {
-    putchar('-');
-    putint_aux(-n);
-  } else {
-    putint_aux(n);
-  }
-}
-
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   if (include_stack != 0) {
@@ -244,26 +235,6 @@ void syntax_error(char *msg) {
   putstr("syntax error: "); putstr(msg); putchar('\n');
 #endif
   exit(1);
-}
-
-void print_dec(int n) {
-  if (n < 0) {
-    putchar('-');
-    print_dec(-n);
-  } else {
-    if (n > 9) print_dec(n / 10);
-    putchar('0' + n % 10);
-  }
-}
-
-void print_hex(int n) {
-  if (n < 0) {
-    putchar('-');
-    print_hex(-n);
-  } else {
-    if (n > 15) print_hex(n >> 4);
-    putchar("0123456789abcdef"[n & 0xf]);
-  }
 }
 
 // tokenizer
