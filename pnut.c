@@ -499,11 +499,9 @@ int end_ident() {
   return probe;
 }
 
-#ifndef PNUT_CC
 void get_tok();
 void get_ident();
 void expect_tok(int expected);
-#endif
 
 #define IFDEF_DEPTH_MAX 20
 bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
@@ -2027,14 +2025,12 @@ void expect_tok(int expected_tok) {
   get_tok();
 }
 
-#ifndef PNUT_CC
 ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
 ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
-#endif
 
 ast parse_type() {
 
