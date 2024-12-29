@@ -459,11 +459,12 @@ void accum_string_char(char c) {
 }
 
 // Like accum_string, but takes a string from the string_pool as input instead of reading it from ch
-void accum_string_string(int s) {
-  int i = 0;
-  while (string_pool[s + i] != 0) {
-    accum_string_char(string_pool[s + i]);
-    i += 1;
+void accum_string_string(int string_probe) {
+  char *string_start = STRING_BUF(string_probe);
+  char *string_end = string_start + STRING_LEN(string_probe);
+  while (string_start < string_end) {
+    accum_string_char(*string_start);
+    string_start += 1;
   }
 }
 
@@ -1240,7 +1241,7 @@ void handle_preprocessor_directive() {
       tok = '\n';
       if (temp == ERROR_ID) exit(1);
     } else {
-      putstr("tok="); putint(tok); putstr(": "); putstr(string_pool + heap[val + 1]); putchar('\n');
+      putstr("tok="); putint(tok); putstr(": "); putstr(STRING_BUF(val)); putchar('\n');
       syntax_error("unsupported preprocessor directive");
     }
   } else {
@@ -1251,10 +1252,10 @@ void handle_preprocessor_directive() {
   if (tok != '\n' && tok != EOF) {
     putstr("tok="); putint(tok); putchar('\n');
     putstr("directive="); putint(tok); putchar('\n');
-    putstr("string="); putstr(string_pool + heap[val + 1]); putchar('\n');
+    putstr("string="); putstr(STRING_BUF(val)); putchar('\n');
     if (tok == IDENTIFIER || tok == MACRO) {
       putstr("string = ");
-      putstr(string_pool + heap[1 + val]);
+      putstr(STRING_BUF(val));
       putchar('\n');
     }
     syntax_error("preprocessor expected end of line");
@@ -1425,7 +1426,7 @@ void check_macro_arity(int macro_args_count, int macro) {
     putstr("expected_argc="); putint(expected_argc);
     putstr(" != macro_args_count="); putint(macro_args_count);
     putchar('\n');
-    putstr("macro="); putstr(string_pool + heap[macro + 1]); putchar('\n');
+    putstr("macro="); putstr(STRING_BUF(macro)); putchar('\n');
     syntax_error("macro argument count mismatch");
   }
 }
@@ -1584,16 +1585,16 @@ void paste_tokens(int left_tok, int left_val) {
   if (left_tok == IDENTIFIER || left_tok == MACRO || left_tok <= WHILE_KW) {
     // Something that starts with an identifier can only be an identifier
     begin_string();
-    accum_string_string(heap[left_val + 1]);
+    accum_string_string(left_val);
 
     if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
-      accum_string_string(heap[right_val + 1]);
+      accum_string_string(right_val);
     } else if (right_tok == INTEGER) {
       accum_string_integer(-right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
       // show identifier/macro string
-      putstr("left="); putstr(string_pool + heap[left_val + 1]); putchar('\n');
+      putstr("left="); putstr(STRING_BUF(left_val)); putchar('\n');
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -1605,7 +1606,7 @@ void paste_tokens(int left_tok, int left_val) {
     } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
       begin_string();
       accum_string_integer(-left_val);
-      accum_string_string(heap[right_val + 1]);
+      accum_string_string(right_val);
 
       val = end_ident();
       tok = heap[val+2]; // The kind of the identifier
@@ -2526,7 +2527,7 @@ ast parse_primary_expression() {
       begin_string();
 
       while (result != 0) {
-        accum_string_string(heap[car(result)+1]);
+        accum_string_string(car(result));
         result = cdr(result);
       }
 
