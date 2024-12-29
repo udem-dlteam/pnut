@@ -410,6 +410,7 @@ void begin_string() {
   hash = 0;
 }
 
+// Append the current character (ch) to the string under construction in the pool
 void accum_string() {
   hash = (ch + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = ch;
@@ -419,7 +420,7 @@ void accum_string() {
   }
 }
 
-// Like accum_string, but takes the character as input instead of reading it from ch
+// Append a character to the current string under construction in the pool
 void accum_string_char(char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
@@ -429,7 +430,7 @@ void accum_string_char(char c) {
   }
 }
 
-// Like accum_string, but takes a string from the string_pool as input instead of reading it from ch
+// Append a string from the string_pool to the string under construction
 void accum_string_string(int string_probe) {
   char *string_start = STRING_BUF(string_probe);
   char *string_end = string_start + STRING_LEN(string_probe);
