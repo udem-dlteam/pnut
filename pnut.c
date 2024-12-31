@@ -2011,10 +2011,53 @@ void get_tok() {
 }
 
 // parser
-
 #if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG
 #include "debug.c"
 #endif
+
+
+
+void parse_error(char * msg, int token) {
+
+#ifdef NICE_ERR_MSG
+  #define ANSI_RED     "\x1b[31m"
+  #define ANSI_GREEN   "\x1b[32m"
+  #define ANSI_YELLOW  "\x1b[33m"
+  #define ANSI_BLUE    "\x1b[34m"
+  #define ANSI_MAGENTA "\x1b[35m"
+  #define ANSI_CYAN    "\x1b[36m"
+  #define ANSI_RESET   "\x1b[0m"
+
+  //Error header
+  putstr(ANSI_RED"Error occurred while parsing ");
+  putstr(ANSI_GREEN"\"");
+  putstr(include_stack->filepath);
+  putstr("\""ANSI_RESET"\n");
+
+  //Error message
+  putstr("  Message: "ANSI_YELLOW);
+  putstr(msg);
+  putstr(ANSI_RESET"\n");
+
+  //Error token
+  putstr("  Offending Token: "ANSI_YELLOW);
+  print_tok_type(token);
+  putstr(ANSI_RESET"\n");
+
+  //Error location
+  putstr("  Location: "ANSI_GREEN);
+  putstr(include_stack->filepath);
+  putchar(':');
+  putint(last_tok_line_number);
+  putchar(':');
+  putint(last_tok_column_number);
+  putstr(ANSI_RESET"\n");
+#else
+  fatal_error(msg);
+#endif
+  exit(1);
+}
+
 
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
@@ -2025,7 +2068,7 @@ void expect_tok(int expected_tok) {
     putstr("expected tok="); putint(expected_tok);
     putstr("\ncurrent tok="); putint(tok); putchar('\n');
 #endif
-    syntax_error("unexpected token");
+    parse_error("unexpected token", tok);
   }
   get_tok();
 }
@@ -2043,26 +2086,26 @@ ast parse_type() {
 
   while (1) {
     if (tok == INT_KW || tok == SHORT_KW || tok == LONG_KW || tok == SIGNED_KW) {
-      if (type_kw != 0 && type_kw != INT_KW) syntax_error("inconsistent type");
+      if (type_kw != 0 && type_kw != INT_KW) parse_error("inconsistent type", tok);
       type_kw = INT_KW;
       get_tok();
     } else if (tok == CHAR_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
+      if (type_kw != 0) parse_error("inconsistent type", tok);
       type_kw = CHAR_KW;
       get_tok();
     } else if ((tok == UNSIGNED_KW) || (tok == FLOAT_KW) || (tok == DOUBLE_KW)) {
-      syntax_error("unsupported type");
+      parse_error("unsupported type", tok);
     } else if (tok == VOID_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
+      if (type_kw != 0) parse_error("inconsistent type", tok);
       type_kw = VOID_KW;
       get_tok();
     } else if (tok == CONST_KW) {
       get_tok(); // ignore const
     } else if (tok == ENUM_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
+      if (type_kw != 0) parse_error("inconsistent type", tok);
       return parse_enum();
     } else if (tok == STRUCT_KW || tok == UNION_KW) {
-      if (type_kw != 0) syntax_error("inconsistent type");
+      if (type_kw != 0) parse_error("inconsistent type", tok);
       return parse_struct_or_union(tok);
     } else if (tok == TYPE) {
       // Look in types table. It's a type, not a type_kw, but we reuse the variable
@@ -2075,7 +2118,7 @@ ast parse_type() {
   }
 
   if (type_kw == 0) {
-    syntax_error("type expected");
+    parse_error("type expected", tok);
   }
 
   return new_ast0(type_kw, 0);
@@ -2142,7 +2185,7 @@ ast parse_enum() {
 
     while (tok != '}') {
       if (tok != IDENTIFIER) {
-        syntax_error("identifier expected");
+        parse_error("identifier expected", tok);
       }
       ident = new_ast0(IDENTIFIER, val);
       get_tok();
@@ -2150,7 +2193,7 @@ ast parse_enum() {
       if (tok == '=') {
         get_tok();
 
-        if (tok != INTEGER) syntax_error("integer expected");
+        if (tok != INTEGER) parse_error("integer expected", tok);
         value = new_ast0(INTEGER, val);
         next_value = val - 1; // Next value is the current value + 1, but val is negative
         get_tok(); // skip
@@ -2205,13 +2248,13 @@ ast parse_struct_or_union(int struct_or_union_tok) {
     get_tok();
 
     while (tok != '}') {
-      if (!is_type_starter(tok)) syntax_error("type expected in struct declaration");
-      if (ends_in_flex_array)    syntax_error("flexible array member must be last");
+      if (!is_type_starter(tok)) parse_error("type expected in struct declaration", tok);
+      if (ends_in_flex_array)    parse_error("flexible array member must be last", tok);
 
       type = parse_type_with_stars();
 
       if (get_val(type) == 0 && get_op(type) == VOID_KW)
-        syntax_error("variable with void type");
+        parse_error("variable with void type", tok);
 
       ident = 0; // Anonymous struct
       if (tok == IDENTIFIER) {
@@ -2221,7 +2264,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
       if (tok == '[') { // Array
         get_tok();
           if (tok == ']') {
-            if (struct_or_union_tok != STRUCT_KW) syntax_error("flexible array member must be in a struct");
+            if (struct_or_union_tok != STRUCT_KW) parse_error("flexible array member must be in a struct", tok);
             ends_in_flex_array = true;
             val = 0; // Flex array are arrays with no size, using 0 for now
             type = new_ast2('[', new_ast0(INTEGER, 0), type);
@@ -2231,12 +2274,12 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         get_tok();
         expect_tok(']');
           } else {
-            syntax_error("array size must be an integer constant");
+            parse_error("array size must be an integer constant", tok);
           }
 
         }
       } else if (get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
-        syntax_error("Anonymous struct/union member must have be a struct or union type");
+        parse_error("Anonymous struct/union member must have be a struct or union type", tok);
       }
 
       expect_tok(';');
@@ -2267,7 +2310,7 @@ ast parse_param_decl() {
     type = parse_type_with_stars();
     name = val;
     expect_tok(IDENTIFIER);
-    if (get_val(type) == 0 && get_op(type) == VOID_KW) syntax_error("variable with void type");
+    if (get_val(type) == 0 && get_op(type) == VOID_KW) parse_error("variable with void type", tok);
     result = new_ast3(VAR_DECL, name, type, 0);
   } else if (tok == IDENTIFIER) {
     // Support K&R param syntax in function definition
@@ -2324,7 +2367,7 @@ ast parse_definition(int local) {
     // global enum/struct/union declaration
     if (tok == ';') {
       if (get_op(type) != ENUM_KW && get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
-        syntax_error("enum/struct/union declaration expected");
+        parse_error("enum/struct/union declaration expected", tok);
       }
       get_tok();
       return type;
@@ -2341,7 +2384,7 @@ ast parse_definition(int local) {
       if (tok == '(') {
 
         if (local) {
-          syntax_error("function declaration only allowed at global level");
+          parse_error("function declaration only allowed at global level", tok);
         }
 
         get_tok();
@@ -2363,7 +2406,7 @@ ast parse_definition(int local) {
       } else {
 
         if (get_val(this_type) == 0 && get_op(this_type) == VOID_KW) {
-          syntax_error("variable with void type");
+          parse_error("variable with void type", tok);
         }
 
         if (tok == '[') {
@@ -2375,7 +2418,7 @@ ast parse_definition(int local) {
             this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
             get_tok();
           } else {
-            syntax_error("array size must be an integer constant");
+            parse_error("array size must be an integer constant", tok);
           }
 
           expect_tok(']');
@@ -2404,7 +2447,7 @@ ast parse_definition(int local) {
           get_tok();
           continue; // Continue to the next declaration
         } else {
-          syntax_error("';' or ',' expected");
+          parse_error("';' or ',' expected", tok);
         }
       }
     }
@@ -2421,7 +2464,7 @@ ast parse_definition(int local) {
     // it was defined in (global or in function).
     get_tok();
     type = parse_type_with_stars();
-    if (tok != IDENTIFIER) { syntax_error("identifier expected"); }
+    if (tok != IDENTIFIER) { parse_error("identifier expected", tok); }
 
 #ifdef sh
     // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
@@ -2443,8 +2486,7 @@ ast parse_definition(int local) {
     expect_tok(';');
     return result;
   } else {
-    putstr("tok="); putint(tok); putchar('\n');
-    syntax_error("unknown decl: type expected");
+    parse_error("unknown decl: type expected", tok);
     return result;
   }
 }
@@ -2511,7 +2553,7 @@ ast parse_primary_expression() {
     result = parse_parenthesized_expression();
 
   } else {
-    syntax_error("identifier, literal, or '(' expected");
+    parse_error("identifier, literal, or '(' expected", tok);
     return 0;
   }
 
@@ -2548,7 +2590,7 @@ ast parse_postfix_expression() {
 
       get_tok();
       if (tok != IDENTIFIER) {
-        syntax_error("identifier expected");
+        parse_error("identifier expected", tok);
       }
       result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
       get_tok();
@@ -2557,7 +2599,7 @@ ast parse_postfix_expression() {
 
       get_tok();
       if (tok != IDENTIFIER) {
-        syntax_error("identifier expected");
+        parse_error("identifier expected", tok);
       }
       result = new_ast2(ARROW, result, new_ast0(IDENTIFIER, val));
       get_tok();
@@ -2628,7 +2670,7 @@ ast parse_unary_expression() {
       result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
       get_tok_macro();
     } else {
-      syntax_error("identifier or '(' expected");
+      parse_error("identifier or '(' expected", tok);
       return 0;
     }
 
@@ -2664,7 +2706,7 @@ ast parse_cast_expression() {
       type = parse_type_with_stars();
 
       if (get_val(type) == 0 && get_op(type) == VOID_KW)
-        syntax_error("variable with void type");
+        parse_error("variable with void type", tok);
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());
