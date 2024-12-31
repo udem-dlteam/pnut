@@ -13,7 +13,7 @@ run_with_shell() {
 
   echo "Running $variant with $1"
 
-  /usr/bin/time $1 "$TEMP_DIR/pnut-$variant.sh" $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-$variant.output"
+  env time $1 "$TEMP_DIR/pnut-$variant.sh" $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-$variant.output"
 }
 
 # Parse the arguments

@@ -211,15 +211,6 @@ void putint(int n) {
   }
 }
 
-void putintneg(int n) {
-  if (n > 0) {
-    putchar('-');
-    putint_aux(-n);
-  } else {
-    putint_aux(n);
-  }
-}
-
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   if (include_stack != 0) {
@@ -244,26 +235,6 @@ void syntax_error(char *msg) {
   putstr("syntax error: "); putstr(msg); putchar('\n');
 #endif
   exit(1);
-}
-
-void print_dec(int n) {
-  if (n < 0) {
-    putchar('-');
-    print_dec(-n);
-  } else {
-    if (n > 9) print_dec(n / 10);
-    putchar('0' + n % 10);
-  }
-}
-
-void print_hex(int n) {
-  if (n < 0) {
-    putchar('-');
-    print_hex(-n);
-  } else {
-    if (n > 15) print_hex(n >> 4);
-    putchar("0123456789abcdef"[n & 0xf]);
-  }
 }
 
 // tokenizer
@@ -439,6 +410,7 @@ void begin_string() {
   hash = 0;
 }
 
+// Append the current character (ch) to the string under construction in the pool
 void accum_string() {
   hash = (ch + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = ch;
@@ -448,7 +420,7 @@ void accum_string() {
   }
 }
 
-// Like accum_string, but takes the character as input instead of reading it from ch
+// Append a character to the current string under construction in the pool
 void accum_string_char(char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
@@ -458,7 +430,7 @@ void accum_string_char(char c) {
   }
 }
 
-// Like accum_string, but takes a string from the string_pool as input instead of reading it from ch
+// Append a string from the string_pool to the string under construction
 void accum_string_string(int string_probe) {
   char *string_start = STRING_BUF(string_probe);
   char *string_end = string_start + STRING_LEN(string_probe);
@@ -528,11 +500,9 @@ int end_ident() {
   return probe;
 }
 
-#ifndef PNUT_CC
 void get_tok();
 void get_ident();
 void expect_tok(int expected);
-#endif
 
 #define IFDEF_DEPTH_MAX 20
 bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
@@ -976,13 +946,13 @@ void handle_define() {
   int args = 0; // List of arguments for a function-like macro
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
-  if (tok == IDENTIFIER || tok == MACRO || (0 <= AUTO_KW && tok <= WHILE_KW)) {
-    heap[val + 2] = MACRO; // Mark the identifier as a macro
-    macro = val;
-  } else {
+  if (tok != IDENTIFIER && tok != MACRO && (tok < AUTO_KW || tok > WHILE_KW)) {
     putstr("tok="); putint(tok); putchar('\n');
     syntax_error("#define directive can only be followed by a identifier");
   }
+
+  heap[val + 2] = MACRO; // Mark the identifier as a macro
+  macro = val;
   if (ch == '(') { // Function-like macro
     args_count = 0;
     get_tok_macro(); // Skip macro name
@@ -1231,6 +1201,7 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the macro name
       handle_define();
     } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
+#ifndef DEBUG_EXPAND_INCLUDES
       temp = val;
       putstr(temp == WARNING_ID ? "warning:" : "error:");
       // Print the rest of the line, it does not support \ at the end of the line but that's ok
@@ -1240,6 +1211,9 @@ void handle_preprocessor_directive() {
       putchar('\n');
       tok = '\n';
       if (temp == ERROR_ID) exit(1);
+#else
+      tok = '\n';
+#endif
     } else {
       putstr("tok="); putint(tok); putstr(": "); putstr(STRING_BUF(val)); putchar('\n');
       syntax_error("unsupported preprocessor directive");
@@ -2056,14 +2030,12 @@ void expect_tok(int expected_tok) {
   get_tok();
 }
 
-#ifndef PNUT_CC
 ast parse_comma_expression();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
 ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
-#endif
 
 ast parse_type() {
 
