@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdint.h> // for intptr_t
 
-
 #define ast int
 #define true 1
 #define false 0
@@ -38,8 +37,6 @@
 #define NICE_ERR_MSG
 #define OPTIMIZE_LONG_LINES
 #endif
-
-
 
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
@@ -228,9 +225,6 @@ void fatal_error(char *msg) {
 #endif
   exit(1);
 }
-
-
-
 
 void syntax_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
@@ -2032,23 +2026,23 @@ void get_tok() {
 
 void parse_error(char * msg, int token) {
 #ifdef NICE_ERR_MSG 
-  /*Error header*/
+  //Error header
   putstr(ANSI_RED"Error occurred while parsing ");    
   putstr(ANSI_GREEN"\"");
   putstr(include_stack->filepath); 
   putstr("\""ANSI_RESET"\n");
 
-  /*Error message*/
+  //Error message
   putstr("  Message: "ANSI_YELLOW);
   putstr(msg);
   putstr(ANSI_RESET"\n");
 
-  /*Error token*/
+  //Error token
   putstr("  Offending Token: "ANSI_YELLOW);
   print_tok_type(token);
   putstr(ANSI_RESET"\n");
 
-  /*Error location*/
+  //Error location
   putstr("  Location: "ANSI_GREEN);
   putstr(include_stack->filepath);
   putchar(':');
