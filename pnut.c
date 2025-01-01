@@ -2019,11 +2019,15 @@ void get_tok() {
 #endif
 
 
-#ifdef __gcc__
-#define parse_error(msg, token) parse_error_internal(msg, token, __FILE__, __LINE__)
-#else
-#define parse_error(msg, token) parse_error_internal(msg, token, "probably pnut.c", -1)
+#ifndef __LINE__ 
+#define __LINE__ (-1)
 #endif
+
+#ifndef __FILE__
+#define __FILE__ "<unknown>"
+#endif
+
+#define parse_error(msg, token) parse_error_internal(msg, token, __FILE__, __LINE__)
 
 void parse_error_internal(char * msg, int token, char * file, int line) {
 
