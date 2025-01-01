@@ -2019,7 +2019,7 @@ void get_tok() {
 #endif
 
 
-#ifndef __LINE__ 
+#ifndef __LINE__
 #define __LINE__ (-1)
 #endif
 
