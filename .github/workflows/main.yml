@@ -47,7 +47,7 @@ jobs:
         run: |
           set -e
           check_dir() { # $1 is the file extension, $2 is the directory and $3 the max depth to check
-            result=$(find $2 -maxdepth ${3:-1000} -name "$1" -type f -exec egrep -l " +$" {} \;)
+            result=$(find $2 -maxdepth ${3:-1000} -name "$1" -type f -exec grep -l -E " +$" {} \;)
             if [ -n "$result" ]; then
               echo "Trailing whitespace found in the following files:"
               echo "$result"
