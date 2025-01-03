@@ -1517,7 +1517,8 @@ bool attempt_macro_expansion(int macro) {
   int tokens = car(heap[macro + 3]);
   macro = val;
   if (cdr(heap[macro + 3]) == -1) { // Object-like macro
-    // Note: We don't check if the macro was redefined by the program
+    // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line
+    // directives is not supported.
     if (macro == FILE__ID) {
       play_macro(cons(cons(STRING, intern_str(fp_filepath)), 0), 0);
     }
