@@ -28,7 +28,6 @@ void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, int executes_conditionally);
 
-
 // Codegen context
 
 #define GLO_DECL_SIZE 100000
@@ -2136,8 +2135,10 @@ void prologue() {
 
 void epilogue() {
   int c;
-
   text main_args = 0;
+
+  putstr("# Runtime library\n");
+  produce_runtime();
 
   if (any_character_used) {
     putstr("# Character constants\n");
@@ -2149,9 +2150,6 @@ void epilogue() {
       }
     }
   }
-
-  putstr("# Runtime library\n");
-  produce_runtime();
 
   if (main_defined) {
     if (runtime_use_make_argv) {

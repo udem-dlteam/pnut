@@ -111,72 +111,14 @@ END_RUNTIME_FUN(local_vars)
 DEFINE_RUNTIME_FUN(char_to_int)
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
-  putstr("__c2i_0=48\n");
-  putstr("__c2i_1=49\n");
-  putstr("__c2i_2=50\n");
-  putstr("__c2i_3=51\n");
-  putstr("__c2i_4=52\n");
-  putstr("__c2i_5=53\n");
-  putstr("__c2i_6=54\n");
-  putstr("__c2i_7=55\n");
-  putstr("__c2i_8=56\n");
-  putstr("__c2i_9=57\n");
-  putstr("__c2i_a=97\n");
-  putstr("__c2i_b=98\n");
-  putstr("__c2i_c=99\n");
-  putstr("__c2i_d=100\n");
-  putstr("__c2i_e=101\n");
-  putstr("__c2i_f=102\n");
-  putstr("__c2i_g=103\n");
-  putstr("__c2i_h=104\n");
-  putstr("__c2i_i=105\n");
-  putstr("__c2i_j=106\n");
-  putstr("__c2i_k=107\n");
-  putstr("__c2i_l=108\n");
-  putstr("__c2i_m=109\n");
-  putstr("__c2i_n=110\n");
-  putstr("__c2i_o=111\n");
-  putstr("__c2i_p=112\n");
-  putstr("__c2i_q=113\n");
-  putstr("__c2i_r=114\n");
-  putstr("__c2i_s=115\n");
-  putstr("__c2i_t=116\n");
-  putstr("__c2i_u=117\n");
-  putstr("__c2i_v=118\n");
-  putstr("__c2i_w=119\n");
-  putstr("__c2i_x=120\n");
-  putstr("__c2i_y=121\n");
-  putstr("__c2i_z=122\n");
-  putstr("__c2i_A=65\n");
-  putstr("__c2i_B=66\n");
-  putstr("__c2i_C=67\n");
-  putstr("__c2i_D=68\n");
-  putstr("__c2i_E=69\n");
-  putstr("__c2i_F=70\n");
-  putstr("__c2i_G=71\n");
-  putstr("__c2i_H=72\n");
-  putstr("__c2i_I=73\n");
-  putstr("__c2i_J=74\n");
-  putstr("__c2i_K=75\n");
-  putstr("__c2i_L=76\n");
-  putstr("__c2i_M=77\n");
-  putstr("__c2i_N=78\n");
-  putstr("__c2i_O=79\n");
-  putstr("__c2i_P=80\n");
-  putstr("__c2i_Q=81\n");
-  putstr("__c2i_R=82\n");
-  putstr("__c2i_S=83\n");
-  putstr("__c2i_T=84\n");
-  putstr("__c2i_U=85\n");
-  putstr("__c2i_V=86\n");
-  putstr("__c2i_W=87\n");
-  putstr("__c2i_X=88\n");
-  putstr("__c2i_Y=89\n");
-  putstr("__c2i_Z=90\n");
-
+  characters_useds[3] |= 0x03FF; // Mark 0-9 as used
+  characters_useds[4] |= 0xFFFE; // Mark A-O as used
+  characters_useds[5] |= 0x07FF; // Mark P-Z as used
+  characters_useds[6] |= 0xFFFE; // Mark a-o as used
+  characters_useds[7] |= 0x07FF; // Mark p-z as used
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
-  putstr("    [[:alnum:]]) __c=$((__c2i_$1)) ;;\n");
+  putstr("    [[:alnum:]]) __c=$((__$1__)) ;;\n");
 #else
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
