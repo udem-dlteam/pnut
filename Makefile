@@ -22,7 +22,7 @@ endif
 
 pnut-sh: pnut.c sh.c sh-runtime.c
 	mkdir -p $(BUILD_DIR)
-	gcc $(BUILD_OPT_SH) -g pnut.c -o $(BUILD_DIR)/pnut-sh
+	gcc $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
 
 pnut-sh.sh: pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
