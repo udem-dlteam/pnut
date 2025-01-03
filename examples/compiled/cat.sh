@@ -58,9 +58,6 @@ _main() { let argc $2; let myargv $3
   endlet $1 i myargv argc
 }
 
-# Character constants
-readonly __NUL__=0
-readonly __MINUS__=45
 # Runtime library
 _free() { # $2 = object to free
   __ptr=$(($2 - 1))          # Start of object
@@ -294,6 +291,9 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+# Character constants
+readonly __NUL__=0
+readonly __MINUS__=45
 # Setup argc, argv
 __argc_for_main=$(($# + 1))
 make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv

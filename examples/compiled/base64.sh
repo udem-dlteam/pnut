@@ -160,12 +160,6 @@ _main() { let argc $2; let myargv $3
   endlet $1 myargv argc
 }
 
-# Character constants
-readonly __NUL__=0
-readonly __NEWLINE__=10
-readonly __MINUS__=45
-readonly __EQ__=61
-readonly __d__=100
 # Runtime library
 __stdin_buf=
 __stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
@@ -248,6 +242,12 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+# Character constants
+readonly __NUL__=0
+readonly __NEWLINE__=10
+readonly __MINUS__=45
+readonly __EQ__=61
+readonly __d__=100
 # Setup argc, argv
 __argc_for_main=$(($# + 1))
 make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv

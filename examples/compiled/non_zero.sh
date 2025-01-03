@@ -20,10 +20,6 @@ _main() {
   endlet $1 __t1 n
 }
 
-# Character constants
-readonly __NEWLINE__=10
-readonly __0__=48
-readonly __9__=57
 # Runtime library
 
 __stdin_buf=
@@ -74,4 +70,8 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+# Character constants
+readonly __NEWLINE__=10
+readonly __0__=48
+readonly __9__=57
 _main __

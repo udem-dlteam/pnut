@@ -47,9 +47,6 @@ _main() {
   endlet $1 c d b k i
 }
 
-# Character constants
-readonly __NEWLINE__=10
-readonly __0__=48
 # Runtime library
 # Local variables
 __=0
@@ -69,5 +66,8 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+# Character constants
+readonly __NEWLINE__=10
+readonly __0__=48
 __code=0; # Success exit code
 _main __code; exit $__code
