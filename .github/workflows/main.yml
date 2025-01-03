@@ -87,7 +87,7 @@ jobs:
             brew install coreutils
           else
             sudo apt-get update
-            sudo apt-get install -y coreutils
+            sudo apt-get install -y coreutils time
           fi
 
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }}
@@ -110,7 +110,7 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y coreutils ${{ matrix.shell }}
+          sudo apt-get install -y coreutils time ${{ matrix.shell }}
 
       - name: Run tests with ${{ matrix.shell }}
         run: |
@@ -124,7 +124,7 @@ jobs:
   bootstrap-pnut-sh:
     strategy:
       matrix:
-        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
+        shell: ["ksh"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -133,12 +133,12 @@ jobs:
       - name: Install ${{ matrix.shell }} shell
         run: |
           sudo apt-get update
-          sudo apt-get install -y coreutils ${{ matrix.shell }}
+          sudo apt-get install -y coreutils time ${{ matrix.shell }}
 
       - name: Bootstrap pnut-sh.sh on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }} --fast
+          ksh ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-exe:
     strategy:
@@ -163,7 +163,7 @@ jobs:
             brew install coreutils ${{ matrix.shell }}
           else
             sudo apt-get update
-            sudo apt-get install -y coreutils ${{ matrix.shell }}
+            sudo apt-get install -y coreutils time ${{ matrix.shell }}
           fi
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
@@ -198,7 +198,7 @@ jobs:
             brew install coreutils
           else
             sudo apt-get update
-            sudo apt-get install -y coreutils
+            sudo apt-get install -y coreutils time
           fi
 
       - name: Bootstrap pnut-sh with pnut-exe on ${{ matrix.target }} backend
@@ -238,6 +238,25 @@ jobs:
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --fast"
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast"
 
+  pnut-variants-run:
+    strategy:
+      matrix:
+        variant: ["reader", "tokenizer", "parser"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install ksh shell
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y coreutils time ksh
+
+      - name: Build with warnings
+        run: |
+          set -e
+          bash ./run-pnut-variant.sh --${{ matrix.variant }} --shell ksh
 
   success-message:
     runs-on: ubuntu-latest

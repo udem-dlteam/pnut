@@ -11,6 +11,16 @@ void print_string_char(int c) {
   else putchar(c);
 }
 
+void print_tok_string(int string_probe) {
+  char *string_start = STRING_BUF(string_probe);
+  char *string_end = string_start + STRING_LEN(string_probe);
+
+  while (string_start < string_end) {
+    print_string_char(*string_start);
+    string_start += 1;
+  }
+}
+
 int print_tok_indent = 0;
 void print_tok(int tok, int val) {
   int i;
@@ -81,18 +91,14 @@ void print_tok(int tok, int val) {
     putstr(string_pool + heap[val+1]);
     putchar(']');
   }  else if (tok == INTEGER) {
-    putintneg(val);
+    putint(-val);
   } else if (tok == CHARACTER) {
     putchar('\'');
     print_string_char(val);
     putchar('\'');
   } else if (tok == STRING) {
     putchar('"');
-    i = 0;
-    while (string_pool[val+i] != 0) {
-      print_string_char(string_pool[val+i]);
-      i += 1;
-    }
+    print_tok_string(val);
     putchar('"');
   } else if (tok == MACRO_ARG) {
     putstr("ARG["); putint(val); putstr("]");

@@ -6,12 +6,12 @@ void handle_shell_include() {
   FILE* shell_include_fp;
   int c;
   if (tok == STRING) {
-    // Include the shell code from the file
-    shell_include_fp = fopen(STRING_BUF(val), "r");
     // Include pack_string and unpack_string functions
     // since they will likely be used in the included file
     runtime_use_put_pstr = true;
     runtime_use_unpack_string = true;
+    // Include the file as-is without any preprocessing
+    shell_include_fp = fopen_source_file(STRING_BUF(val), include_stack->dirname);
     while ((c = fgetc(shell_include_fp)) != EOF) {
       putchar(c);
     }

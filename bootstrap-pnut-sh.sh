@@ -12,7 +12,7 @@ bootstrap_with_shell() {
 
   echo "Bootstrap with $1"
 
-  time $1 "$TEMP_DIR/pnut-sh.sh" $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-sh-twice-bootstrapped.sh"
+  /usr/bin/time $1 "$TEMP_DIR/pnut-sh.sh" $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-sh-twice-bootstrapped.sh"
 
   diff "$TEMP_DIR/pnut-sh.sh" "$TEMP_DIR/pnut-sh-twice-bootstrapped.sh"
 
