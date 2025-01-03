@@ -1,29 +1,5 @@
 // POSIX shell codegen
 
-#include "sh-runtime.c"
-
-void handle_shell_include() {
-  FILE* shell_include_fp;
-  int c;
-  if (tok == STRING) {
-    // Include pack_string and unpack_string functions
-    // since they will likely be used in the included file
-    runtime_use_put_pstr = true;
-    runtime_use_unpack_string = true;
-    // Include the file as-is without any preprocessing
-    shell_include_fp = fopen_source_file(STRING_BUF(val), include_stack->dirname);
-    while ((c = fgetc(shell_include_fp)) != EOF) {
-      putchar(c);
-    }
-    putchar('\n');
-    fclose(shell_include_fp);
-    get_tok_macro(); // Skip the string
-  } else {
-    putstr("tok="); putint(tok); putchar('\n');
-    syntax_error("expected string to #include_shell directive");
-  }
-}
-
 // codegen
 
 // String concatenation functions
@@ -178,6 +154,31 @@ void print_glo_decls() {
       }
     }
     i += 3;
+  }
+}
+
+// Functions to generate the shell runtime
+#include "sh-runtime.c"
+
+void handle_shell_include() {
+  FILE* shell_include_fp;
+  int c;
+  if (tok == STRING) {
+    // Include pack_string and unpack_string functions
+    // since they will likely be used in the included file
+    runtime_use_put_pstr = true;
+    runtime_use_unpack_string = true;
+    // Include the file as-is without any preprocessing
+    shell_include_fp = fopen_source_file(STRING_BUF(val), include_stack->dirname);
+    while ((c = fgetc(shell_include_fp)) != EOF) {
+      putchar(c);
+    }
+    putchar('\n');
+    fclose(shell_include_fp);
+    get_tok_macro(); // Skip the string
+  } else {
+    putstr("tok="); putint(tok); putchar('\n');
+    syntax_error("expected string to #include_shell directive");
   }
 }
 
