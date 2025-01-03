@@ -2384,8 +2384,8 @@ ast parse_definition(int local) {
   ast tail = 0;
   ast current_declaration;
 
-  //Currently, static is just skipped
-  if(tok == STATIC_KW) {
+  //static can be skipped for global definitions without affective semantics
+  if(!local && tok == STATIC_KW) {
     get_tok();
   }
 
