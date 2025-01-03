@@ -909,6 +909,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
   ast previous_conditional_fun_calls;
   ast left_conditional_fun_calls;
   ast right_conditional_fun_calls;
+  int start_gensym_ix = gensym_ix;
 
   if (nb_children == 0) {
     if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
@@ -967,9 +968,11 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       // The left side is always executed, unless the whole expression is executed conditionally.
       // We could compile it as always executed, but it makes the Shell code less regular so we compile it conditionally.
       sub1 = handle_side_effects_go(get_child(node, 0), true);
+      gensym_ix = start_gensym_ix; // Reset gensym counter because the 2 sides are independent
       left_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
       sub2 = handle_side_effects_go(get_child(node, 1), true);
+      gensym_ix = start_gensym_ix; // Reset gensym counter because the 2 sides are independent
       right_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = previous_conditional_fun_calls;
       return new_ast4(op, sub1, sub2, left_conditional_fun_calls, right_conditional_fun_calls);
