@@ -208,9 +208,6 @@ _main() {
   endlet $1 __t1 len ix files
 }
 
-# Character constants
-readonly __0__=48
-readonly __9__=57
 # Runtime library
 
 __stdin_buf=
@@ -299,4 +296,7 @@ unpack_string() {
   : $((_$__ptr = 0))
 }
 
+# Character constants
+readonly __0__=48
+readonly __9__=57
 _main __

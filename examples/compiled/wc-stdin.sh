@@ -31,10 +31,6 @@ _main() {
   endlet $1 last_sep sep c chars words lines
 }
 
-# Character constants
-readonly __TAB__=9
-readonly __NEWLINE__=10
-readonly __SPACE__=32
 # Runtime library
 
 __stdin_buf=
@@ -85,4 +81,8 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+# Character constants
+readonly __TAB__=9
+readonly __NEWLINE__=10
+readonly __SPACE__=32
 _main __

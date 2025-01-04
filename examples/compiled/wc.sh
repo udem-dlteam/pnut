@@ -82,10 +82,6 @@ _main() { let argc $2; let argv_ $3
   endlet $1 i argv_ argc
 }
 
-# Character constants
-readonly __TAB__=9
-readonly __NEWLINE__=10
-readonly __SPACE__=32
 # Runtime library
 _put_pstr() {
   : $(($1 = 0)); shift # Return 0
@@ -309,6 +305,10 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+# Character constants
+readonly __TAB__=9
+readonly __NEWLINE__=10
+readonly __SPACE__=32
 # Setup argc, argv
 __argc_for_main=$(($# + 1))
 make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv
