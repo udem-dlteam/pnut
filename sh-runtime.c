@@ -909,6 +909,12 @@ DEPENDS_ON(read_byte)
   putstr("}\n");
 END_RUNTIME_FUN(fgetc)
 
+DEFINE_RUNTIME_FUN(isatty)
+  putstr("_isatty() { # $2: fd\n");
+  putstr("  [ -t $2 ] && : $(($1 = 1)) || : $(($1 = 0))\n");
+  putstr("}\n");
+END_RUNTIME_FUN(fgetc)
+
 void produce_runtime() {
   if (runtime_use_defstr)     runtime_defstr();
   if (runtime_use_putchar)    runtime_putchar();
@@ -925,6 +931,7 @@ void produce_runtime() {
   if (runtime_use_write)      runtime_write();
   if (runtime_use_open)       runtime_open();
   if (runtime_use_close)      runtime_close();
+  if (runtime_use_isatty)     runtime_isatty();
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
   if (runtime_use_unpack_string) runtime_unpack_string();

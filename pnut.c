@@ -865,6 +865,7 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
+int ISATTY_ID;
 
 // Macros that are defined by the preprocessor
 int FILE__ID;
@@ -1368,6 +1369,7 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+  ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
 
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.

@@ -1678,6 +1678,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == WRITE_ID)   { runtime_use_write = true; }
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
+  else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
 
   return string_concat3(
     function_name(get_val(name)),
