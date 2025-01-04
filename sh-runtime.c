@@ -111,6 +111,7 @@ END_RUNTIME_FUN(local_vars)
 DEFINE_RUNTIME_FUN(char_to_int)
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
+  any_character_used = true;
   characters_useds[3] |= 0x03FF; // Mark 0-9 as used
   characters_useds[4] |= 0xFFFE; // Mark A-O as used
   characters_useds[5] |= 0x07FF; // Mark P-Z as used
