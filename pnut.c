@@ -2104,10 +2104,12 @@ void parse_error(char *msg, int token) {
   putstr("  Location: ");
   change_color(ANSI_GREEN);
   putstr(include_stack->filepath);
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   putchar(':');
   putint(last_tok_line_number);
   putchar(':');
   putint(last_tok_column_number);
+#endif
   putchar('\n');
   exit(1);
 }
