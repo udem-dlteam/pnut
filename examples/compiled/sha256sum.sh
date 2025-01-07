@@ -206,8 +206,8 @@ _process_file() { let filename $2
     _hex __ $h
     : $((i += 1))
   done
-  printf \\$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))
-  printf \\$(((__SPACE__)/64))$(((__SPACE__)/8%8))$(((__SPACE__)%8))
+  printf " "
+  printf " "
   while [ $((_$filename)) != 0 ]; do
     printf \\$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
     : $((filename += 1))
@@ -233,7 +233,6 @@ _main() { let argc $2; let myargv $3
 
 # Character constants
 readonly __NEWLINE__=10
-readonly __SPACE__=32
 # Runtime library
 
 unpack_escaped_string() {
