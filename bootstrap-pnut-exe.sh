@@ -15,7 +15,7 @@ if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 printf_timing() {
   msg=$1
   cmd=$2
-  real_time=`/usr/bin/time -p sh -c "$cmd" 2>&1 | grep '^real ' | sed 's/.* //'`
+  real_time=`env time -p sh -c "$cmd" 2>&1 | grep '^real ' | sed 's/.* //'`
   printf "%ss %s\n" $real_time "$msg"
 }
 

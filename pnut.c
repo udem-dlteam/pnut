@@ -38,6 +38,9 @@
 #define OPTIMIZE_LONG_LINES
 #endif
 
+// Uncomment to cause parse_error() to print which pnut function emitted the error
+//#define DEBUG_SHOW_ERR_ORIGIN
+
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
@@ -866,6 +869,13 @@ int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
 
+// Macros that are defined by the preprocessor
+int FILE__ID;
+int LINE__ID;
+int DATE__ID;
+int TIME__ID;
+int TIMESTAMP__ID;
+
 // When we parse a macro, we generally want the tokens as they are, without expanding them.
 void get_tok_macro() {
   bool prev_expand_macro = expand_macro;
@@ -1260,8 +1270,7 @@ void get_ident() {
   tok = heap[val+2];
 }
 
-int init_ident(int tok, char *name) {
-
+int intern_str(char* name) {
   int i = 0;
   int prev_ch = ch; // The character may be important to the calling function, saving it
 
@@ -1273,12 +1282,16 @@ int init_ident(int tok, char *name) {
     i += 1;
   }
 
-  i = end_ident();
-
-  heap[i+2] = tok;
+  i = end_string();
 
   ch = prev_ch;
 
+  return i;
+}
+
+int init_ident(int tok, char *name) {
+  int i = intern_str(name);
+  heap[i+2] = tok;
   return i;
 }
 
@@ -1364,8 +1377,28 @@ void init_ident_table() {
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 }
 
+void init_builtin_string_macro(int macro_id, char* value) {
+  // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
+  heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
+}
+
+void init_builtin_int_macro(int macro_id, int value) {
+  heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
+}
+
 void init_pnut_macros() {
   init_ident(MACRO, "PNUT_CC");
+  FILE__ID      = init_ident(MACRO, "__FILE__");
+  LINE__ID      = init_ident(MACRO, "__LINE__");
+  DATE__ID      = init_ident(MACRO, "__DATE__");
+  TIME__ID      = init_ident(MACRO, "__TIME__");
+  TIMESTAMP__ID = init_ident(MACRO, "__TIMESTAMP__");
+
+  init_builtin_string_macro(FILE__ID, "<unknown>");
+  init_builtin_int_macro   (LINE__ID, 0);
+  init_builtin_string_macro(DATE__ID, "Jan  1 1970");
+  init_builtin_string_macro(TIME__ID, "00:00:00");
+  init_builtin_string_macro(TIMESTAMP__ID, "Jan  1 1970 00:00:00");
 }
 
 // A macro argument is represented using a list of tokens.
@@ -1487,7 +1520,19 @@ bool attempt_macro_expansion(int macro) {
   int tokens = car(heap[macro + 3]);
   macro = val;
   if (cdr(heap[macro + 3]) == -1) { // Object-like macro
-    play_macro(tokens, 0);
+    // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line
+    // directives is not supported.
+    if (macro == FILE__ID) {
+      play_macro(cons(cons(STRING, intern_str(fp_filepath)), 0), 0);
+    }
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+    else if (macro == LINE__ID) {
+      play_macro(cons(cons(INTEGER, -line_number), 0), 0);
+    }
+#endif
+    else {
+      play_macro(tokens, 0);
+    }
     return true;
   } else {
     new_macro_args = get_macro_args_toks(macro);
@@ -2015,9 +2060,9 @@ void get_tok() {
 #include "debug.c"
 #endif
 
+#define parse_error(msg, token) parse_error_internal(msg, token, __FILE__, __LINE__)
 
-
-void parse_error(char * msg, int token) {
+void parse_error_internal(char * msg, int token, char * file, int line) {
 
 #ifdef NICE_ERR_MSG
   #define ANSI_RED     "\x1b[31m"
@@ -2053,8 +2098,17 @@ void parse_error(char * msg, int token) {
   putint(last_tok_column_number);
   putstr(ANSI_RESET"\n");
 #else
-  fatal_error(msg);
+  putstr(msg);
 #endif
+
+#ifdef DEBUG_SHOW_ERR_ORIGIN
+  putstr("Note, error emitted from ");
+  putstr(file);
+  putstr(" line ");
+  putint(line);
+  putstr("\n");
+#endif
+
   exit(1);
 }
 
@@ -2148,8 +2202,19 @@ int parse_stars_for_type(int type) {
   return type;
 }
 
+//defining a const after the * is valid c, ie
+//   const int * const foo;
+void ignore_optional_const() {
+    if(tok == CONST_KW) {
+        //skip the const
+        get_tok();
+    }
+}
+
 int parse_type_with_stars() {
-  return parse_stars_for_type(parse_type());
+  int type = parse_stars_for_type(parse_type());
+  ignore_optional_const();
+  return type;
 }
 
 int is_type_starter(int tok) {
@@ -2361,6 +2426,11 @@ ast parse_definition(int local) {
   ast tail = 0;
   ast current_declaration;
 
+  //static can be skipped for global definitions without affecting semantics
+  if(!local && tok == STATIC_KW) {
+    get_tok();
+  }
+
   if (is_type_starter(tok)) {
     type = parse_type();
 
@@ -2376,6 +2446,7 @@ ast parse_definition(int local) {
     while (1) {
 
       this_type = parse_stars_for_type(type);
+      ignore_optional_const();
 
       name = val;
 
@@ -2704,9 +2775,6 @@ ast parse_cast_expression() {
 
     if (is_type_starter(tok)) {
       type = parse_type_with_stars();
-
-      if (get_val(type) == 0 && get_op(type) == VOID_KW)
-        parse_error("variable with void type", tok);
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());

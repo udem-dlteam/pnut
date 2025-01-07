@@ -51,9 +51,14 @@ esac
 compile_pnut() { # extra pnut compilation options: $1
   pnut_source="pnut.c"
   extra_opts="$1"
-  extra_opts_id=$(printf "%s" $extra_opts | base64)
-  pnut_exe="./tests/pnut-by-gcc-$extra_opts_id.exe"
-  pnut_exe_backend="./tests/pnut-$extra_opts_id.$ext"
+  if [ -z "$extra_opts" ]; then
+    extra_opts_id="base"
+  else
+    extra_opts_id=$(printf "%s" "$extra_opts" | md5sum | cut -c 1-16) # 16 characters should be enough
+  fi
+  extra_opts_suffix=${extra_opts_id:+"-"}$extra_opts_id             # Add a dash if there are extra options
+  pnut_exe="./tests/pnut-by-gcc${extra_opts_suffix}.exe"
+  pnut_exe_backend="./tests/pnut-$extra_opts_suffix.$ext"
 
   if [ ! -f "$pnut_exe" ]; then
     gcc "$pnut_source" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" 2> /dev/null || fail "Error: Failed to compile $pnut_source with $backend"
