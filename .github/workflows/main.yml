@@ -124,7 +124,7 @@ jobs:
   bootstrap-pnut-sh:
     strategy:
       matrix:
-        shell: ["ksh"]
+        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -138,7 +138,7 @@ jobs:
       - name: Bootstrap pnut-sh.sh on ${{ matrix.shell }}
         run: |
           set -e
-          ksh ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }} --fast
+          ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-exe:
     strategy:

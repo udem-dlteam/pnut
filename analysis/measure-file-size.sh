@@ -36,8 +36,14 @@ expand_includes() { # $1 = output-name, $2 = options
   ./$TEMP_DIR/pnut-sh.exe pnut.c $2 > "$TEMP_DIR/$1.sh"
   ./$TEMP_DIR/pnut-sh.exe "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"
 
-  diff -q "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1-preincluded.sh" || \
-    { echo "Error: $1.sh and $1-preincluded.sh differ"; exit 1; }
+  # Because we use the __FILE__ macro in pnut, the preincluded.sh file will have
+  # a different path than the original file. We need to replace the path in the
+  # preincluded file with the path of the original file.
+  # Note: | is used as the delimiter because the path contains /
+  cat "$TEMP_DIR/$1-preincluded.sh" | sed "s|$TEMP_DIR/$1.c|pnut.c|" > "$TEMP_DIR/$1-preincluded-canonical.sh"
+
+  diff -q "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1-preincluded-canonical.sh" || \
+    { echo "Error: $1.sh and $1-preincluded-canonical.sh differ"; exit 1; }
 }
 
 included_files() {
