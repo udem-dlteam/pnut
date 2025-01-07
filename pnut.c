@@ -5,6 +5,7 @@
 #include <strings.h>
 #include <string.h>
 #include <stdint.h> // for intptr_t
+#include <unistd.h> // for isatty
 
 #define ast int
 #define true 1
@@ -2059,49 +2060,62 @@ void get_tok() {
 #include "debug.c"
 #endif
 
-
-
-void parse_error(char * msg, int token) {
-
 #ifdef NICE_ERR_MSG
-  #define ANSI_RED     "\x1b[31m"
-  #define ANSI_GREEN   "\x1b[32m"
-  #define ANSI_YELLOW  "\x1b[33m"
-  #define ANSI_BLUE    "\x1b[34m"
-  #define ANSI_MAGENTA "\x1b[35m"
-  #define ANSI_CYAN    "\x1b[36m"
-  #define ANSI_RESET   "\x1b[0m"
+#define ANSI_RED     "\x1b[31m"
+#define ANSI_GREEN   "\x1b[32m"
+#define ANSI_YELLOW  "\x1b[33m"
+#define ANSI_BLUE    "\x1b[34m"
+#define ANSI_MAGENTA "\x1b[35m"
+#define ANSI_CYAN    "\x1b[36m"
+#define ANSI_RESET   "\x1b[0m"
 
-  //Error header
-  putstr(ANSI_RED"Error occurred while parsing ");
-  putstr(ANSI_GREEN"\"");
+void change_color(char *color) {
+  if (isatty(1)) { // Only output color codes if stdout is a terminal
+    putstr(color);
+  }
+}
+
+void parse_error(char *msg, int token) {
+  // Error header
+  change_color(ANSI_RED);
+  putstr("Error occurred while parsing ");
+  change_color(ANSI_GREEN);
+  putchar('"');
   putstr(include_stack->filepath);
-  putstr("\""ANSI_RESET"\n");
+  putchar('"');
+  putchar('\n');
 
-  //Error message
-  putstr("  Message: "ANSI_YELLOW);
+  // Error message
+  change_color(ANSI_RESET);
+  putstr("  Message: ");
+  change_color(ANSI_YELLOW);
   putstr(msg);
-  putstr(ANSI_RESET"\n");
+  putchar('\n');
 
-  //Error token
-  putstr("  Offending Token: "ANSI_YELLOW);
+  // Error token
+  change_color(ANSI_RESET);
+  putstr("  Offending Token: ");
+  change_color(ANSI_YELLOW);
   print_tok_type(token);
-  putstr(ANSI_RESET"\n");
+  putchar('\n');
 
-  //Error location
-  putstr("  Location: "ANSI_GREEN);
+  // Error location
+  change_color(ANSI_RESET);
+  putstr("  Location: ");
+  change_color(ANSI_GREEN);
   putstr(include_stack->filepath);
   putchar(':');
   putint(last_tok_line_number);
   putchar(':');
   putint(last_tok_column_number);
-  putstr(ANSI_RESET"\n");
-#else
-  fatal_error(msg);
-#endif
+  putchar('\n');
   exit(1);
 }
-
+#else
+void parse_error(char *msg, int token) {
+  fatal_error(msg);
+}
+#endif
 
 void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
