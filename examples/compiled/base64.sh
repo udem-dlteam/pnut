@@ -84,15 +84,15 @@ _encode() {
     printf \\$(((_$((_codes + (b1 >> 2))))/64))$(((_$((_codes + (b1 >> 2))))/8%8))$(((_$((_codes + (b1 >> 2))))%8))
     if [ $b2 -lt 0 ] ; then
       printf \\$(((_$((_codes + (63 & (b1 << 4)))))/64))$(((_$((_codes + (63 & (b1 << 4)))))/8%8))$(((_$((_codes + (63 & (b1 << 4)))))%8))
-      printf \\$(((__EQ__)/64))$(((__EQ__)/8%8))$(((__EQ__)%8))
-      printf \\$(((__EQ__)/64))$(((__EQ__)/8%8))$(((__EQ__)%8))
+      printf "="
+      printf "="
       break
     else
       printf \\$(((_$((_codes + (63 & ((b1 << 4) | (b2 >> 4))))))/64))$(((_$((_codes + (63 & ((b1 << 4) | (b2 >> 4))))))/8%8))$(((_$((_codes + (63 & ((b1 << 4) | (b2 >> 4))))))%8))
       _getchar b3
       if [ $b3 -lt 0 ] ; then
         printf \\$(((_$((_codes + (63 & (b2 << 2)))))/64))$(((_$((_codes + (63 & (b2 << 2)))))/8%8))$(((_$((_codes + (63 & (b2 << 2)))))%8))
-        printf \\$(((__EQ__)/64))$(((__EQ__)/8%8))$(((__EQ__)%8))
+        printf "="
         break
       else
         printf \\$(((_$((_codes + (63 & ((b2 << 2) | (b3 >> 6))))))/64))$(((_$((_codes + (63 & ((b2 << 2) | (b3 >> 6))))))/8%8))$(((_$((_codes + (63 & ((b2 << 2) | (b3 >> 6))))))%8))
@@ -164,7 +164,6 @@ _main() { let argc $2; let myargv $3
 readonly __NUL__=0
 readonly __NEWLINE__=10
 readonly __MINUS__=45
-readonly __EQ__=61
 readonly __d__=100
 # Runtime library
 __stdin_buf=

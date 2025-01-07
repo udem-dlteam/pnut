@@ -1445,15 +1445,21 @@ text fun_call_params(ast params) {
 
 #ifdef INCLUDE_COMP_PUTCHAR_INLINE
 text comp_putchar_inline(ast param) {
-  text res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
+  text res;
   ast ident;
+
+  if (get_op(param) == CHARACTER && get_val(param) >= 32 && get_val(param) <= 126) { // Printable ASCII characters
+    return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_char(get_val(param)), true), wrap_char('\"'));
+  }
+
+  res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
 
   if (contains_side_effects) {
     ident = fresh_ident();
     append_glo_decl(string_concat4(comp_lvalue(ident), wrap_str_lit("=$(("), res, wrap_str_lit("))")));
     res = comp_lvalue(ident);
   } else if (get_op(param) != IDENTIFIER) {
-    res = string_concat3(wrap_char('('), res, wrap_char(')'));
+    res = string_concat3(wrap_char('('), res, wrap_char(')')); // Wrap in parentheses to avoid priority of operations issues
   }
 
   res =
