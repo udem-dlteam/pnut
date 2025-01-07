@@ -2134,48 +2134,110 @@ ast parse_conditional_expression();
 ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
 
+// Type object:
+// At most 1 storage-class-specifier: auto, register, static, extern, typedef
+// type-specifier: void, char, short, int, long, float, double, signed, unsigned, struct-or-union-specifier, enum-specifier, typedef-name
+// declaration-specifier: const, volatile
+
+ast parse_declarator() {
+  switch (tok) {
+    case IDENTIFIER:
+      // TODO
+      break;
+
+    // Parenthesis have no meaning, except that they delimit the specifier-and-qualifier part of the declaration with the declarator
+    case '(':
+      get_tok();
+      parse_declarator();
+      expect_tok(')');
+      break;
+
+    case '*':
+      get_tok();
+      // TODO: Increment star
+      return parse_declarator();
+  }
+}
+
 ast parse_type() {
 
-  int type_kw = 0;
+  int type_storage_class = 0;
+  int type_qualifier = 0;
+  int type = 0;
+  bool loop = true;
+  ast declarators = 0;
 
-  while (1) {
-    if (tok == INT_KW || tok == SHORT_KW || tok == LONG_KW || tok == SIGNED_KW) {
-      if (type_kw != 0 && type_kw != INT_KW) parse_error("inconsistent type", tok);
-      type_kw = INT_KW;
-      get_tok();
-    } else if (tok == CHAR_KW) {
-      if (type_kw != 0) parse_error("inconsistent type", tok);
-      type_kw = CHAR_KW;
-      get_tok();
-    } else if ((tok == UNSIGNED_KW) || (tok == FLOAT_KW) || (tok == DOUBLE_KW)) {
-      parse_error("unsupported type", tok);
-    } else if (tok == VOID_KW) {
-      if (type_kw != 0) parse_error("inconsistent type", tok);
-      type_kw = VOID_KW;
-      get_tok();
-    } else if (tok == CONST_KW) {
-      get_tok(); // ignore const
-    } else if (tok == ENUM_KW) {
-      if (type_kw != 0) parse_error("inconsistent type", tok);
-      return parse_enum();
-    } else if (tok == STRUCT_KW || tok == UNION_KW) {
-      if (type_kw != 0) parse_error("inconsistent type", tok);
-      return parse_struct_or_union(tok);
-    } else if (tok == TYPE) {
-      // Look in types table. It's a type, not a type_kw, but we reuse the variable
-      type_kw = heap[val + 3]; // For TYPE tokens, the tag is the type
-      get_tok();
-      return type_kw;
-    } else {
-      break;
+  // A type is split in 2 parts:
+  //    1. specifiers and qualifiers
+  //    2. declarators and initializers
+  while (loop) {
+    switch (tok) {
+      case AUTO_KW:
+      case REGISTER_KW:
+      case STATIC_KW:
+      case EXTERN_KW:
+      case TYPEDEF_KW:
+        // The storage class specifier tokens are all between 300 (AUTO_KW) and 326 (TYPEDEF_KW) so we store them as bits in an int
+        type_storage_class |= 1 << (tok - AUTO_KW);
+        get_tok();
+        break;
+
+      case CONST_KW:
+      case VOLATILE_KW:
+        // The type qualifier tokens are all between 300 (AUTO_KW) and 330 (VOLATILE_KW) so we store them as bits in an int
+        type_qualifier |= 1 << (tok - AUTO_KW);
+        get_tok();
+        break;
+
+      case INT_KW:
+      case CHAR_KW:
+        if (type != 0) parse_error("Multiple types not supported", tok);
+        type = tok;
+        get_tok();
+        break;
+
+      case FLOAT_KW:
+      case DOUBLE_KW:
+        parse_error("Floating point types not supported", tok);
+        break;
+
+      // Ignore for now
+      case LONG_KW:
+      case SHORT_KW:
+      case SIGNED_KW:
+      case UNSIGNED_KW:
+        break;
+
+      case STRUCT_KW:
+      case UNION_KW:
+        if (type != 0) parse_error("Multiple types not supported", tok);
+        type = parse_struct_or_union(tok);
+        break;
+
+      case ENUM_KW:
+        if (type != 0) parse_error("Multiple types not supported", tok);
+        type = parse_enum();
+        break;
+
+      case TYPE:
+        // Look in types table. It's a type, not a type_kw, but we reuse the variable
+        type = heap[val + 3]; // For TYPE tokens, the tag is the type
+        get_tok();
+        break;
+
+      default:
+        loop = false; // Break out of loop
+        break;
     }
   }
 
-  if (type_kw == 0) {
-    parse_error("type expected", tok);
+  // Then we parse the declarators and initializers
+  while (tok != ';' && tok != EOF) {
+    declarators = cons(parse_declarator(), declarators);
   }
 
-  return new_ast0(type_kw, 0);
+  if (type == 0) syntax_error("type expected");
+  // TODO: If declarators == 0, type must be struct, union or enum
 }
 
 int parse_stars() {
