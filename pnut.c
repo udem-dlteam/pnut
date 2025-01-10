@@ -148,8 +148,8 @@ enum {
   VOID_KW,
   VOLATILE_KW,
   WHILE_KW,
-  VAR_DECL,
-  VAR_DECLS,
+  DECL,
+  DECLS,
   FUN_DECL,
   CAST,
 
@@ -2286,7 +2286,7 @@ ast parse_enum() {
 
   }
 
-  return new_ast3(ENUM_KW, 0, name, result); // 0 is number of stars
+  return new_ast3(ENUM_KW, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
 
 ast parse_struct_or_union(int struct_or_union_tok) {
@@ -2323,11 +2323,11 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
       ident = 0; // Anonymous struct
       if (tok == IDENTIFIER) {
-      ident = new_ast0(IDENTIFIER, val);
-      get_tok();
-
-      if (tok == '[') { // Array
+        ident = new_ast0(IDENTIFIER, val);
         get_tok();
+
+        if (tok == '[') { // Array
+          get_tok();
           if (tok == ']') {
             if (struct_or_union_tok != STRUCT_KW) parse_error("flexible array member must be in a struct", tok);
             ends_in_flex_array = true;
@@ -2335,13 +2335,12 @@ ast parse_struct_or_union(int struct_or_union_tok) {
             type = new_ast2('[', new_ast0(INTEGER, 0), type);
             get_tok();
           } else if (tok == INTEGER) {
-        type = new_ast2('[', new_ast0(INTEGER, -val), type);
-        get_tok();
-        expect_tok(']');
+            type = new_ast2('[', new_ast0(INTEGER, -val), type);
+            get_tok();
+            expect_tok(']');
           } else {
             parse_error("array size must be an integer constant", tok);
           }
-
         }
       } else if (get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
         parse_error("Anonymous struct/union member must have be a struct or union type", tok);
@@ -2362,204 +2361,258 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
   }
 
-  return new_ast3(struct_or_union_tok, 0, name, result); // 0 is number of stars
+  return new_ast3(struct_or_union_tok, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
 
-ast parse_param_decl() {
 
-  ast type;
-  int name;
-  ast result = 0;
+// A declaration is split in 2 parts:
+//    1. specifiers and qualifiers
+//    2. declarators and initializers
+// This function parses the first part
+ast parse_declaration_specifiers() {
+  ast type_specifier = 0;
+  int type_storage_class = 0;
+  int type_qualifier = 0;
+  bool loop = true;
 
-  if (is_type_starter(tok)) {
-    type = parse_type_with_stars();
-    name = val;
-    expect_tok(IDENTIFIER);
-    if (get_val(type) == 0 && get_op(type) == VOID_KW) parse_error("variable with void type", tok);
-    result = new_ast3(VAR_DECL, name, type, 0);
-  } else if (tok == IDENTIFIER) {
-    // Support K&R param syntax in function definition
-    name = val;
-    expect_tok(IDENTIFIER);
-    type = new_ast0(INT_KW, 0);
-    result = new_ast3(VAR_DECL, name, type, 0);
-  } else if (tok == ELLIPSIS) {
-    // ignore ELLIPSIS nodes for now
-    get_tok();
+  while (loop) {
+    switch (tok) {
+      case AUTO_KW:
+      case REGISTER_KW:
+      case STATIC_KW:
+      case EXTERN_KW:
+      case TYPEDEF_KW:
+        // The storage class specifier tokens are all between 300 (AUTO_KW) and 326 (TYPEDEF_KW) so we store them as bits in an int
+        type_storage_class |= 1 << (tok - AUTO_KW);
+        get_tok();
+        break;
+
+      case CONST_KW:
+      case VOLATILE_KW:
+        // The type qualifier tokens are all between 300 (AUTO_KW) and 330 (VOLATILE_KW) so we store them as bits in an int
+        type_qualifier |= 1 << (tok - AUTO_KW);
+        get_tok();
+        break;
+
+      case INT_KW:
+      case CHAR_KW:
+        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+        type_specifier = new_ast0(tok, 0); // Create a new type node
+        get_tok();
+        break;
+
+      case FLOAT_KW:
+      case DOUBLE_KW:
+        parse_error("Floating point types not supported", tok);
+        break;
+
+      // Ignore for now
+      case LONG_KW:
+      case SHORT_KW:
+      case SIGNED_KW:
+      case UNSIGNED_KW:
+        break;
+
+      case STRUCT_KW:
+      case UNION_KW:
+        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+        type_specifier = parse_struct_or_union(tok);
+        break;
+
+      case ENUM_KW:
+        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+        type_specifier = parse_enum();
+        break;
+
+      case TYPE:
+        // Look in types table. It's a type, not a type_kw, but we reuse the variable
+        type_specifier = heap[val + 3]; // For TYPE tokens, the tag is the type
+        type_specifier = clone_ast(type_specifier); // Clone the type so it can be modified
+        get_tok();
+        break;
+
+      default:
+        loop = false; // Break out of loop
+        break;
+    }
   }
 
-  return result;
+  // TODO: Remove to support K&R C syntax
+  if (type_specifier == 0) parse_error("Type expected", tok);
+
+  set_child(type_specifier, 0, type_storage_class | type_qualifier); // Set the storage class and type qualifier
+
+  return type_specifier;
 }
 
+typedef enum DECL_SCOPE {
+  DECL_SCOPE_GLOBAL,
+  DECL_SCOPE_LOCAL,
+  DECL_SCOPE_PARAM
+} DECL_SCOPE;
+
+ast parse_declaration(DECL_SCOPE scope);
+
 int parse_param_list() {
-  ast decl = parse_param_decl();
   ast result = 0;
   ast tail;
-  if (decl != 0) {
-    result = new_ast2(',', decl, 0);
-    tail = result;
+  ast decl;
 
-    while (tok == ',') {
+  expect_tok('(');
+
+  while (tok != ')' && tok != EOF) {
+    if (is_type_starter(tok)) {
+      result = parse_declaration(DECL_SCOPE_PARAM);
+      // TODO: if decl == void, it must be the only parameter
+    } else if (tok == IDENTIFIER) {
+      // Support K&R param syntax in function definition
+      decl = new_ast3(DECL, val, new_ast0(INT_KW, 0), 0);
+    } else if (tok == ELLIPSIS) {
+      // ignore ELLIPSIS nodes for now, but it should be the last parameter
       get_tok();
-      decl = parse_param_decl();
-      if (decl == 0) { break; }
-
+      break;
+    } else {
+      parse_error("Parameter declaration expected", tok);
+    }
+    if (result == 0) {
+      result = new_ast2(',', decl, 0);
+      tail = result;
+    } else {
       decl = new_ast2(',', decl, 0);
       set_child(tail, 1, decl);
       tail = decl;
     }
   }
 
+  expect_tok(')');
+
   return result;
 }
 
-// Note: Uses a simplified syntax for definitions
-ast parse_definition(int local) {
-
-  ast type;
-  ast init;
-  int name;
-  ast params;
-  ast body;
-  ast this_type;
+ast parse_declarator(ast parent_type) {
   ast result = 0;
-  ast tail = 0;
-  ast current_declaration;
+  bool first_tok = tok; // Indicates if the declarator is a noptr-declarator
+  int decl_name;
 
-  //static can be skipped for global definitions without affecting semantics
-  if(!local && tok == STATIC_KW) {
-    get_tok();
-  }
-
-  if (is_type_starter(tok)) {
-    type = parse_type();
-
-    // global enum/struct/union declaration
-    if (tok == ';') {
-      if (get_op(type) != ENUM_KW && get_op(type) != STRUCT_KW && get_op(type) != UNION_KW) {
-        parse_error("enum/struct/union declaration expected", tok);
-      }
+  switch (tok) {
+    case IDENTIFIER:
+      result = new_ast3(DECL, val, parent_type, 0); // 0 is the initializer
       get_tok();
-      return type;
-    }
+      break;
 
-    while (1) {
-
-      this_type = parse_stars_for_type(type);
-      ignore_optional_const();
-
-      name = val;
-
-      expect_tok(IDENTIFIER);
-
-      if (tok == '(') {
-
-        if (local) {
-          parse_error("function declaration only allowed at global level", tok);
-        }
-
+    case '*':
+      get_tok();
+      // Pointers may be const-qualified
+      if (tok == CONST_KW) {
         get_tok();
-
-        params = parse_param_list();
-
-        expect_tok(')');
-
-        if (tok == ';') {
-          // forward declaration. Body == -1
-          body = -1;
-          get_tok();
-        } else {
-          body = parse_compound_statement();
-        }
-
-        return new_ast4(FUN_DECL, name, this_type, params, body);
-
+        result = new_ast2('*', 1 << (CONST_KW - AUTO_KW), parent_type);
       } else {
-
-        if (get_val(this_type) == 0 && get_op(this_type) == VOID_KW) {
-          parse_error("variable with void type", tok);
-        }
-
-        if (tok == '[') {
-          // if (local) {
-          //   syntax_error("array declaration only allowed at global level");
-          // }
-          get_tok();
-          if (tok == INTEGER) {
-            this_type = new_ast2('[', new_ast0(INTEGER, -val), this_type);
-            get_tok();
-          } else {
-            parse_error("array size must be an integer constant", tok);
-          }
-
-          expect_tok(']');
-        }
-
-        init = 0;
-
-        if (tok == '=') {
-          get_tok();
-            init = parse_conditional_expression();
-        }
-        current_declaration = new_ast3(VAR_DECL, name, this_type, init); // Create a new declaration
-
-        if(result == 0) { // First declaration
-          result = new_ast2(',', current_declaration, 0);
-          tail = result; // Keep track of the last declaration
-        } else {
-          set_child(tail, 1, new_ast2(',', current_declaration, 0)); // Link the new declaration to the last one
-          tail = get_child(tail, 1); // Update the last declaration
-        }
-
-        if (tok == ';') {
-          get_tok();
-          break;
-        } else if (tok == ',') {
-          get_tok();
-          continue; // Continue to the next declaration
-        } else {
-          parse_error("';' or ',' expected", tok);
-        }
+        result = new_ast2('*', 0, parent_type);
       }
-    }
-    return new_ast1(VAR_DECLS, result);
-  } else if (tok == TYPEDEF_KW) {
-    // When parsing a typedef, the type is added to the types table.
-    // This is so the parser can determine if an identifier is a type or not.
-    // This implementation is not completely correct, as an identifier that was
-    // typedef'ed can also be used as a variable name, but TCC doesn't do that so
-    // it should be fine for now.
-    //
-    // When we want to implement typedef correctly, we'll want to tag
-    // identifiers as typedef'ed and have the typedef be scoped to the block
-    // it was defined in (global or in function).
-    get_tok();
-    type = parse_type_with_stars();
-    if (tok != IDENTIFIER) { parse_error("identifier expected", tok); }
 
-#ifdef sh
-    // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
-    // This is not correct, but it's a limitation of the current shell backend where we
-    // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
-    // don't always have a name.
-    if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW || get_op(type) == ENUM_KW) {
-      if (get_child(type, 1) != 0 && get_val(get_child(type, 1)) != val) {
-        syntax_error("typedef name must match struct/union/enum name");
-      }
-      set_child(type, 1, new_ast0(IDENTIFIER, val));
-    }
-#endif
+      result = parse_declarator(result);
+      break;
 
-    heap[val + 2] = TYPE;
-    heap[val + 3] = type;
-    result = new_ast2(TYPEDEF_KW, val, type);
-    get_tok();
-    expect_tok(';');
-    return result;
-  } else {
-    parse_error("unknown decl: type expected", tok);
-    return result;
+    // Parenthesis delimit the specifier-and-qualifier part of the declaration from the declarator
+    case '(':
+      get_tok();
+      parse_declarator(parent_type);
+      expect_tok(')');
+      break;
   }
+
+  if (result == 0) parse_error("Declarator expected", tok);
+
+  // At this point, the only non-recursive declarator is an identifier
+  // so we know that get_op(result) == DECL.
+  // Because we want the DECL to stay as the outermost node, we temporarily
+  // unwrap the DECL parent_type.
+  if (get_op(result) != DECL) fatal_error("Expected a DECL node");
+  decl_name = get_child(result, 0);
+  result = get_child(result, 1);
+
+  while (first_tok != '*') {
+    // noptr-declarator may be followed by [ constant-expression ] to declare an
+    // array or by ( parameter-type-list ) to declare a function. We loop since
+    // both may be present.
+    if (tok == '[') {
+      get_tok();
+      if (tok == ']') {
+        result = new_ast2('[', result, -1); // -1 is used to represent an unsized array
+      } else if (tok == INTEGER) {
+        result = new_ast2('[', result, -val);
+        get_tok();
+      } else {
+        parse_error("Array size must be an integer constant", tok);
+      }
+      expect_tok(']');
+    } else if (tok == '(') {
+      result = new_ast2('(', result, parse_param_list());
+    } else {
+      break;
+    }
+  }
+
+  // And now we wrap the DECL back around the result.
+  // Maybe we could try reusing the DECL node?
+  return new_ast3(DECL, decl_name, result, 0); // 0 is the initializer
+}
+
+ast parse_declarator_and_initializer(ast parent_type) {
+  ast declarator = parse_declarator(parent_type);
+
+  if (tok == '=') {
+    get_tok();
+    // parse_declarator returns a DECL node where the initializer is child#2
+    set_child(declarator, 2, parse_conditional_expression());
+  }
+
+  return declarator;
+}
+
+ast parse_declaration(DECL_SCOPE scope) {
+  ast declarator;
+  ast declarators;
+  // First we parse the specifiers:
+  ast type_specifier = parse_declaration_specifiers();
+
+  // From cppreference:
+  // > The enum, struct, and union declarations may omit declarators, in which
+  // > case they only introduce the enumeration constants and/or tags.
+  if (tok == ';') {
+    if (scope != DECL_SCOPE_PARAM && get_op(type_specifier) != ENUM_KW && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW) {
+      parse_error("enum/struct/union declaration expected", tok);
+    }
+    get_tok(); // Skip the ;
+    return type_specifier;
+  }
+
+  // Then we parse the declarators and initializers
+  declarator = parse_declarator_and_initializer(type_specifier);
+
+  // The declarator may be a function definition, in which case we parse the function body
+  if (tok == '{') {
+    // TODO: Check that the parameters are all named
+    return new_ast2(FUN_DECL, declarator, parse_compound_statement());
+  }
+
+  declarator = cons(declarator, 0); // Wrap the declarator in a list
+
+  // Otherwise, this is a variable or declaration
+  while (1) {
+    if (tok == ',') {
+      get_tok();
+      declarator = new_ast2(',', declarator, parse_declarator_and_initializer(type_specifier));
+    } else if (tok == ';') {
+      get_tok();
+      break;
+    } else {
+      printf("declarator: %d\n", get_op(declarator));
+      parse_error("';' or ',' expected", tok);
+    }
+  }
+
+  return new_ast1(DECLS, declarator);
 }
 
 ast parse_parenthesized_expression() {
@@ -3183,7 +3236,7 @@ ast parse_compound_statement() {
   // TODO: Simplify this
   if (tok != '}' && tok != EOF) {
     if (is_type_starter(tok)) {
-      child1 = parse_definition(1);
+      child1 = parse_declaration(DECL_SCOPE_LOCAL);
     } else {
       child1 = parse_statement();
     }
@@ -3191,7 +3244,7 @@ ast parse_compound_statement() {
     tail = result;
     while (tok != '}' && tok != EOF) {
       if (is_type_starter(tok)) {
-        child1 = parse_definition(1);
+        child1 = parse_declaration(DECL_SCOPE_LOCAL);
       } else {
         child1 = parse_statement();
       }
@@ -3295,15 +3348,16 @@ int main(int argc, char **argv) {
 #elif defined DEBUG_PARSER // Parse input, output nothing
     get_tok();
   while (tok != EOF) {
-    decl = parse_definition(0);
+    decl = parse_declaration(DECL_SCOPE_GLOBAL);
   }
 #else
   codegen_begin();
   get_tok();
   while (tok != EOF) {
-    decl = parse_definition(0);
+    decl = parse_declaration(DECL_SCOPE_GLOBAL);
+    printf("parsed decl: %d\n", get_op(decl));
 #ifdef SH_INCLUDE_C_CODE
-    output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == VAR_DECLS);
+    output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == DECLS);
 #endif
     codegen_glo_decl(decl);
   }

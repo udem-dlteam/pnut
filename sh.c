@@ -2082,7 +2082,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;
-  } else if (op == VAR_DECLS) {
+  } else if (op == DECLS) {
     comp_var_decls(node);
     return false;
   } else {
@@ -2342,10 +2342,12 @@ void comp_glo_decl(ast node) {
 
   if (op == '=') { // Assignments
    comp_assignment(get_child(node, 0), get_child(node, 1));
-  } else if (op == VAR_DECLS) { // Variable declarations
+  } else if (op == DECLS) { // Variable declarations
     declarations = get_child(node, 0);
+    printf("op=%d %c with %d children\n", op, op, get_nb_children(declarations));
     while (declarations != 0) { // Multiple variable declarations
       variable = get_child(declarations, 0); // Single variable declaration
+      printf("op=%d %c with %d children\n", get_op(variable), get_op(variable), get_nb_children(variable));
       comp_glo_var_decl(variable); // Compile variable declaration
       declarations = get_child(declarations, 1); // Next variable declaration
     }
