@@ -2364,6 +2364,8 @@ ast parse_struct_or_union(int struct_or_union_tok) {
   return new_ast3(struct_or_union_tok, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
 
+// The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
+#define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
 
 // A declaration is split in 2 parts:
 //    1. specifiers and qualifiers
@@ -2382,20 +2384,19 @@ ast parse_declaration_specifiers() {
       case STATIC_KW:
       case EXTERN_KW:
       case TYPEDEF_KW:
-        // The storage class specifier tokens are all between 300 (AUTO_KW) and 326 (TYPEDEF_KW) so we store them as bits in an int
-        type_storage_class |= 1 << (tok - AUTO_KW);
+        type_storage_class |= MK_TYPE_SPECIFIER(tok);
         get_tok();
         break;
 
       case CONST_KW:
       case VOLATILE_KW:
-        // The type qualifier tokens are all between 300 (AUTO_KW) and 330 (VOLATILE_KW) so we store them as bits in an int
-        type_qualifier |= 1 << (tok - AUTO_KW);
+      type_qualifier |= MK_TYPE_SPECIFIER(tok);
         get_tok();
         break;
 
       case INT_KW:
       case CHAR_KW:
+      case VOID_KW:
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         type_specifier = new_ast0(tok, 0); // Create a new type node
         get_tok();
@@ -2445,13 +2446,7 @@ ast parse_declaration_specifiers() {
   return type_specifier;
 }
 
-typedef enum DECL_SCOPE {
-  DECL_SCOPE_GLOBAL,
-  DECL_SCOPE_LOCAL,
-  DECL_SCOPE_PARAM
-} DECL_SCOPE;
-
-ast parse_declaration(DECL_SCOPE scope);
+ast parse_declarator(ast parent_type);
 
 int parse_param_list() {
   ast result = 0;
@@ -2462,8 +2457,13 @@ int parse_param_list() {
 
   while (tok != ')' && tok != EOF) {
     if (is_type_starter(tok)) {
-      result = parse_declaration(DECL_SCOPE_PARAM);
-      // TODO: if decl == void, it must be the only parameter
+      result = parse_declaration_specifiers();
+      if (get_op(result) == VOID_KW && tok == ')') {
+        // void is the only parameter
+        break;
+      } else {
+        result = parse_declarator(result);
+      }
     } else if (tok == IDENTIFIER) {
       // Support K&R param syntax in function definition
       decl = new_ast3(DECL, val, new_ast0(INT_KW, 0), 0);
@@ -2474,6 +2474,11 @@ int parse_param_list() {
     } else {
       parse_error("Parameter declaration expected", tok);
     }
+
+    if (tok == ',') {
+      get_tok();
+    }
+
     if (result == 0) {
       result = new_ast2(',', decl, 0);
       tail = result;
@@ -2505,7 +2510,7 @@ ast parse_declarator(ast parent_type) {
       // Pointers may be const-qualified
       if (tok == CONST_KW) {
         get_tok();
-        result = new_ast2('*', 1 << (CONST_KW - AUTO_KW), parent_type);
+        result = new_ast2('*', MK_TYPE_SPECIFIER(CONST_KW), parent_type);
       } else {
         result = new_ast2('*', 0, parent_type);
       }
@@ -2516,7 +2521,7 @@ ast parse_declarator(ast parent_type) {
     // Parenthesis delimit the specifier-and-qualifier part of the declaration from the declarator
     case '(':
       get_tok();
-      parse_declarator(parent_type);
+      result = parse_declarator(parent_type);
       expect_tok(')');
       break;
   }
@@ -2570,8 +2575,31 @@ ast parse_declarator_and_initializer(ast parent_type) {
   return declarator;
 }
 
-ast parse_declaration(DECL_SCOPE scope) {
-  ast declarator;
+void add_typedef(ast declarator) {
+  int decl_ident = get_child(declarator, 0);
+  ast decl_type = get_child(declarator, 1); // child#1 is the type
+  if (get_child(declarator, 2) != 0) {
+    parse_error("Initializer not allowed in typedef", tok);
+  }
+
+#ifdef sh
+  // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
+  // This is not correct, but it's a limitation of the current shell backend where we
+  // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
+  // don't always have a name.
+  if (get_op(decl_type) == STRUCT_KW || get_op(decl_type) == UNION_KW || get_op(decl_type) == ENUM_KW) {
+    if (get_child(decl_type, 1) != 0 && get_val(get_child(type, 1)) != val) {
+      syntax_error("typedef name must match struct/union/enum name");
+    }
+    set_child(decl_type, 1, new_ast0(IDENTIFIER, decl_ident));
+  }
+#endif
+
+  heap[decl_ident + 2] = TYPE;
+  heap[decl_ident + 3] = decl_type;
+}
+
+ast parse_declaration(bool local) {
   ast declarators;
   // First we parse the specifiers:
   ast type_specifier = parse_declaration_specifiers();
@@ -2580,7 +2608,7 @@ ast parse_declaration(DECL_SCOPE scope) {
   // > The enum, struct, and union declarations may omit declarators, in which
   // > case they only introduce the enumeration constants and/or tags.
   if (tok == ';') {
-    if (scope != DECL_SCOPE_PARAM && get_op(type_specifier) != ENUM_KW && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW) {
+    if (get_op(type_specifier) != ENUM_KW && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW) {
       parse_error("enum/struct/union declaration expected", tok);
     }
     get_tok(); // Skip the ;
@@ -2588,31 +2616,43 @@ ast parse_declaration(DECL_SCOPE scope) {
   }
 
   // Then we parse the declarators and initializers
-  declarator = parse_declarator_and_initializer(type_specifier);
+  declarators = parse_declarator_and_initializer(type_specifier);
 
   // The declarator may be a function definition, in which case we parse the function body
-  if (tok == '{') {
+  if (!local && tok == '{') {
     // TODO: Check that the parameters are all named
-    return new_ast2(FUN_DECL, declarator, parse_compound_statement());
+    return new_ast2(FUN_DECL, declarators, parse_compound_statement());
   }
 
-  declarator = cons(declarator, 0); // Wrap the declarator in a list
+  declarators = new_ast2(',', declarators, 0); // Wrap the declarators in a list
 
   // Otherwise, this is a variable or declaration
   while (1) {
     if (tok == ',') {
       get_tok();
-      declarator = new_ast2(',', declarator, parse_declarator_and_initializer(type_specifier));
+      declarators = new_ast2(',', declarators, parse_declarator_and_initializer(type_specifier));
     } else if (tok == ';') {
       get_tok();
       break;
+    } else if (tok == ')') {
+      break;
     } else {
-      printf("declarator: %d\n", get_op(declarator));
       parse_error("';' or ',' expected", tok);
     }
   }
 
-  return new_ast1(DECLS, declarator);
+  // The type_specifier may be a typedef, in that case, it's not a variable or
+  // function declaration, and we instead want to add the typedef'ed type to the
+  // type table.
+  if (get_val(type_specifier) & MK_TYPE_SPECIFIER(TYPEDEF_KW)) {
+    type_specifier = declarators; // Save declarators in type_specifier
+    while (get_op(declarators) == ',') {
+      add_typedef(get_child(declarators, 0));
+      declarators = get_child(declarators, 1);
+    }
+  } else {
+  }
+  return new_ast1(DECLS, declarators);
 }
 
 ast parse_parenthesized_expression() {
@@ -3236,7 +3276,7 @@ ast parse_compound_statement() {
   // TODO: Simplify this
   if (tok != '}' && tok != EOF) {
     if (is_type_starter(tok)) {
-      child1 = parse_declaration(DECL_SCOPE_LOCAL);
+      child1 = parse_declaration(true);
     } else {
       child1 = parse_statement();
     }
@@ -3244,7 +3284,7 @@ ast parse_compound_statement() {
     tail = result;
     while (tok != '}' && tok != EOF) {
       if (is_type_starter(tok)) {
-        child1 = parse_declaration(DECL_SCOPE_LOCAL);
+        child1 = parse_declaration(true);
       } else {
         child1 = parse_statement();
       }
@@ -3348,13 +3388,13 @@ int main(int argc, char **argv) {
 #elif defined DEBUG_PARSER // Parse input, output nothing
     get_tok();
   while (tok != EOF) {
-    decl = parse_declaration(DECL_SCOPE_GLOBAL);
+    decl = parse_declaration(false);
   }
 #else
   codegen_begin();
   get_tok();
   while (tok != EOF) {
-    decl = parse_declaration(DECL_SCOPE_GLOBAL);
+    decl = parse_declaration(false);
     printf("parsed decl: %d\n", get_op(decl));
 #ifdef SH_INCLUDE_C_CODE
     output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == DECLS);
