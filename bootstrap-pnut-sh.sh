@@ -34,7 +34,11 @@ if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
 gcc -o "$TEMP_DIR/pnut.exe" $PNUT_SH_OPTIONS pnut.c
 
-./$TEMP_DIR/pnut.exe $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-sh.sh"
+./$TEMP_DIR/pnut.exe $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-sh.sh" || {
+  echo "Failed to create pnut-sh.sh"
+  tail -n 25 "$TEMP_DIR/pnut-sh.sh"
+  exit 1
+}
 
 if [ "$shell" = "all" ]; then
   set +e # Don't exit on error because we want to test all shells.
