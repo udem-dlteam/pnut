@@ -558,7 +558,7 @@ void assert_var_decl_is_safe(ast decl, bool local) { // Helper function for asse
 
   // Local variables don't correspond to memory locations, and can't store
   // more than 1 number/pointer.
-  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW && get_val(type) == 0))) {
+  if (local && (get_op(type) == '[' || get_op(type) == STRUCT_KW)) {
     printf("%s ", name);
     fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
   }
@@ -2120,7 +2120,7 @@ void comp_glo_fun_decl(ast node) {
   ast body = get_child(node, 1);
   text trailing_txt = 0;
   int params_ix = 2; // Start at 2 because $1 is assigned to the return location
-  ast var;
+  ast param_decl;
   int save_loc_vars_fixup;
   int start_glo_decl_idx;
 
@@ -2147,9 +2147,9 @@ void comp_glo_fun_decl(ast node) {
 
   if (trailing_txt == 0) {
     // Show the mapping between the function parameters and $1, $2, etc.
-    while (params != 0) {
-      var = get_child(params, 0);
-      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
+    while (get_op(params) == ',') {
+      param_decl = get_child(params, 0);
+      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val(get_child(param_decl, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
       params = get_child(params, 1);
       params_ix += 1;
     }
@@ -2170,15 +2170,15 @@ void comp_glo_fun_decl(ast node) {
 
 #ifndef SH_INITIALIZE_PARAMS_WITH_LET
   // Initialize parameters
-  params = get_child(node, 2); // Reload params because params is now = 0
+  params = get_child_('(', declarator_fun_type, 1); // Reload params because params is now = 0
   params_ix = 2;
-  while (params != 0) {
-    var = get_child(params, 0);
+  while (get_op(params) == ',') {
+    param_decl = get_child(params, 0);
 
     // TODO: Constant param optimization
     // Constant parameters don't need to be initialized
-    // if (!variable_is_constant_param(find_var_in_local_env(get_val(var)), local_env)) {
-      comp_assignment(new_ast0(IDENTIFIER, get_child(var, 0)), new_ast0(IDENTIFIER_DOLLAR, params_ix));
+    // if (!variable_is_constant_param(find_var_in_local_env(get_val(param_decl)), local_env)) {
+      comp_assignment(new_ast0(IDENTIFIER, get_child(param_decl, 0)), new_ast0(IDENTIFIER_DOLLAR, params_ix));
     // }
 
     params = get_child(params, 1);
@@ -2209,9 +2209,9 @@ void comp_glo_fun_decl(ast node) {
 }
 
 void comp_glo_var_decl(ast node) {
-  ast name = get_child(node, 0);
-  ast type = get_child(node, 1);
-  ast init = get_child(node, 2);
+  ast name = get_child_(DECL, node, 0);
+  ast type = get_child_(DECL, node, 1);
+  ast init = get_child_(DECL, node, 2);
 
   if (init == 0) init = new_ast0(INTEGER, 0);
 
@@ -2230,13 +2230,15 @@ void comp_glo_var_decl(ast node) {
   }
 
   if (get_op(type) == '[') { // Array declaration
+    if (get_child(type, 1) < 0) fatal_error("Array size must be a positive integer");
+
     runtime_defarr();
     append_glo_decl(
       string_concat4(
         wrap_str_lit("defarr "),
         env_var(new_ast0(IDENTIFIER, name)),
         wrap_char(' '),
-        wrap_int(get_val(get_child(type, 0)))
+        wrap_int(get_child(type, 1))
       )
     );
   } else {
@@ -2353,7 +2355,6 @@ void handle_enum_struct_union_type_decl(ast type) {
 //   - struct declarations
 void comp_glo_decl(ast node) {
   ast declarations;
-  ast variable;
   int op = get_op(node);
   fun_gensym_ix = 0;
 
@@ -2363,10 +2364,9 @@ void comp_glo_decl(ast node) {
    comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
   } else if (op == DECLS) { // Variable declarations
     declarations = get_child__(DECLS, ',', node, 0);
-    while (get_op(declarations) == ',') { // Multiple variable declarations
-      variable = get_child__(',', DECL, declarations, 0); // Single variable declaration
-      comp_glo_var_decl(variable); // Compile variable declaration
-      declarations = get_child_(',', declarations, 1); // Next variable declaration
+    while (get_op(declarations) == ',') {
+      comp_glo_var_decl(get_child__(',', DECL, declarations, 0));
+      declarations = get_child_(',', declarations, 1);
     }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);

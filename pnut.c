@@ -2387,12 +2387,10 @@ int parse_param_list() {
 
   while (tok != ')' && tok != EOF) {
     if (is_type_starter(tok)) {
-      decl = parse_declaration_specifiers();
+      decl = parse_declarator(true, parse_declaration_specifiers());
       if (get_op(decl) == VOID_KW) {
         if (tok != ')' || result != 0) parse_error("void must be the only parameter", tok);
         break;
-      } else {
-        decl = parse_declarator(true, decl);
       }
     } else if (tok == IDENTIFIER) {
       // Support K&R param syntax in function definition
@@ -2539,9 +2537,24 @@ void add_typedef(ast declarator) {
   heap[decl_ident + 3] = decl_type;
 }
 
+ast parse_fun_def(ast declarator) {
+  ast params = get_child(declarator, 1);
+
+  // Check that the parameters are all named since declarator may be abstract
+  while (get_op(params) == ',') {
+    if (get_child_(DECL, get_child__(',', DECL, params, 0), 0) == 0) {
+      parse_error("Parameter name expected", tok);
+    }
+    params = get_child(params, 1);
+  }
+  if (get_child_(DECL, declarator, 2) != 0) parse_error("Initializer not allowed in function definition", tok);
+  return new_ast2(FUN_DECL, declarator, parse_compound_statement());
+}
+
 ast parse_declaration(bool local) {
   ast declarator;
   ast declarators;
+  ast tail;
   // First we parse the specifiers:
   ast type_specifier = parse_declaration_specifiers();
 
@@ -2561,23 +2574,19 @@ ast parse_declaration(bool local) {
 
   // The declarator may be a function definition, in which case we parse the function body
   if (get_op(get_child(declarator, 1)) == '(' && tok == '{') {
-    if (local) {
-      parse_error("Function definition not allowed in local scope", tok);
-    } else {
-      // TODO: Check that the parameters are all named
-      if (get_child(declarator, 2) != 0) parse_error("Initializer not allowed in function definition", tok);
-      return new_ast2(FUN_DECL, declarator, parse_compound_statement());
-    }
+    if (local) parse_error("Function definition not allowed in local scope", tok);
+    return parse_fun_def(declarator);
   }
 
   declarators = new_ast2(',', declarator, 0); // Wrap the declarators in a list
+  tail = declarators;
 
   // Otherwise, this is a variable or declaration
   while (1) {
     if (tok == ',') {
       get_tok();
-      // TODO: Reverse order of declarators
-      declarators = new_ast2(',', parse_declarator_and_initializer(type_specifier), declarators);
+      set_child(tail, 1, new_ast2(',', parse_declarator_and_initializer(type_specifier), 0));
+      tail = get_child(tail, 1);
     } else if (tok == ';') {
       get_tok();
       break;
