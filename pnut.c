@@ -2328,7 +2328,7 @@ ast parse_enum() {
         tail = result;
       } else {
         set_child(tail, 2, new_ast3(',', ident, value, 0));
-        tail = get_child(tail, 2);
+        tail = get_child_(',', tail, 2);
       }
 
       if (tok == ',') {
@@ -2410,7 +2410,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         tail = result;
       } else {
         set_child(tail, 2, new_ast3(',', ident, type, 0));
-        tail = get_child(tail, 2);
+        tail = get_child_(',', tail, 2);
       }
     }
 
@@ -2564,7 +2564,7 @@ ast parse_definition(int local) {
           tail = result; // Keep track of the last declaration
         } else {
           set_child(tail, 1, new_ast2(',', current_declaration, 0)); // Link the new declaration to the last one
-          tail = get_child(tail, 1); // Update the last declaration
+          tail = get_child_(',', tail, 1); // Update the last declaration
         }
 
         if (tok == ';') {
