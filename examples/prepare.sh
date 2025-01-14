@@ -34,9 +34,11 @@ generate_executable_with() { # $1 = executable, $2 = options
     opt=$2
   fi
 
-  if ./build/$1 $file $opt > $COMP_DIR/$filename.sh; then
+  if timeout 3 ./build/$1 $file $opt > $COMP_DIR/$filename.sh; then
     chmod +x $COMP_DIR/$filename.sh
     printf "✅\n"
+  elif [ $? -eq 124 ]; then
+    printf "Timeout ❌\n"
   else
     printf "Failed to compile ❌\n"
     failed=1
