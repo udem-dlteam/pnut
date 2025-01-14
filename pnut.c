@@ -1047,27 +1047,31 @@ int eval_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
   int op1;
   int op2;
+  ast child0, child1;
+
+  if (get_nb_children(expr) >= 1) child0 = get_child(expr, 0);
+  if (get_nb_children(expr) >= 2) child1 = get_child(expr, 1);
 
   switch (op) {
-    case PARENS:    return eval_constant(get_child(expr, 0), if_macro);
+    case PARENS:    return eval_constant(child0, if_macro);
     case INTEGER:   return -get_val(expr);
     case CHARACTER: return get_val(expr);
-    case '~':       return ~eval_constant(get_child(expr, 0), if_macro);
-    case '!':       return !eval_constant(get_child(expr, 0), if_macro);
+    case '~':       return ~eval_constant(child0, if_macro);
+    case '!':       return !eval_constant(child0, if_macro);
     case '-':
     case '+':
-      op1 = eval_constant(get_child(expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (get_nb_children(expr) == 1) {
         return op == '-' ? -op1 : op1;
       } else {
-        op2 = eval_constant(get_child(expr, 1), if_macro);
+        op2 = eval_constant(child1, if_macro);
         return op == '-' ? op1 - op2 : op1 + op2;
       }
 
     case '?':
-      op1 = eval_constant(get_child(expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (op1) {
-        return eval_constant(get_child(expr, 1), if_macro);
+        return eval_constant(child1, if_macro);
       } else {
         return eval_constant(get_child(expr, 2), if_macro);
       }
@@ -1086,8 +1090,8 @@ int eval_constant(ast expr, bool if_macro) {
     case GT_EQ:
     case '<':
     case '>':
-      op1 = eval_constant(get_child(expr, 0), if_macro);
-      op2 = eval_constant(get_child(expr, 1), if_macro);
+      op1 = eval_constant(child0, if_macro);
+      op2 = eval_constant(child1, if_macro);
       switch (op) {
         case '*':     return op1 * op2;
         case '/':     return op1 / op2;
@@ -1107,18 +1111,18 @@ int eval_constant(ast expr, bool if_macro) {
       return 0; // Should never reach here
 
     case AMP_AMP:
-      op1 = eval_constant(get_child(expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (!op1) return 0;
-      else return eval_constant(get_child(expr, 1), if_macro);
+      else return eval_constant(child1, if_macro);
 
     case BAR_BAR:
-      op1 = eval_constant(get_child(expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (op1) return 1;
-      else return eval_constant(get_child(expr, 1), if_macro);
+      else return eval_constant(child1, if_macro);
 
     case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val(get_child(expr, 0)) == DEFINED_ID) {
-        return get_child(expr, 1) == MACRO;
+      if (if_macro && get_val(child0) == DEFINED_ID) {
+        return child1 == MACRO;
       } else {
         fatal_error("unknown function call in constant expressions");
         return 0;

@@ -904,12 +904,15 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
 ast handle_side_effects_go(ast node, bool executes_conditionally) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
-  ast sub1;
-  ast sub2;
+  ast sub1, sub2;
   ast previous_conditional_fun_calls;
-  ast left_conditional_fun_calls;
-  ast right_conditional_fun_calls;
+  ast left_conditional_fun_calls, right_conditional_fun_calls;
   int start_gensym_ix = gensym_ix;
+  ast child0, child1, child2;
+
+  if (nb_children >= 1) { child0 = get_child(node, 0); }
+  if (nb_children >= 2) { child1 = get_child(node, 1); }
+  if (nb_children >= 3) { child2 = get_child(node, 2); }
 
   if (nb_children == 0) {
     if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
@@ -927,10 +930,10 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
   } else if (nb_children == 1) {
     if (op == '&' || op == '*' || op == '+' || op == '-' || op == '~' || op == '!' || op == PARENS) {
       // TODO: Reuse ast node?
-      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
+      return new_ast1(op, handle_side_effects_go(child0, executes_conditionally));
     } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
       contains_side_effects = true;
-      return new_ast1(op, handle_side_effects_go(get_child(node, 0), executes_conditionally));
+      return new_ast1(op, handle_side_effects_go(child0, executes_conditionally));
     } else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
     } else {
@@ -942,42 +945,42 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     if (op == '(') { // Function call
       return handle_fun_call_side_effect(node, 0, executes_conditionally);
     } else if (op == '=') {
-      if (get_op(get_child(node, 1)) == '(') { // Function call
+      if (get_op(child1) == '(') { // Function call
         // In that case, we reuse the left hand side of the assignment as the result location
-        return handle_fun_call_side_effect(get_child(node, 1), get_child(node, 0), executes_conditionally);
+        return handle_fun_call_side_effect(child1, child0, executes_conditionally);
       } else {
-        sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
-        sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
+        sub1 = handle_side_effects_go(child0, executes_conditionally);
+        sub2 = handle_side_effects_go(child1, executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
         return new_ast2(op, sub1, sub2);
       }
     } else if (op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
       || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == LSHIFT || op == RSHIFT || op == '['
       || op == '.' || op == ARROW ) {
-      sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
-      sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
+      sub1 = handle_side_effects_go(child0, executes_conditionally);
+      sub2 = handle_side_effects_go(child1, executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
     } else if (op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       // Just like previous case, except that we update contains_side_effects
       contains_side_effects = true;
-      sub1 = handle_side_effects_go(get_child(node, 0), executes_conditionally);
-      sub2 = handle_side_effects_go(get_child(node, 1), executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
+      sub1 = handle_side_effects_go(child0, executes_conditionally);
+      sub2 = handle_side_effects_go(child1, executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
     } else if (op == AMP_AMP || op == BAR_BAR) {
       previous_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
       // The left side is always executed, unless the whole expression is executed conditionally.
       // We could compile it as always executed, but it makes the Shell code less regular so we compile it conditionally.
-      sub1 = handle_side_effects_go(get_child(node, 0), true);
+      sub1 = handle_side_effects_go(child0, true);
       gensym_ix = start_gensym_ix; // Reset gensym counter because the 2 sides are independent
       left_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
-      sub2 = handle_side_effects_go(get_child(node, 1), true);
+      sub2 = handle_side_effects_go(child1, true);
       gensym_ix = start_gensym_ix; // Reset gensym counter because the 2 sides are independent
       right_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = previous_conditional_fun_calls;
       return new_ast4(op, sub1, sub2, left_conditional_fun_calls, right_conditional_fun_calls);
     } else if (op == CAST) {
-      return new_ast2(CAST, get_child(node, 0), handle_side_effects_go(get_child(node, 1), executes_conditionally));
+      return new_ast2(CAST, child0, handle_side_effects_go(child1, executes_conditionally));
     } else {
       printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
@@ -987,16 +990,16 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     if (op == '?') {
       previous_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
-      sub1 = handle_side_effects_go(get_child(node, 1), true);
+      sub1 = handle_side_effects_go(child1, true);
       left_conditional_fun_calls = conditional_fun_calls;
       conditional_fun_calls = 0;
-      sub2 = handle_side_effects_go(get_child(node, 2), true);
+      sub2 = handle_side_effects_go(child2, true);
       right_conditional_fun_calls = conditional_fun_calls;
       if (left_conditional_fun_calls != 0 || right_conditional_fun_calls != 0) {
         fatal_error("Conditional function calls in ternary operator not allowed");
       }
 
-      return new_ast3('?', handle_side_effects_go(get_child(node, 0), executes_conditionally), sub1, sub2);
+      return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
     } else {
       printf("3: op=%d %c\n", op, op);
       fatal_error("unexpected operator");
@@ -1116,9 +1119,13 @@ text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) 
 text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
-  text sub1;
-  text sub2;
-  text sub3;
+  text sub1, sub2, sub3;
+  ast child0, child1, child2, child3;
+
+  if (nb_children >= 1) { child0 = get_child(node, 0); }
+  if (nb_children >= 2) { child1 = get_child(node, 1); }
+  if (nb_children >= 3) { child2 = get_child(node, 2); }
+  if (nb_children >= 4) { child3 = get_child(node, 3); }
 
   if (nb_children == 0) {
     if (op == INTEGER) {
@@ -1149,54 +1156,54 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // Setting context to RVALUE_CTX_BASE even if it's wrapped in $(( ... )) because we
       // need another layer of wrapping if it's a complex expression, i.e. not a
       // literal or a variable.
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0, op);
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_BASE, 0, op);
       return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('_'), sub1), outer_op, op);
     } else if (op == '+' || op == PARENS) {
       // +x is equivalent to x
-      return comp_rvalue_go(get_child(node, 0), context, test_side_effects, outer_op);
+      return comp_rvalue_go(child0, context, test_side_effects, outer_op);
     } else if (op == '-') {
       // Check if the rest of ast is a literal, if so directly return the negated value.
       // Note: I think this can be simplified by not wrapped in () in the else case.
-      if (get_op(get_child(node, 0)) == INTEGER) {
-        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(get_child(node, 0))));
+      if (get_op(child0) == INTEGER) {
+        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(child0)));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+        sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
         return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("-("), sub1, wrap_char(')')), outer_op, op);
       }
     } else if (op == '~') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("~("), sub1, wrap_char(')')), outer_op, op);
     } else if (op == '!') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat(wrap_char('!'), sub1), outer_op, op);
     } else if (op == MINUS_MINUS_PRE) {
-      sub1 = comp_lvalue(get_child(node, 0));
+      sub1 = comp_lvalue(child0);
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" -= 1")), outer_op, op);
     } else if (op == PLUS_PLUS_PRE) {
-      sub1 = comp_lvalue(get_child(node, 0));
+      sub1 = comp_lvalue(child0);
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" += 1")), outer_op, op);
     } else if (op == MINUS_MINUS_POST) {
-      sub1 = comp_lvalue(get_child(node, 0));
+      sub1 = comp_lvalue(child0);
       return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
     } else if (op == PLUS_PLUS_POST) {
-      sub1 = comp_lvalue(get_child(node, 0));
+      sub1 = comp_lvalue(child0);
       return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
     } else if (op == SIZEOF_KW) {
-      if (get_op(get_child(node, 0)) == INT_KW
-       || get_op(get_child(node, 0)) == CHAR_KW
-       || get_op(get_child(node, 0)) == VOID_KW
-       || get_op(get_child(node, 0)) == ENUM_KW
-       || (( get_op(get_child(node, 0)) == STRUCT_KW || get_op(get_child(node, 0)) == UNION_KW)
-          && get_child(get_child(node, 0), 0) >= 1)) { // If it's a pointer
+      if (get_op(child0) == INT_KW
+       || get_op(child0) == CHAR_KW
+       || get_op(child0) == VOID_KW
+       || get_op(child0) == ENUM_KW
+       || (( get_op(child0) == STRUCT_KW || get_op(child0) == UNION_KW)
+          && get_child(child0, 0) >= 1)) { // If it's a pointer
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
-      } else if (get_op(get_child(node, 0)) == STRUCT_KW) {
-        return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(get_child(node, 0), 1)), outer_op, op);
+      } else if (get_op(child0) == STRUCT_KW) {
+        return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child(child0, 1)), outer_op, op);
       } else {
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
     } else if (op == '&') {
-      return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(get_child(node, 0)), outer_op, op);
+      return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
     } else {
       printf("1: op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
@@ -1204,33 +1211,33 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     }
   } else if (nb_children == 2) {
     if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == ',') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
     } else if (op == '=' || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
-      sub1 = comp_lvalue(get_child(node, 0));
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub1 = comp_lvalue(child0);
+      sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
     } else if (op == '[') { // array indexing
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, '+');
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, '+');
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, '+');
+      sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, '+');
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
     } else if (op == ARROW) { // member access is implemented like array access
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub2 = struct_member_var(get_child(node, 1));
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub2 = struct_member_var(child1);
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
     } else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
       if (context == RVALUE_CTX_TEST) {
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_BASE, 0, op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_BASE, 0, op);
+        sub1 = comp_rvalue_go(child0, RVALUE_CTX_BASE, 0, op);
+        sub2 = comp_rvalue_go(child1, RVALUE_CTX_BASE, 0, op);
         return with_prefixed_side_effects(test_side_effects, string_concat5(wrap_str_lit("[ "), sub1, test_op_to_str(op), sub2, wrap_str_lit(" ]")));
       } else {
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+        sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+        sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
         return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
       }
     } else if (op == CAST) { // Casts are no-op
-      return comp_rvalue_go(get_child(node, 1), context, 0, op);
+      return comp_rvalue_go(child1, context, 0, op);
     } else if (op == AMP_AMP || op == BAR_BAR) {
       fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
       return 0;
@@ -1240,9 +1247,9 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     }
   } else if (nb_children == 3) {
     if (op == '?') {
-      sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub3 = comp_rvalue_go(get_child(node, 2), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+      sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
       return 0;
     } else {
@@ -1265,31 +1272,31 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         //
         // As a heuristic, we add parenthesis whenever the left or right side of
         // the operator is a different comparison operator.
-        sub1 = non_parenthesized_operand(get_child(node, 0)); // un-parenthesized lhs
-        sub2 = non_parenthesized_operand(get_child(node, 1)); // un-parenthesized rhs
+        sub1 = non_parenthesized_operand(child0); // un-parenthesized lhs
+        sub2 = non_parenthesized_operand(child1); // un-parenthesized rhs
 
         // if lhs is && or ||, and different from the current operator
         if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2), op);
+          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
           sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
         } else {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, get_child(node, 2), op);
+          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
         }
 
         // if rhs is && or ||, and different from the current operator
         if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3), op);
+          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
           sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
         } else {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, get_child(node, 3), op);
+          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
         }
         return string_concat3(sub1, op_to_str(op), sub2);
       } else {
-        if (test_side_effects != 0 || get_child(node, 2) != 0 || get_child(node, 3) != 0) {
+        if (test_side_effects != 0 || child2 != 0 || child3 != 0) {
           fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
         }
-        sub1 = comp_rvalue_go(get_child(node, 0), RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        sub2 = comp_rvalue_go(get_child(node, 1), RVALUE_CTX_ARITH_EXPANSION, 0, op);
+        sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+        sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
         return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
       }
     } else {
