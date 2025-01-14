@@ -27,7 +27,11 @@ bootstrap_with_gcc() {
 
   gcc -o $TEMP_DIR/pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c
   # gcc -E -P -DPNUT_CC $PNUT_EXE_OPTIONS pnut.c > "$TEMP_DIR/pnut-after-cpp.c"
-  ./$TEMP_DIR/pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
+  ./$TEMP_DIR/pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe || {
+    echo "Failed to compile pnut-x86-by-pnut-x86-by-gcc.exe"
+    tail -n 20 $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
+    exit 1
+  }
 
   chmod +x $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
 
