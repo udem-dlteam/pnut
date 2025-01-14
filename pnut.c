@@ -2394,7 +2394,7 @@ int parse_param_list() {
       }
     } else if (tok == IDENTIFIER) {
       // Support K&R param syntax in function definition
-      decl = new_ast3(DECL, val, new_ast0(INT_KW, 0), 0);
+      decl = new_ast3(DECL, new_ast0(IDENTIFIER, val), new_ast0(INT_KW, 0), 0);
     } else if (tok == ELLIPSIS) {
       // ignore ELLIPSIS nodes for now, but it should be the last parameter
       get_tok();
@@ -2429,7 +2429,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
 
   switch (tok) {
     case IDENTIFIER:
-      result = new_ast3(DECL, val, parent_type, 0); // child#2 is the initializer
+      result = new_ast3(DECL, new_ast0(IDENTIFIER, val), parent_type, 0); // child#2 is the initializer
       get_tok();
       break;
 
@@ -2514,8 +2514,8 @@ ast parse_declarator_and_initializer(ast parent_type) {
 }
 
 void add_typedef(ast declarator) {
-  int decl_ident = get_child(declarator, 0);
-  ast decl_type = get_child(declarator, 1); // child#1 is the type
+  int decl_ident = get_val(get_child__(DECL, IDENTIFIER, declarator, 0));
+  ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
   if (get_child(declarator, 2) != 0) {
     parse_error("Initializer not allowed in typedef", tok);
   }
