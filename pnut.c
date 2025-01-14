@@ -325,6 +325,58 @@ ast get_child(ast node, int i) {
   return heap[node+i+1];
 }
 
+// Because everything is an int in pnut, it's easy to make mistakes and pass the
+// wrong node type to a function. These versions of get_child take the input
+// and/or output node type and checks that the node has the expected type before
+// returning the child node.
+#ifdef SAFE_MODE
+// This function checks that the parent node has the expected operator before
+// returning the child node.
+ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i) {
+  if (get_op(node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+    exit(1);
+  }
+  return heap[node+i+1];
+}
+
+// This function checks that the parent node has the expected operator and that
+// the child node has the expected operator before returning the child node.
+ast get_child__go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  if (get_op(node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+    exit(1);
+  }
+  if (get_op(heap[node+i+1]) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(heap[node+i+1]));
+    exit(1);
+  }
+  return heap[node+i+1];
+}
+
+// This function checks that the parent node has the expected operator and that
+// the child node has the expected operator (if child node is not 0) before
+// returning the child node.
+ast get_child_opt_go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  if (get_op(node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+    exit(1);
+  }
+  if (heap[node+i+1] > 0 && get_op(heap[node+i+1]) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(heap[node+i+1]));
+    exit(1);
+  }
+  return heap[node+i+1];
+}
+#define get_child_(expected_parent_node, node, i) get_child_go(__FILE__, __LINE__, expected_parent_node, node, i)
+#define get_child__(expected_parent_node, expected_node, node, i) get_child__go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
+#define get_child_opt_(expected_parent_node, expected_node, node, i) get_child_opt_go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
+#else
+#define get_child_(expected_parent_node, node, i) get_child(node, i)
+#define get_child__(expected_parent_node, expected_node, node, i) get_child(node, i)
+#define get_child_opt_(expected_parent_node, expected_node, node, i) get_child(node, i)
+#endif
+
 void set_child(ast node, int i, ast child) {
   heap[node+i+1] = child;
 }
