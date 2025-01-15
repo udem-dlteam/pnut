@@ -646,6 +646,10 @@ int end_ident() {
   return probe;
 }
 
+int probe_string(int probe) {
+  return heap[probe+1]; // return the start of the string
+}
+
 void get_tok();
 void get_ident();
 void expect_tok(int expected);
@@ -1146,8 +1150,8 @@ int eval_constant(ast expr, bool if_macro) {
 
   switch (op) {
     case PARENS:    return eval_constant(child0, if_macro);
-    case INTEGER:   return -get_val(expr);
-    case CHARACTER: return get_val(expr);
+    case INTEGER:   return -get_val_(INTEGER, expr);
+    case CHARACTER: return get_val_(CHARACTER, expr);
     case '~':       return ~eval_constant(child0, if_macro);
     case '!':       return !eval_constant(child0, if_macro);
     case '-':
@@ -1213,7 +1217,7 @@ int eval_constant(ast expr, bool if_macro) {
       else return eval_constant(child1, if_macro);
 
     case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val(child0) == DEFINED_ID) {
+      if (if_macro && get_val_(IDENTIFIER, child0) == DEFINED_ID) {
         return child1 == MACRO;
       } else {
         fatal_error("unknown function call in constant expressions");
@@ -2344,7 +2348,7 @@ int parse_stars_for_type(int type) {
   // We don't want to mutate types that are typedef'ed, so making a copy of the type obj
   if (stars != 0) {
     type = clone_ast(type);
-    set_val(type, stars);
+    set_child(type, 0, stars);
   }
 
   return type;
@@ -2466,7 +2470,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
       type = parse_type_with_stars();
 
-      if (get_val(type) == 0 && get_op(type) == VOID_KW)
+      if (get_op(type) == VOID_KW && get_stars(type) == 0)
         parse_error("variable with void type", tok);
 
       ident = 0; // Anonymous struct
@@ -2483,9 +2487,9 @@ ast parse_struct_or_union(int struct_or_union_tok) {
             type = new_ast2('[', new_ast0(INTEGER, 0), type);
             get_tok();
           } else if (tok == INTEGER) {
-        type = new_ast2('[', new_ast0(INTEGER, -val), type);
-        get_tok();
-        expect_tok(']');
+            type = new_ast2('[', new_ast0(INTEGER, -val), type);
+            get_tok();
+            expect_tok(']');
           } else {
             parse_error("array size must be an integer constant", tok);
           }
@@ -2523,7 +2527,7 @@ ast parse_param_decl() {
     type = parse_type_with_stars();
     name = val;
     expect_tok(IDENTIFIER);
-    if (get_val(type) == 0 && get_op(type) == VOID_KW) parse_error("variable with void type", tok);
+    if (get_op(type) == VOID_KW && get_stars(type) == 0) parse_error("variable with void type", tok);
     result = new_ast3(VAR_DECL, name, type, 0);
   } else if (tok == IDENTIFIER) {
     // Support K&R param syntax in function definition
@@ -2624,7 +2628,7 @@ ast parse_definition(int local) {
 
       } else {
 
-        if (get_val(this_type) == 0 && get_op(this_type) == VOID_KW) {
+        if (get_op(this_type) == VOID_KW && get_stars(this_type) == 0) {
           parse_error("variable with void type", tok);
         }
 
@@ -2691,7 +2695,7 @@ ast parse_definition(int local) {
     // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
     // don't always have a name.
     if (get_op(type) == STRUCT_KW || get_op(type) == UNION_KW || get_op(type) == ENUM_KW) {
-      if (get_child(type, 1) != 0 && get_val(get_child(type, 1)) != val) {
+      if (get_child(type, 1) != 0 && get_val_(IDENTIFIER, get_child(type, 1)) != val) {
         syntax_error("typedef name must match struct/union/enum name");
       }
       set_child(type, 1, new_ast0(IDENTIFIER, val));
@@ -2748,7 +2752,7 @@ ast parse_primary_expression() {
     get_tok();
 
     if (tok == STRING) { // Contiguous strings
-      result = cons(get_val(result), 0); // Result is now a list of string values
+      result = cons(get_val_(STRING, result), 0); // Result is now a list of string values
       tail = result;
       while (tok == STRING) {
         set_cdr(tail, cons(val, 0));

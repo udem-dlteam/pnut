@@ -422,21 +422,21 @@ void print_glo_decls() {
 text format_special_var(ast ident, ast prefixed_with_dollar) {
   int op = get_op(ident);
   if (op == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str_lit("__t"), get_val(ident));
+    return string_concat(wrap_str_lit("__t"), get_val_(IDENTIFIER_INTERNAL, ident));
   } else if (op == IDENTIFIER_STRING) {
-    return string_concat(wrap_str_lit("__str_"), get_val(ident));
+    return string_concat(wrap_str_lit("__str_"), get_val_(IDENTIFIER_STRING, ident));
   } else if (op == IDENTIFIER_DOLLAR) {
     if (prefixed_with_dollar) {
-      if (get_val(ident) <= 9) {
-        return wrap_int(get_val(ident));
+      if (get_val_(IDENTIFIER_DOLLAR, ident) <= 9) {
+        return wrap_int(get_val_(IDENTIFIER_DOLLAR, ident));
       } else {
-        return string_concat3(wrap_char('{'), wrap_int(get_val(ident)), wrap_char('}'));
+        return string_concat3(wrap_char('{'), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)), wrap_char('}'));
       }
     } else {
-      if (get_val(ident) <= 9) {
-        return string_concat(wrap_char('$'), wrap_int(get_val(ident)));
+      if (get_val_(IDENTIFIER_DOLLAR, ident) <= 9) {
+        return string_concat(wrap_char('$'), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)));
       } else {
-        return string_concat3(wrap_str_lit("${"), wrap_int(get_val(ident)), wrap_char('}'));
+        return string_concat3(wrap_str_lit("${"), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)), wrap_char('}'));
       }
     }
   } else if (op == IDENTIFIER_EMPTY) {
@@ -449,28 +449,28 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
 }
 
 text struct_member_var(ast member_name_ident) {
-  return string_concat(wrap_str_lit("__"), wrap_str_pool(get_val(get_val(member_name_ident))));
+  return string_concat(wrap_str_lit("__"), wrap_str_pool(probe_string(get_val_(IDENTIFIER, member_name_ident))));
 }
 
 text struct_sizeof_var(ast struct_name_ident) {
-  return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(get_val(get_val(struct_name_ident))));
+  return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(probe_string(get_val_(IDENTIFIER, struct_name_ident))));
 }
 
-text global_var(ast ident_tok) {
-  return string_concat(wrap_char('_'), wrap_str_pool(get_val(ident_tok)));
+text global_var(ast ident) {
+  return string_concat(wrap_char('_'), wrap_str_pool(probe_string(ident)));
 }
 
 text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
   if (get_op(ident) == IDENTIFIER) {
-    if (cgc_lookup_var(get_val(ident), cgc_locals)) {
+    if (cgc_lookup_var(get_val_(IDENTIFIER, ident), cgc_locals)) {
       // TODO: Constant param optimization
-      if (get_val(ident) == ARGV_ID) {
+      if (get_val_(IDENTIFIER, ident) == ARGV_ID) {
         return wrap_str_lit("argv_");
       } else {
-        return wrap_str_pool(get_val(get_val(ident)));
+        return wrap_str_pool(probe_string(get_val_(IDENTIFIER, ident)));
       }
     } else {
-      return global_var(get_val(ident));
+      return global_var(get_val_(IDENTIFIER, ident));
     }
   } else {
     return format_special_var(ident, prefixed_with_dollar);
@@ -482,7 +482,7 @@ text env_var(ast ident) {
 }
 
 text function_name(int ident_tok) {
-  return string_concat(wrap_char('_'), wrap_str_pool(get_val(ident_tok)));
+  return string_concat(wrap_char('_'), wrap_str_pool(probe_string(ident_tok)));
 }
 
 ast fresh_ident() {
@@ -508,16 +508,16 @@ ast fresh_string_ident(int string_probe) {
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
-  int ident_tok = get_child_(VAR_DECL, decl, 0);
+  int ident_probe = get_child_(VAR_DECL, decl, 0);
 
   // Make sure we're not shadowing an existing local variable
-  if (cgc_lookup_var(ident_tok, cgc_locals)) {
-    putstr("var="); putstr(string_pool + get_val(ident_tok)); putchar('\n');
+  if (cgc_lookup_var(ident_probe, cgc_locals)) {
+    putstr("var="); putstr(string_pool + probe_string(ident_probe)); putchar('\n');
     fatal_error("Variable is already in local environment");
   }
 
   // The var is not part of the environment, so we add it.
-  cgc_add_local_var(kind, ident_tok, get_child_(VAR_DECL, decl, 1));
+  cgc_add_local_var(kind, ident_probe, get_child_(VAR_DECL, decl, 1));
 }
 
 void add_fun_params_to_local_env(ast lst) {
@@ -533,8 +533,8 @@ void add_fun_params_to_local_env(ast lst) {
 //
 // Also, the shell backend doesn't support variables with aggregate types.
 void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for assert_idents_are_safe
-  ast ident_tok = get_child_(VAR_DECL, variable, 0);
-  char* name = string_pool + get_val(ident_tok);
+  ast ident_probe = get_child_(VAR_DECL, variable, 0);
+  char* name = string_pool + probe_string(ident_probe);
   ast type = get_child_(VAR_DECL, variable, 1);
   if (name[0] == '_'
   || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
@@ -545,14 +545,14 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   // IFS is a special shell variable that's overwritten by certain.
   // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
   // This check only applies to local variables because globals are prefixed with _.
-  if (local && (ident_tok == ARGV__ID || ident_tok == IFS_ID)) {
+  if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
     printf("%s ", name);
     fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
   }
 
   // Local variables don't correspond to memory locations, and can't store
   // more than 1 number/pointer.
-  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW && get_val(type) == 0))) {
+  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW && get_stars(type) == 0))) {
     printf("%s ", name);
     fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
   }
@@ -908,8 +908,8 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
-      sub1 = fresh_string_ident(get_val(node));
-      literals_inits = new_ast2(',', new_ast2('=', sub1, get_val(node)), literals_inits);
+      sub1 = fresh_string_ident(get_val_(STRING, node));
+      literals_inits = new_ast2(',', new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
       return sub1;
     } else {
       printf("handle_side_effects_go: op=%d %c", op, op);
@@ -1119,15 +1119,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
 
   if (nb_children == 0) {
     if (op == INTEGER) {
-      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val(node)));
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val_(INTEGER, node)));
     } else if (op == CHARACTER) {
 #ifdef SH_INLINE_CHAR_LITERAL
-      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(node)));
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(CHARACTER, node)));
 #else
       if (context == RVALUE_CTX_ARITH_EXPANSION) {
-        return character_ident(get_val(node));
+        return character_ident(get_val_(CHARACTER, node));
       } else {
-        return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val(node))));
+        return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), character_ident(get_val_(CHARACTER, node))));
       }
 #endif
     } else if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR) {
@@ -1155,7 +1155,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // Check if the rest of ast is a literal, if so directly return the negated value.
       // Note: I think this can be simplified by not wrapped in () in the else case.
       if (get_op(child0) == INTEGER) {
-        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val(child0)));
+        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(INTEGER, child0)));
       } else {
         sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
         return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("-("), sub1, wrap_char(')')), outer_op, op);
@@ -1448,8 +1448,8 @@ text comp_putchar_inline(ast param) {
   text res;
   ast ident;
 
-  if (get_op(param) == CHARACTER && get_val(param) >= 32 && get_val(param) <= 126) { // Printable ASCII characters
-    return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_char(get_val(param)), true), wrap_char('\"'));
+  if (get_op(param) == CHARACTER && get_val_(CHARACTER, param) >= 32 && get_val_(CHARACTER, param) <= 126) { // Printable ASCII characters
+    return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_char(get_val_(CHARACTER, param)), true), wrap_char('\"'));
   }
 
   res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
@@ -1643,16 +1643,16 @@ void handle_printf_call(char *format_str, ast params) {
 text comp_fun_call_code(ast node, ast assign_to) {
   ast name = get_child__('(', IDENTIFIER, node, 0);
   ast params = get_child_('(', node, 1);
-  int name_id = get_val(name);
+  int name_id = get_val_(IDENTIFIER, name);
   text res;
 
 #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && params != 0 && get_op(params) == STRING)) { // puts("..."), putstr("..."), printf("...")
-      return printf_call(STRING_BUF(get_val(params)), 0, 0, true);
+      return printf_call(STRING_BUF(get_val_(STRING, params)), 0, 0, true);
     } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) {
-      handle_printf_call(STRING_BUF(get_val(get_child(params, 0))), get_child(params, 1));
+      handle_printf_call(STRING_BUF(get_val_(STRING, get_child(params, 0))), get_child(params, 1));
       return 0;
     }
 #ifdef SH_INLINE_PUTCHAR
@@ -1684,7 +1684,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
 
   return string_concat3(
-    function_name(get_val(name)),
+    function_name(get_val_(IDENTIFIER, name)),
     wrap_char(' '),
     concatenate_strings_with(comp_lvalue(assign_to), fun_call_params(params), wrap_char(' '))
   );
@@ -2069,7 +2069,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == ':') {
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val(get_val(get_child_(':', node, 0)))), wrap_char(':')));
+    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(probe_string(get_val_(IDENTIFIER, get_child_(':', node, 0)))), wrap_char(':')));
     return comp_statement(get_child_(':', node, 1), stmt_ctx);
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
@@ -2125,7 +2125,7 @@ void comp_glo_fun_decl(ast node) {
     // Show the mapping between the function parameters and $1, $2, etc.
     while (params != 0) {
       var = get_child__(',', VAR_DECL, params, 0);
-      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val(get_val(var))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
+      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(probe_string(get_child_(VAR_DECL, var, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
       params = get_child_(',', params, 1);
       params_ix += 1;
     }
@@ -2198,9 +2198,9 @@ void comp_glo_var_decl(ast node) {
   // be able to generate the correct code for these cases.
   if ((get_op(type) == '['
     && get_op(get_child_('[', type, 1)) == STRUCT_KW
-    && get_val(get_child_('[', type, 1)) == 0)
-    || (get_op(type) == STRUCT_KW && get_val(type) == 0)) {
-    printf("%s ", string_pool + get_val(name));
+    && get_stars(get_child_('[', type, 1)) == 0)
+    || (get_op(type) == STRUCT_KW && get_stars(type) == 0)) {
+    printf("%s ", string_pool + probe_string(name));
     fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
   }
 
@@ -2211,7 +2211,7 @@ void comp_glo_var_decl(ast node) {
         wrap_str_lit("defarr "),
         env_var(new_ast0(IDENTIFIER, name)),
         wrap_char(' '),
-        wrap_int(get_val(get_child_('[', type, 0)))
+        wrap_int(get_val_(INTEGER, get_child__('[', INTEGER, type, 0)))
       )
     );
   } else {
@@ -2240,7 +2240,7 @@ void comp_assignment_constant(text constant_name, ast rhs) {
 // it easy to implement enums.
 void comp_enum_cases(ast ident, ast cases) {
   if (ident != 0) {
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val(get_val(ident))), wrap_str_lit(" enum declaration")));
+    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(probe_string(get_val_(IDENTIFIER, ident))), wrap_str_lit(" enum declaration")));
   } else {
     append_glo_decl(wrap_str_lit("# Enum declaration"));
   }
@@ -2281,7 +2281,7 @@ void comp_struct(ast ident, ast members) {
   int offset = new_ast0(INTEGER, 0);
   int field_type;
   if (ident != 0) {
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val(get_val(ident))), wrap_str_lit(" struct member declarations")));
+    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(probe_string(get_val_(IDENTIFIER, ident))), wrap_str_lit(" struct member declarations")));
   } else {
     append_glo_decl(wrap_str_lit("# Struct member declarations"));
   }
@@ -2293,10 +2293,10 @@ void comp_struct(ast ident, ast members) {
     // Arrays and struct value types are not supported for now.
     // When we have type information on the local and global variables, we'll
     // be able to generate the correct code for these cases.
-    if (get_op(field_type) == '[' || (get_op(field_type) == STRUCT_KW && get_val(field_type) == 0)) {
+    if (get_op(field_type) == '[' || (get_op(field_type) == STRUCT_KW && get_stars(field_type) == 0)) {
       fatal_error("Nested structures not supported by shell backend. Use a reference type instead.");
     } else {
-      set_val(offset, get_val(offset) - 1);
+      set_val(offset, get_val_(INTEGER, offset) - 1);
     }
   }
 
