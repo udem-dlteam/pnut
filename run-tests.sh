@@ -21,6 +21,7 @@ backend=$1; shift
 bootstrap=0
 safe=0
 fast=0
+compile_only=0
 shell="$SHELL" # Use current shell as the default
 pattern=".*"
 while [ $# -gt 0 ]; do
@@ -30,6 +31,7 @@ while [ $# -gt 0 ]; do
     --bootstrap)     bootstrap=1;        shift 1;;
     --safe)          safe=1;             shift 1;;
     --fast)          fast=1;             shift 1;;
+    --compile-only)  compile_only=1;     shift 1;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -221,6 +223,11 @@ run_test() { # file_to_test: $1
   compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
 
   if [ $? -eq 0 ]; then # If compilation was successful
+    if [ "$compile_only" -eq 1 ]; then
+      echo "✅ Compiled $file"
+      return 0
+    fi
+
     chmod +x "$dir/$filename.$ext"
     execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$dir/$filename.output" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then # If the executable ran successfully
