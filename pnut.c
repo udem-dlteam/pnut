@@ -668,6 +668,7 @@ void get_ch() {
       include_stack = include_stack->next;
       fp = include_stack->fp;
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+      fp_filepath = include_stack->filepath;
       line_number = include_stack->line_number;
       column_number = include_stack->column_number;
 #endif
