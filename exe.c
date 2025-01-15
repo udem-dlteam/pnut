@@ -474,7 +474,7 @@ int type_width(ast type, int stars, bool array_value, bool word_align) {
     // sizeof, in struct definitions, etc.) while in other contexts we care
     // about the pointer (i.e. when passing an array to a function, etc.)
     if (array_value) {
-      return round_up_to_word_size(get_val(get_child(type, 0)) * type_width_ast(get_child(type, 1), true, false));
+      return round_up_to_word_size(get_val(get_child_('[', type, 0)) * type_width_ast(get_child_('[', type, 1), true, false));
     } else {
       return word_size; // Array is a pointer to the first element
     }
@@ -511,29 +511,29 @@ ast canonicalize_type(ast type) {
   ast res = type;
   int binding;
 
-  if (get_op(type) == STRUCT_KW && get_child(type, 2) == 0) { // struct with empty def => reference
-    binding = cgc_lookup_struct(get_val(get_child(type, 1)), cgc_globals);
+  if (get_op(type) == STRUCT_KW && get_child_opt_(STRUCT_KW, ',', type, 2) == 0) { // struct with empty def => reference
+    binding = cgc_lookup_struct(get_val(get_child__(STRUCT_KW, IDENTIFIER, type, 1)), cgc_globals);
     if (binding == 0) fatal_error("canonicalize_type: struct type not defined");
     res = heap[binding+3];
     if (get_val(type) != 0) { // Copy stars
       res = clone_ast(res);
-      set_child(res, 0, get_child(type, 0));
+      set_child(res, 0, get_child_(STRUCT_KW, type, 0));
     }
-  } else if (get_op(type) == UNION_KW && get_child(type, 2) == 0) { // union with empty def => reference
-    binding = cgc_lookup_union(get_val(get_child(type, 1)), cgc_globals);
+  } else if (get_op(type) == UNION_KW && get_child_opt_(UNION_KW, ',', type, 2) == 0) { // union with empty def => reference
+    binding = cgc_lookup_union(get_val(get_child__(UNION_KW, IDENTIFIER, type, 1)), cgc_globals);
     if (binding == 0) fatal_error("canonicalize_type: union type not defined");
     res = heap[binding+3];
     if (get_val(type) != 0) { // Copy stars
       res = clone_ast(res);
-      set_child(res, 0, get_child(type, 0));
+      set_child(res, 0, get_child_(UNION_KW, type, 0));
     }
-  } else if (get_op(type) == ENUM_KW && get_child(type, 1) == 0) { // enum with empty def => reference
-    binding = cgc_lookup_enum(get_val(get_child(type, 0)), cgc_globals);
+  } else if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, ',', type, 1) == 0) { // enum with empty def => reference
+    binding = cgc_lookup_enum(get_val(get_child__(ENUM_KW, IDENTIFIER, type, 0)), cgc_globals);
     if (binding == 0) fatal_error("canonicalize_type: enum type not defined");
     res = heap[binding+3];
     if (get_val(type) != 0) { // Copy stars
       res = clone_ast(res);
-      set_child(res, 0, get_child(type, 0));
+      set_child(res, 0, get_child_(ENUM_KW, type, 0));
     }
   }
 
@@ -553,16 +553,16 @@ int struct_union_size(ast type) {
   switch (get_op(type)) {
     case STRUCT_KW:
   while (get_op(members) == ',') {
-    member_type = get_child(members, 1);
-    members = get_child(members, 2);
+        member_type = get_child_(',', members, 1);
+        members = get_child_opt_(',', ',', members, 2);
         member_size = type_width_ast(member_type, true, true);
         size += member_size;
       }
       break;
     case UNION_KW:
       while (get_op(members) == ',') {
-        member_type = get_child(members, 1);
-        members = get_child(members, 2);
+        member_type = get_child_(',', members, 1);
+        members = get_child_opt_(',', ',', members, 2);
         member_size = type_width_ast(member_type, true, true);
         // Union size is the max of its members
         if (member_size > size) size = member_size;
@@ -583,20 +583,20 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast ident;
 
   while (get_op(members) == ',') {
-    ident = get_val(get_child(members, 0));
+    ident = get_val(get_child_opt_(',', IDENTIFIER, members, 0));
     if (ident == 0) { // Anonymous struct member, search that struct
-      sub_offset = struct_member_offset_go(get_child(members, 1), member_ident);
+      sub_offset = struct_member_offset_go(get_child_(',', members, 1), member_ident);
       if (sub_offset != -1) return offset + sub_offset;
-    } else if (get_val(member_ident) == get_val(get_child(members, 0))) {
+    } else if (get_val(member_ident) == ident) {
       return offset;
     }
 
     if (get_op(struct_type) == STRUCT_KW) {
       // For unions, fields are always at offset 0. We must still iterate
       // because the field may be in an anonymous struct.
-    offset += round_up_to_word_size(type_width_ast(get_child(members, 1), true, true));
+      offset += round_up_to_word_size(type_width_ast(get_child_(',', members, 1), true, true));
     }
-    members = get_child(members, 2);
+    members = get_child_opt_(',', ',', members, 2);
   }
 
   return -1;
@@ -614,15 +614,14 @@ ast struct_member_go(ast struct_type, ast member_ident) {
   ast ident;
 
   while (members != 0) {
-    ident = get_val(get_child(members, 0));
+    ident = get_val(get_child_opt_(',', IDENTIFIER, members, 0));
     if (ident == 0) { // Anonymous struct member, search that struct
-      ident = struct_member_go(get_child(members, 1), member_ident);
+      ident = struct_member_go(get_child_(',', members, 1), member_ident);
       if (ident != 0) return ident; // Found member in the anonymous struct
     } else if (get_val(member_ident) == ident) {
       return members;
     }
-
-    members = get_child(members, 2);
+    members = get_child_opt_(',', ',', members, 2);
   }
 
   return -1;
@@ -637,7 +636,7 @@ ast struct_member(ast struct_type, ast member_ident) {
 // Width of an object pointed to by a reference type.
 int ref_type_width(ast type) {
   if (get_op(type) == '[') {
-    return type_width_ast(get_child(type, 1), false, false); // size of inner type
+    return type_width_ast(get_child_('[', type, 1), false, false); // size of inner type
   } else if (get_val(type) == 1) { // pointer *
     return type_width(type, 0, false, false); // size of inner type
   } else {
@@ -703,7 +702,7 @@ ast value_type(ast node) {
     if (op == '*') {
       left_type = value_type(child0);
       if (get_op(left_type) == '[') { // Array type
-        return get_child(left_type, 1);
+        return get_child_('[', left_type, 1);
       } else if (get_val(left_type) != 0) { // Pointer type
         left_type = clone_ast(left_type);
         set_val(left_type, get_val(left_type) - 1); // one less indirection
@@ -716,7 +715,7 @@ ast value_type(ast node) {
     } else if (op == '&') {
       left_type = value_type(child0);
       if (get_op(left_type) == '[') {
-        left_type = clone_ast(get_child(left_type, 1)); // Inner type
+        left_type = clone_ast(get_child_('[', left_type, 1)); // Inner type
         set_val(left_type, get_val(left_type) + 1); // Increment star by 2, to account for the [ we just removed
       } else {
         left_type = clone_ast(left_type);
@@ -756,13 +755,13 @@ ast value_type(ast node) {
       right_type = value_type(child1);
 
       if (get_op(left_type) == '[') { // Array
-        return get_child(left_type, 1); // array inner type
+        return get_child_('[', left_type, 1); // array inner type
       } else if (get_val(left_type) != 0) { // Pointer
         left_type = clone_ast(left_type);
         set_val(left_type, get_val(left_type) - 1); // one less indirection
         return left_type;
       } else if (get_op(right_type) == '[') { // Array, but with the operands flipped (i.e. 0[arr] instead of arr[0])
-        return get_child(right_type, 1); // array inner type
+        return get_child_('[', right_type, 1); // array inner type
       } else if (get_val(right_type) != 0) {
         right_type = clone_ast(right_type);
         set_val(right_type, get_val(right_type) - 1); // one less indirection
@@ -791,7 +790,7 @@ ast value_type(ast node) {
     } else if (op == '.') {
       left_type = value_type(child0);
       if (is_struct_or_union_type(left_type) && get_val(left_type) == 0) {
-        return get_child(struct_member(left_type, child1), 1); // child 1 of member is the type
+        return get_child_(',', struct_member(left_type, child1), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: . operator on non-struct pointer type");
         return -1;
@@ -800,7 +799,7 @@ ast value_type(ast node) {
       // Same as '.', but left_type must be a pointer
       left_type = value_type(child0);
       if (is_struct_or_union_type(left_type) && get_val(left_type) == 1) {
-        return get_child(struct_member(left_type, child1), 1); // child 1 of member is the type
+        return get_child_(',', struct_member(left_type, child1), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
         return -1;
@@ -952,10 +951,14 @@ int codegen_params(ast params) {
 
   int fs = 0;
 
+  // Function params are comma expressions that aren't exactly like comma lists.
+  // Comma lists end with a new_ast2(',', last, 0) node, while function params
+  // end with a new_ast2(',', second_last, last) if there are more than one param
+  // and are just the last param if there is only one.
   if (params != 0) {
     if (get_op(params) == ',') {
-      fs = codegen_params(get_child(params, 1));
-      fs += codegen_param(get_child(params, 0));
+      fs = codegen_params(get_child_(',', params, 1));
+      fs += codegen_param(get_child_(',', params, 0));
     } else {
       fs = codegen_param(params);
     }
@@ -965,18 +968,17 @@ int codegen_params(ast params) {
 }
 
 void codegen_call(ast node) {
-
-  ast fun = get_child(node, 0);
-  ast name = get_val(fun);
+  ast fun_ident = get_child__('(', IDENTIFIER, node, 0);
+  ast ident_probe = get_val(fun_ident);
   ast params = get_child(node, 1);
   ast nb_params = codegen_params(params);
 
-  int binding = cgc_lookup_fun(name, cgc_globals);
+  int binding = cgc_lookup_fun(ident_probe, cgc_globals);
   int lbl;
 
   if (binding == 0) {
     lbl = alloc_label();
-    cgc_add_global_fun(name, lbl, 0);
+    cgc_add_global_fun(ident_probe, lbl, 0);
     binding = cgc_globals;
   }
 
@@ -1073,7 +1075,7 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width_ast(get_child(struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width_ast(get_child_(',', struct_member(type, child1), 1), true, true); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: . operator on non-struct type");
       }
@@ -1089,7 +1091,7 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width_ast(get_child(struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width_ast(get_child_(',', struct_member(type, child1), 1), true, true); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
@@ -1344,7 +1346,7 @@ void codegen_rvalue(ast node) {
     } else if (op == '.') {
       type1 = value_type(child0);
       if (is_struct_or_union_type(type1) && get_val(type1) == 0) {
-        type2 = get_child(struct_member(type1, child1), 1);
+        type2 = get_child_(',', struct_member(type1, child1), 1);
         codegen_lvalue(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
@@ -1362,7 +1364,7 @@ void codegen_rvalue(ast node) {
     } else if (op == ARROW) {
       type1 = value_type(child0);
       if (is_struct_or_union_type(type1) && get_val(type1) == 1) {
-        type2 = get_child(struct_member(type1, child1), 1);
+        type2 = get_child_(',', struct_member(type1, child1), 1);
         codegen_rvalue(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
@@ -1479,19 +1481,19 @@ void codegen_begin() {
 void handle_enum_struct_union_type_decl(ast type);
 
 void codegen_enum(ast node) {
-  ast name = get_child(node, 1);
-  ast cases = get_child(node, 2);
+  ast name = get_child_opt_(ENUM_KW, IDENTIFIER, node, 1);
+  ast cases = get_child_opt_(ENUM_KW, ',', node, 2);
   int binding;
 
-  while (get_op(cases) == ',') {
-    cgc_add_enum(get_val(get_child(cases, 0)), get_child(cases, 1));
-    cases = get_child(cases, 2);
-  }
-
-  if (name != 0 && get_child(node, 2) != 0) { // if enum has a name and members (not a reference to an existing type)
+  if (name != 0 && cases != 0) { // if enum has a name and members (not a reference to an existing type)
     binding = cgc_lookup_enum(get_val(name), cgc_globals);
     if (binding != 0) { fatal_error("codegen_enum: enum already declared"); }
     cgc_add_typedef(get_val(name), BINDING_TYPE_ENUM, node);
+  }
+
+  while (get_op(cases) == ',') {
+    cgc_add_enum(get_val(get_child__(',', IDENTIFIER, cases, 0)), get_child__(',', INTEGER, cases, 1));
+    cases = get_child_opt_(',', ',', cases, 2);
   }
 }
 
@@ -1500,7 +1502,7 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   ast members = get_child(node, 2);
   int binding;
 
-  if (name != 0 && get_child(node, 2) != 0) { // if struct has a name and members (not a reference to an existing type)
+  if (name != 0 && members != 0) { // if struct has a name and members (not a reference to an existing type)
     binding = cgc_lookup_binding_ident(kind, get_val(name), cgc_globals);
     if (binding != 0 && heap[binding + 3] != node) { fatal_error("codegen_struct_or_union: struct/union/enum already declared"); }
     cgc_add_typedef(get_val(name), kind, node);
@@ -1510,8 +1512,8 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   // This is not the right semantic because inner declarations are scoped to
   // this declaration, but it's probably good enough for TCC.
   while (members != 0 && get_op(members) == ',') {
-    handle_enum_struct_union_type_decl(get_child(members, 1));
-    members = get_child(members, 2);
+    handle_enum_struct_union_type_decl(get_child_(',', members, 1));
+    members = get_child_opt_(',', ',', members, 2);
   }
 }
 
@@ -1528,15 +1530,14 @@ void handle_enum_struct_union_type_decl(ast type) {
 }
 
 void codegen_glo_var_decl(ast node) {
-
-  ast name = get_child(node, 0);
-  ast type = get_child(node, 1);
-  ast init = get_child(node, 2);
+  ast name = get_child_(VAR_DECL, node, 0);
+  ast type = get_child_(VAR_DECL, node, 1);
+  ast init = get_child_(VAR_DECL, node, 2);
   int size;
   int binding = cgc_lookup_var(name, cgc_globals);
 
   if (get_op(type) == '[') { // Array declaration
-    size = get_val(get_child(type, 0));
+    size = get_val(get_child_('[', type, 0));
   } else {
     // All non-array types have size 1
     size = 1;
@@ -1572,27 +1573,11 @@ void codegen_glo_var_decl(ast node) {
   }
 }
 
-void codegen_body(ast node) {
-  ast decls;
-  ast variable;
-  ast x;
-  int save_fs = cgc_fs;
-  int save_locals = cgc_locals;
-  ast name;
-  ast type;
-  ast init;
+void codegen_local_var_decl(ast node) {
+  ast name = get_child_(VAR_DECL, node, 0);
+  ast type = get_child_(VAR_DECL, node, 1);
+  ast init = get_child_(VAR_DECL, node, 2);
   int size;
-
-  if (node != 0) {
-    while (get_op(node) == '{') {
-      x = get_child(node, 0);
-      if (get_op(x) == VAR_DECLS) { // Variable declaration
-        decls = get_child(x, 0); // Declaration list
-        while(decls != 0) { // Multiple variable declarations
-          variable = get_child(decls, 0); // Single variable declaration
-          name = get_child(variable, 0);
-          type = get_child(variable, 1);
-          init = get_child(variable, 2);
 
           if (get_op(type) == '[') { // Array declaration
             size = type_width_ast(type, true, true);  // size in bytes (word aligned)
@@ -1615,20 +1600,31 @@ void codegen_body(ast node) {
             size = 1;
           }
           cgc_add_local_var(name, size, type);
-          decls = get_child(decls, 1); // Move to the next declaration in the list
+}
+
+void codegen_body(ast node) {
+  int save_fs = cgc_fs;
+  int save_locals = cgc_locals;
+  ast stmt;
+  ast decls;
+
+  while (node != 0) {
+    stmt = get_child_('{', node, 0);
+    if (get_op(stmt) == VAR_DECLS) { // Variable declaration
+      decls = get_child__(VAR_DECLS, ',', stmt, 0); // Declaration list
+      while(decls != 0) { // Multiple variable declarations
+        codegen_local_var_decl(get_child__(',', VAR_DECL, decls, 0));
+        decls = get_child_opt_(',', ',', decls, 1); // Move to the next declaration in the list
         }
-
       } else {
-        codegen_statement(x);
+      codegen_statement(stmt);
       }
-      node = get_child(node, 1);
+    node = get_child_opt_('{', '{', node, 1);
     }
-
     grow_stack(save_fs - cgc_fs);
 
     cgc_fs = save_fs;
     cgc_locals = save_locals;
-  }
 }
 
 void codegen_statement(ast node) {
@@ -1646,15 +1642,15 @@ void codegen_statement(ast node) {
 
     lbl1 = alloc_label(); // else statement
     lbl2 = alloc_label(); // join point after if
-    codegen_rvalue(get_child(node, 0));
+    codegen_rvalue(get_child_(IF_KW, node, 0));
     pop_reg(reg_X);
     grow_fs(-1);
     xor_reg_reg(reg_Y, reg_Y);
     jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
-    codegen_statement(get_child(node, 1));
+    codegen_statement(get_child_(IF_KW, node, 1));
     jump(lbl2);
     def_label(lbl1);
-    codegen_statement(get_child(node, 2));
+    codegen_statement(get_child_(IF_KW, node, 2));
     def_label(lbl2);
 
   } else if (op == WHILE_KW) {
@@ -1668,12 +1664,12 @@ void codegen_statement(ast node) {
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
 
     def_label(lbl1);
-    codegen_rvalue(get_child(node, 0));
+    codegen_rvalue(get_child_(WHILE_KW, node, 0));
     pop_reg(reg_X);
     grow_fs(-1);
     xor_reg_reg(reg_Y, reg_Y);
     jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
-    codegen_statement(get_child(node, 1));
+    codegen_statement(get_child_(WHILE_KW, node, 1));
     jump(lbl1);
     def_label(lbl2);
 
@@ -1691,17 +1687,17 @@ void codegen_statement(ast node) {
 
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
 
-    codegen_statement(get_child(node, 0)); // init
+    codegen_statement(get_child_(FOR_KW, node, 0)); // init
     jump(lbl3); // skip post loop action
     def_label(lbl1);
-    codegen_statement(get_child(node, 2)); // post loop action
+    codegen_statement(get_child_(FOR_KW, node, 2)); // post loop action
     def_label(lbl3);
-    codegen_rvalue(get_child(node, 1)); // test
+    codegen_rvalue(get_child_(FOR_KW, node, 1)); // test
     pop_reg(reg_X);
     grow_fs(-1);
     xor_reg_reg(reg_Y, reg_Y);
     jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
-    codegen_statement(get_child(node, 3));
+    codegen_statement(get_child_(FOR_KW, node, 3));
     jump(lbl1);
     def_label(lbl2);
 
@@ -1718,8 +1714,8 @@ void codegen_statement(ast node) {
 
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
     def_label(lbl1);
-    codegen_statement(get_child(node, 0));
-    codegen_rvalue(get_child(node, 1));
+    codegen_statement(get_child_(DO_KW, node, 0));
+    codegen_rvalue(get_child_(DO_KW, node, 1));
     pop_reg(reg_X);
     grow_fs(-1);
     xor_reg_reg(reg_Y, reg_Y);
@@ -1740,9 +1736,9 @@ void codegen_statement(ast node) {
 
     cgc_add_enclosing_switch(cgc_fs, lbl1, lbl2);
 
-    codegen_rvalue(get_child(node, 0));    // switch operand
+    codegen_rvalue(get_child_(SWITCH_KW, node, 0));    // switch operand
     jump(lbl2);                            // Jump to first case
-    codegen_statement(get_child(node, 1)); // switch body
+    codegen_statement(get_child_(SWITCH_KW, node, 1)); // switch body
 
     if (heap[lbl2 + 1] >= 0) {
       def_label(lbl2); // No case statement => jump to end of switch
@@ -1768,12 +1764,12 @@ void codegen_statement(ast node) {
       def_label(heap[binding + 4]);           // false jump location of previous case
       heap[binding + 4] = alloc_label();      // create false jump location for current case
       dup(reg_X);                             // duplicate switch operand for the comparison
-      codegen_rvalue(get_child(node, 0));     // evaluate case expression and compare it
+      codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
       pop_reg(reg_Y); pop_reg(reg_X); grow_fs(-2);
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       jump(heap[binding + 4]);                // condition is false => jump to next case
       def_label(lbl1);                        // start of case conditional block
-      codegen_statement(get_child(node, 1));  // case statement
+      codegen_statement(get_child_(CASE_KW, node, 1));  // case statement
     } else {
       fatal_error("case outside of switch");
     }
@@ -1785,7 +1781,7 @@ void codegen_statement(ast node) {
     if (binding != 0) {
       def_label(heap[binding + 4]);           // false jump location of previous case
       heap[binding + 4] = alloc_label();      // create label for next case (even if default catches all cases)
-      codegen_statement(get_child(node, 0));  // default statement
+      codegen_statement(get_child_(DEFAULT_KW, node, 0));  // default statement
     } else {
       fatal_error("default outside of switch");
     }
@@ -1812,8 +1808,8 @@ void codegen_statement(ast node) {
 
   } else if (op == RETURN_KW) {
 
-    if (get_child(node, 0) != 0) {
-      codegen_rvalue(get_child(node, 0));
+    if (get_child_(RETURN_KW, node, 0) != 0) {
+      codegen_rvalue(get_child_(RETURN_KW, node, 0));
       pop_reg(reg_X);
       grow_fs(-1);
     }
@@ -1828,15 +1824,15 @@ void codegen_statement(ast node) {
 
   } else if (op == ':') {
 
-    binding = cgc_lookup_goto_label(get_val(get_child(node, 0)), cgc_locals_fun);
+    binding = cgc_lookup_goto_label(get_val(get_child_(':', node, 0)), cgc_locals_fun);
 
     if (binding == 0) {
-      cgc_add_goto_label(get_val(get_child(node, 0)), alloc_goto_label());
+      cgc_add_goto_label(get_val(get_child_(':', node, 0)), alloc_goto_label());
       binding = cgc_locals_fun;
     }
 
     def_goto_label(heap[binding + 3]);
-    codegen_statement(get_child(node, 1)); // labelled statement
+    codegen_statement(get_child_(':', node, 1)); // labelled statement
 
   } else if (op == GOTO_KW) {
 
@@ -1857,27 +1853,23 @@ void add_params(ast params) {
   int ident;
   ast type;
 
-  if (params != 0) {
-    decl = get_child(params, 0);
-    ident = get_child(decl, 0); // TODO: ident is not really a child
-    type = get_child(decl, 1);
+  while (params != 0) {
+    decl = get_child__(',', VAR_DECL, params, 0);
+    ident = get_child_(VAR_DECL, decl, 0);
+    type = get_child_(VAR_DECL, decl, 1);
 
-    if (cgc_lookup_var(ident, cgc_locals) != 0) {
-      fatal_error("add_params: duplicate parameter");
-    }
+    if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
     cgc_add_local_param(ident, type_width_ast(type, false, true) / word_size, type);
-
-    add_params(get_child(params, 1));
+    params = get_child_opt_(',', ',',  params, 1);
   }
 }
 
 void codegen_glo_fun_decl(ast node) {
-
-  ast name = get_child(node, 0);
-  ast fun_type = get_child(node, 1);
-  ast params = get_child(node, 2);
-  ast body = get_child(node, 3);
+  ast name = get_child_(FUN_DECL, node, 0);
+  ast fun_type = get_child_(FUN_DECL, node, 1);
+  ast params = get_child_(FUN_DECL, node, 2);
+  ast body = get_child_opt_(FUN_DECL, '{', node, 3);
   int lbl;
   int binding;
   int save_locals_fun = cgc_locals_fun;
@@ -1926,20 +1918,18 @@ void codegen_glo_fun_decl(ast node) {
 
 void codegen_glo_decl(ast node) {
   ast decls;
-  ast variable;
   int op = get_op(node);
 
   if (op == VAR_DECLS) {
-    decls = get_child(node, 0); // Declaration list
+    decls = get_child__(VAR_DECLS, ',', node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations
-      variable = get_child(decls, 0); // Single variable declaration
-      codegen_glo_var_decl(variable); // Process each variable declaration
-      decls = get_child(decls, 1); // Move to the next variable declaration in the list
+      codegen_glo_var_decl(get_child__(',', VAR_DECL, decls, 0));
+      decls = get_child_opt_(',', ',', decls, 1); // Next variable declaration
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
-    handle_enum_struct_union_type_decl(get_child(node, 1));
+    handle_enum_struct_union_type_decl(get_child_(TYPEDEF_KW, node, 1));
   } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
