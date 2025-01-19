@@ -1791,16 +1791,29 @@ bool comp_switch(ast node) {
 
   if (node == 0 || (get_op(node) != '{' && get_op(node) != CASE_KW)) fatal_error("comp_statement: switch without body");
 
-  // This is for the edge case where the entire 'statement' part of < switch ( expression ) statement > is a single < case constant-expression : statement >
-  if(get_op(node) == CASE_KW) {
-    // There is no child to fetch, we are already at the case keyword
-    append_glo_decl(make_switch_pattern(node));
+  while (get_op(node) == '{' || get_op(node) == CASE_KW) {
+    if(get_op(node) == CASE_KW) {
+      // This is for the edge case where the entire 'statement' part of < switch ( expression ) statement > 
+      // is a single < case constant-expression : statement >
+      statement = node;
+      node = get_child(node, 0);
+    }
+    else {
+      statement = get_child(node, 0);
+      node = get_child(node, 1);
+    }
 
+    append_glo_decl(make_switch_pattern(statement));
     statement = last_stmt; // last_stmt is set by make_switch_pattern
+
     nest_level += 1;
 
+    // Since we don't know if the switch is exhaustive, we can't compile in tail
+    // position mode, see comment below.
     in_tail_position = false;
-    
+
+    // We keep compiling statements until we encounter a statement that returns or breaks.
+    // Case and default nodes contain the first statement of the block so we process that one first.
     if (!comp_statement(statement, STMT_CTX_SWITCH)) {
       while (get_op(node) == '{') {
         statement = get_child(node, 0);
@@ -1808,36 +1821,9 @@ bool comp_switch(ast node) {
         if (comp_statement(statement, STMT_CTX_SWITCH)) break;
       }
     }
+
     nest_level -= 1;
     append_glo_decl(wrap_str_lit(";;"));
-  }
-  else {
-    while (get_op(node) == '{') {
-      statement = get_child(node, 0);
-      node = get_child(node, 1);
-
-      append_glo_decl(make_switch_pattern(statement));
-      statement = last_stmt; // last_stmt is set by make_switch_pattern
-
-      nest_level += 1;
-
-      // Since we don't know if the switch is exhaustive, we can't compile in tail
-      // position mode, see comment below.
-      in_tail_position = false;
-
-      // We keep compiling statements until we encounter a statement that returns or breaks.
-      // Case and default nodes contain the first statement of the block so we process that one first.
-      if (!comp_statement(statement, STMT_CTX_SWITCH)) {
-        while (get_op(node) == '{') {
-          statement = get_child(node, 0);
-          node = get_child(node, 1);
-          if (comp_statement(statement, STMT_CTX_SWITCH)) break;
-        }
-      }
-
-      nest_level -= 1;
-      append_glo_decl(wrap_str_lit(";;"));
-    }
   }
 
   nest_level -= 1;
