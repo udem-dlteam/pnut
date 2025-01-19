@@ -206,6 +206,17 @@ void state_machine_switch() {
   }
 }
 
+void bodiless_switch() {
+  switch (123)
+    case 123: 
+      putchar('E');
+
+  switch (456) 
+      case 123:
+      case 456:
+          putchar('E');
+}
+
 int main() {
   empty_switch();             putchar('\n');
   no_case_switch();           putchar('\n');
@@ -220,5 +231,6 @@ int main() {
   duff_device_switch(15);     putchar('\n');
   state_machine_switch();
   state_machine_switch();     putchar('\n');
+  bodiless_switch();          putchar('\n');
   return 0;
 }
