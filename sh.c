@@ -1791,17 +1791,15 @@ bool comp_switch(ast node) {
 
   if (node == 0 || (get_op(node) != '{' && get_op(node) != CASE_KW)) fatal_error("comp_statement: switch without body");
 
-  while (get_op(node) == '{' || get_op(node) == CASE_KW) {
-    if(get_op(node) == CASE_KW) {
-      // This is for the edge case where the entire 'statement' part of < switch ( expression ) statement > 
-      // is a single < case constant-expression : statement >
-      statement = node;
-      node = get_child(node, 0);
-    }
-    else {
-      statement = get_child(node, 0);
-      node = get_child(node, 1);
-    }
+  if(get_op(node) == CASE_KW) {
+    // This is for the edge case where the entire 'statement' part of < switch ( expression ) statement > 
+    // is a single < case constant-expression : statement >
+    // therefore we wrap the case statement with a block statement to simplify down to the typical syntax
+    node = new_ast2('{', node, 0);
+  }
+  while (get_op(node) == '{') {
+    statement = get_child(node, 0);
+    node = get_child(node, 1);
 
     append_glo_decl(make_switch_pattern(statement));
     statement = last_stmt; // last_stmt is set by make_switch_pattern
