@@ -44,6 +44,8 @@
 // Use positional parameter directly for function parameters that are constants
 #define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
+// Make get_ch() use a length-1 character buffer to lookahead and skip line continuations
+#define SUPPORT_LINE_CONTINUATION
 
 // Shell backend codegen options
 #ifndef SH_AVOID_PRINTF_USE_NOT
@@ -242,7 +244,11 @@ void syntax_error(char *msg) {
 
 // tokenizer
 
+#define CHBUF_SIZE 1
 int ch;
+int chbuf[CHBUF_SIZE];
+int chbuf_head = -1;
+int chbuf_tail = 0;
 #ifdef DEBUG_EXPAND_INCLUDES
 int prev_ch = EOF;
 #endif
@@ -607,7 +613,30 @@ void output_declaration_c_code(bool no_header) {
 #endif
 
 void get_ch() {
+#ifdef SUPPORT_LINE_CONTINUATION
+  if(chbuf_head > -1) {
+    ch = chbuf[chbuf_head++];
+    if(chbuf_head == chbuf_tail)
+      chbuf_head = -1;
+  } else {
+    ch = fgetc(fp);
+
+    if(ch == '\\') {
+      ch = fgetc(fp);
+
+      if(ch != '\n'){   // The character isn't a newline, so this is an escape sequence:
+        chbuf[0] = ch;  // Put the character back in the character buffer for future consumption
+        chbuf_tail = 1; // Set the character buffer size
+        chbuf_head = 0; // Set the pointer to the character buffer
+        ch = '\\';      // Restore the character that was read on this call
+      } else {          // The character is a newline, so this is a line continuation which we want to bypass
+        ch = fgetc(fp); // Consume yet another character, the next one for logical parsing
+      }
+    }
+  }
+#else
   ch = fgetc(fp);
+#endif
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
     if (include_stack->next != 0) {
