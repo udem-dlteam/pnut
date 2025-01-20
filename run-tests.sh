@@ -19,6 +19,9 @@ fi
 : ${PNUT_OPTIONS:=} # Default to empty options
 backend=$1; shift
 bootstrap=0
+safe=0
+fast=0
+compile_only=0
 shell="$SHELL" # Use current shell as the default
 pattern=".*"
 while [ $# -gt 0 ]; do
@@ -26,6 +29,9 @@ while [ $# -gt 0 ]; do
     --shell)         shell="$2";         shift 2;;
     --match)         pattern="$2";       shift 2;;
     --bootstrap)     bootstrap=1;        shift 1;;
+    --safe)          safe=1;             shift 1;;
+    --fast)          fast=1;             shift 1;;
+    --compile-only)  compile_only=1;     shift 1;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -45,6 +51,19 @@ case "$backend" in
     exit 1
     ;;
 esac
+
+if [ "$safe" -eq 1 ]; then
+  # Enable safe mode which checks get_child accesses
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE"
+fi
+
+if [ "$fast" -eq 1 ]; then
+  if [ "$backend" != "sh" ]; then
+    fail "Fast mode is not supported for the sh backend"
+  fi
+  # Enable fast mode which optimizes constant parameters
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSH_SAVE_VARS_WITH_SET"
+fi
 
 # Compile pnut, either using gcc or with pnut itself. Set pnut_comp to the compiled pnut executable
 # The compiled pnut executable is cached in the tests folder to speed up the process
@@ -204,6 +223,11 @@ run_test() { # file_to_test: $1
   compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
 
   if [ $? -eq 0 ]; then # If compilation was successful
+    if [ "$compile_only" -eq 1 ]; then
+      echo "✅ Compiled $file"
+      return 0
+    fi
+
     chmod +x "$dir/$filename.$ext"
     execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$dir/$filename.output" 2> "$dir/$filename.err"
     if [ $? -eq 0 ]; then # If the executable ran successfully

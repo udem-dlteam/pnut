@@ -6,13 +6,15 @@
 #include <string.h>
 #include <stdint.h> // for intptr_t
 
-#define SAFE_MODE
-#define RELEASE_PNUT
-
 #define ast int
 #define true 1
 #define false 0
 #define EOF (-1)
+
+#ifdef SAFE_MODE
+#define INCLUDE_LINE_NUMBER_ON_ERROR
+#define NICE_ERR_MSG
+#endif
 
 #ifdef RELEASE_PNUT_SH
 #define sh
@@ -316,6 +318,129 @@ ast get_nb_children(ast node) {
   return heap[node] >> 10;
 }
 
+// Because everything is an int in pnut, it's easy to make mistakes and pass the
+// wrong node type to a function. These versions of get_child take the input
+// and/or output node type and checks that the node has the expected type before
+// returning the child node.
+// It also checks that the index is within bounds.
+#ifdef SAFE_MODE
+int get_val_checked(char* file, int line, ast node) {
+  if (get_nb_children(node) != 0) {
+    printf("%s:%d: get_val called on node %d with %d children\n", file, line, get_op(node), get_nb_children(node));
+    exit(1);
+  }
+  return heap[node+1];
+}
+
+int get_val_go(char* file, int line, int expected_node, ast node) {
+  if (get_op(node) != expected_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_node, get_op(node));
+    exit(1);
+  }
+  return get_val_checked(file, line, node);
+}
+
+void set_val_checked(char* file, int line, ast node, int val) {
+  if (get_nb_children(node) != 0) {
+    printf("%s:%d: set_val called on node %d with %d children\n", file, line, get_op(node), get_nb_children(node));
+    exit(1);
+  }
+  heap[node+1] = val;
+}
+
+ast get_child_checked(char* file, int line, ast node, int i) {
+  if (i != 0 && i >= get_nb_children(node)) {
+    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op(node));
+    exit(1);
+  }
+  return heap[node+i+1];
+}
+
+void set_child_checked(char* file, int line, ast node, int i, ast child) {
+  if (i != 0 && i >= get_nb_children(node)) {
+    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op(node));
+    exit(1);
+  }
+  heap[node+i+1] = child;
+}
+
+// This function checks that the parent node has the expected operator before
+// returning the child node.
+ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i) {
+  if (get_op(node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+    exit(1);
+  }
+  return get_child_checked(file, line, node, i);
+}
+
+// This function checks that the parent node has the expected operator and that
+// the child node has the expected operator before returning the child node.
+ast get_child__go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  if (get_op(node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+    exit(1);
+  }
+  if (get_op(heap[node+i+1]) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(heap[node+i+1]));
+    exit(1);
+  }
+  return get_child_checked(file, line, node, i);
+}
+
+// This function checks that the parent node has the expected operator and that
+// the child node has the expected operator (if child node is not 0) before
+// returning the child node.
+ast get_child_opt_go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  if (get_op(node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+    exit(1);
+  }
+  if (heap[node+i+1] > 0 && get_op(heap[node+i+1]) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(heap[node+i+1]));
+    exit(1);
+  }
+  return get_child_checked(file, line, node, i);
+}
+
+#define get_val(node) get_val_checked(__FILE__, __LINE__, node)
+#define get_val_(expected_node, node) get_val_go(__FILE__, __LINE__, expected_node, node)
+#define set_val(node, val) set_val_checked(__FILE__, __LINE__, node, val)
+#define set_child(node, i, child) set_child_checked(__FILE__, __LINE__, node, i, child)
+#define get_child(node, i) get_child_checked(__FILE__, __LINE__, node, i)
+#define get_child_(expected_parent_node, node, i) get_child_go(__FILE__, __LINE__, expected_parent_node, node, i)
+#define get_child__(expected_parent_node, expected_node, node, i) get_child__go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
+#define get_child_opt_(expected_parent_node, expected_node, node, i) get_child_opt_go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
+
+int get_stars(ast type) {
+  switch (get_op(type)) {
+    case INT_KW:
+      return get_child_(INT_KW, type, 0);
+    case CHAR_KW:
+      return get_child_(CHAR_KW, type, 0);
+    case VOID_KW:
+      return get_child_(VOID_KW, type, 0);
+    case ENUM_KW:
+      return get_child_(ENUM_KW, type, 0);
+    case STRUCT_KW:
+      return get_child_(STRUCT_KW, type, 0);
+    case UNION_KW:
+      return get_child_(UNION_KW, type, 0);
+    case '[':
+      return get_child_('[', type, 0);
+    default:
+      printf("get_stars: unexpected type: %d\n", get_op(type));
+      exit(1);
+      return 0;
+  }
+}
+
+void set_stars(ast type, int stars) {
+  set_child(type, 0, stars);
+}
+
+#else
+
 int get_val(ast node) {
   return heap[node+1];
 }
@@ -357,6 +482,21 @@ ast get_child__go(char* file, int line, int expected_parent_node, int expected_n
 void set_child(ast node, int i, ast child) {
   heap[node+i+1] = child;
 }
+
+#define get_val_(expected_node, node) get_val(node)
+#define get_child_(expected_parent_node, node, i) get_child(node, i)
+#define get_child__(expected_parent_node, expected_node, node, i) get_child(node, i)
+#define get_child_opt_(expected_parent_node, expected_node, node, i) get_child(node, i)
+
+int get_stars(ast type) {
+  return get_child(type, 0);
+}
+
+void set_stars(ast type, int stars) {
+  set_child(type, 0, stars);
+}
+
+#endif
 
 ast ast_result;
 
@@ -532,6 +672,10 @@ int end_ident() {
   return probe;
 }
 
+int probe_string(int probe) {
+  return heap[probe+1]; // return the start of the string
+}
+
 void get_tok();
 void get_ident();
 void expect_tok(int expected);
@@ -645,6 +789,7 @@ void get_ch() {
       include_stack = include_stack->next;
       fp = include_stack->fp;
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+      fp_filepath = include_stack->filepath;
       line_number = include_stack->line_number;
       column_number = include_stack->column_number;
 #endif
@@ -1024,27 +1169,31 @@ int eval_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
   int op1;
   int op2;
+  ast child0, child1;
+
+  if (get_nb_children(expr) >= 1) child0 = get_child(expr, 0);
+  if (get_nb_children(expr) >= 2) child1 = get_child(expr, 1);
 
   switch (op) {
-    case PARENS:    return eval_constant(get_child_(op, expr, 0), if_macro);
-    case INTEGER:   return -get_val(expr);
-    case CHARACTER: return get_val(expr);
-    case '~':       return ~eval_constant(get_child_(op, expr, 0), if_macro);
-    case '!':       return !eval_constant(get_child_(op, expr, 0), if_macro);
+    case PARENS:    return eval_constant(child0, if_macro);
+    case INTEGER:   return -get_val_(INTEGER, expr);
+    case CHARACTER: return get_val_(CHARACTER, expr);
+    case '~':       return ~eval_constant(child0, if_macro);
+    case '!':       return !eval_constant(child0, if_macro);
     case '-':
     case '+':
-      op1 = eval_constant(get_child_(op, expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (get_nb_children(expr) == 1) {
         return op == '-' ? -op1 : op1;
       } else {
-        op2 = eval_constant(get_child_(op, expr, 1), if_macro);
+        op2 = eval_constant(child1, if_macro);
         return op == '-' ? op1 - op2 : op1 + op2;
       }
 
     case '?':
-      op1 = eval_constant(get_child_(op, expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (op1) {
-        return eval_constant(get_child_(op, expr, 1), if_macro);
+        return eval_constant(child1, if_macro);
       } else {
         return eval_constant(get_child_(op, expr, 2), if_macro);
       }
@@ -1063,8 +1212,8 @@ int eval_constant(ast expr, bool if_macro) {
     case GT_EQ:
     case '<':
     case '>':
-      op1 = eval_constant(get_child_(op, expr, 0), if_macro);
-      op2 = eval_constant(get_child_(op, expr, 1), if_macro);
+      op1 = eval_constant(child0, if_macro);
+      op2 = eval_constant(child1, if_macro);
       switch (op) {
         case '*':     return op1 * op2;
         case '/':     return op1 / op2;
@@ -1084,18 +1233,18 @@ int eval_constant(ast expr, bool if_macro) {
       return 0; // Should never reach here
 
     case AMP_AMP:
-      op1 = eval_constant(get_child_(op, expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (!op1) return 0;
-      else return eval_constant(get_child_(op, expr, 1), if_macro);
+      else return eval_constant(child1, if_macro);
 
     case BAR_BAR:
-      op1 = eval_constant(get_child_(op, expr, 0), if_macro);
+      op1 = eval_constant(child0, if_macro);
       if (op1) return 1;
-      else return eval_constant(get_child_(op, expr, 1), if_macro);
+      else return eval_constant(child1, if_macro);
 
     case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val(get_child_(op, expr, 0)) == DEFINED_ID) {
-        return get_child_(op, expr, 1) == MACRO;
+      if (if_macro && get_val_(IDENTIFIER, child0) == DEFINED_ID) {
+        return child1 == MACRO;
       } else {
         fatal_error("unknown function call in constant expressions");
         return 0;
@@ -2220,7 +2369,7 @@ ast parse_enum() {
         tail = result;
       } else {
         set_child(tail, 2, new_ast3(',', ident, value, 0));
-        tail = get_child(tail, 2);
+        tail = get_child_(',', tail, 2);
       }
 
       if (tok == ',') {
@@ -2284,8 +2433,8 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         result = new_ast2(',', decl, 0);
         tail = result;
       } else {
-        set_child(tail, 2, new_ast2(',', decl, 0));
-        tail = get_child(tail, 2);
+        set_child(tail, 1, new_ast2(',', decl, 0));
+        tail = get_child_(',', tail, 1);
       }
     }
 
@@ -2412,7 +2561,7 @@ int parse_param_list() {
       tail = result;
     } else {
       set_child(tail, 1, new_ast2(',', decl, 0));
-      tail = get_child(tail, 1);
+      tail = get_child_(',', tail, 1);
     }
   }
 
@@ -2514,9 +2663,9 @@ ast parse_declarator_and_initializer(ast parent_type) {
 }
 
 void add_typedef(ast declarator) {
-  int decl_ident = get_val(get_child__(DECL, IDENTIFIER, declarator, 0));
+  int decl_ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, declarator, 0));
   ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
-  if (get_child(declarator, 2) != 0) {
+  if (get_child_(DECL, declarator, 2) != 0) {
     parse_error("Initializer not allowed in typedef", tok);
   }
 
@@ -2526,7 +2675,7 @@ void add_typedef(ast declarator) {
   // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
   // don't always have a name.
   if (get_op(decl_type) == STRUCT_KW || get_op(decl_type) == UNION_KW || get_op(decl_type) == ENUM_KW) {
-    if (get_child(decl_type, 1) != 0 && get_val(get_child(decl_type, 1)) != decl_ident) {
+    if (get_child(decl_type, 1) != 0 && get_val_(IDENTIFIER, get_child(decl_type, 1)) != decl_ident) {
       syntax_error("typedef name must match struct/union/enum name");
     }
     set_child(decl_type, 1, new_ast0(IDENTIFIER, decl_ident));
@@ -2538,14 +2687,14 @@ void add_typedef(ast declarator) {
 }
 
 ast parse_fun_def(ast declarator) {
-  ast params = get_child(declarator, 1);
+  ast params = get_child_(DECL, declarator, 1);
 
   // Check that the parameters are all named since declarator may be abstract
   while (get_op(params) == ',') {
     if (get_child_(DECL, get_child__(',', DECL, params, 0), 0) == 0) {
       parse_error("Parameter name expected", tok);
     }
-    params = get_child(params, 1);
+    params = get_child_(',', params, 1);
   }
   if (get_child_(DECL, declarator, 2) != 0) parse_error("Initializer not allowed in function definition", tok);
   return new_ast2(FUN_DECL, declarator, parse_compound_statement());
@@ -2573,7 +2722,7 @@ ast parse_declaration(bool local) {
   declarator = parse_declarator_and_initializer(type_specifier);
 
   // The declarator may be a function definition, in which case we parse the function body
-  if (get_op(get_child(declarator, 1)) == '(' && tok == '{') {
+  if (get_op(get_child_(DECL, declarator, 1)) == '(' && tok == '{') {
     if (local) parse_error("Function definition not allowed in local scope", tok);
     return parse_fun_def(declarator);
   }
@@ -2586,7 +2735,7 @@ ast parse_declaration(bool local) {
     if (tok == ',') {
       get_tok();
       set_child(tail, 1, new_ast2(',', parse_declarator_and_initializer(type_specifier), 0));
-      tail = get_child(tail, 1);
+      tail = get_child__(',', ',', tail, 1);
     } else if (tok == ';') {
       get_tok();
       break;
@@ -2600,11 +2749,11 @@ ast parse_declaration(bool local) {
   // The type_specifier may be a typedef, in that case, it's not a variable or
   // function declaration, and we instead want to add the typedef'ed type to the
   // type table.
-  if (get_val(type_specifier) & MK_TYPE_SPECIFIER(TYPEDEF_KW)) {
+  if (get_child(type_specifier, 0) & MK_TYPE_SPECIFIER(TYPEDEF_KW)) {
     type_specifier = declarators; // Save declarators in type_specifier
     while (get_op(declarators) == ',') {
-      add_typedef(get_child(declarators, 0));
-      declarators = get_child(declarators, 1);
+      add_typedef(get_child__(',', DECL, declarators, 0));
+      declarators = get_child_opt_(',', ',', declarators, 1);
     }
     return new_ast1(TYPEDEF_KW, type_specifier);
   } else {
@@ -2650,7 +2799,7 @@ ast parse_primary_expression() {
     get_tok();
 
     if (tok == STRING) { // Contiguous strings
-      result = cons(get_val(result), 0); // Result is now a list of string values
+      result = cons(get_val_(STRING, result), 0); // Result is now a list of string values
       tail = result;
       while (tok == STRING) {
         set_cdr(tail, cons(val, 0));
