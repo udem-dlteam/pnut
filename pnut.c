@@ -367,40 +367,43 @@ void set_child_checked(char* file, int line, ast node, int i, ast child) {
 // This function checks that the parent node has the expected operator before
 // returning the child node.
 ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i) {
+  ast res = get_child_checked(file, line, node, i);
   if (get_op(node) != expected_parent_node) {
     printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
     exit(1);
   }
-  return get_child_checked(file, line, node, i);
+  return res;
 }
 
 // This function checks that the parent node has the expected operator and that
 // the child node has the expected operator before returning the child node.
 ast get_child__go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  ast res = get_child_checked(file, line, node, i);
   if (get_op(node) != expected_parent_node) {
     printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
     exit(1);
   }
-  if (get_op(heap[node+i+1]) != expected_node) {
-    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(heap[node+i+1]));
+  if (get_op(res) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(res));
     exit(1);
   }
-  return get_child_checked(file, line, node, i);
+  return res;
 }
 
 // This function checks that the parent node has the expected operator and that
 // the child node has the expected operator (if child node is not 0) before
 // returning the child node.
 ast get_child_opt_go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  ast res = get_child_checked(file, line, node, i);
   if (get_op(node) != expected_parent_node) {
     printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
     exit(1);
   }
-  if (heap[node+i+1] > 0 && get_op(heap[node+i+1]) != expected_node) {
-    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(heap[node+i+1]));
+  if (res > 0 && get_op(res) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(res));
     exit(1);
   }
-  return get_child_checked(file, line, node, i);
+  return res;
 }
 
 #define get_val(node) get_val_checked(__FILE__, __LINE__, node)
