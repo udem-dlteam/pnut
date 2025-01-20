@@ -616,8 +616,9 @@ void get_ch() {
 #ifdef SUPPORT_LINE_CONTINUATION
   if(chbuf_head > -1) {
     ch = chbuf[chbuf_head++];
-    if(chbuf_head == chbuf_tail)
+    if(chbuf_head == chbuf_tail) {
       chbuf_head = -1;
+    }
   } else {
     ch = fgetc(fp);
 
@@ -631,6 +632,10 @@ void get_ch() {
         ch = '\\';      // Restore the character that was read on this call
       } else {          // The character is a newline, so this is a line continuation which we want to bypass
         ch = fgetc(fp); // Consume yet another character, the next one for logical parsing
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+        line_number += 1;
+        column_number = 0;
+#endif
       }
     }
   }
