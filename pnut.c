@@ -2412,11 +2412,10 @@ ast parse_enum() {
 
       if (tok == '=') {
         get_tok();
-
-        if (tok != INTEGER) parse_error("integer expected", tok);
-        value = new_ast0(INTEGER, val);
-        next_value = val - 1; // Next value is the current value + 1, but val is negative
-        get_tok(); // skip
+        value = parse_assignment_expression();
+        if (value == 0) parse_error("Enum value must be a constant expression", tok);
+        value = new_ast0(INTEGER, -eval_constant(value, false));
+        next_value = get_val_(INTEGER, value) - 1; // Next value is the current value + 1, but val is negative
       } else {
         value = new_ast0(INTEGER, next_value);
         next_value -= 1;
