@@ -31,10 +31,16 @@ enum Boolean {
   TRUE
 };
 
+#define FIRST_VALUE   0
+#define SECOND_VALUE  1000000
+#define THIRD_VALUE   2000000
+#define FORTH_VALUE   FIRST_VALUE + SECOND_VALUE + THIRD_VALUE
+
 enum LargeEnum {
-  FIRST = 0,
-  SECOND = 1000000,
-  THIRD = 2000000
+  FIRST = FIRST_VALUE,
+  SECOND = SECOND_VALUE,
+  THIRD = THIRD_VALUE,
+  FORTH = FORTH_VALUE,
 };
 
 int main(){
