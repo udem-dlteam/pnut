@@ -27,7 +27,11 @@ bootstrap_with_gcc() {
 
   gcc -o $TEMP_DIR/pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c
   # gcc -E -P -DPNUT_CC $PNUT_EXE_OPTIONS pnut.c > "$TEMP_DIR/pnut-after-cpp.c"
-  ./$TEMP_DIR/pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
+  ./$TEMP_DIR/pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe || {
+    echo "Failed to compile pnut-x86-by-pnut-x86-by-gcc.exe"
+    tail -n 20 $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
+    exit 1
+  }
 
   chmod +x $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
 
@@ -121,12 +125,14 @@ bootstrap_with_shell() {
 # Parse the arguments
 backend="x86_64_linux"  # Default to x86_64_linux
 shell=                  # Defined if doing the full bootstrap using pnut.sh on Posix shell. "all" to test with all shells (slow).
+safe=0                  # Whether to use safe mode when compiling pnut (adds checks at run time)
 
 while [ $# -gt 0 ]; do
   case $1 in
     --backend) backend="$2";                            shift 2 ;;
     --shell)   shell="$2";                              shift 2 ;;
     --fast)    PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
+    --safe)    safe=1;                                  shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -140,6 +146,9 @@ case $backend in
     exit 1
     ;;
 esac
+
+# Add safe mode if requested
+if [ $safe -eq 1 ]; then PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE"; fi
 
 if [ -z "$shell" ]; then
   bootstrap_with_gcc

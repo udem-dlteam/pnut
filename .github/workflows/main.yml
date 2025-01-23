@@ -99,9 +99,6 @@ jobs:
     strategy:
       matrix:
         shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
-        include:
-          - shell: dash # Using dash because it's the fastest
-            pnut_opts: "'-DSH_SAVE_VARS_WITH_SET' '-DOPTIMIZE_CONSTANT_PARAM'"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -116,10 +113,11 @@ jobs:
         run: |
           set -e
           ./run-tests.sh sh --shell ${{ matrix.shell }}
-          for pnut_opts in ${{ matrix.pnut_opts }}; do
-            echo "Running tests with pnut options: $pnut_opts"
-            PNUT_OPTIONS="${pnut_opts}" ./run-tests.sh sh --shell ${{ matrix.shell }}
-          done
+
+      - name: Run tests with ${{ matrix.shell }} (fast)
+        run: |
+          set -e
+          ./run-tests.sh sh --shell ${{ matrix.shell }} --fast
 
   bootstrap-pnut-sh:
     strategy:
@@ -205,6 +203,25 @@ jobs:
         run: |
           set -e
           ./bootstrap-pnut-sh-by-pnut-exe.sh --backend ${{ matrix.target }}
+
+  compile-in-safe-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coreutils time
+
+      - name: Compile pnut-sh, pnut-exe and tests in safe mode
+        run: |
+          set -e
+          ./bootstrap-pnut-sh.sh --safe --compile-only
+          ./bootstrap-pnut-exe.sh --safe # No compile-only flag for pnut-exe since it's fast enough
+          ./run-tests.sh sh --safe --compile-only
+          ./run-tests.sh i386_linux --safe --compile-only
 
   bootstrap-bash-2_05a:
     runs-on: ubuntu-latest
