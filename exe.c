@@ -1733,11 +1733,15 @@ void codegen_statement(ast node) {
     lbl2 = alloc_label(); // lbl2: next case
 
     cgc_add_enclosing_switch(cgc_fs, lbl1, lbl2);
+    binding = cgc_locals;
 
     codegen_rvalue(get_child_(SWITCH_KW, node, 0));    // switch operand
-    jump(lbl2);                            // Jump to first case
+    jump(lbl2);                                        // Jump to first case
     codegen_statement(get_child_(SWITCH_KW, node, 1)); // switch body
 
+    // false jump location of last case
+    // Reload because the label is updated when a new case is added
+    lbl2 = heap[binding + 4];
     if (heap[lbl2 + 1] >= 0) {
       def_label(lbl2); // No case statement => jump to end of switch
     }
