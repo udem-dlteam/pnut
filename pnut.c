@@ -415,33 +415,6 @@ ast get_child_opt_go(char* file, int line, int expected_parent_node, int expecte
 #define get_child__(expected_parent_node, expected_node, node, i) get_child__go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
 #define get_child_opt_(expected_parent_node, expected_node, node, i) get_child_opt_go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
 
-int get_stars(ast type) {
-  switch (get_op(type)) {
-    case INT_KW:
-      return get_child_(INT_KW, type, 0);
-    case CHAR_KW:
-      return get_child_(CHAR_KW, type, 0);
-    case VOID_KW:
-      return get_child_(VOID_KW, type, 0);
-    case ENUM_KW:
-      return get_child_(ENUM_KW, type, 0);
-    case STRUCT_KW:
-      return get_child_(STRUCT_KW, type, 0);
-    case UNION_KW:
-      return get_child_(UNION_KW, type, 0);
-    case '[':
-      return get_child_('[', type, 0);
-    default:
-      printf("get_stars: unexpected type: %d\n", get_op(type));
-      exit(1);
-      return 0;
-  }
-}
-
-void set_stars(ast type, int stars) {
-  set_child(type, 0, stars);
-}
-
 #else
 
 int get_val(ast node) {
@@ -464,14 +437,6 @@ void set_child(ast node, int i, ast child) {
 #define get_child_(expected_parent_node, node, i) get_child(node, i)
 #define get_child__(expected_parent_node, expected_node, node, i) get_child(node, i)
 #define get_child_opt_(expected_parent_node, expected_node, node, i) get_child(node, i)
-
-int get_stars(ast type) {
-  return get_child(type, 0);
-}
-
-void set_stars(ast type, int stars) {
-  set_child(type, 0, stars);
-}
 
 #endif
 

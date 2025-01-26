@@ -167,30 +167,30 @@ int power_of_2_log(int n) {
   return i;
 }
 
-void mul_for_pointer_arith(int reg, int type_width) {
+void mul_for_pointer_arith(int reg, int width) {
   int other_reg = reg == reg_X ? reg_Y : reg_X;
 
-  if (type_width == 1) return;
+  if (width == 1) return;
 
-  if (is_power_of_2(type_width)) {
-    while (type_width > 1) {
-      type_width /= 2;
+  if (is_power_of_2(width)) {
+    while (width > 1) {
+      width /= 2;
       add_reg_reg(reg, reg);
     }
   } else {
     push_reg(other_reg);
-    mov_reg_imm(other_reg, type_width);
+    mov_reg_imm(other_reg, width);
     mul_reg_reg(reg, other_reg);
     pop_reg(other_reg);
   }
 }
 
-void div_for_pointer_arith(int reg, int type_width) {
+void div_for_pointer_arith(int reg, int width) {
   int reg_start = reg;
 
-  if (type_width == 1) return;
+  if (width == 1) return;
 
-  if (is_power_of_2(type_width)) {
+  if (is_power_of_2(width)) {
     // sar_reg_reg does not work with reg_Y, so we need to shift the value to reg_X
     if (reg_start != reg_X) {
       push_reg(reg_X);                // Save reg_X
@@ -201,7 +201,7 @@ void div_for_pointer_arith(int reg, int type_width) {
     }
 
     // At this point, reg is always reg_X, and reg_Y is free
-    mov_reg_imm(reg_Y, power_of_2_log(type_width));
+    mov_reg_imm(reg_Y, power_of_2_log(width));
     sar_reg_reg(reg_X, reg_Y);
 
     // Now reg_X contains the result, and we move it back in reg_start if needed
@@ -220,7 +220,7 @@ void div_for_pointer_arith(int reg, int type_width) {
       push_reg(reg_Y);
     }
 
-    mov_reg_imm(reg_Y, type_width);
+    mov_reg_imm(reg_Y, width);
     div_reg_reg(reg_X, reg_Y);
 
     if (reg_start != reg_X) {
@@ -419,14 +419,12 @@ void def_goto_label(int lbl) {
 }
 
 // Type, structure and union handling
-int type_width_ast(ast type, bool array_value, bool word_align);
 int struct_union_size(ast struct_type);
 
 // A pointer type is either an array type or a type with at least one star
 bool is_pointer_type(ast type) {
   bool op = get_op(type);
-  bool stars = get_stars(type);
-  return op == '[' || stars > 0;
+  return op == '[' || op == '*';
 }
 
 bool is_struct_or_union_type(ast type) {
@@ -436,26 +434,8 @@ bool is_struct_or_union_type(ast type) {
 
 // An aggregate type is either an array type or a struct/union type (that's not a reference)
 bool is_aggregate_type(ast type) {
-  if ((is_struct_or_union_type(type) && get_stars(type) == 0) || get_op(type) == '[') {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-bool is_type(ast type) {
-  switch (get_op(type)) {
-    case INT_KW:
-    case CHAR_KW:
-    case VOID_KW:
-    case STRUCT_KW:
-    case UNION_KW:
-    case ENUM_KW:
-    case '[':
-      return true;
-    default:
-      return false;
-  }
+  int op = get_op(type);
+  return op == '[' || op == STRUCT_KW || op == UNION_KW;
 }
 
 bool is_not_pointer_type(ast type) {
@@ -466,39 +446,31 @@ bool is_not_pointer_type(ast type) {
 // If array_value is true, the size of the array is returned, otherwise the
 // size of the pointer is returned.
 // If word_align is true, the size is rounded up to the word size.
-int type_width(ast type, int stars, bool array_value, bool word_align) {
-  // All types have the same shape (kw, stars, ...) except for arrays so we
-  // handle array types separately.
-  if (get_op(type) == '[') {
-    // In certain contexts, we want to know the static size of the array (i.e.
-    // sizeof, in struct definitions, etc.) while in other contexts we care
-    // about the pointer (i.e. when passing an array to a function, etc.)
-    if (array_value) {
-      return round_up_to_word_size(get_val_(INTEGER, get_child_('[', type, 0)) * type_width_ast(get_child_('[', type, 1), true, false));
-    } else {
-      return word_size; // Array is a pointer to the first element
-    }
-  } else if (stars) {
-    return word_size; // Pointer
-  }
-
+int type_width(ast type, bool array_value, bool word_align) {
   // Basic type kw
   switch (get_op(type)) {
+    case '[':
+      // In certain contexts, we want to know the static size of the array (i.e.
+      // sizeof, in struct definitions, etc.) while in other contexts we care
+      // about the pointer (i.e. when passing an array to a function, etc.)
+      if (array_value) {
+        return round_up_to_word_size(get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false));
+      } else {
+        return word_size; // Array is a pointer to the first element
+      }
+    case '*':
+      return word_size;
     case CHAR_KW:
       return word_align ? word_size : char_width;
     case STRUCT_KW:
     case UNION_KW:
       return struct_union_size(type);
     case VOID_KW:
-      fatal_error("type_width_ast: void type");
+      fatal_error("type_width: void type");
       return 0;
     default:
       return word_size;
   }
-}
-
-int type_width_ast(ast type, bool array_value, bool word_align) {
-  return type_width(type, get_stars(type), array_value, word_align);
 }
 
 // Structs, enums and unions types come in 2 variants:
@@ -513,29 +485,19 @@ ast canonicalize_type(ast type) {
 
   if (get_op(type) == STRUCT_KW && get_child_opt_(STRUCT_KW, ',', type, 2) == 0) { // struct with empty def => reference
     binding = cgc_lookup_struct(get_val_(IDENTIFIER, get_child__(STRUCT_KW, IDENTIFIER, type, 1)), cgc_globals);
-    if (binding == 0) fatal_error("canonicalize_type: struct type not defined");
-    res = heap[binding+3];
-    if (get_stars(type) != 0) { // Copy stars
-      res = clone_ast(res);
-      set_child(res, 0, get_child_(STRUCT_KW, type, 0));
-    }
   } else if (get_op(type) == UNION_KW && get_child_opt_(UNION_KW, ',', type, 2) == 0) { // union with empty def => reference
     binding = cgc_lookup_union(get_val_(IDENTIFIER, get_child__(UNION_KW, IDENTIFIER, type, 1)), cgc_globals);
-    if (binding == 0) fatal_error("canonicalize_type: union type not defined");
-    res = heap[binding+3];
-    if (get_stars(type) != 0) { // Copy stars
-      res = clone_ast(res);
-      set_child(res, 0, get_child_(UNION_KW, type, 0));
-    }
-  } else if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, ',', type, 1) == 0) { // enum with empty def => reference
-    binding = cgc_lookup_enum(get_val_(IDENTIFIER, get_child__(ENUM_KW, IDENTIFIER, type, 0)), cgc_globals);
-    if (binding == 0) fatal_error("canonicalize_type: enum type not defined");
-    res = heap[binding+3];
-    if (get_stars(type) != 0) { // Copy stars
-      res = clone_ast(res);
-      set_child(res, 0, get_child_(ENUM_KW, type, 0));
-    }
+  } else if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, ',', type, 2) == 0) { // enum with empty def => reference
+    binding = cgc_lookup_enum(get_val_(IDENTIFIER, get_child__(ENUM_KW, IDENTIFIER, type, 1)), cgc_globals);
+  } else {
+    return res;
   }
+
+  if (binding == 0) {
+    putstr("type="); putstr(STRING_BUF(get_val_(IDENTIFIER, get_child(type, 1)))); putchar('\n');
+    fatal_error("canonicalize_type: Type is not defined");
+  }
+  res = heap[binding+3];
 
   return res;
 }
@@ -545,34 +507,21 @@ int struct_union_size(ast type) {
   ast members;
   ast member_type;
   int member_size;
-  int size = 0;
+  int sum_size = 0, max_size = 0;
 
   type = canonicalize_type(type);
   members = get_child(type, 2);
 
-  switch (get_op(type)) {
-    case STRUCT_KW:
   while (get_op(members) == ',') {
-        member_type = get_child_(',', members, 1);
-        members = get_child_opt_(',', ',', members, 2);
-        member_size = type_width_ast(member_type, true, true);
-        size += member_size;
-      }
-      break;
-    case UNION_KW:
-      while (get_op(members) == ',') {
-        member_type = get_child_(',', members, 1);
-        members = get_child_opt_(',', ',', members, 2);
-        member_size = type_width_ast(member_type, true, true);
-        // Union size is the max of its members
-        if (member_size > size) size = member_size;
-      }
-      break;
-    default:
-      fatal_error("struct_union_size: not a struct or union type");
+    member_type = get_child_(DECL, get_child__(',', DECL, members, 0), 1);
+    members = get_child_opt_(',', ',', members, 1);
+    member_size = type_width(member_type, true, true);
+    sum_size += member_size;                            // Struct size is the sum of its members
+    if (member_size > max_size) max_size = member_size; // Union size is the max of its members
   }
 
-  return round_up_to_word_size(size);
+  // Don't need to round the size of a union to the word size since type_width already did
+  return get_op(type) == STRUCT_KW ? sum_size : max_size;
 }
 
 // Find offset of struct member
@@ -580,12 +529,13 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast members = get_child(canonicalize_type(struct_type), 2);
   int offset = 0;
   int sub_offset;
-  ast ident;
+  ast decl, ident;
 
-  while (get_op(members) == ',') {
-    ident = get_child_opt_(',', IDENTIFIER, members, 0);
+  while (members != 0) {
+    decl = get_child_opt_(',', DECL, members, 0);
+    ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
-      sub_offset = struct_member_offset_go(get_child_(',', members, 1), member_ident);
+      sub_offset = struct_member_offset_go(get_child_(DECL, decl, 1), member_ident);
       if (sub_offset != -1) return offset + sub_offset;
     } else if (get_val_(IDENTIFIER, member_ident) == get_val_(IDENTIFIER, ident)) {
       return offset;
@@ -593,10 +543,11 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
 
     if (get_op(struct_type) == STRUCT_KW) {
       // For unions, fields are always at offset 0. We must still iterate
-      // because the field may be in an anonymous struct.
-      offset += round_up_to_word_size(type_width_ast(get_child_(',', members, 1), true, true));
+      // because the field may be in an anonymous struct, in which case the
+      // final offset is not 0.
+      offset += round_up_to_word_size(type_width(get_child_(DECL, decl, 1), true, true));
     }
-    members = get_child_opt_(',', ',', members, 2);
+    members = get_child_opt_(',', ',', members, 1);
   }
 
   return -1;
@@ -611,17 +562,18 @@ int struct_member_offset(ast struct_type, ast member_ident) {
 // Find a struct member
 ast struct_member_go(ast struct_type, ast member_ident) {
   ast members = get_child(canonicalize_type(struct_type), 2);
-  ast ident;
+  ast decl, ident;
 
   while (members != 0) {
-    ident = get_child_opt_(',', IDENTIFIER, members, 0);
+    decl = get_child_opt_(',', DECL, members, 0);
+    ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
-      ident = struct_member_go(get_child_(',', members, 1), member_ident);
+      ident = struct_member_go(get_child_(DECL, decl, 1), member_ident);
       if (ident != 0) return ident; // Found member in the anonymous struct
     } else if (get_val_(IDENTIFIER, member_ident) == get_val_(IDENTIFIER, ident)) {
-      return members;
+      return decl;
     }
-    members = get_child_opt_(',', ',', members, 2);
+    members = get_child_opt_(',', ',', members, 1);
   }
 
   return -1;
@@ -635,12 +587,13 @@ ast struct_member(ast struct_type, ast member_ident) {
 
 // Width of an object pointed to by a reference type.
 int ref_type_width(ast type) {
-  if (get_op(type) == '[') {
-    return type_width_ast(get_child_('[', type, 1), false, false); // size of inner type
-  } else if (get_stars(type) == 1) { // pointer *
-    return type_width(type, 0, false, false); // size of inner type
-  } else {
-    return word_size;
+  switch (get_op(type)) {
+    case '[':
+      return type_width(get_child_('[', type, 0), false, false); // size of inner type
+    case '*':
+      return type_width(get_child_('*', type, 1), false, false); // size of inner type;
+    default:
+      return word_size;
   }
 }
 
@@ -649,6 +602,19 @@ ast char_type;
 ast string_type;
 ast void_type;
 ast void_star_type;
+
+ast dereference_type(ast type) {
+  switch (get_op(type)) {
+    case '[': // Array type
+      return get_child_('[', type, 0);
+    case '*': // Pointer type
+      return get_child_('*', type, 1);
+    default:
+      putstr("type="); putint(get_op(type)); putchar('\n');
+      fatal_error("dereference_type: non pointer is being dereferenced with *");
+      return -1;
+  }
+}
 
 // Compute the type of an expression
 ast value_type(ast node) {
@@ -701,27 +667,10 @@ ast value_type(ast node) {
 
     if (op == '*') {
       left_type = value_type(child0);
-      if (get_op(left_type) == '[') { // Array type
-        return get_child_('[', left_type, 1);
-      } else if (get_stars(left_type) != 0) { // Pointer type
-        left_type = clone_ast(left_type);
-        set_stars(left_type, get_stars(left_type) - 1); // one less indirection
-        return left_type;
-      } else {
-        putstr("left_type="); putint(left_type); putchar('\n');
-        fatal_error("pointer_width: non pointer is being dereferenced with *");
-        return -1;
-      }
+      return dereference_type(left_type);
     } else if (op == '&') {
       left_type = value_type(child0);
-      if (get_op(left_type) == '[') {
-        left_type = clone_ast(get_child_('[', left_type, 1)); // Inner type
-        set_stars(left_type, get_stars(left_type) + 1); // Increment star by 2, to account for the [ we just removed
-      } else {
-        left_type = clone_ast(left_type);
-        set_stars(left_type, get_stars(left_type) + 1); // Increment star by 1
-      }
-      return left_type;
+      return pointer_type(left_type, false);
     } else if (op == '+' || op == '-' || op == '~' || op == '!' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PARENS) {
       // Unary operation don't change the type
       return value_type(child0);
@@ -754,21 +703,14 @@ ast value_type(ast node) {
       left_type = value_type(child0);
       right_type = value_type(child1);
 
-      if (get_op(left_type) == '[') { // Array
-        return get_child_('[', left_type, 1); // array inner type
-      } else if (get_stars(left_type) != 0) { // Pointer
-        left_type = clone_ast(left_type);
-        set_stars(left_type, get_stars(left_type) - 1); // one less indirection
-        return left_type;
-      } else if (get_op(right_type) == '[') { // Array, but with the operands flipped (i.e. 0[arr] instead of arr[0])
-        return get_child_('[', right_type, 1); // array inner type
-      } else if (get_stars(right_type) != 0) {
-        right_type = clone_ast(right_type);
-        set_stars(right_type, get_stars(right_type) - 1); // one less indirection
-        return right_type;
+      if (get_op(left_type) == '[' || get_op(left_type) == '*') {
+        return dereference_type(left_type);
+      } else if (get_op(right_type) == '[' || get_op(right_type) == '*') {
+        return dereference_type(right_type);
       } else {
-        putstr("left_type="); putint(left_type); putchar('\n');
-        fatal_error("value_type: non pointer is being dereferenced with *");
+        putstr("left_type="); putint(get_op(left_type)); putchar('\n');
+        putstr("right_type="); putint(get_op(right_type)); putchar('\n');
+        fatal_error("value_type: non pointer is being dereferenced as array");
         return -1;
       }
     } else if (op == '=' || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
@@ -789,8 +731,8 @@ ast value_type(ast node) {
       }
     } else if (op == '.') {
       left_type = value_type(child0);
-      if (is_struct_or_union_type(left_type) && get_stars(left_type) == 0) {
-        return get_child_(',', struct_member(left_type, child1), 1); // child 1 of member is the type
+      if (is_struct_or_union_type(left_type)) {
+        return get_child_(DECL, struct_member(left_type, child1), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: . operator on non-struct pointer type");
         return -1;
@@ -798,14 +740,14 @@ ast value_type(ast node) {
     } else if (op == ARROW) {
       // Same as '.', but left_type must be a pointer
       left_type = value_type(child0);
-      if (is_struct_or_union_type(left_type) && get_stars(left_type) == 1) {
-        return get_child_(',', struct_member(left_type, child1), 1); // child 1 of member is the type
+      if (get_op(left_type) == '*' && is_struct_or_union_type(get_child_('*', left_type, 1))) {
+        return get_child_(DECL, struct_member(get_child_('*', left_type, 1), child1), 1); // child 1 of member is the type
       } else {
         fatal_error("value_type: -> operator on non-struct pointer type");
         return -1;
       }
     } else if (op == CAST) {
-      return child0;
+      return get_child_(DECL, child0, 1);
     } else {
       fatal_error("value_type: unknown expression with 2 children");
       return -1;
@@ -933,7 +875,7 @@ int codegen_param(ast param) {
   int type = value_type(param);
   int left_width;
 
-  if (is_struct_or_union_type(type) && get_stars(type) == 0) {
+  if (is_struct_or_union_type(type)) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
@@ -944,7 +886,7 @@ int codegen_param(ast param) {
     codegen_rvalue(param);
   }
 
-  return type_width_ast(type, false, true) / word_size;
+  return type_width(type, false, true) / word_size;
 }
 
 int codegen_params(ast params) {
@@ -1034,7 +976,7 @@ int codegen_lvalue(ast node) {
           fatal_error("codegen_lvalue: identifier not found");
         }
       }
-      lvalue_width = type_width_ast(heap[binding+5], true, true);
+      lvalue_width = type_width(heap[binding+5], true, true);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
@@ -1065,38 +1007,39 @@ int codegen_lvalue(ast node) {
       lvalue_width = ref_type_width(type);
     } else if (op == '.') {
       type = value_type(child0);
-      if (is_struct_or_union_type(type) && get_stars(type) == 0) {
+      if (is_struct_or_union_type(type)) {
         codegen_lvalue(child0);
         pop_reg(reg_X);
         // union members are at the same offset: 0
         if (get_op(type) == STRUCT_KW) {
-        add_reg_imm(reg_X, struct_member_offset(type, child1));
+          add_reg_imm(reg_X, struct_member_offset(type, child1));
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width_ast(get_child_(',', struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, true); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: . operator on non-struct type");
       }
     } else if (op == ARROW) {
       // Same as '.', but type must be a pointer
       type = value_type(child0);
-      if (is_struct_or_union_type(type) && get_stars(type) == 1) {
+      if (get_op(type) == '*' && is_struct_or_union_type(get_child_('*', type, 1))) {
+        type = get_child_('*', type, 1);
         codegen_rvalue(child0);
         pop_reg(reg_X);
         // union members are at the same offset: 0
         if (get_op(type) == STRUCT_KW) {
-        add_reg_imm(reg_X, struct_member_offset(type, child1));
+          add_reg_imm(reg_X, struct_member_offset(type, child1));
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width_ast(get_child_(',', struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, true); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
     } else if (op == CAST) {
       codegen_lvalue(child1);
-      lvalue_width = type_width_ast(child0, true, true);
+      lvalue_width = type_width(child0, true, true);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       fatal_error("codegen_lvalue: unknown lvalue with 2 children");
@@ -1167,11 +1110,8 @@ void codegen_rvalue(ast node) {
       if (binding != 0) {
         mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
         add_reg_reg(reg_X, reg_SP);
-        // local arrays are allocated on the stack, so no need to dereference
-        // same thing for non-pointer structs and unions.
-        if (get_op(heap[binding+5]) != '['
-          && (get_op(heap[binding+5]) != STRUCT_KW || get_stars(heap[binding+5]) != 0)
-          && (get_op(heap[binding+5]) != UNION_KW || get_stars(heap[binding+5]) != 0)) {
+        // local arrays/structs/unions are allocated on the stack, so no need to dereference
+        if (get_op(heap[binding+5]) != '[' && get_op(heap[binding+5]) != STRUCT_KW && get_op(heap[binding+5]) != UNION_KW) {
           mov_reg_mem(reg_X, reg_X, 0);
         }
         push_reg(reg_X);
@@ -1180,11 +1120,8 @@ void codegen_rvalue(ast node) {
         if (binding != 0) {
           mov_reg_imm(reg_X, heap[binding+4]);
           add_reg_reg(reg_X, reg_glo);
-          // global arrays are allocated on the stack, so no need to dereference
-          // same thing for non-pointer structs and unions.
-          if (get_op(heap[binding+5]) != '['
-            && (get_op(heap[binding+5]) != STRUCT_KW || get_stars(heap[binding+5]) != 0)
-            && (get_op(heap[binding+5]) != UNION_KW || get_stars(heap[binding+5]) != 0)) {
+          // global arrays/structs/unions are also allocated on the stack, so no need to dereference
+          if (get_op(heap[binding+5]) != '[' && get_op(heap[binding+5]) != STRUCT_KW && get_op(heap[binding+5]) != UNION_KW) {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
@@ -1275,10 +1212,10 @@ void codegen_rvalue(ast node) {
       codegen_lvalue(child0);
       grow_fs(-1);
     } else if (op == SIZEOF_KW) {
-      if (is_type(child0)) {
-        mov_reg_imm(reg_X, type_width_ast(child0, true, false));
+      if (get_op(child0) == DECL) {
+        mov_reg_imm(reg_X, type_width(get_child_(DECL, child0, 1), true, false));
       } else {
-        mov_reg_imm(reg_X, type_width_ast(value_type(child0), true, false));
+        mov_reg_imm(reg_X, type_width(value_type(child0), true, false));
       }
       push_reg(reg_X);
     } else {
@@ -1295,7 +1232,7 @@ void codegen_rvalue(ast node) {
     } else if (op == '=') {
       type1 = value_type(child0);
       left_width = codegen_lvalue(child0);
-      if (is_struct_or_union_type(type1) && get_stars(type1) == 0) {
+      if (is_struct_or_union_type(type1)) {
         // Struct assignment, we copy the struct.
         codegen_lvalue(child1);
         pop_reg(reg_X);
@@ -1343,8 +1280,8 @@ void codegen_rvalue(ast node) {
       codegen_call(node);
     } else if (op == '.') {
       type1 = value_type(child0);
-      if (is_struct_or_union_type(type1) && get_stars(type1) == 0) {
-        type2 = get_child_(',', struct_member(type1, child1), 1);
+      if (is_struct_or_union_type(type1)) {
+        type2 = get_child_(DECL, struct_member(type1, child1), 1);
         codegen_lvalue(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
@@ -1353,7 +1290,7 @@ void codegen_rvalue(ast node) {
           add_reg_imm(reg_Y, struct_member_offset(type1, child1));
         }
         if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, type_width_ast(type2, false, false));
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false));
         }
         push_reg(reg_Y);
       } else {
@@ -1361,8 +1298,9 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == ARROW) {
       type1 = value_type(child0);
-      if (is_struct_or_union_type(type1) && get_stars(type1) == 1) {
-        type2 = get_child_(',', struct_member(type1, child1), 1);
+      if (get_op(type1) == '*' && is_struct_or_union_type(get_child_('*', type1, 1))) {
+        type1 = get_child_('*', type1, 1);
+        type2 = get_child_(DECL, struct_member(type1, child1), 1);
         codegen_rvalue(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
@@ -1427,9 +1365,9 @@ void codegen_begin() {
 
   int_type = new_ast0(INT_KW, 0);
   char_type = new_ast0(CHAR_KW, 0);
-  string_type = new_ast0(CHAR_KW, 1);
+  string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
   void_type = new_ast0(VOID_KW, 0);
-  void_star_type = new_ast0(VOID_KW, 1);
+  void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
 
   main_lbl = alloc_label();
   cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, void_type);
@@ -1500,18 +1438,21 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   ast members = get_child(node, 2);
   int binding;
 
-  if (name != 0 && members != 0) { // if struct has a name and members (not a reference to an existing type)
+  // if struct has a name and members (not a reference to an existing type)
+  if (name != 0 && members != 0) {
     binding = cgc_lookup_binding_ident(kind, get_val_(IDENTIFIER, name), cgc_globals);
-    if (binding != 0 && heap[binding + 3] != node) { fatal_error("codegen_struct_or_union: struct/union/enum already declared"); }
+    if (binding != 0 && heap[binding + 3] != node && get_child(heap[binding + 3], 2) != members) {
+      fatal_error("codegen_struct_or_union: struct/union already declared");
+    }
     cgc_add_typedef(get_val_(IDENTIFIER, name), kind, node);
   }
 
   // Traverse the structure to find any other declarations.
   // This is not the right semantic because inner declarations are scoped to
   // this declaration, but it's probably good enough for TCC.
-  while (members != 0 && get_op(members) == ',') {
-    handle_enum_struct_union_type_decl(get_child_(',', members, 1));
-    members = get_child_opt_(',', ',', members, 2);
+  while (members != 0) {
+    handle_enum_struct_union_type_decl(get_child_(DECL, get_child__(',', DECL, members, 0), 1));
+    members = get_child_opt_(',', ',', members, 1);
   }
 }
 
@@ -1528,101 +1469,104 @@ void handle_enum_struct_union_type_decl(ast type) {
 }
 
 void codegen_glo_var_decl(ast node) {
-  ast name = get_child_(VAR_DECL, node, 0);
-  ast type = get_child_(VAR_DECL, node, 1);
-  ast init = get_child_(VAR_DECL, node, 2);
+  ast name = get_child__(DECL, IDENTIFIER, node, 0);
+  ast type = get_child_(DECL, node, 1);
+  ast init = get_child_(DECL, node, 2);
+  int name_probe = get_val_(IDENTIFIER, name);
   int size;
-  int binding = cgc_lookup_var(name, cgc_globals);
+  int binding = cgc_lookup_var(name_probe, cgc_globals);
 
   if (get_op(type) == '[') { // Array declaration
-    size = get_val_(INTEGER, get_child_('[', type, 0));
+    size = get_child_('[', type, 0);
   } else {
     // All non-array types have size 1
     size = 1;
   }
+  if (get_op(type) == '(') {
+    // Forward declaration
+    binding = cgc_lookup_fun(name_probe, cgc_globals);
+    if (binding == 0) cgc_add_global_fun(name_probe, alloc_label(), type);
 
-  handle_enum_struct_union_type_decl(type);
+  } else {
+    handle_enum_struct_union_type_decl(type);
 
-  if (binding == 0) {
-    cgc_add_global(name, size, type_width_ast(type, true, true), type);
-    binding = cgc_globals;
-  }
-
-  if (get_op(type) != '[') { // not array declaration
-
-    def_label(init_next_lbl);
-    init_next_lbl = alloc_label();
-
-    if (init != 0) {
-
-      codegen_rvalue(init);
-    } else {
-      xor_reg_reg(reg_X, reg_X);
-      push_reg(reg_X);
-      grow_fs(1);
+    if (binding == 0) {
+      cgc_add_global(name_probe, size, type_width(type, true, true), type);
+      binding = cgc_globals;
     }
 
-    pop_reg(reg_X);
-    grow_fs(-1);
+    if (get_op(type) != '[') { // not array declaration
 
-    mov_mem_reg(reg_glo, heap[binding+4], reg_X);
+      def_label(init_next_lbl);
+      init_next_lbl = alloc_label();
 
-    jump(init_next_lbl);
+      if (init != 0) {
+        codegen_rvalue(init);
+      } else {
+        xor_reg_reg(reg_X, reg_X);
+        push_reg(reg_X);
+        grow_fs(1);
+      }
+
+      pop_reg(reg_X);
+      grow_fs(-1);
+
+      mov_mem_reg(reg_glo, heap[binding+4], reg_X);
+
+      jump(init_next_lbl);
+    }
   }
 }
 
 void codegen_local_var_decl(ast node) {
-  ast name = get_child_(VAR_DECL, node, 0);
-  ast type = get_child_(VAR_DECL, node, 1);
-  ast init = get_child_(VAR_DECL, node, 2);
+  ast name = get_child__(DECL, IDENTIFIER, node, 0);
+  ast type = get_child_(DECL, node, 1);
+  ast init = get_child_(DECL, node, 2);
   int size;
 
-          if (get_op(type) == '[') { // Array declaration
-            size = type_width_ast(type, true, true);  // size in bytes (word aligned)
-            grow_stack_bytes(size);
-            size /= word_size; // size in words
-          } else if (is_struct_or_union_type(type) && get_stars(type) == 0) {
-            size = struct_union_size(type); // size in bytes (word aligned)
-            grow_stack_bytes(size);
-            size /= word_size; // size in words
-          } else {
-            // All non-array types are represented as a word, even if they are smaller
-            if (init != 0) {
-              codegen_rvalue(init);
-              grow_fs(-1);
-            } else {
-              xor_reg_reg(reg_X, reg_X);
-              push_reg(reg_X);
-            }
+  if (is_aggregate_type(type)) { // Array/struct/union declaration
+    size = type_width(type, true, true);  // size in bytes (word aligned)
+    grow_stack_bytes(size);
+    size /= word_size; // size in words
+  } else {
+    // All non-array types are represented as a word, even if they are smaller
+    if (init != 0) {
+      codegen_rvalue(init);
+      grow_fs(-1);
+    } else {
+      xor_reg_reg(reg_X, reg_X);
+      push_reg(reg_X);
+    }
+    size = 1;
+  }
 
-            size = 1;
-          }
-          cgc_add_local_var(name, size, type);
+  cgc_add_local_var(get_val_(IDENTIFIER, name), size, type);
 }
 
 void codegen_body(ast node) {
   int save_fs = cgc_fs;
   int save_locals = cgc_locals;
   ast stmt;
-  ast decls;
+  ast declarations;
 
   while (node != 0) {
     stmt = get_child_('{', node, 0);
-    if (get_op(stmt) == VAR_DECLS) { // Variable declaration
-      decls = get_child__(VAR_DECLS, ',', stmt, 0); // Declaration list
-      while(decls != 0) { // Multiple variable declarations
-        codegen_local_var_decl(get_child__(',', VAR_DECL, decls, 0));
-        decls = get_child_opt_(',', ',', decls, 1); // Move to the next declaration in the list
-        }
-      } else {
-      codegen_statement(stmt);
+    if (get_op(stmt) == DECLS) { // Variable declaration
+      declarations = get_child__(DECLS, ',', stmt, 0);
+      while (declarations != 0) { // Multiple variable declarations
+        codegen_local_var_decl(get_child__(',', DECL, declarations, 0));
+        declarations = get_child_opt_(',', ',', declarations, 1);
       }
-    node = get_child_opt_('{', '{', node, 1);
+    } else {
+      codegen_statement(stmt);
     }
-    grow_stack(save_fs - cgc_fs);
+    node = get_child_opt_('{', '{', node, 1);
+  }
 
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
+  grow_stack(save_fs - cgc_fs);
+
+  cgc_fs = save_fs;
+  cgc_locals = save_locals;
 }
 
 void codegen_statement(ast node) {
@@ -1846,53 +1790,51 @@ void codegen_statement(ast node) {
 }
 
 void add_params(ast params) {
-
-  ast decl;
+  ast decl, type;
   int ident;
-  ast type;
 
   while (params != 0) {
-    decl = get_child__(',', VAR_DECL, params, 0);
-    ident = get_child_(VAR_DECL, decl, 0);
-    type = get_child_(VAR_DECL, decl, 1);
+    decl = get_child__(',', DECL, params, 0);
+    ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+    type = get_child_(DECL, decl, 1);
 
     if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
-    cgc_add_local_param(ident, type_width_ast(type, false, true) / word_size, type);
+    cgc_add_local_param(ident, type_width(type, false, true) / word_size, type);
     params = get_child_opt_(',', ',',  params, 1);
   }
 }
 
 void codegen_glo_fun_decl(ast node) {
-  ast name = get_child_(FUN_DECL, node, 0);
-  ast fun_type = get_child_(FUN_DECL, node, 1);
-  ast params = get_child_(FUN_DECL, node, 2);
-  ast body = get_child_opt_(FUN_DECL, '{', node, 3);
+  ast decl = get_child__(FUN_DECL, DECL, node, 0);
+  ast body = get_child_opt_(FUN_DECL, '{', node, 1);
+  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+  ast fun_type = get_child__(DECL, '(', decl, 1);
+  ast params = get_child_opt_('(', ',', fun_type, 1);
+  ast fun_return_type = get_child_('(', fun_type, 0);
   int lbl;
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
-  if (is_struct_or_union_type(fun_type) && get_stars(fun_type) == 0) {
-    fatal_error("add_params: returning structs from function not supported");
-  } else if (get_op(fun_type) == '[') {
-    fatal_error("add_params: returning arrays from function not supported");
+  if (is_aggregate_type(fun_return_type)) {
+    fatal_error("Returning arrays or structs from function not supported");
   }
 
   // If the function is main
-  if (name == MAIN_ID) {
+  if (name_probe == MAIN_ID) {
     // Check if main returns an exit code.
-    if (get_op(fun_type) != VOID_KW) main_returns = true;
+    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
   }
 
-  binding = cgc_lookup_fun(name, cgc_globals);
+  binding = cgc_lookup_fun(name_probe, cgc_globals);
 
   if (binding == 0) {
     lbl = alloc_label();
-    cgc_add_global_fun(name, lbl, fun_type);
+    cgc_add_global_fun(name_probe, lbl, fun_type);
     binding = cgc_globals;
   }
 
-  if (body > 0) { // 0 is empty body, -1 is forward declaration
+  if (body != 0) { // 0 is empty body
 
     lbl = heap[binding+4];
 
@@ -1914,20 +1856,31 @@ void codegen_glo_fun_decl(ast node) {
   cgc_locals_fun = save_locals_fun;
 }
 
+// For now, we don't do anything with the declarations in a typedef.
+// The only thing we need to do is to call handle_enum_struct_union_type_decl
+// on the type specifier, which is the same for all declarations.
+void handle_typedef(ast node) {
+  ast decls = get_child__(TYPEDEF_KW, ',', node, 0);
+  ast decl = get_child__(',', DECL, decls, 0);
+  ast type = get_child_(DECL, decl, 1);
+
+  handle_enum_struct_union_type_decl(get_type_specifier(type));
+}
+
 void codegen_glo_decl(ast node) {
   ast decls;
   int op = get_op(node);
 
-  if (op == VAR_DECLS) {
-    decls = get_child__(VAR_DECLS, ',', node, 0); // Declaration list
+  if (op == DECLS) {
+    decls = get_child__(DECLS, ',', node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations
-      codegen_glo_var_decl(get_child__(',', VAR_DECL, decls, 0));
+      codegen_glo_var_decl(get_child__(',', DECL, decls, 0));
       decls = get_child_opt_(',', ',', decls, 1); // Next variable declaration
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
-    handle_enum_struct_union_type_decl(get_child_(TYPEDEF_KW, node, 1));
+    handle_typedef(node);
   } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
