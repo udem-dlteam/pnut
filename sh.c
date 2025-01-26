@@ -2343,19 +2343,7 @@ void handle_typedef(ast node) {
   ast decl = get_child__(',', DECL, decls, 0);
   ast type = get_child_(DECL, decl, 1);
 
-  while (1) {
-    switch (get_op(type)) {
-      case '[':
-        type = get_child_('[', type, 0);
-        break;
-      case '*':
-        type = get_child_('*', type, 0);
-        break;
-      default:
-        handle_enum_struct_union_type_decl(type);
-        return;
-    }
-  }
+  handle_enum_struct_union_type_decl(get_type_specifier(type));
 }
 
 // This function compiles 1 top level declaration at the time.

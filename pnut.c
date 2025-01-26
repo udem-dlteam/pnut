@@ -2293,6 +2293,23 @@ ast parse_declaration_specifiers();
 // The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
 #define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
 
+ast get_type_specifier(ast type_or_decl) {
+  while (1) {
+    switch (get_op(type_or_decl)) {
+      case DECL:
+        type_or_decl = get_child_(DECL, type_or_decl, 1);
+        break;
+      case '[':
+        type_or_decl = get_child_('[', type_or_decl, 0);
+        break;
+      case '*':
+        type_or_decl = get_child_('*', type_or_decl, 0);
+        break;
+      default:
+        return type_or_decl;
+    }
+  }
+}
 
 ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', is_const ? MK_TYPE_SPECIFIER(CONST_KW) : 0, parent_type);
