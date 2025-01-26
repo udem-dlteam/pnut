@@ -2293,6 +2293,12 @@ ast parse_declaration_specifiers();
 // The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
 #define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
 
+
+ast pointer_type(ast parent_type, bool is_const) {
+  return new_ast2('*', is_const ? MK_TYPE_SPECIFIER(CONST_KW) : 0, parent_type);
+}
+
+// Type and declaration parser
 int is_type_starter(int tok) {
   return tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW       // Numeric types
       || tok == VOID_KW
@@ -2630,12 +2636,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
     case '*':
       get_tok();
       // Pointers may be const-qualified
-      if (tok == CONST_KW) {
-        get_tok();
-        result = new_ast2('*', MK_TYPE_SPECIFIER(CONST_KW), parent_type);
-      } else {
-        result = new_ast2('*', 0, parent_type);
-      }
+      result = pointer_type(parent_type, tok == CONST_KW);
+      if (tok == CONST_KW) get_tok();
 
       result = parse_declarator(abstract_decl, result);
       break;
@@ -2646,17 +2648,17 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       result = parse_declarator(abstract_decl, parent_type);
       expect_tok(')');
       break;
-  }
 
-  if (result == 0) {
-    // Abstract declarators don't need names, meaning the previous switch may
-    // not have set result. In that case, we create a DECL node with no
-    // identifier.
-    if (abstract_decl) {
-      return new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
-    } else {
-      parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
-    }
+    default:
+      // Abstract declarators don't need names, and so in the base declarator,
+      // we don't require an identifier. This is useful for function pointers.
+      // In that case, we create a DECL node with no identifier.
+      if (abstract_decl) {
+        result = new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
+      } else {
+        parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
+      }
+      return result;
   }
 
   // At this point, the only non-recursive declarator is an identifier
@@ -2691,7 +2693,6 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   }
 
   // And now we wrap the DECL back around the result.
-  // Maybe we could try reusing the DECL node?
   set_child(decl, 1, result); // child#1 is the type
   return decl;
 }
