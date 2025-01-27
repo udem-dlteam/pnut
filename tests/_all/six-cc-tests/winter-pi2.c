@@ -18,10 +18,7 @@ int d;
 int c = 0;
 
 int main() {
-  int newline;
-  int newline2;
   int i = 0;
-  newline = identity(10, 2, 3);
 
   while (i < 2800) {
     r[i] = 2000;
@@ -54,11 +51,7 @@ int main() {
     k = k - 14;
   }
 
-  putchar(newline);
+  putchar('\n');
 
   return 0;
-}
-
-int identity(int x, int y, int z) {
-  return x;
 }
