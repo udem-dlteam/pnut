@@ -977,9 +977,10 @@ void codegen_call(ast node) {
   int lbl;
 
   if (binding == 0) {
-    lbl = alloc_label();
-    cgc_add_global_fun(ident_probe, lbl, 0);
-    binding = cgc_globals;
+    putstr("ident = ");
+    putstr(string_pool + probe_string(ident_probe));
+    putchar('\n');
+    fatal_error("codegen_call: function not found");
   }
 
   call(heap[binding+4]);
