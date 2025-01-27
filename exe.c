@@ -76,8 +76,6 @@ void grow_fs(int words) {
   cgc_fs += words;
 }
 
-const int char_width = 1;
-
 const int reg_X;
 const int reg_Y;
 const int reg_Z;
@@ -529,7 +527,7 @@ int type_width(ast type, int stars, bool array_value, bool word_align) {
   // Basic type kw
   switch (get_op(type)) {
     case CHAR_KW:
-      return word_align ? word_size : char_width;
+      return word_align ? word_size : 1;
     case STRUCT_KW:
     case UNION_KW:
       return struct_union_size(type);
@@ -1168,20 +1166,11 @@ void codegen_string(int string_probe) {
   call(lbl);
 
   while (string_start != string_end) {
-    if (char_width == 1) {
-      emit_i8(*string_start);
-    } else {
-      emit_word_le(*string_start);
-    }
+    emit_i8(*string_start);
     string_start += 1;
   }
 
-
-  if (char_width == 1) {
-    emit_i8(0);
-  } else {
-    emit_word_le(0);
-  }
+  emit_i8(0);
 
   def_label(lbl);
 }
