@@ -6,6 +6,11 @@
 #include <string.h>
 #include <stdint.h> // for intptr_t
 
+#ifdef PNUT_CC
+// On pnut, intptr_t is not defined
+#define intptr_t int
+#endif
+
 #define ast int
 #define true 1
 #define false 0
@@ -264,7 +269,7 @@ int hash;
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
 #define HEAP_SIZE 200000
-int heap[HEAP_SIZE];
+intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
 int alloc_result;
@@ -2232,7 +2237,7 @@ void parse_error_internal(char * msg, int token, char * file, int line) {
   exit(1);
 }
 
-void expect_tok(int expected_tok) {
+void expect_tok_(int expected_tok, char* file, int line) {
   if (tok != expected_tok) {
 #ifdef NICE_ERR_MSG
     putstr("expected tok="); print_tok_type(expected_tok);
@@ -2241,10 +2246,12 @@ void expect_tok(int expected_tok) {
     putstr("expected tok="); putint(expected_tok);
     putstr("\ncurrent tok="); putint(tok); putchar('\n');
 #endif
-    parse_error("unexpected token", tok);
+    parse_error_internal("unexpected token", tok, file, line);
   }
   get_tok();
 }
+
+#define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
 
 ast parse_comma_expression();
 ast parse_cast_expression();

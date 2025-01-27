@@ -445,7 +445,7 @@ void setup_proc_args(int global_vars_size) {
 #ifdef target_i386_linux
 
 void os_getchar() {
-  int lbl = alloc_label();
+  int lbl = alloc_label("get_char_eof");
   push_reg(BX);           // save address of global variables table
   mov_reg_imm(AX, 0);     // mov  eax, 0
   push_reg(AX);           // push eax      # buffer to read byte
@@ -494,7 +494,7 @@ void os_fclose() {
 }
 
 void os_fgetc() {
-  int lbl = alloc_label();  // label for EOF
+  int lbl = alloc_label("fgetc_eof"); // label for EOF
   push_reg(BX);             // save address of global variables table
   mov_reg_reg(BX, reg_X);   // mov  ebx, file descriptor
   mov_reg_imm(AX, 3);       // mov  eax, 3 == SYS_READ
@@ -600,7 +600,7 @@ void os_close() {
 #ifdef SYSTEM_V_ABI
 
 void os_getchar() {
-  int lbl = alloc_label();
+  int lbl = alloc_label("get_char_eof");
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte
   mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
@@ -641,7 +641,7 @@ void os_fclose() {
 }
 
 void os_fgetc() {
-  int lbl = alloc_label(); // label for EOF
+  int lbl = alloc_label("fgetc_eof"); // label for EOF
   mov_reg_reg(DI, reg_X);  // mov  edi, file descriptor
   mov_reg_imm(AX, 0);      // mov  eax, 0
   push_reg(AX);            // push eax      # buffer to read byte
