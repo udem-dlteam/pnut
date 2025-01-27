@@ -338,16 +338,16 @@ int alloc_label(char* name) {
 
 #define assert_all_labels_defined() // No-op
 #define add_label(lbl) // No-op
+#define alloc_label(name) alloc_label_()
 
-#endif
-
-int alloc_label() {
+int alloc_label_() {
   int lbl = alloc_obj(2);
   heap[lbl] = GENERIC_LABEL;
   heap[lbl + 1] = 0; // Address of label
   add_label(lbl);
   return lbl;
 }
+#endif
 
 int alloc_goto_label() {
   int lbl = alloc_obj(3);
@@ -894,8 +894,8 @@ void codegen_binop(int op, ast lhs, ast rhs) {
 
   if (cond != -1) {
 
-    lbl1 = alloc_label();
-    lbl2 = alloc_label();
+    lbl1 = alloc_label(0);
+    lbl2 = alloc_label(0);
     jump_cond_reg_reg(cond, lbl1, reg_X, reg_Y);
     xor_reg_reg(reg_X, reg_X);
     jump(lbl2);
@@ -1161,7 +1161,7 @@ int codegen_lvalue(ast node) {
 }
 
 void codegen_string(int string_probe) {
-  int lbl = alloc_label();
+  int lbl = alloc_label(0);
   char *string_start = string_pool + heap[string_probe + 1];
   char *string_end = string_start + heap[string_probe + 4];
 
@@ -1370,7 +1370,7 @@ void codegen_rvalue(ast node) {
       write_mem_location(reg_Y, 0, reg_X, left_width);
       push_reg(reg_X);
     } else if (op == AMP_AMP || op == BAR_BAR) {
-      lbl1 = alloc_label();
+      lbl1 = alloc_label(0);
       codegen_rvalue(child0);
       pop_reg(reg_X);
       push_reg(reg_X);
@@ -1432,8 +1432,8 @@ void codegen_rvalue(ast node) {
   } else if (nb_children == 3) {
 
     if (op == '?') {
-      lbl1 = alloc_label(); // false label
-      lbl2 = alloc_label(); // end label
+      lbl1 = alloc_label(0); // false label
+      lbl2 = alloc_label(0); // end label
       codegen_rvalue(child0);
       pop_reg(reg_X);
       grow_fs(-1);
@@ -1461,8 +1461,8 @@ void codegen_rvalue(ast node) {
 
 void codegen_begin() {
 
-  setup_lbl = alloc_label();
-  init_start_lbl = alloc_label();
+  setup_lbl = alloc_label("setup");
+  init_start_lbl = alloc_label("init_start");
   init_next_lbl = init_start_lbl;
 
   // Make room for heap start and malloc bump pointer.
@@ -1476,46 +1476,46 @@ void codegen_begin() {
   void_type = new_ast0(VOID_KW, 0);
   void_star_type = new_ast0(VOID_KW, 1);
 
-  main_lbl = alloc_label();
+  main_lbl = alloc_label("main");
   cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, void_type);
 
-  exit_lbl = alloc_label();
+  exit_lbl = alloc_label("exit");
   cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, void_type);
 
-  getchar_lbl = alloc_label();
+  getchar_lbl = alloc_label("getchar");
   cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, char_type);
 
-  putchar_lbl = alloc_label();
+  putchar_lbl = alloc_label("putchar");
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, void_type);
 
-  fopen_lbl = alloc_label();
+  fopen_lbl = alloc_label("fopen");
   cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, int_type);
 
-  fclose_lbl = alloc_label();
+  fclose_lbl = alloc_label("fclose");
   cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, void_type);
 
-  fgetc_lbl = alloc_label();
+  fgetc_lbl = alloc_label("fgetc");
   cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, char_type);
 
-  malloc_lbl = alloc_label();
+  malloc_lbl = alloc_label("malloc");
   cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, void_star_type);
 
-  free_lbl = alloc_label();
+  free_lbl = alloc_label("free");
   cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, char_type);
 
-  read_lbl = alloc_label();
+  read_lbl = alloc_label("read");
   cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, int_type);
 
-  write_lbl = alloc_label();
+  write_lbl = alloc_label("write");
   cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, int_type);
 
-  open_lbl = alloc_label();
+  open_lbl = alloc_label("open");
   cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, int_type);
 
-  close_lbl = alloc_label();
+  close_lbl = alloc_label("close");
   cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, int_type);
 
-  printf_lbl = alloc_label();
+  printf_lbl = alloc_label("printf");
   cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, void_type);
 
   jump(setup_lbl);
@@ -1596,10 +1596,9 @@ void codegen_glo_var_decl(ast node) {
   if (get_op(type) != '[') { // not array declaration
 
     def_label(init_next_lbl);
-    init_next_lbl = alloc_label();
+    init_next_lbl = alloc_label("init_next");
 
     if (init != 0) {
-
       codegen_rvalue(init);
     } else {
       xor_reg_reg(reg_X, reg_X);
@@ -1683,8 +1682,8 @@ void codegen_statement(ast node) {
 
   if (op == IF_KW) {
 
-    lbl1 = alloc_label(); // else statement
-    lbl2 = alloc_label(); // join point after if
+    lbl1 = alloc_label(0); // else statement
+    lbl2 = alloc_label(0); // join point after if
     codegen_rvalue(get_child_(IF_KW, node, 0));
     pop_reg(reg_X);
     grow_fs(-1);
@@ -1698,8 +1697,8 @@ void codegen_statement(ast node) {
 
   } else if (op == WHILE_KW) {
 
-    lbl1 = alloc_label(); // while statement start
-    lbl2 = alloc_label(); // join point after while
+    lbl1 = alloc_label(0); // while statement start
+    lbl2 = alloc_label(0); // join point after while
 
     save_fs = cgc_fs;
     save_locals = cgc_locals;
@@ -1721,9 +1720,9 @@ void codegen_statement(ast node) {
 
   } else if (op == FOR_KW) {
 
-    lbl1 = alloc_label(); // while statement start
-    lbl2 = alloc_label(); // join point after while
-    lbl3 = alloc_label(); // initial loop starting point
+    lbl1 = alloc_label(0); // while statement start
+    lbl2 = alloc_label(0); // join point after while
+    lbl3 = alloc_label(0); // initial loop starting point
 
     save_fs = cgc_fs;
     save_locals = cgc_locals;
@@ -1749,8 +1748,8 @@ void codegen_statement(ast node) {
 
   } else if (op == DO_KW) {
 
-    lbl1 = alloc_label(); // do statement start
-    lbl2 = alloc_label(); // break point
+    lbl1 = alloc_label(0); // do statement start
+    lbl2 = alloc_label(0); // break point
 
     save_fs = cgc_fs;
     save_locals = cgc_locals;
@@ -1774,8 +1773,8 @@ void codegen_statement(ast node) {
     save_fs = cgc_fs;
     save_locals = cgc_locals;
 
-    lbl1 = alloc_label(); // lbl1: end of switch
-    lbl2 = alloc_label(); // lbl2: next case
+    lbl1 = alloc_label(0); // lbl1: end of switch
+    lbl2 = alloc_label(0); // lbl2: next case
 
     cgc_add_enclosing_switch(cgc_fs, lbl1, lbl2);
     binding = cgc_locals;
@@ -1806,10 +1805,10 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_switch(cgc_locals);
 
     if (binding != 0) {
-      lbl1 = alloc_label();                   // skip case when falling through
+      lbl1 = alloc_label(0);                   // skip case when falling through
       jump(lbl1);
       def_label(heap[binding + 4]);           // false jump location of previous case
-      heap[binding + 4] = alloc_label();      // create false jump location for current case
+      heap[binding + 4] = alloc_label(0);     // create false jump location for current case
       dup(reg_X);                             // duplicate switch operand for the comparison
       codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
       pop_reg(reg_Y); pop_reg(reg_X); grow_fs(-2);
@@ -1827,7 +1826,7 @@ void codegen_statement(ast node) {
 
     if (binding != 0) {
       def_label(heap[binding + 4]);           // false jump location of previous case
-      heap[binding + 4] = alloc_label();      // create label for next case (even if default catches all cases)
+      heap[binding + 4] = alloc_label(0);     // create label for next case (even if default catches all cases)
       codegen_statement(get_child_(DEFAULT_KW, node, 0));  // default statement
     } else {
       fatal_error("default outside of switch");
@@ -1936,7 +1935,7 @@ void codegen_glo_fun_decl(ast node) {
   binding = cgc_lookup_fun(name, cgc_globals);
 
   if (binding == 0) {
-    lbl = alloc_label();
+    lbl = alloc_label(STRING_BUF(name));
     cgc_add_global_fun(name, lbl, fun_type);
     binding = cgc_globals;
   }
@@ -2002,7 +2001,7 @@ void rt_crash(char* msg) {
 }
 
 void rt_malloc() {
-  int end_lbl = alloc_label();
+  int end_lbl = alloc_label("rt_malloc_success");
 
   mov_reg_mem(reg_Y, reg_glo, word_size); // Bump pointer
   add_reg_reg(reg_X, reg_Y);              // New bump pointer
@@ -2029,7 +2028,7 @@ void rt_free() {
 
 void codegen_end() {
 
-  int glo_setup_loop_lbl = alloc_label();
+  int glo_setup_loop_lbl = alloc_label("glo_setup_loop");
 
   def_label(setup_lbl);
 

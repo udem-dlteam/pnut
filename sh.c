@@ -28,10 +28,6 @@ void handle_shell_include() {
 
 #define text int
 #define TEXT_POOL_SIZE 1000000
-#ifdef PNUT_CC
-// On pnut, intptr_t is not defined
-#define intptr_t int
-#endif
 intptr_t text_pool[TEXT_POOL_SIZE];
 int text_alloc = 1; // Start at 1 because 0 is the empty text
 
