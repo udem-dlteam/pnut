@@ -6,6 +6,11 @@
 #include <string.h>
 #include <stdint.h> // for intptr_t
 
+#ifdef PNUT_CC
+// On pnut, intptr_t is not defined
+#define intptr_t int
+#endif
+
 #define ast int
 #define true 1
 #define false 0
@@ -264,7 +269,7 @@ int hash;
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
 #define HEAP_SIZE 200000
-int heap[HEAP_SIZE];
+intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
 int alloc_result;
