@@ -1016,7 +1016,6 @@ void codegen_call(ast node) {
   ast nb_params = codegen_params(params);
 
   int binding = cgc_lookup_fun(ident_probe, cgc_globals);
-  int lbl;
 
   if (binding == 0) {
     putstr("ident = ");
