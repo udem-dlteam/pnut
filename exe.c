@@ -299,10 +299,53 @@ enum {
   GOTO_LABEL,
 };
 
+#ifdef SAFE_MODE
+int labels[100000];
+int labels_ix = 0;
+
+void assert_all_labels_defined() {
+  int i = 0;
+  int lbl;
+  // Check that all labels are defined
+  for (; i < labels_ix; i++) {
+    lbl = labels[i];
+    if (heap[lbl + 1] > 0) {
+      putstr("Label ");
+      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
+        putstr((char*) heap[lbl + 2]);
+      } else {
+        putint(lbl);
+      }
+      putstr(" is not defined\n");
+      exit(1);
+    }
+  }
+}
+
+void add_label(int lbl) {
+  labels[labels_ix++] = lbl;
+}
+
+int alloc_label(char* name) {
+  int lbl = alloc_obj(3);
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  heap[lbl + 2] = (intptr_t) name; // Name of label
+  add_label(lbl);
+  return lbl;
+}
+#else
+
+#define assert_all_labels_defined() // No-op
+#define add_label(lbl) // No-op
+
+#endif
+
 int alloc_label() {
   int lbl = alloc_obj(2);
   heap[lbl] = GENERIC_LABEL;
   heap[lbl + 1] = 0; // Address of label
+  add_label(lbl);
   return lbl;
 }
 
@@ -311,6 +354,7 @@ int alloc_goto_label() {
   heap[lbl] = GOTO_LABEL;
   heap[lbl + 1] = 0; // Address of label
   heap[lbl + 2] = 0; // cgc-fs of label
+  add_label(lbl);
   return lbl;
 }
 
@@ -2095,6 +2139,8 @@ void codegen_end() {
   def_label(printf_lbl);
   rt_crash("printf is not supported yet.");
   ret();
+
+  assert_all_labels_defined();
 
   generate_exe();
 }
