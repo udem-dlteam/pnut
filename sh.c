@@ -2140,7 +2140,6 @@ void comp_glo_fun_decl(ast node) {
   params_ix = 2;
   while (params != 0) {
     var = get_child__(',', DECL, params, 0);
-
     // TODO: Constant param optimization
     // Constant parameters don't need to be initialized
     comp_assignment(get_child_(DECL, var, 0), new_ast0(IDENTIFIER_DOLLAR, params_ix));
@@ -2150,8 +2149,6 @@ void comp_glo_fun_decl(ast node) {
 #endif
 
   comp_body(body, STMT_CTX_DEFAULT);
-  // functions cannot be empty so we insert ':' if it's empty
-  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
   // Set local environment to cummulative for the save_local_vars/restore_local_vars
   cgc_locals = cgc_locals_fun;
@@ -2165,6 +2162,9 @@ void comp_glo_fun_decl(ast node) {
     fixup_glo_decl(get_child_(',', rest_loc_var_fixups, 0), restore_local_vars(params_ix - 1));
     rest_loc_var_fixups = get_child_opt_(',', ',', rest_loc_var_fixups, 1);
   }
+
+  // functions cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
   nest_level -= 1;
 
