@@ -1,1 +1,1 @@
-"a" variable: array/struct value type is not supported for shell backend. Use a reference type instead.
+"a" variable: tests/_sh/checks/local_array_arg.c:5:0  array/struct value type is not supported for shell backend. Use a reference type instead.

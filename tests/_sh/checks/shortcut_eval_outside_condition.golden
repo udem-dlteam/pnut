@@ -1,1 +1,1 @@
-comp_rvalue_go: && and || with function calls can only be used in tests
+tests/_sh/checks/shortcut_eval_outside_condition.c:7:0  comp_rvalue_go: && and || with function calls can only be used in tests

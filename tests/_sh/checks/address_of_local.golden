@@ -1,1 +1,1 @@
-comp_rvalue_go: can't take the address of a local variable
+tests/_sh/checks/address_of_local.c:6:0  comp_rvalue_go: can't take the address of a local variable

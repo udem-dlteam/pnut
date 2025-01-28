@@ -1,1 +1,1 @@
-_a variable name is invalid. It can't start or end with '_'.
+_a tests/_sh/checks/local_var_underscore.c:5:0  variable name is invalid. It can't start or end with '_'.

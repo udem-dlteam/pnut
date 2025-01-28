@@ -1,1 +1,1 @@
-Variable is already in local environment
+tests/_sh/checks/local_var_shadowing.c:6:0  Variable is already in local environment

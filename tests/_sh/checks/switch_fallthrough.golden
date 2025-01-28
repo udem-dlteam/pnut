@@ -1,1 +1,1 @@
-case/default must be at the beginning of a switch conditional block
+tests/_sh/checks/switch_fallthrough.c:11:0  case/default must be at the beginning of a switch conditional block

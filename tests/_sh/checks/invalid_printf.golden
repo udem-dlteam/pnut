@@ -1,1 +1,1 @@
-Not enough parameters for printf
+tests/_sh/checks/invalid_printf.c:5:0  Not enough parameters for printf
