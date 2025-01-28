@@ -1,0 +1,1 @@
+comp_rvalue_go: && and || with function calls can only be used in tests
