@@ -239,7 +239,6 @@ void print_escaped_text(text t, bool for_printf) {
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
   } else {
-    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
     fatal_error("print_escaped_text: unexpected string tree node");
   }
 }
@@ -276,7 +275,6 @@ void print_text(text t) {
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
   } else {
-    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
     fatal_error("print_text: unexpected string tree node");
   }
 }
@@ -542,7 +540,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
   // This check only applies to local variables because globals are prefixed with _.
   if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
-    printf("%s ", name);
+    printf("\"%s\" ", name);
     fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
   }
 
@@ -550,7 +548,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     // Local variables don't correspond to memory locations, and can't store
     // more than 1 number/pointer.
     if (get_op(type) == '[' || get_op(type) == STRUCT_KW) {
-      printf("%s ", name);
+      printf("\"%s\" variable: ", name);
       fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
   } else {
@@ -560,7 +558,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
       || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
       || get_op(type) == STRUCT_KW) { // Struct value type
-      printf("%s ", name);
+      printf("\"%s\" variable: ", name);
       fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
     }
   }
@@ -920,7 +918,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       literals_inits = new_ast2(',', new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
       return sub1;
     } else {
-      printf("handle_side_effects_go: op=%d %c", op, op);
+      printf("op=%d %c", op, op);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -934,7 +932,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
     } else {
-      printf("1: op=%d %c", op, op);
+      printf("op=%d %c", op, op);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -979,35 +977,24 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == CAST) {
       return new_ast2(CAST, child0, handle_side_effects_go(child1, executes_conditionally));
     } else {
-      printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
       return 0;
     }
-  } else if (nb_children == 3) {
-    if (op == '?') {
-      previous_conditional_fun_calls = conditional_fun_calls;
-      conditional_fun_calls = 0;
-      sub1 = handle_side_effects_go(child1, true);
-      left_conditional_fun_calls = conditional_fun_calls;
-      conditional_fun_calls = 0;
-      sub2 = handle_side_effects_go(child2, true);
-      right_conditional_fun_calls = conditional_fun_calls;
-      if (left_conditional_fun_calls != 0 || right_conditional_fun_calls != 0) {
-        fatal_error("Conditional function calls in ternary operator not allowed");
-      }
+  } else if (nb_children == 3 && op == '?') {
+    previous_conditional_fun_calls = conditional_fun_calls;
+    conditional_fun_calls = 0;
+    sub1 = handle_side_effects_go(child1, true);
+    left_conditional_fun_calls = conditional_fun_calls;
+    conditional_fun_calls = 0;
+    sub2 = handle_side_effects_go(child2, true);
+    right_conditional_fun_calls = conditional_fun_calls;
+    if (left_conditional_fun_calls != 0 || right_conditional_fun_calls != 0) {
+      fatal_error("Conditional function calls in ternary operator not allowed");
+    }
 
-      return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
-    } else {
-      printf("3: op=%d %c\n", op, op);
-      fatal_error("unexpected operator");
-      return 0;
-    }
-  } else if (nb_children == 4) {
-    printf("4: op=%d %c\n", op, op);
-    fatal_error("unexpected operator");
-    return 0;
+    return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
   } else {
-    printf("5: op=%d %c with %d children\n", op, op, get_nb_children(node));
+    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("unexpected operator");
     return 0;
   }
@@ -1141,9 +1128,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
-    } else if (op == STRING) {
-      fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
-      return 0;
     } else {
       printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
@@ -1201,20 +1185,20 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         } else if (get_op(child0) == STRUCT_KW) {
           return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
         } else {
-          printf("op=%d %c", get_op(child0), get_op(child0));
-          printf("op=%d %c", get_op(get_child(child0, 1)), get_op(get_child(child0, 1)));
+          printf("op=%d %c\n", get_op(child0), get_op(child0));
+          printf("op=%d %c\n", get_op(get_child(child0, 1)), get_op(get_child(child0, 1)));
           fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
           return 0;
         }
       } else {
-        printf("op=%d %c", get_op(child0), get_op(child0));
+        printf("op=%d %c\n", get_op(child0), get_op(child0));
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
     } else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
     } else {
-      printf("1: op=%d %c", op, op);
+      printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
     }
@@ -1247,75 +1231,60 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       }
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(child1, context, 0, op);
-    } else if (op == AMP_AMP || op == BAR_BAR) {
-      fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
-      return 0;
     } else {
       fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
       return 0;
     }
-  } else if (nb_children == 3) {
-    if (op == '?') {
+  } else if (nb_children == 3 && op == '?') {
+    sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+    sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+    sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+    return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
+    return 0;
+  } else if (nb_children == 4 && (op == AMP_AMP || op == BAR_BAR)) {
+    // Note, this could also be compiled in a single [ ] block using -a and
+    // -o, which I think are POSIX compliant but are deprecated.
+    if (context == RVALUE_CTX_TEST) {
+      // When compiling in a test context, && and || can be compiled to
+      // Shell's && and || with [ ... ] blocks.
+      //
+      // A notable difference between these operators in Shell and C is that
+      // in Shell, they have equal precedence while in C, && has higher
+      // precedence. This means that we need to add parenthesis that would not
+      // be needed in C.
+      //
+      // As a heuristic, we add parenthesis whenever the left or right side of
+      // the operator is a different comparison operator.
+      sub1 = non_parenthesized_operand(child0); // un-parenthesized lhs
+      sub2 = non_parenthesized_operand(child1); // un-parenthesized rhs
+
+      // if lhs is && or ||, and different from the current operator
+      if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
+        sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
+        sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
+      } else {
+        sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
+      }
+
+      // if rhs is && or ||, and different from the current operator
+      if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
+        sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
+        sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
+      } else {
+        sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
+      }
+      return string_concat3(sub1, op_to_str(op), sub2);
+    } else {
+      if (test_side_effects != 0 || child2 != 0 || child3 != 0) {
+        fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
+      }
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
-      return 0;
-    } else {
-      printf("op=%d %c\n", op, op);
-      fatal_error("comp_rvalue_go: unknown rvalue with 3 children");
-      return 0;
-    }
-  } else if (nb_children == 4) {
-    if (op == AMP_AMP || op == BAR_BAR) {
-      // Note, this could also be compiled in a single [ ] block using -a and
-      // -o, which I think are POSIX compliant but are deprecated.
-      if (context == RVALUE_CTX_TEST) {
-        // When compiling in a test context, && and || can be compiled to
-        // Shell's && and || with [ ... ] blocks.
-        //
-        // A notable difference between these operators in Shell and C is that
-        // in Shell, they have equal precedence while in C, && has higher
-        // precedence. This means that we need to add parenthesis that would not
-        // be needed in C.
-        //
-        // As a heuristic, we add parenthesis whenever the left or right side of
-        // the operator is a different comparison operator.
-        sub1 = non_parenthesized_operand(child0); // un-parenthesized lhs
-        sub2 = non_parenthesized_operand(child1); // un-parenthesized rhs
-
-        // if lhs is && or ||, and different from the current operator
-        if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
-          sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
-        } else {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
-        }
-
-        // if rhs is && or ||, and different from the current operator
-        if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
-          sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
-        } else {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
-        }
-        return string_concat3(sub1, op_to_str(op), sub2);
-      } else {
-        if (test_side_effects != 0 || child2 != 0 || child3 != 0) {
-          fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
-        }
-        sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
-      }
-    } else {
-      printf("op=%d %c\n", op, op);
-      fatal_error("comp_rvalue_go: unknown rvalue with 4 children");
-      return 0;
+      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
     }
   } else {
     printf("op=%d %c\n", op, op);
-    fatal_error("comp_rvalue_go: unknown rvalue with >4 children");
+    fatal_error("comp_rvalue_go: unknown rvalue");
     return 0;
   }
 }
