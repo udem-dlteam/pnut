@@ -566,7 +566,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   }
 }
 
-void check_param_decls(ast lst) {
+void check_decls(ast lst) {
   while (lst != 0) {
     assert_var_decl_is_safe(get_child__(',', DECL, lst, 0), true);
     lst = get_child_(',', lst, 1);
@@ -2014,6 +2014,7 @@ void comp_var_decls(ast node) {
   while (node != 0) {
     // Add to local env and cummulative env, then initialize
     var_decl = get_child__(',', DECL, node, 0);
+    assert_var_decl_is_safe(var_decl, true);
     add_var_to_local_env(var_decl, BINDING_VAR_LOCAL);
     if (get_child_(DECL, var_decl, 2) != 0) { // Initializer
       comp_assignment(get_child__(DECL, IDENTIFIER, var_decl, 0), get_child_(DECL, var_decl, 2));
@@ -2124,7 +2125,7 @@ void comp_glo_fun_decl(ast node) {
 
   top_level_stmt = false;
 
-  check_param_decls(params);
+  check_decls(params);
   add_fun_params_to_local_env(params);
 
   // If the function is main
