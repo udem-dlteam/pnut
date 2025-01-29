@@ -12,7 +12,7 @@ mkdir -p build
 
 echo "Compiling examples"
 
-PNUT_SH_OPTIONS="-DRELEASE_PNUT_SH -DRT_COMPACT"
+PNUT_SH_OPTIONS="-DRELEASE_PNUT_SH -DRT_COMPACT -DSAFE_MODE"
 
 # Compile pnut.exe
 gcc -o build/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c 2> /dev/null || fail "Error: Failed to compile pnut"
@@ -34,9 +34,11 @@ generate_executable_with() { # $1 = executable, $2 = options
     opt=$2
   fi
 
-  if ./build/$1 $file $opt > $COMP_DIR/$filename.sh; then
+  if timeout 3 ./build/$1 $file $opt > $COMP_DIR/$filename.sh; then
     chmod +x $COMP_DIR/$filename.sh
     printf "✅\n"
+  elif [ $? -eq 124 ]; then
+    printf "Timeout ❌\n"
   else
     printf "Failed to compile ❌\n"
     failed=1

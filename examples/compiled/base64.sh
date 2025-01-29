@@ -13,12 +13,6 @@ _malloc() { # $2 = object size
 defarr() { _malloc $1 $2; }
 
 defarr _buf 1024
-: $((fd = 0))
-_cat_fd() { let fd $2
-  :
-  endlet $1 fd
-}
-
 
 unpack_escaped_string() {
   __buf="$1"

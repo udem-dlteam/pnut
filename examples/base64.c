@@ -12,9 +12,6 @@
 
 char buf[BUF_SIZE];
 
-void cat_fd(int fd) {
-}
-
 char *codes = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 void encode() {

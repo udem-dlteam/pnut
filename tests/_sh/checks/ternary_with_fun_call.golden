@@ -1,0 +1,1 @@
+tests/_sh/checks/ternary_with_fun_call.c:6:0  Conditional function calls in ternary operator not allowed

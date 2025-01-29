@@ -1,0 +1,1 @@
+tests/_sh/checks/switch_early_exit.c:14:0  Early break out of a switch case is unsupported

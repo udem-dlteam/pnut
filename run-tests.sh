@@ -67,25 +67,32 @@ fi
 
 # Compile pnut, either using gcc or with pnut itself. Set pnut_comp to the compiled pnut executable
 # The compiled pnut executable is cached in the tests folder to speed up the process
-compile_pnut() { # extra pnut compilation options: $1
+compile_pnut() { # extra pnut compilation options: $1, expect_failed_compilation?: $2
   pnut_source="pnut.c"
   extra_opts="$1"
+  expect_failed_compilation="${2:-0}"
+  if [ "$safe" -eq 0 ] && [ "$expect_failed_compilation" -eq 1 ]; then
+    extra_opts="$extra_opts -DSAFE_MODE"
+  fi
+
   if [ -z "$extra_opts" ]; then
     extra_opts_id="base"
   else
     extra_opts_id=$(printf "%s" "$extra_opts" | md5sum | cut -c 1-16) # 16 characters should be enough
   fi
-  extra_opts_suffix=${extra_opts_id:+"-"}$extra_opts_id             # Add a dash if there are extra options
+  extra_opts_suffix=${extra_opts_id:+"-"}$extra_opts_id               # Add a dash if there are extra options
   pnut_exe="./tests/pnut-by-gcc${extra_opts_suffix}.exe"
-  pnut_exe_backend="./tests/pnut-$extra_opts_suffix.$ext"
+  pnut_exe_backend="./tests/pnut$extra_opts_suffix.$ext"
 
   if [ ! -f "$pnut_exe" ]; then
-    gcc "$pnut_source" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" 2> /dev/null || fail "Error: Failed to compile $pnut_source with $backend"
+    gcc "$pnut_source" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" 2> /dev/null \
+      || fail "Error: Failed to compile $pnut_source with $backend"
   fi
 
   if [ "$bootstrap" -eq 1 ]; then
     if [ ! -f "$pnut_exe_backend" ]; then
-      $pnut_exe $PNUT_EXE_OPTIONS $extra_opts "$pnut_source" > "$pnut_exe_backend" || fail "Error: Failed to compile $pnut_source with $pnut_exe (bootstrap)"
+      $pnut_exe $PNUT_EXE_OPTIONS $extra_opts "$pnut_source" > "$pnut_exe_backend" \
+        || fail "Error: Failed to compile $pnut_source with $pnut_exe (bootstrap)"
       chmod +x "$pnut_exe_backend"
     fi
     pnut_comp="$pnut_exe_backend"
@@ -135,8 +142,18 @@ test_args() {
 # not relevant to the bootstrap process.
 # // expect_failure_for: bash-2*
 # // expect_failure_for: yash
-test_expect_falure_for_shells() {
+test_expect_failure_for_shells() {
   echo `sed -n -e "/\/\/ expect_failure_for: /p" "$1" | sed -e "s/^\/\/ expect_failure_for: //"`
+}
+
+# Some tests are expected to fail with a compilation error
+# // expect_comp_failure
+test_expect_comp_failure() {
+  if grep -q "// expect_comp_failure" "$1"; then
+    return 1
+  else
+    return 0
+  fi
 }
 
 # Some tests take a long time to run, so we set a timeout to prevent infinite
@@ -147,7 +164,7 @@ test_timeout() {
 }
 
 test_expect_failure_for_shell() { # file: $1
-  failing_shells=$(test_expect_falure_for_shells "$1")
+  failing_shells=$(test_expect_failure_for_shells "$1")
   for failing_shell in $failing_shells; do
     failing_shell_name=$(echo "$failing_shell" | sed 's/-.*//')
     failing_shell_version=$(echo "$failing_shell" | sed 's/.*-//')
@@ -174,9 +191,9 @@ execute_test() { # executable: $1, timeout: $2, args: $3
   fi
 }
 
-compile_test() { # c file: $1
+compile_test() { # c file: $1, expect_failed_compilation?: $2
   # 15s timeout to prevent infinite loops in pnut
-  compile_pnut $(test_pnut_comp_options $1)
+  compile_pnut "$(test_pnut_comp_options $1)" "$2"
   if [ $bootstrap -eq 1 ]; then
     if [ "$backend" = "sh" ]; then
       timeout 15 $shell $pnut_comp "$1" $(test_comp_options $1)
@@ -190,19 +207,24 @@ compile_test() { # c file: $1
 
 run_test() { # file_to_test: $1
   file="$1"
-  filename=$(basename "$file" .c) # Get the filename without extension
-  dir=$(dirname "$file") # Get the directory of the test file
+  filename=$(basename "$file" .c)     # Get the filename without extension
+  dir=$(dirname "$file")              # Get the directory of the test file
+  golden_file="$dir/$filename.golden" # Path of the expected output
 
-  golden_file="$dir/$filename.golden"
+  failed_pnut_comp=0                  # Flag to indicate if compilation failed
+
+  expect_failed_comp=0                # Flag to indicate if compilation is expected to fail
+  test_expect_comp_failure "$file" || expect_failed_comp=1
 
   # Print file name before generating golden file so we know it's getting processed
   printf "$file: "
 
   # Generate golden file if it doesn't exist
   if [ ! -f "$golden_file" ]; then
-    compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.pnut.err" && \
-      gcc "$file" $(test_comp_options $file) -o "$dir/$filename-gcc.$ext" 2> "$dir/$filename.gcc.err"
-    if [ $? -eq 0 ]; then
+    compile_test "$file" "$expect_failed_comp" > "$dir/$filename.$ext" && \
+      gcc "$file" $(test_comp_options $file) -o "$dir/$filename-gcc.$ext" 2> "$dir/$filename-by-gcc.err"
+    compile_test_exit_code="$?"
+    if [ "$compile_test_exit_code" -eq 0 ] && [ "$expect_failed_comp" -eq 0 ]; then
       chmod +x "$dir/$filename.$ext"
       execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$dir/$filename.output"
       $dir/$filename-gcc.$ext $(test_args $file) > "$dir/$filename-gcc.output"
@@ -213,16 +235,28 @@ run_test() { # file_to_test: $1
         echo "❌ Program compiled by gcc and pnut produced different outputs"
       fi
 
+    elif [ "$expect_failed_comp" -eq 1 ]; then
+
+      if [ "$compile_test_exit_code" -eq 0 ]; then
+        echo "❌ Compilation succeeded when it should have failed"
+        return 1
+      else
+        echo "🟡 Golden file generated by pnut"
+        tail -n 1 "$dir/$filename.$ext" > "$golden_file" # Save the error message which is the last line
+      fi
+
     else
-      echo "❌ Failed to compile with pnut. See $dir/$filename.pnut.err and $dir/$filename.gcc.err"
+      echo "❌ Failed to compile with pnut. See $dir/$filename.$ext and $dir/$filename-by-gcc.err"
     fi
     return 1
   fi
 
   # Compile the test file with pnut.exe
-  compile_test "$file" > "$dir/$filename.$ext" 2> "$dir/$filename.err"
+  compile_test "$file" "$expect_failed_comp" > "$dir/$filename.$ext"
+  compile_test_exit_code="$?"
 
-  if [ $? -eq 0 ]; then # If compilation was successful
+  if [ "$compile_test_exit_code" -eq 0 ] && [ "$expect_failed_comp" -eq 0 ]; then # If compilation was successful and not expected to fail
+
     if [ "$compile_only" -eq 1 ]; then
       echo "✅ Compiled $file"
       return 0
@@ -251,9 +285,30 @@ run_test() { # file_to_test: $1
       echo "❌ Failed to run: $(cat "$dir/$filename.err")"
       return 1
     fi
-  else
-    echo "❌ Failed to compile with pnut: $(cat "$dir/$filename.err")"
+
+  elif [ "$expect_failed_comp" -eq 1 ]; then # Compilation failed as expected
+
+    if [ "$compile_test_exit_code" -eq 0 ]; then
+      echo "❌ Compilation succeeded when it should have failed"
+      return 1
+    else
+      diff_out=$(tail -n 1 "$dir/$filename.$ext" | diff - "$dir/$filename.golden")
+      if [ $? -eq 0 ]; then # If the error message matches the golden file
+        echo "✅ Test passed (compilation failed as expected)"
+        return 0
+      else
+        echo "❌ Compilation failed for a different reason than expected:"
+        echo "diff (error vs expected)"
+        echo "$diff_out"
+        return 1
+      fi
+    fi
+
+  else # Compilation failed when it should have succeeded
+
+    echo "❌ Failed to compile with pnut: $(cat "$dir/$filename.$ext")"
     return 1
+
   fi
 }
 

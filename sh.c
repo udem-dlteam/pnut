@@ -239,7 +239,6 @@ void print_escaped_text(text t, bool for_printf) {
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
   } else {
-    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
     fatal_error("print_escaped_text: unexpected string tree node");
   }
 }
@@ -276,7 +275,6 @@ void print_text(text t) {
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
   } else {
-    printf("\nt=%d %d\n", t, TEXT_TO_INT(text_pool[t]));
     fatal_error("print_text: unexpected string tree node");
   }
 }
@@ -504,7 +502,7 @@ ast fresh_string_ident(int string_probe) {
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
-  int ident_probe = get_child_(VAR_DECL, decl, 0);
+  int ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
 
   // Make sure we're not shadowing an existing local variable
   if (cgc_lookup_var(ident_probe, cgc_locals)) {
@@ -513,12 +511,12 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
   }
 
   // The var is not part of the environment, so we add it.
-  cgc_add_local_var(kind, ident_probe, get_child_(VAR_DECL, decl, 1));
+  cgc_add_local_var(kind, ident_probe, get_child_(DECL, decl, 1));
 }
 
 void add_fun_params_to_local_env(ast lst) {
   while (lst != 0) {
-    add_var_to_local_env(get_child__(',', VAR_DECL, lst, 0), BINDING_PARAM_LOCAL);
+    add_var_to_local_env(get_child__(',', DECL, lst, 0), BINDING_PARAM_LOCAL);
     lst = get_child_opt_(',', ',', lst, 1);
   }
 }
@@ -529,9 +527,9 @@ void add_fun_params_to_local_env(ast lst) {
 //
 // Also, the shell backend doesn't support variables with aggregate types.
 void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for assert_idents_are_safe
-  ast ident_probe = get_child_(VAR_DECL, variable, 0);
+  ast ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
   char* name = string_pool + probe_string(ident_probe);
-  ast type = get_child_(VAR_DECL, variable, 1);
+  ast type = get_child_(DECL, variable, 1);
   if (name[0] == '_'
   || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
     printf("%s ", name);
@@ -542,21 +540,33 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
   // This check only applies to local variables because globals are prefixed with _.
   if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
-    printf("%s ", name);
+    printf("\"%s\" ", name);
     fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
   }
 
-  // Local variables don't correspond to memory locations, and can't store
-  // more than 1 number/pointer.
-  if (local && (get_op(type) == '[' || (get_op(type) == STRUCT_KW && get_stars(type) == 0))) {
-    printf("%s ", name);
-    fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
+  if (local) {
+    // Local variables don't correspond to memory locations, and can't store
+    // more than 1 number/pointer.
+    if (get_op(type) == '[' || get_op(type) == STRUCT_KW) {
+      printf("\"%s\" variable: ", name);
+      fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
+    }
+  } else {
+    // Arrays of structs and struct value types are not supported for now.
+    // When we have type information on the local and global variables, we'll
+    // be able to generate the correct code for these cases.
+    if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
+      || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
+      || get_op(type) == STRUCT_KW) { // Struct value type
+      printf("\"%s\" variable: ", name);
+      fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
+    }
   }
 }
 
-void check_param_decls(ast lst) {
+void check_decls(ast lst) {
   while (lst != 0) {
-    assert_var_decl_is_safe(get_child__(',', VAR_DECL, lst, 0), true);
+    assert_var_decl_is_safe(get_child__(',', DECL, lst, 0), true);
     lst = get_child_(',', lst, 1);
   }
 }
@@ -649,7 +659,7 @@ text let_params(int params) {
 
   while (params != 0) {
     // TODO: Constant param optimization
-    ident = new_ast0(IDENTIFIER, get_child_(VAR_DECL, get_child__(',', VAR_DECL, params, 0), 0));
+    ident = get_child__(DECL, IDENTIFIER, get_child__(',', DECL, params, 0), 0);
     res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str_lit("; "));
     params = get_child_opt_(',', ',', params, 1);
     params_ix += 1;
@@ -908,7 +918,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       literals_inits = new_ast2(',', new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
       return sub1;
     } else {
-      printf("handle_side_effects_go: op=%d %c", op, op);
+      printf("op=%d %c", op, op);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -922,7 +932,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
     } else {
-      printf("1: op=%d %c", op, op);
+      printf("op=%d %c", op, op);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -967,35 +977,24 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == CAST) {
       return new_ast2(CAST, child0, handle_side_effects_go(child1, executes_conditionally));
     } else {
-      printf("2: op=%d %c", op, op);
       fatal_error("unexpected operator");
       return 0;
     }
-  } else if (nb_children == 3) {
-    if (op == '?') {
-      previous_conditional_fun_calls = conditional_fun_calls;
-      conditional_fun_calls = 0;
-      sub1 = handle_side_effects_go(child1, true);
-      left_conditional_fun_calls = conditional_fun_calls;
-      conditional_fun_calls = 0;
-      sub2 = handle_side_effects_go(child2, true);
-      right_conditional_fun_calls = conditional_fun_calls;
-      if (left_conditional_fun_calls != 0 || right_conditional_fun_calls != 0) {
-        fatal_error("Conditional function calls in ternary operator not allowed");
-      }
+  } else if (nb_children == 3 && op == '?') {
+    previous_conditional_fun_calls = conditional_fun_calls;
+    conditional_fun_calls = 0;
+    sub1 = handle_side_effects_go(child1, true);
+    left_conditional_fun_calls = conditional_fun_calls;
+    conditional_fun_calls = 0;
+    sub2 = handle_side_effects_go(child2, true);
+    right_conditional_fun_calls = conditional_fun_calls;
+    if (left_conditional_fun_calls != 0 || right_conditional_fun_calls != 0) {
+      fatal_error("Conditional function calls in ternary operator not allowed");
+    }
 
-      return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
-    } else {
-      printf("3: op=%d %c\n", op, op);
-      fatal_error("unexpected operator");
-      return 0;
-    }
-  } else if (nb_children == 4) {
-    printf("4: op=%d %c\n", op, op);
-    fatal_error("unexpected operator");
-    return 0;
+    return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
   } else {
-    printf("5: op=%d %c with %d children\n", op, op, get_nb_children(node));
+    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
     fatal_error("unexpected operator");
     return 0;
   }
@@ -1129,9 +1128,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR) {
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
-    } else if (op == STRING) {
-      fatal_error("comp_rvalue_go: string should have been removed by handle_side_effects");
-      return 0;
     } else {
       printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
@@ -1175,23 +1171,34 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       sub1 = comp_lvalue(child0);
       return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
     } else if (op == SIZEOF_KW) {
-      if (get_op(child0) == INT_KW
-       || get_op(child0) == CHAR_KW
-       || get_op(child0) == VOID_KW
-       || get_op(child0) == ENUM_KW
-       || (( get_op(child0) == STRUCT_KW || get_op(child0) == UNION_KW)
-          && get_child(child0, 0) >= 1)) { // If it's a pointer
-        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
-      } else if (get_op(child0) == STRUCT_KW) {
-        return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+      // child0 is either an abstract declaration or an expression
+      if (get_op(child0) == DECL) {
+        child0 = get_child_(DECL, child0, 1); // Get the type
+        if ( get_op(child0) == INT_KW
+          || get_op(child0) == SHORT_KW
+          || get_op(child0) == LONG_KW
+          || get_op(child0) == CHAR_KW
+          || get_op(child0) == VOID_KW
+          || get_op(child0) == ENUM_KW
+          || get_op(child0) == '*') { // If it's a pointer
+          return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
+        } else if (get_op(child0) == STRUCT_KW) {
+          return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+        } else {
+          printf("op=%d %c\n", get_op(child0), get_op(child0));
+          printf("op=%d %c\n", get_op(get_child(child0, 1)), get_op(get_child(child0, 1)));
+          fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+          return 0;
+        }
       } else {
+        printf("op=%d %c\n", get_op(child0), get_op(child0));
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
     } else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
     } else {
-      printf("1: op=%d %c", op, op);
+      printf("op=%d %c", op, op);
       fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
     }
@@ -1224,75 +1231,60 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       }
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(child1, context, 0, op);
-    } else if (op == AMP_AMP || op == BAR_BAR) {
-      fatal_error("comp_rvalue_go: && and || should have 4 children by that point");
-      return 0;
     } else {
       fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
       return 0;
     }
-  } else if (nb_children == 3) {
-    if (op == '?') {
+  } else if (nb_children == 3 && op == '?') {
+    sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+    sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+    sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
+    return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
+    return 0;
+  } else if (nb_children == 4 && (op == AMP_AMP || op == BAR_BAR)) {
+    // Note, this could also be compiled in a single [ ] block using -a and
+    // -o, which I think are POSIX compliant but are deprecated.
+    if (context == RVALUE_CTX_TEST) {
+      // When compiling in a test context, && and || can be compiled to
+      // Shell's && and || with [ ... ] blocks.
+      //
+      // A notable difference between these operators in Shell and C is that
+      // in Shell, they have equal precedence while in C, && has higher
+      // precedence. This means that we need to add parenthesis that would not
+      // be needed in C.
+      //
+      // As a heuristic, we add parenthesis whenever the left or right side of
+      // the operator is a different comparison operator.
+      sub1 = non_parenthesized_operand(child0); // un-parenthesized lhs
+      sub2 = non_parenthesized_operand(child1); // un-parenthesized rhs
+
+      // if lhs is && or ||, and different from the current operator
+      if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
+        sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
+        sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
+      } else {
+        sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
+      }
+
+      // if rhs is && or ||, and different from the current operator
+      if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
+        sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
+        sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
+      } else {
+        sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
+      }
+      return string_concat3(sub1, op_to_str(op), sub2);
+    } else {
+      if (test_side_effects != 0 || child2 != 0 || child3 != 0) {
+        fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
+      }
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
-      return 0;
-    } else {
-      printf("op=%d %c\n", op, op);
-      fatal_error("comp_rvalue_go: unknown rvalue with 3 children");
-      return 0;
-    }
-  } else if (nb_children == 4) {
-    if (op == AMP_AMP || op == BAR_BAR) {
-      // Note, this could also be compiled in a single [ ] block using -a and
-      // -o, which I think are POSIX compliant but are deprecated.
-      if (context == RVALUE_CTX_TEST) {
-        // When compiling in a test context, && and || can be compiled to
-        // Shell's && and || with [ ... ] blocks.
-        //
-        // A notable difference between these operators in Shell and C is that
-        // in Shell, they have equal precedence while in C, && has higher
-        // precedence. This means that we need to add parenthesis that would not
-        // be needed in C.
-        //
-        // As a heuristic, we add parenthesis whenever the left or right side of
-        // the operator is a different comparison operator.
-        sub1 = non_parenthesized_operand(child0); // un-parenthesized lhs
-        sub2 = non_parenthesized_operand(child1); // un-parenthesized rhs
-
-        // if lhs is && or ||, and different from the current operator
-        if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
-          sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
-        } else {
-          sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
-        }
-
-        // if rhs is && or ||, and different from the current operator
-        if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
-          sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
-        } else {
-          sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
-        }
-        return string_concat3(sub1, op_to_str(op), sub2);
-      } else {
-        if (test_side_effects != 0 || child2 != 0 || child3 != 0) {
-          fatal_error("comp_rvalue_go: && and || with function calls can only be used in tests");
-        }
-        sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
-      }
-    } else {
-      printf("op=%d %c\n", op, op);
-      fatal_error("comp_rvalue_go: unknown rvalue with 4 children");
-      return 0;
+      return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
     }
   } else {
     printf("op=%d %c\n", op, op);
-    fatal_error("comp_rvalue_go: unknown rvalue with >4 children");
+    fatal_error("comp_rvalue_go: unknown rvalue");
     return 0;
   }
 }
@@ -1987,17 +1979,18 @@ bool comp_return(ast return_value) {
 void comp_var_decls(ast node) {
   ast var_decl;
 
-  node = get_child_opt_(VAR_DECLS, ',', node, 0);
+  node = get_child_opt_(DECLS, ',', node, 0);
   while (node != 0) {
     // Add to local env and cummulative env, then initialize
-    var_decl = get_child__(',', VAR_DECL, node, 0);
+    var_decl = get_child__(',', DECL, node, 0);
+    assert_var_decl_is_safe(var_decl, true);
     add_var_to_local_env(var_decl, BINDING_VAR_LOCAL);
-    if (get_child_(VAR_DECL, var_decl, 2) != 0) { // Initializer
-      comp_assignment(new_ast0(IDENTIFIER, get_child_(VAR_DECL, var_decl, 0)), get_child_(VAR_DECL, var_decl, 2));
+    if (get_child_(DECL, var_decl, 2) != 0) { // Initializer
+      comp_assignment(get_child__(DECL, IDENTIFIER, var_decl, 0), get_child_(DECL, var_decl, 2));
     }
 #ifdef INITIALIZE_LOCAL_VARS_WITH_ZERO
     else {
-      comp_assignment(new_ast0(IDENTIFIER, get_child_(VAR_DECL, var, 0)), new_ast0(INTEGER, 0));
+      comp_assignment(new_ast0(IDENTIFIER, get_child__(DECL, IDENTIFIER, var, 0)), new_ast0(INTEGER, 0));
     }
 #endif
     node = get_child_opt_(',', ',', node, 1); // Next variable
@@ -2073,7 +2066,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;
-  } else if (op == VAR_DECLS) {
+  } else if (op == DECLS) {
     comp_var_decls(node);
     return false;
   } else {
@@ -2086,10 +2079,11 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
 }
 
 void comp_glo_fun_decl(ast node) {
-  ast name = get_child_(FUN_DECL, node, 0);
-  ast fun_type = get_child_(FUN_DECL, node, 1);
-  ast params = get_child_opt_(FUN_DECL, ',', node, 2);
-  ast body = get_child_opt_(FUN_DECL, '{', node, 3);
+  ast decl = get_child__(FUN_DECL, DECL, node, 0);
+  ast body = get_child_opt_(FUN_DECL, '{', node, 1);
+  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+  ast fun_type = get_child__(DECL, '(', decl, 1);
+  ast params = get_child_opt_('(', ',', fun_type, 1);
   text trailing_txt = 0;
   int params_ix = 2; // Start at 2 because $1 is assigned to the return location
   ast var;
@@ -2100,16 +2094,16 @@ void comp_glo_fun_decl(ast node) {
 
   top_level_stmt = false;
 
-  check_param_decls(params);
+  check_decls(params);
   add_fun_params_to_local_env(params);
 
   // If the function is main
-  if (name == MAIN_ID) {
+  if (name_probe == MAIN_ID) {
     main_defined = true;
     // If main has parameters. If so, we'll prepare the argc/argv values in the prologue.
     if (params != 0) runtime_use_make_argv = true;
     // Check if main returns an exit code.
-    if (get_op(fun_type) != VOID_KW) main_returns = true;
+    if (get_op(get_child_('(', fun_type, 0)) != VOID_KW) main_returns = true; // TODO: test this
   }
 
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
@@ -2120,8 +2114,8 @@ void comp_glo_fun_decl(ast node) {
   if (trailing_txt == 0) {
     // Show the mapping between the function parameters and $1, $2, etc.
     while (params != 0) {
-      var = get_child__(',', VAR_DECL, params, 0);
-      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(probe_string(get_child_(VAR_DECL, var, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
+      var = get_child__(',', DECL, params, 0);
+      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(probe_string(get_val_(IDENTIFIER, get_child_(DECL, var, 0)))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
       params = get_child_(',', params, 1);
       params_ix += 1;
     }
@@ -2129,7 +2123,7 @@ void comp_glo_fun_decl(ast node) {
   }
 
   append_glo_decl(string_concat3(
-    function_name(name),
+    function_name(name_probe),
     wrap_str_lit("() {"),
     trailing_txt
   ));
@@ -2142,22 +2136,19 @@ void comp_glo_fun_decl(ast node) {
 
 #ifndef SH_INITIALIZE_PARAMS_WITH_LET
   // Initialize parameters
-  params = get_child_opt_(FUN_DECL, ',', node, 2); // Reload params because params is now = 0
+  params = get_child_opt_('(', ',', fun_type, 1); // Reload params because params is now = 0
   params_ix = 2;
   while (params != 0) {
-    var = get_child__(',', VAR_DECL, params, 0);
-
+    var = get_child__(',', DECL, params, 0);
     // TODO: Constant param optimization
     // Constant parameters don't need to be initialized
-    comp_assignment(new_ast0(IDENTIFIER, get_child_(VAR_DECL, var, 0)), new_ast0(IDENTIFIER_DOLLAR, params_ix));
+    comp_assignment(get_child_(DECL, var, 0), new_ast0(IDENTIFIER_DOLLAR, params_ix));
     params = get_child_opt_(',', ',', params, 1);
     params_ix += 1;
   }
 #endif
 
   comp_body(body, STMT_CTX_DEFAULT);
-  // functions cannot be empty so we insert ':' if it's empty
-  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
   // Set local environment to cummulative for the save_local_vars/restore_local_vars
   cgc_locals = cgc_locals_fun;
@@ -2172,15 +2163,20 @@ void comp_glo_fun_decl(ast node) {
     rest_loc_var_fixups = get_child_opt_(',', ',', rest_loc_var_fixups, 1);
   }
 
+  // functions cannot be empty so we insert ':' if it's empty
+  if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
+
   nest_level -= 1;
 
   append_glo_decl(wrap_str_lit("}\n"));
 }
 
 void comp_glo_var_decl(ast node) {
-  ast name = get_child(node, 0);
-  ast type = get_child(node, 1);
-  ast init = get_child(node, 2);
+  ast name = get_child__(DECL, IDENTIFIER, node, 0);
+  ast type = get_child_(DECL, node, 1);
+  ast init = get_child_(DECL, node, 2);
+
+  if (get_op(type) == '(') return; // Ignore function declarations
 
   if (init == 0) init = new_ast0(INTEGER, 0);
 
@@ -2189,25 +2185,14 @@ void comp_glo_var_decl(ast node) {
 
   assert_var_decl_is_safe(node, false);
 
-  // Arrays of structs and struct value types are not supported for now.
-  // When we have type information on the local and global variables, we'll
-  // be able to generate the correct code for these cases.
-  if ((get_op(type) == '['
-    && get_op(get_child_('[', type, 1)) == STRUCT_KW
-    && get_stars(get_child_('[', type, 1)) == 0)
-    || (get_op(type) == STRUCT_KW && get_stars(type) == 0)) {
-    printf("%s ", string_pool + probe_string(name));
-    fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
-  }
-
   if (get_op(type) == '[') { // Array declaration
     runtime_defarr();
     append_glo_decl(
       string_concat4(
         wrap_str_lit("defarr "),
-        env_var(new_ast0(IDENTIFIER, name)),
+        env_var(name),
         wrap_char(' '),
-        wrap_int(get_val_(INTEGER, get_child__('[', INTEGER, type, 0)))
+        wrap_int(get_child_('[', type, 1))
       )
     );
   } else {
@@ -2216,13 +2201,13 @@ void comp_glo_var_decl(ast node) {
     append_glo_decl(
       string_concat4(
         wrap_str_lit("defglo "),
-        env_var(new_ast0(IDENTIFIER, name)),
+        env_var(name),
         wrap_char(' '),
         comp_rvalue(init, VALUE_CTX_BASE)
       )
     );
 #else
-    comp_assignment(new_ast0(IDENTIFIER, name), init);
+    comp_assignment(name, init);
 #endif
   }
 }
@@ -2274,6 +2259,7 @@ void comp_enum_cases(ast ident, ast cases) {
 // Because the member offset variables are declared as readonly, name conflicts
 // will result in a runtime error when the shell program initializes.
 void comp_struct(ast ident, ast members) {
+  ast decl;
   int offset = new_ast0(INTEGER, 0);
   int field_type;
   if (ident != 0) {
@@ -2282,18 +2268,18 @@ void comp_struct(ast ident, ast members) {
     append_glo_decl(wrap_str_lit("# Struct member declarations"));
   }
   while (get_op(members) == ',') {
-    field_type = get_child_(',', members, 1);
-    comp_assignment_constant(struct_member_var(get_child_opt_(',', IDENTIFIER, members, 0)), offset);
-    members = get_child_opt_(',', ',', members, 2);
-
+    decl = get_child__(',', DECL, members, 0);
+    field_type = get_child_(DECL, decl, 1);
     // Arrays and struct value types are not supported for now.
     // When we have type information on the local and global variables, we'll
     // be able to generate the correct code for these cases.
-    if (get_op(field_type) == '[' || (get_op(field_type) == STRUCT_KW && get_stars(field_type) == 0)) {
+    if (get_op(field_type) == '[' || get_op(field_type) == STRUCT_KW) {
       fatal_error("Nested structures not supported by shell backend. Use a reference type instead.");
-    } else {
-      set_val(offset, get_val_(INTEGER, offset) - 1);
     }
+
+    comp_assignment_constant(struct_member_var(get_child_opt_(DECL, IDENTIFIER, decl, 0)), offset);
+    members = get_child_opt_(',', ',', members, 1);
+    set_val(offset, get_val_(INTEGER, offset) - 1);
   }
 
   if (ident != 0) {
@@ -2315,6 +2301,17 @@ void handle_enum_struct_union_type_decl(ast type) {
   // If not an enum, struct, or union, do nothing
 }
 
+// For now, we don't do anything with the declarations in a typedef.
+// The only thing we need to do is to call handle_enum_struct_union_type_decl
+// on the type specifier.
+void handle_typedef(ast node) {
+  ast decls = get_child__(TYPEDEF_KW, ',', node, 0);
+  ast decl = get_child__(',', DECL, decls, 0);
+  ast type = get_child_(DECL, decl, 1);
+
+  handle_enum_struct_union_type_decl(get_type_specifier(type));
+}
+
 // This function compiles 1 top level declaration at the time.
 // The supported top level declarations are:
 //   - global variable declarations
@@ -2331,16 +2328,16 @@ void comp_glo_decl(ast node) {
 
   if (op == '=') { // Assignments
    comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
-  } else if (op == VAR_DECLS) { // Variable declarations
-    declarations = get_child__(VAR_DECLS, ',', node, 0);
+  } else if (op == DECLS) { // Variable declarations
+    declarations = get_child__(DECLS, ',', node, 0);
     while (declarations != 0) { // Multiple variable declarations
-      comp_glo_var_decl(get_child__(',', VAR_DECL, declarations, 0));
+      comp_glo_var_decl(get_child__(',', DECL, declarations, 0));
       declarations = get_child_opt_(',', ',', declarations, 1);
     }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
-    handle_enum_struct_union_type_decl(get_child_(TYPEDEF_KW, node, 1));
+    handle_typedef(node);
   } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {

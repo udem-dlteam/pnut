@@ -1,0 +1,1 @@
+tests/_sh/checks/sizeof_array.c:7:0  comp_rvalue_go: sizeof is not supported for this type or expression
