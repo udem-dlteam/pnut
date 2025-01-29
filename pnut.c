@@ -615,7 +615,7 @@ int end_ident() {
   heap[probe+1] = string_start;
   heap[probe+2] = IDENTIFIER;
   heap[probe+3] = 0; // Token tag
-  heap[probe+4] = string_pool_alloc - string_start - 1; // string length
+  heap[probe+4] = string_pool_alloc - string_start - 1; // string length (excluding terminator)
 
   return probe;
 }
