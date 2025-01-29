@@ -195,6 +195,7 @@ enum {
   MINUS_MINUS_POST,
   ELLIPSIS,
   PARENS,
+  INITIALIZER_LIST,
 
   // Other tokens
   MACRO_ARG = 499,
@@ -2261,6 +2262,8 @@ ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
 ast parse_declarator(bool abstract_decl, ast parent_type);
 ast parse_declaration_specifiers();
+ast parse_initializer_list();
+ast parse_initializer();
 
 // The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
 #define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
@@ -2686,6 +2689,38 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   return decl;
 }
 
+ast parse_initializer_list() {
+  ast result = 0, tail = 0;
+
+  expect_tok('{');
+
+  while (tok != '}' && tok != EOF) {
+#ifdef sh
+    if (tok == '{') fatal_error("nested initializer lists not supported");
+#endif
+    if (result == 0) {
+      tail = result = new_ast2(',', parse_initializer(), 0);
+    } else {
+      set_child(tail, 1, new_ast2(',', parse_initializer(), 0));
+      tail = get_child_(',', tail, 1);
+    }
+    if (tok == ',') get_tok();
+    else break;
+  }
+
+  expect_tok('}');
+
+  return new_ast1(INITIALIZER_LIST, result);
+}
+
+ast parse_initializer() {
+  if (tok == '{') {
+    return parse_initializer_list();
+  } else {
+    return parse_assignment_expression();
+  }
+}
+
 ast parse_declarator_and_initializer(ast type_specifier) {
   ast declarator = parse_declarator(false, type_specifier);
 
@@ -2693,7 +2728,7 @@ ast parse_declarator_and_initializer(ast type_specifier) {
     if (tok == '=') {
       get_tok();
       // parse_declarator returns a DECL node where the initializer is child#2
-      set_child(declarator, 2, parse_conditional_expression());
+      set_child(declarator, 2, parse_initializer());
     }
   }
 
