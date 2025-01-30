@@ -1501,6 +1501,26 @@ void handle_enum_struct_union_type_decl(ast type) {
   // If not an enum, struct, or union, do nothing
 }
 
+// Initialize a global variable with an initializer list
+void codegen_glo_initializer_list(ast init, int offset) {
+  ast list = get_child_(INITIALIZER_LIST, init, 0);
+  
+  while (list != 0) {
+    def_label(init_next_lbl);
+    init_next_lbl = alloc_label("init_next");
+
+    codegen_rvalue(get_child_(',', list, 0));
+    pop_reg(reg_X);
+    grow_fs(-1);
+    mov_mem_reg(reg_glo, offset, reg_X);
+
+    offset += word_size;
+    list = get_child_opt_(',', ',', list, 1);
+    
+    jump(init_next_lbl);
+  }
+}
+
 void codegen_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
@@ -1512,7 +1532,7 @@ void codegen_glo_var_decl(ast node) {
   if (get_op(type) == '[') { // Array declaration
     size = get_child_('[', type, 0);
   } else {
-    // All non-array types have size 1
+    // All non-array types have size 1 
     size = 1;
   }
   if (get_op(type) == '(') {
@@ -1528,26 +1548,36 @@ void codegen_glo_var_decl(ast node) {
       binding = cgc_globals;
     }
 
-    if (get_op(type) != '[') { // not array declaration
+    if (init != 0) {
+      if (get_op(init) == INITIALIZER_LIST) {
+        codegen_glo_initializer_list(init, heap[binding+4]);
+      } else if (get_op(type) != '[') { // not array declaration
+        def_label(init_next_lbl);
+        init_next_lbl = alloc_label("init_next");
 
-      def_label(init_next_lbl);
-      init_next_lbl = alloc_label("init_next");
-
-      if (init != 0) {
         codegen_rvalue(init);
-      } else {
-        xor_reg_reg(reg_X, reg_X);
-        push_reg(reg_X);
-        grow_fs(1);
+        pop_reg(reg_X);
+        grow_fs(-1);
+        mov_mem_reg(reg_glo, heap[binding+4], reg_X);
+
+        jump(init_next_lbl);
       }
-
-      pop_reg(reg_X);
-      grow_fs(-1);
-
-      mov_mem_reg(reg_glo, heap[binding+4], reg_X);
-
-      jump(init_next_lbl);
     }
+  }
+}
+
+// Initialize a local variable with an initializer list
+void codegen_local_initializer_list(ast init, int offset) {
+  ast list = get_child_(INITIALIZER_LIST, init, 0);
+  
+  while (list != 0) {
+    codegen_rvalue(get_child_(',', list, 0));
+    pop_reg(reg_X);
+    grow_fs(-1);
+    mov_mem_reg(reg_SP, offset, reg_X);
+    
+    offset += word_size;
+    list = get_child_opt_(',', ',', list, 1);
   }
 }
 
@@ -1561,11 +1591,20 @@ void codegen_local_var_decl(ast node) {
     size = type_width(type, true, true);  // size in bytes (word aligned)
     grow_stack_bytes(size);
     size /= word_size; // size in words
+    
+    if (init != 0 && get_op(init) == INITIALIZER_LIST) {
+      codegen_local_initializer_list(init, 0);
+    }
   } else {
     // All non-array types are represented as a word, even if they are smaller
     if (init != 0) {
-      codegen_rvalue(init);
-      grow_fs(-1);
+      if (get_op(init) == INITIALIZER_LIST) {
+        grow_stack(1);
+        codegen_local_initializer_list(init, 0);
+      } else {
+        codegen_rvalue(init);
+        grow_fs(-1);
+      }
     } else {
       xor_reg_reg(reg_X, reg_X);
       push_reg(reg_X);
