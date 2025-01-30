@@ -537,7 +537,7 @@ ast canonicalize_type(ast type) {
 
   if (binding == 0) {
     putstr("type="); putstr(STRING_BUF(get_val_(IDENTIFIER, get_child(type, 1)))); putchar('\n');
-    fatal_error("canonicalize_type: Type is not defined");
+    fatal_error("canonicalize_type: type is not defined");
   }
   res = heap[binding+3];
 
@@ -658,6 +658,20 @@ ast dereference_type(ast type) {
   }
 }
 
+int resolve_identifier(int ident_probe) {
+  int binding = cgc_lookup_var(ident_probe, cgc_locals);
+  if (binding != 0) return binding;
+
+  binding = cgc_lookup_var(ident_probe, cgc_globals);
+  if (binding != 0) return binding;
+
+  binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
+  if (binding != 0) return binding;
+
+  putstr("ident = "); putstr(string_pool + probe_string(ident_probe)); putchar('\n');
+  fatal_error("identifier not found");
+}
+
 // Compute the type of an expression
 ast value_type(ast node) {
   int op = get_op(node);
@@ -679,26 +693,23 @@ ast value_type(ast node) {
       return string_type;
     } else if (op == IDENTIFIER) {
       ident = get_val_(IDENTIFIER, node);
-      binding = cgc_lookup_var(ident, cgc_locals);
-      if (binding != 0) {
-        return heap[binding+5];
-      } else {
-        binding = cgc_lookup_var(ident, cgc_globals);
-        if (binding != 0) {
-          return heap[binding+5];
-        } else {
-          binding = cgc_lookup_enum_value(ident, cgc_globals);
-          if (binding != 0) {
-            return int_type; // Enums are always integers
-          } else {
-            putstr("ident = ");
-            putstr(string_pool + probe_string(ident));
-            putchar('\n');
-            fatal_error("value_type: identifier not found");
-            return -1;
-          }
-        }
+      binding = resolve_identifier(ident);
+      switch (binding_kind(binding)) {
+        case BINDING_PARAM_LOCAL:
+        case BINDING_VAR_LOCAL:
+          return heap[binding+4];
+        case BINDING_VAR_GLOBAL:
+          return heap[binding+4];
+        case BINDING_ENUM_CST:
+          return int_type;
+        default:
+          putstr("ident = ");
+          putstr(string_pool + probe_string(ident));
+          putchar('\n');
+          fatal_error("value_type: unknown identifier");
+          return -1;
       }
+
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with nb_children == 0");
@@ -1003,22 +1014,24 @@ int codegen_lvalue(ast node) {
 
   if (nb_children == 0) {
     if (op == IDENTIFIER) {
-      binding = cgc_lookup_var(get_val_(IDENTIFIER, node), cgc_locals);
-      if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
-        add_reg_reg(reg_X, reg_SP);
-        push_reg(reg_X);
-      } else {
-        binding = cgc_lookup_var(get_val_(IDENTIFIER, node), cgc_globals);
-        if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+4]);
+      binding = resolve_identifier(get_val_(IDENTIFIER, node));
+      switch (binding_kind(binding)) {
+        case BINDING_PARAM_LOCAL:
+        case BINDING_VAR_LOCAL:
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          add_reg_reg(reg_X, reg_SP);
+          push_reg(reg_X);
+          break;
+        case BINDING_VAR_GLOBAL:
+          mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
           push_reg(reg_X);
-        } else {
+          break;
+        default:
           fatal_error("codegen_lvalue: identifier not found");
-        }
+          break;
       }
-      lvalue_width = type_width(heap[binding+5], true, true);
+      lvalue_width = type_width(heap[binding+4], true, true);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
@@ -1121,7 +1134,6 @@ void codegen_rvalue(ast node) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int binding;
-  int ident;
   int lbl1, lbl2;
   int left_width;
   ast type1, type2;
@@ -1138,36 +1150,36 @@ void codegen_rvalue(ast node) {
       mov_reg_imm(reg_X, get_val_(CHARACTER, node));
       push_reg(reg_X);
     } else if (op == IDENTIFIER) {
-      ident = get_val_(IDENTIFIER, node);
-      binding = cgc_lookup_var(ident, cgc_locals);
-      if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
-        add_reg_reg(reg_X, reg_SP);
-        // local arrays/structs/unions are allocated on the stack, so no need to dereference
-        if (get_op(heap[binding+5]) != '[' && get_op(heap[binding+5]) != STRUCT_KW && get_op(heap[binding+5]) != UNION_KW) {
-          mov_reg_mem(reg_X, reg_X, 0);
-        }
-        push_reg(reg_X);
-      } else {
-        binding = cgc_lookup_var(ident, cgc_globals);
-        if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+4]);
-          add_reg_reg(reg_X, reg_glo);
-          // global arrays/structs/unions are also allocated on the stack, so no need to dereference
-          if (get_op(heap[binding+5]) != '[' && get_op(heap[binding+5]) != STRUCT_KW && get_op(heap[binding+5]) != UNION_KW) {
+      binding = resolve_identifier(get_val_(IDENTIFIER, node));
+      switch (binding_kind(binding)) {
+        case BINDING_PARAM_LOCAL:
+        case BINDING_VAR_LOCAL:
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          add_reg_reg(reg_X, reg_SP);
+          // local arrays/structs/unions are allocated on the stack, so no need to dereference
+          if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
-        } else {
-          binding = cgc_lookup_enum_value(ident, cgc_globals);
-          if (binding != 0) {
-            mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
-            push_reg(reg_X);
-          } else {
-            putstr("ident = "); putstr(string_pool + probe_string(ident)); putchar('\n');
-            fatal_error("codegen_rvalue: identifier not found");
+          break;
+        case BINDING_VAR_GLOBAL:
+          mov_reg_imm(reg_X, heap[binding+3]);
+          add_reg_reg(reg_X, reg_glo);
+          // global arrays/structs/unions are also allocated on the stack, so no need to dereference
+          if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
+            mov_reg_mem(reg_X, reg_X, 0);
           }
-        }
+          push_reg(reg_X);
+          break;
+        case BINDING_ENUM_CST:
+          mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
+          push_reg(reg_X);
+          break;
+
+        default:
+          putstr("ident = "); putstr(string_pool + probe_string(get_val_(IDENTIFIER, node))); putchar('\n');
+          fatal_error("codegen_rvalue: identifier not found");
+          break;
       }
     } else if (op == STRING) {
       codegen_string(get_val_(STRING, node));
@@ -1506,15 +1518,8 @@ void codegen_glo_var_decl(ast node) {
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
   int name_probe = get_val_(IDENTIFIER, name);
-  int size;
   int binding = cgc_lookup_var(name_probe, cgc_globals);
 
-  if (get_op(type) == '[') { // Array declaration
-    size = get_child_('[', type, 0);
-  } else {
-    // All non-array types have size 1
-    size = 1;
-  }
   if (get_op(type) == '(') {
     // Forward declaration
     binding = cgc_lookup_fun(name_probe, cgc_globals);
@@ -1524,7 +1529,7 @@ void codegen_glo_var_decl(ast node) {
     handle_enum_struct_union_type_decl(type);
 
     if (binding == 0) {
-      cgc_add_global(name_probe, size, type_width(type, true, true), type);
+      cgc_add_global(name_probe, type_width(type, true, true), type);
       binding = cgc_globals;
     }
 
@@ -1544,7 +1549,7 @@ void codegen_glo_var_decl(ast node) {
       pop_reg(reg_X);
       grow_fs(-1);
 
-      mov_mem_reg(reg_glo, heap[binding+4], reg_X);
+      mov_mem_reg(reg_glo, heap[binding+3], reg_X);
 
       jump(init_next_lbl);
     }
