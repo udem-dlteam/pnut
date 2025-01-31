@@ -2020,7 +2020,6 @@ void codegen_glo_fun_decl(ast node) {
   ast fun_type = get_child__(DECL, '(', decl, 1);
   ast params = get_child_opt_('(', ',', fun_type, 1);
   ast fun_return_type = get_child_('(', fun_type, 0);
-  int lbl;
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
@@ -2037,29 +2036,24 @@ void codegen_glo_fun_decl(ast node) {
   binding = cgc_lookup_fun(name_probe, cgc_globals);
 
   if (binding == 0) {
-    lbl = alloc_label(STRING_BUF(name_probe));
-    cgc_add_global_fun(name_probe, lbl, fun_type);
+    cgc_add_global_fun(name_probe, alloc_label(STRING_BUF(name_probe)), fun_type);
     binding = cgc_globals;
   }
 
-  if (body != 0) { // 0 is empty body
+  def_label(heap[binding+4]);
 
-    lbl = heap[binding+4];
+  cgc_fs = -1; // space for return address
+  cgc_locals = 0;
+  add_params(params);
+  cgc_fs = 0;
 
-    def_label(lbl);
+  codegen_body(body);
 
-    cgc_fs = -1; // space for return address
-    cgc_locals = 0;
-    add_params(params);
-    cgc_fs = 0;
+  grow_stack(-cgc_fs);
+  cgc_fs = 0;
 
-    codegen_body(body);
+  ret();
 
-    grow_stack(-cgc_fs);
-    cgc_fs = 0;
-
-    ret();
-  }
 
   cgc_locals_fun = save_locals_fun;
 }
