@@ -1008,9 +1008,14 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-void comp_defstr(ast ident, int string_probe) {
+void comp_defstr(ast ident, int string_probe, int array_size) {
   char *string_start = string_pool + heap[string_probe + 1];
   char *string_end = string_start + heap[string_probe + 4];
+  text array_size_text = 0;
+
+  if (array_size != -1) {
+    array_size_text = string_concat(wrap_char(' '), wrap_int(array_size));
+  }
 
   if (top_level_stmt) {
     // If defstr is used at the top level, it needs to be included beforehand
@@ -1019,11 +1024,57 @@ void comp_defstr(ast ident, int string_probe) {
     runtime_use_defstr = true;
   }
 
-  append_glo_decl(string_concat5( wrap_str_lit("defstr ")
-                                , format_special_var(ident, false)
-                                , wrap_str_lit(" \"")
-                                , escape_text(wrap_str_imm(string_start, string_end), false)
-                                , wrap_char('\"')));
+  append_glo_decl(string_concat4( wrap_str_lit("defstr ")
+                                , env_var(ident)
+                                , string_concat3( wrap_str_lit(" \"")
+                                                , escape_text(wrap_str_imm(string_start, string_end), false)
+                                                , wrap_char('\"')
+                                                )
+                                , array_size_text));
+}
+
+int initializer_list_len(ast node) {
+  int res = 0;
+
+  // Each element of the list has size 1 since nested initializers are not allowed
+  while (node != 0) {
+    res += 1;
+    node = get_child_(',', node, 1);
+  }
+
+  return res;
+}
+
+text comp_initializer_list(ast initializer_list, int expected_len) {
+  text args = 0;
+  ast element;
+  ast str_ident;
+
+  runtime_use_initialize = true;
+
+  while (initializer_list != 0) {
+    element = get_child_(',', initializer_list, 0);
+    switch (get_op(element)) {
+      case INTEGER:
+        args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
+        break;
+      case CHARACTER:
+        // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
+        args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
+        break;
+      case STRING:
+        str_ident = fresh_string_ident(get_val_(STRING, element));
+        comp_defstr(str_ident, get_val_(STRING, element), -1);
+        args = concatenate_strings_with(args, string_concat(wrap_char('$'), format_special_var(str_ident, true)), wrap_char(' '));
+        break;
+      default:
+        // TODO: Support nested initializers and constant expressions
+        fatal_error("comp_initializer: unexpected operator");
+    }
+    initializer_list = get_child_opt_(',', ',', initializer_list, 1);
+  }
+
+  return args;
 }
 
 enum VALUE_CTX {
@@ -1303,7 +1354,7 @@ text comp_rvalue(ast node, int context) {
 
   while (literals_inits != 0) {
     side_effect = get_child__(',', '=', literals_inits, 0);
-    comp_defstr(get_child_('=', side_effect, 0), get_child_('=', side_effect, 1));
+    comp_defstr(get_child_('=', side_effect, 0), get_child_('=', side_effect, 1), -1);
     literals_inits = get_child_opt_(',', ',', literals_inits, 1);
   }
 
@@ -2175,10 +2226,10 @@ void comp_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
+  int arr_len, init_len;
+  text args = 0;
 
   if (get_op(type) == '(') return; // Ignore function declarations
-
-  if (init == 0) init = new_ast0(INTEGER, 0);
 
   // TODO: Add enum/struct/union to env if it's not already there
   // handle_enum_struct_union_type_decl(type);
@@ -2186,15 +2237,53 @@ void comp_glo_var_decl(ast node) {
   assert_var_decl_is_safe(node, false);
 
   if (get_op(type) == '[') { // Array declaration
-    runtime_defarr();
-    append_glo_decl(
-      string_concat4(
-        wrap_str_lit("defarr "),
-        env_var(name),
-        wrap_char(' '),
-        wrap_int(get_child_('[', type, 1))
-      )
-    );
+    arr_len = get_child_('[', type, 1);
+
+    // If the array is initialized with a string, we want to call defstr on the
+    // string, and then initialize the array variable with the variable passed
+    // to defstr.
+    if (init != 0 && get_op(init) == STRING) {
+      init_len = heap[get_val_(STRING, init) + 4] + 1; // string_end - string_start
+      if (arr_len != 0 && arr_len < init_len) {
+        fatal_error("Array type is too small for initializer");
+      }
+      comp_defstr(name, get_val_(STRING, init), arr_len != 0 ? arr_len : init_len);
+    } else {
+      // If the array is initialized with an initializer list, we want to pass
+      // the list of values to the defarr function. Because the array size is
+      // optional, we need to calculate the size of the array from the
+      // initializer list if it's not provided.
+      if (init != 0) {
+        if (get_op(init) != INITIALIZER_LIST) fatal_error("Array declaration with invalid initializer");
+        init = get_child_(INITIALIZER_LIST, init, 0);
+
+        runtime_use_initialize = true;
+        init_len = initializer_list_len(init);
+        args = comp_initializer_list(init, arr_len);
+        if (arr_len == 0) {
+          arr_len = init_len;
+        } else if (arr_len < init_len) {
+          fatal_error("Array type is too small for initializer");
+        }
+      }
+
+      if (arr_len == 0) {
+        fatal_error("Array declaration without size or initializer list");
+      }
+
+      runtime_defarr();
+
+      append_glo_decl(
+        concatenate_strings_with(
+          string_concat4(
+            wrap_str_lit("defarr "),
+            env_var(name),
+            wrap_char(' '),
+            wrap_int(arr_len)),
+          args,
+          wrap_char(' '))
+        );
+    }
   } else {
 #ifdef SUPPORT_ADDRESS_OF_OP
     runtime_defglo();
@@ -2207,6 +2296,7 @@ void comp_glo_var_decl(ast node) {
       )
     );
 #else
+    if (init == 0) init = new_ast0(INTEGER, 0);
     comp_assignment(name, init);
 #endif
   }

@@ -152,6 +152,18 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
   }
 }
 
+// Initialize a memory location with a value
+void initialize_memory(int val, int base, int offset, int width) {
+  int i;
+  mov_reg_imm(reg_Z, val);
+  for (i = 0; i < width / word_size; i += 1) {
+    mov_mem_reg(base, offset + i * word_size, reg_Z);
+  }
+  for (i = width - width % word_size; i < width; i += 1) {
+    mov_mem8_reg(base, offset + i, reg_Z);
+  }
+}
+
 int is_power_of_2(int n) {
   return n != 0 && (n & (n - 1)) == 0;
 }
@@ -537,7 +549,7 @@ ast canonicalize_type(ast type) {
 
   if (binding == 0) {
     putstr("type="); putstr(STRING_BUF(get_val_(IDENTIFIER, get_child(type, 1)))); putchar('\n');
-    fatal_error("canonicalize_type: Type is not defined");
+    fatal_error("canonicalize_type: type is not defined");
   }
   res = heap[binding+3];
 
@@ -658,6 +670,21 @@ ast dereference_type(ast type) {
   }
 }
 
+int resolve_identifier(int ident_probe) {
+  int binding = cgc_lookup_var(ident_probe, cgc_locals);
+  if (binding != 0) return binding;
+
+  binding = cgc_lookup_var(ident_probe, cgc_globals);
+  if (binding != 0) return binding;
+
+  binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
+  if (binding != 0) return binding;
+
+  putstr("ident = "); putstr(string_pool + probe_string(ident_probe)); putchar('\n');
+  fatal_error("identifier not found");
+  return 0;
+}
+
 // Compute the type of an expression
 ast value_type(ast node) {
   int op = get_op(node);
@@ -679,26 +706,23 @@ ast value_type(ast node) {
       return string_type;
     } else if (op == IDENTIFIER) {
       ident = get_val_(IDENTIFIER, node);
-      binding = cgc_lookup_var(ident, cgc_locals);
-      if (binding != 0) {
-        return heap[binding+5];
-      } else {
-        binding = cgc_lookup_var(ident, cgc_globals);
-        if (binding != 0) {
-          return heap[binding+5];
-        } else {
-          binding = cgc_lookup_enum_value(ident, cgc_globals);
-          if (binding != 0) {
-            return int_type; // Enums are always integers
-          } else {
-            putstr("ident = ");
-            putstr(string_pool + probe_string(ident));
-            putchar('\n');
-            fatal_error("value_type: identifier not found");
-            return -1;
-          }
-        }
+      binding = resolve_identifier(ident);
+      switch (binding_kind(binding)) {
+        case BINDING_PARAM_LOCAL:
+        case BINDING_VAR_LOCAL:
+          return heap[binding+4];
+        case BINDING_VAR_GLOBAL:
+          return heap[binding+4];
+        case BINDING_ENUM_CST:
+          return int_type;
+        default:
+          putstr("ident = ");
+          putstr(string_pool + probe_string(ident));
+          putchar('\n');
+          fatal_error("value_type: unknown identifier");
+          return -1;
       }
+
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("value_type: unknown expression with nb_children == 0");
@@ -1003,22 +1027,24 @@ int codegen_lvalue(ast node) {
 
   if (nb_children == 0) {
     if (op == IDENTIFIER) {
-      binding = cgc_lookup_var(get_val_(IDENTIFIER, node), cgc_locals);
-      if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
-        add_reg_reg(reg_X, reg_SP);
-        push_reg(reg_X);
-      } else {
-        binding = cgc_lookup_var(get_val_(IDENTIFIER, node), cgc_globals);
-        if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+4]);
+      binding = resolve_identifier(get_val_(IDENTIFIER, node));
+      switch (binding_kind(binding)) {
+        case BINDING_PARAM_LOCAL:
+        case BINDING_VAR_LOCAL:
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          add_reg_reg(reg_X, reg_SP);
+          push_reg(reg_X);
+          break;
+        case BINDING_VAR_GLOBAL:
+          mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
           push_reg(reg_X);
-        } else {
+          break;
+        default:
           fatal_error("codegen_lvalue: identifier not found");
-        }
+          break;
       }
-      lvalue_width = type_width(heap[binding+5], true, true);
+      lvalue_width = type_width(heap[binding+4], true, true);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
@@ -1121,7 +1147,6 @@ void codegen_rvalue(ast node) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int binding;
-  int ident;
   int lbl1, lbl2;
   int left_width;
   ast type1, type2;
@@ -1138,36 +1163,36 @@ void codegen_rvalue(ast node) {
       mov_reg_imm(reg_X, get_val_(CHARACTER, node));
       push_reg(reg_X);
     } else if (op == IDENTIFIER) {
-      ident = get_val_(IDENTIFIER, node);
-      binding = cgc_lookup_var(ident, cgc_locals);
-      if (binding != 0) {
-        mov_reg_imm(reg_X, (cgc_fs - heap[binding+4]) * word_size);
-        add_reg_reg(reg_X, reg_SP);
-        // local arrays/structs/unions are allocated on the stack, so no need to dereference
-        if (get_op(heap[binding+5]) != '[' && get_op(heap[binding+5]) != STRUCT_KW && get_op(heap[binding+5]) != UNION_KW) {
-          mov_reg_mem(reg_X, reg_X, 0);
-        }
-        push_reg(reg_X);
-      } else {
-        binding = cgc_lookup_var(ident, cgc_globals);
-        if (binding != 0) {
-          mov_reg_imm(reg_X, heap[binding+4]);
-          add_reg_reg(reg_X, reg_glo);
-          // global arrays/structs/unions are also allocated on the stack, so no need to dereference
-          if (get_op(heap[binding+5]) != '[' && get_op(heap[binding+5]) != STRUCT_KW && get_op(heap[binding+5]) != UNION_KW) {
+      binding = resolve_identifier(get_val_(IDENTIFIER, node));
+      switch (binding_kind(binding)) {
+        case BINDING_PARAM_LOCAL:
+        case BINDING_VAR_LOCAL:
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          add_reg_reg(reg_X, reg_SP);
+          // local arrays/structs/unions are allocated on the stack, so no need to dereference
+          if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
             mov_reg_mem(reg_X, reg_X, 0);
           }
           push_reg(reg_X);
-        } else {
-          binding = cgc_lookup_enum_value(ident, cgc_globals);
-          if (binding != 0) {
-            mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
-            push_reg(reg_X);
-          } else {
-            putstr("ident = "); putstr(string_pool + probe_string(ident)); putchar('\n');
-            fatal_error("codegen_rvalue: identifier not found");
+          break;
+        case BINDING_VAR_GLOBAL:
+          mov_reg_imm(reg_X, heap[binding+3]);
+          add_reg_reg(reg_X, reg_glo);
+          // global arrays/structs/unions are also allocated on the stack, so no need to dereference
+          if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
+            mov_reg_mem(reg_X, reg_X, 0);
           }
-        }
+          push_reg(reg_X);
+          break;
+        case BINDING_ENUM_CST:
+          mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
+          push_reg(reg_X);
+          break;
+
+        default:
+          putstr("ident = "); putstr(string_pool + probe_string(get_val_(IDENTIFIER, node))); putchar('\n');
+          fatal_error("codegen_rvalue: identifier not found");
+          break;
       }
     } else if (op == STRING) {
       codegen_string(get_val_(STRING, node));
@@ -1501,20 +1526,179 @@ void handle_enum_struct_union_type_decl(ast type) {
   // If not an enum, struct, or union, do nothing
 }
 
+void codegen_initializer_string(int string_probe, ast type, int base_reg, int offset) {
+  char *string_start = string_pool + heap[string_probe + 1];
+  int i = 0;
+  int str_len = heap[string_probe + 4];
+  int arr_len;
+
+  // Only acceptable types are char[] or char*
+  if (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == CHAR_KW) {
+    arr_len = get_child_('[', type, 1);
+    if (str_len >= arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
+
+    // Place the bytes of the string in the memory location allocated for the array
+    for (; i < arr_len; i += 1) {
+      mov_reg_imm(reg_X, i < str_len ? string_start[i] : 0);
+      write_mem_location(base_reg, offset + i, reg_X, 1);
+    }
+  } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
+    // Create the string and assign global variable to the pointer
+    codegen_string(string_probe);
+    pop_reg(reg_X);
+    write_mem_location(base_reg, offset, reg_X, word_size);
+  } else {
+    fatal_error("codegen_initializer: string initializer must be assigned to a char[] or char*");
+  }
+}
+
+// Initialize a variable with an initializer
+void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset, bool in_array) {
+  ast members;
+  ast inner_type;
+  int arr_len;
+  int inner_type_width;
+
+  type = canonicalize_type(type);
+
+  switch (get_op(init)) {
+    case STRING:
+      codegen_initializer_string(get_val_(STRING, init), type, base_reg, offset);
+      break;
+
+    case INITIALIZER_LIST:
+      init = get_child_(INITIALIZER_LIST, init, 0);
+      // Acceptable types are:
+      //  arrays
+      //  structs
+      //  union   (if the initializer list has only one element)
+      //  scalars (if the initializer list has only one element)
+      switch (get_op(type)) {
+        case '[':
+          inner_type = get_child_('[', type, 0);
+          arr_len = get_child_('[', type, 1);
+          inner_type_width = type_width(get_child_('[', type, 0), true, false);
+
+          while (init != 0 && arr_len != 0) {
+            codegen_initializer(local, get_child_(',', init, 0), inner_type, base_reg, offset, true);
+            offset += inner_type_width;
+            init = get_child_opt_(',', ',', init, 1);
+            arr_len -= 1; // decrement the number of elements left to initialize to make sure we don't overflow
+          }
+
+          if (init != 0) {
+            fatal_error("codegen_initializer: too many elements in initializer list");
+          }
+
+          // If there are still elements to initialize, set them to 0.
+          // If it's not a local variable, we don't need to initialize the
+          // memory since the stack is zeroed during setup.
+          if (local && arr_len > 0) initialize_memory(0, base_reg, offset, inner_type_width * arr_len);
+          break;
+
+        case STRUCT_KW:
+          members = get_child_(STRUCT_KW, type, 2);
+          while (init != 0 && members != 0) {
+            inner_type = get_child_(DECL, get_child__(',', DECL, members, 0), 1);
+            codegen_initializer(local, get_child_(',', init, 0), inner_type, base_reg, offset, false);
+            offset += type_width(inner_type, true, true);
+            init = get_child_opt_(',', ',', init, 1);
+            members = get_child_opt_(',', ',', members, 1);
+          }
+
+          //  Initialize rest of the members to 0
+          while (local && members != 0) {
+            inner_type = get_child_(DECL, get_child__(',', DECL, members, 0), 1);
+            initialize_memory(0, base_reg, offset, type_width(inner_type, true, true));
+            offset += type_width(inner_type, true, true);
+            members = get_child_opt_(',', ',', members, 1);
+          }
+          break;
+
+        case UNION_KW:
+          members = get_child_(STRUCT_KW, type, 2);
+          if (get_child_opt_(',', ',', init, 1) != 0) {
+            fatal_error("codegen_initializer: union initializer list has more than one element");
+          } else if (members == 0) {
+            fatal_error("codegen_initializer: union has no members");
+          }
+          codegen_initializer(local, get_child_(',', init, 0), get_child_(DECL, get_child__(',', DECL, members, 0), 1), base_reg, offset, false);
+          break;
+
+        default:
+          if (get_child_opt_(',', ',', init, 1) != 0 // More than 1 element
+           || get_op(get_child_(',', init, 0)) == INITIALIZER_LIST) { // Or nested initializer list
+            fatal_error("codegen_initializer: scalar initializer list has more than one element");
+          }
+          codegen_rvalue(get_child_(',', init, 0));
+          pop_reg(reg_X);
+          grow_fs(-1);
+          write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
+          break;
+      }
+
+      break;
+
+    default:
+      if (is_struct_or_union_type(type)) {
+        // Struct assignment, we copy the struct.
+        codegen_lvalue(init);
+        pop_reg(reg_X);
+        grow_fs(-1);
+        copy_obj(base_reg, offset, reg_X, 0, type_width(type, true, true));
+      } else if (get_op(type) != '[') {
+        codegen_rvalue(init);
+        pop_reg(reg_X);
+        grow_fs(-1);
+        write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
+      } else {
+        fatal_error("codegen_initializer: cannot initialize array with scalar value");
+      }
+      break;
+  }
+}
+
+// Return size of initializer.
+// If it's an initializer list, return the number of elements
+// If it's a string, return the length of the string and delimiter.
+int initializer_size(ast initializer) {
+  int size = 0;
+
+  switch (get_op(initializer)) {
+    case INITIALIZER_LIST:
+      initializer = get_child_(INITIALIZER_LIST, initializer, 0);
+      while (initializer != 0) {
+        size += 1;
+        initializer = get_child_opt_(',', ',', initializer, 1);
+      }
+      return size;
+
+    case STRING:
+      return heap[get_val_(STRING, initializer) + 4] + 1;
+
+    default:
+      fatal_error("initializer_size: unknown initializer");
+      return -1;
+  }
+}
+
+void infer_array_length(ast type, ast init) {
+  // Array declaration with no size
+  if (get_op(type) == '[' && get_child_('[', type, 1) == 0) {
+    if (init == 0) {
+      fatal_error("Array declaration with no size must have an initializer");
+    }
+    set_child(type, 1, initializer_size(init));
+  }
+}
+
 void codegen_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
   int name_probe = get_val_(IDENTIFIER, name);
-  int size;
   int binding = cgc_lookup_var(name_probe, cgc_globals);
 
-  if (get_op(type) == '[') { // Array declaration
-    size = get_child_('[', type, 0);
-  } else {
-    // All non-array types have size 1
-    size = 1;
-  }
   if (get_op(type) == '(') {
     // Forward declaration
     binding = cgc_lookup_fun(name_probe, cgc_globals);
@@ -1522,30 +1706,17 @@ void codegen_glo_var_decl(ast node) {
 
   } else {
     handle_enum_struct_union_type_decl(type);
+    infer_array_length(type, init);
 
     if (binding == 0) {
-      cgc_add_global(name_probe, size, type_width(type, true, true), type);
+      cgc_add_global(name_probe, type_width(type, true, true), type);
       binding = cgc_globals;
     }
 
-    if (get_op(type) != '[') { // not array declaration
-
+    if (init != 0) {
       def_label(init_next_lbl);
       init_next_lbl = alloc_label("init_next");
-
-      if (init != 0) {
-        codegen_rvalue(init);
-      } else {
-        xor_reg_reg(reg_X, reg_X);
-        push_reg(reg_X);
-        grow_fs(1);
-      }
-
-      pop_reg(reg_X);
-      grow_fs(-1);
-
-      mov_mem_reg(reg_glo, heap[binding+4], reg_X);
-
+      codegen_initializer(false, init, type, reg_glo, heap[binding + 3], false); // heap[binding + 3] = offset
       jump(init_next_lbl);
     }
   }
@@ -1557,23 +1728,21 @@ void codegen_local_var_decl(ast node) {
   ast init = get_child_(DECL, node, 2);
   int size;
 
+  infer_array_length(type, init);
+
   if (is_aggregate_type(type)) { // Array/struct/union declaration
-    size = type_width(type, true, true);  // size in bytes (word aligned)
-    grow_stack_bytes(size);
-    size /= word_size; // size in words
+    size = type_width(type, true, true) / word_size;  // size in bytes (word aligned)
   } else {
-    // All non-array types are represented as a word, even if they are smaller
-    if (init != 0) {
-      codegen_rvalue(init);
-      grow_fs(-1);
-    } else {
-      xor_reg_reg(reg_X, reg_X);
-      push_reg(reg_X);
-    }
     size = 1;
   }
 
   cgc_add_local_var(get_val_(IDENTIFIER, name), size, type);
+  grow_stack(size); // Make room for the local variable
+
+  if (init != 0) {
+    // offset (cgc_fs - heap[cgc_locals + 3]) should be 0 since we just allocated the space
+    codegen_initializer(true, init, type, reg_SP, 0, false);
+  }
 }
 
 void codegen_body(ast node) {
@@ -1849,7 +2018,6 @@ void codegen_glo_fun_decl(ast node) {
   ast fun_type = get_child__(DECL, '(', decl, 1);
   ast params = get_child_opt_('(', ',', fun_type, 1);
   ast fun_return_type = get_child_('(', fun_type, 0);
-  int lbl;
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
@@ -1866,29 +2034,24 @@ void codegen_glo_fun_decl(ast node) {
   binding = cgc_lookup_fun(name_probe, cgc_globals);
 
   if (binding == 0) {
-    lbl = alloc_label(STRING_BUF(name_probe));
-    cgc_add_global_fun(name_probe, lbl, fun_type);
+    cgc_add_global_fun(name_probe, alloc_label(STRING_BUF(name_probe)), fun_type);
     binding = cgc_globals;
   }
 
-  if (body != 0) { // 0 is empty body
+  def_label(heap[binding+4]);
 
-    lbl = heap[binding+4];
+  cgc_fs = -1; // space for return address
+  cgc_locals = 0;
+  add_params(params);
+  cgc_fs = 0;
 
-    def_label(lbl);
+  codegen_body(body);
 
-    cgc_fs = -1; // space for return address
-    cgc_locals = 0;
-    add_params(params);
-    cgc_fs = 0;
+  grow_stack(-cgc_fs);
+  cgc_fs = 0;
 
-    codegen_body(body);
+  ret();
 
-    grow_stack(-cgc_fs);
-    cgc_fs = 0;
-
-    ret();
-  }
 
   cgc_locals_fun = save_locals_fun;
 }

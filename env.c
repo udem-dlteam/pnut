@@ -115,24 +115,23 @@ int cgc_loop_depth(int binding) {
   return loop_depth;
 }
 
-int cgc_add_local(enum BINDING binding_type, int ident, int size, ast type, int env) {
-  int binding = alloc_obj(6);
+int cgc_add_local(enum BINDING binding_type, int ident, ast type, int env) {
+  int binding = alloc_obj(5);
   heap[binding+0] = env;
   heap[binding+1] = binding_type;
   heap[binding+2] = ident;
-  heap[binding+3] = size;
-  heap[binding+4] = cgc_fs;
-  heap[binding+5] = type;
+  heap[binding+3] = cgc_fs;
+  heap[binding+4] = type;
   return binding;
 }
 
 #ifdef sh
 void cgc_add_local_var(enum BINDING binding_type, int ident, ast type) {
   cgc_fs += 1;
-  cgc_locals = cgc_add_local(binding_type, ident, 1, type, cgc_locals);
+  cgc_locals = cgc_add_local(binding_type, ident, type, cgc_locals);
   // Add to cgc_locals_fun as well, if not already there
   if (cgc_lookup_var(ident, cgc_locals_fun) == 0) {
-    cgc_locals_fun = cgc_add_local(binding_type, ident, 1, type, cgc_locals_fun);
+    cgc_locals_fun = cgc_add_local(binding_type, ident, type, cgc_locals_fun);
   }
 }
 
@@ -153,14 +152,14 @@ void cgc_add_enclosing_switch(bool in_tail_position) {
   cgc_locals = binding;
 }
 #else
-void cgc_add_local_param(int ident, int size, ast type) {
-  cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, size, type, cgc_locals);
-  cgc_fs -= size;
+void cgc_add_local_param(int ident, int width, ast type) {
+  cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, type, cgc_locals);
+  cgc_fs -= width;
 }
 
-void cgc_add_local_var(int ident, int size, ast type) {
-  cgc_fs += size;
-  cgc_locals = cgc_add_local(BINDING_VAR_LOCAL, ident, size, type, cgc_locals);
+void cgc_add_local_var(int ident, int width, ast type) {
+  cgc_fs += width;
+  cgc_locals = cgc_add_local(BINDING_VAR_LOCAL, ident, type, cgc_locals);
 }
 
 void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
@@ -183,14 +182,13 @@ void cgc_add_enclosing_switch(int loop_fs, int break_lbl, int next_case_lbl) {
   cgc_locals = binding;
 }
 
-void cgc_add_global(int ident, int size, int width, ast type) {
-  int binding = alloc_obj(6);
+void cgc_add_global(int ident, int width, ast type) {
+  int binding = alloc_obj(5);
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_VAR_GLOBAL;
   heap[binding+2] = ident;
-  heap[binding+3] = size;
-  heap[binding+4] = cgc_global_alloc;
-  heap[binding+5] = type;
+  heap[binding+3] = cgc_global_alloc;
+  heap[binding+4] = type;
   cgc_global_alloc += width;
   cgc_globals = binding;
 }

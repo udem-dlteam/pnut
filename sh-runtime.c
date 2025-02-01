@@ -290,25 +290,43 @@ DEFINE_RUNTIME_FUN(malloc)
   putstr("}\n");
 END_RUNTIME_FUN(malloc)
 
-DEFINE_RUNTIME_FUN(initialize_memory)
-  putstr("# Initialize the memory to 0\n");
-  putstr("initialize_memory() { # $1 = address, $2 = length\n");
-  putstr("  __ix=$1\n");
-  putstr("  __last=$(($1 + $2))\n");
-  putstr("  while [ $__ix -lt $__last ]; do\n");
-  putstr("    : $((_$__ix=0))\n");
-  putstr("    : $((__ix += 1))\n");
+DEFINE_RUNTIME_FUN(initialize)
+  putstr("# Initialize memory with the list of values.\n");
+  putstr("# When the expected number of elements is higher than the actual number of\n");
+  putstr("# elements, the remaining elements are set to 0\n");
+  putstr("initialize() { # $1 = var name, $2 = length, $3... = elements\n");
+  putstr("  __ptr=$(($1))\n");
+  putstr("  __size=$2\n");
+  putstr("  __i=0\n");
+  putstr("  while [ $# -ge 3 ]; do\n");
+  putstr("    : $((_$((__ptr + __i)) = $3))\n");
+  putstr("    : $((__i += 1))\n");
+  putstr("    shift\n");
+  putstr("  done\n");
+  putstr("\n");
+  putstr("  while [ $__i -lt $__size ]; do\n");
+  putstr("    : $((_$((__ptr + __i)) = 0))\n");
+  putstr("    : $((__i += 1))\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(initialize_memory)
+END_RUNTIME_FUN(initialize)
 
 DEFINE_RUNTIME_FUN(defarr)
 DEPENDS_ON(malloc)
 #ifdef RT_NO_INIT_GLOBALS
-  putstr("defarr() { _malloc $1 $2; }\n");
+  // If some array initializers were used, defarr is extended to support initialization
+  if (runtime_use_initialize) {
+    DEPENDS_ON(initialize)
+    putstr("defarr() {\n");
+    putstr("  _malloc $1 $2;\n");
+    putstr("  if [ $# -gt 2 ]; then initialize $@; fi\n");
+    putstr("}\n");
+  } else {
+    putstr("defarr() { _malloc $1 $2; }\n");
+  }
 #else
-DEPENDS_ON(initialize_memory)
-  putstr("defarr() { _malloc $1 $2; initialize_memory $(($1)) $2; }\n");
+DEPENDS_ON(initialize)
+  putstr("defarr() { _malloc $1 $2; initialize_memory $@; }\n");
 #endif
 END_RUNTIME_FUN(defarr)
 
@@ -436,11 +454,12 @@ DEPENDS_ON(char_to_int)
     extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
   putstr("}\n");
 #endif
-  putstr("unpack_escaped_string() {\n");
+  putstr("unpack_escaped_string() { # $1 = string, $2 = size (optional)\n");
   putstr("  __buf=\"$1\"\n");
   putstr("  # Allocates enough space for all characters, assuming that no character is escaped\n");
-  putstr("  _malloc __addr $((${#__buf} + 1))\n");
+  putstr("  _malloc __addr $((${2:-${#__buf} + 1}))\n");
   putstr("  __ptr=$__addr\n");
+  putstr("  __end=$((__ptr + ${2:-${#__buf} + 1})) # End of allocated memory\n");
 #ifdef OPTIMIZE_LONG_LINES
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");
@@ -459,7 +478,10 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
 #endif
-  putstr("  : $((_$__ptr = 0))\n");
+  putstr("  while [ $__ptr -le $__end ]; do\n");
+  putstr("    : $((_$__ptr = 0))\n");
+  putstr("    : $((__ptr += 1))\n");
+  putstr("  done\n");
   putstr("}\n");
 END_RUNTIME_FUN(unpack_escaped_string)
 
@@ -468,12 +490,12 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("# Define a string, and return a reference to it in the varible taken as argument.\n");
   putstr("# If the variable is already defined, this function does nothing.\n");
   putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
-  putstr("defstr() { # $1 = variable name, $2 = string\n");
+  putstr("defstr() { # $1 = variable name, $2 = string, $3 = size (optional)\n");
 #ifndef RT_UNSAFE_HEAP
   putstr("  set +u # Necessary to allow the variable to be empty\n");
 #endif
   putstr("  if [ $(($1)) -eq 0 ]; then\n");
-  putstr("    unpack_escaped_string \"$2\"\n");
+  putstr("    unpack_escaped_string \"$2\" $3\n");
   putstr("    : $(($1 = __addr))\n");
   putstr("  fi\n");
 #ifndef RT_UNSAFE_HEAP

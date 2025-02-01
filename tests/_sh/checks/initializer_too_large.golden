@@ -1,0 +1,1 @@
+tests/_sh/checks/initializer_too_large.c:3:0  Array type is too small for initializer
