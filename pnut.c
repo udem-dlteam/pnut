@@ -2670,7 +2670,6 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       } else {
         parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
       }
-      return result;
   }
 
   // At this point, the only non-recursive declarator is an identifier
