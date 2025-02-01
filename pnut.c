@@ -2202,7 +2202,7 @@ void get_tok() {
 }
 
 // parser
-#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG
+#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG || defined HANDLE_SIGNALS
 #include "debug.c"
 #endif
 
@@ -3529,6 +3529,10 @@ ast parse_compound_statement() {
 int main(int argc, char **argv) {
   int i;
   ast decl;
+
+#ifdef HANDLE_SIGNALS
+  signal(SIGINT, signal_callback_handler);
+#endif
 
   init_ident_table();
 

@@ -1,3 +1,16 @@
+
+#ifdef HANDLE_SIGNALS
+#include <signal.h>
+
+void signal_callback_handler(int signum) {
+  if (signum == SIGINT){
+    printf("Caught signal %d\n",signum);
+    printf("Tokenizer at %s:%d:%d\n", fp_filepath, line_number, column_number);
+    exit(1);
+  }
+}
+#endif
+
 void print_string_char(int c) {
   if (c == 7)       putstr("\\a");
   else if (c == 8)  putstr("\\b");
