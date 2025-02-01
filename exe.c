@@ -1561,8 +1561,6 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 
   type = canonicalize_type(type);
 
-  // printf("codegen_initializer: init = %d, type = %d, in_array = %d offset = %d\n", get_op(init), get_op(type), in_array, offset);
-
   switch (get_op(init)) {
     case STRING:
       codegen_initializer_string(get_val_(STRING, init), type, base_reg, offset);
@@ -1635,7 +1633,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           codegen_rvalue(get_child_(',', init, 0));
           pop_reg(reg_X);
           grow_fs(-1);
-          write_mem_location(base_reg, offset, reg_X, type_width(type, true, in_array));
+          write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
           break;
       }
 
@@ -1652,7 +1650,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         codegen_rvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
-        write_mem_location(base_reg, offset, reg_X, type_width(type, true, in_array));
+        write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
       } else {
         fatal_error("codegen_initializer: cannot initialize array with scalar value");
       }
