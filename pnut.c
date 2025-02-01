@@ -3011,8 +3011,16 @@ ast parse_unary_expression() {
     get_tok();
     if (tok == '(') {
       get_tok();
+      // May be a type or an expression
+      if (is_type_starter(tok)) {
       result = parse_declarator(true, parse_declaration_specifiers());
       expect_tok(')');
+      } else {
+        // We need to put the current token and '(' back on the token stream.
+        // Otherwise, sizeof (cast_expression) fails to parse.
+        undo_token('(', 0);
+        result = parse_unary_expression();
+      }
     } else {
       result = parse_unary_expression();
     }
