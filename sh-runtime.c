@@ -456,11 +456,10 @@ DEPENDS_ON(char_to_int)
 #endif
   putstr("unpack_escaped_string() { # $1 = string, $2 = size (optional)\n");
   putstr("  __buf=\"$1\"\n");
-  putstr("  __len=${2:-${#__buf}}\n");
   putstr("  # Allocates enough space for all characters, assuming that no character is escaped\n");
   putstr("  _malloc __addr $((${2:-${#__buf} + 1}))\n");
   putstr("  __ptr=$__addr\n");
-  putstr("  __end=$((__ptr + __len))\n");
+  putstr("  __end=$((__ptr + ${2:-${#__buf} + 1})) # End of allocated memory\n");
 #ifdef OPTIMIZE_LONG_LINES
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");

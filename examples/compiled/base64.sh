@@ -14,11 +14,12 @@ defarr() { _malloc $1 $2; }
 
 defarr _buf 1024
 
-unpack_escaped_string() {
+unpack_escaped_string() { # $1 = string, $2 = size (optional)
   __buf="$1"
   # Allocates enough space for all characters, assuming that no character is escaped
-  _malloc __addr $((${#__buf} + 1))
+  _malloc __addr $((${2:-${#__buf} + 1}))
   __ptr=$__addr
+  __end=$((__ptr + ${2:-${#__buf} + 1})) # End of allocated memory
   while [ -n "$__buf" ] ; do
     case "$__buf" in
       '\'*)
@@ -49,16 +50,19 @@ unpack_escaped_string() {
     : $((_$__ptr = __c))
     : $((__ptr += 1))
   done
-  : $((_$__ptr = 0))
+  while [ $__ptr -le $__end ]; do
+    : $((_$__ptr = 0))
+    : $((__ptr += 1))
+  done
 }
 
 # Define a string, and return a reference to it in the varible taken as argument.
 # If the variable is already defined, this function does nothing.
 # Note that it's up to the caller to ensure that no 2 strings share the same variable.
-defstr() { # $1 = variable name, $2 = string
+defstr() { # $1 = variable name, $2 = string, $3 = size (optional)
   set +u # Necessary to allow the variable to be empty
   if [ $(($1)) -eq 0 ]; then
-    unpack_escaped_string "$2"
+    unpack_escaped_string "$2" $3
     : $(($1 = __addr))
   fi
   set -u
