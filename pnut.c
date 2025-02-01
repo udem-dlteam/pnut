@@ -1514,6 +1514,20 @@ void init_builtin_int_macro(int macro_id, int value) {
 
 void init_pnut_macros() {
   init_ident(MACRO, "PNUT_CC");
+
+#if defined(sh)
+  init_ident(MACRO, "PNUT_SH");
+#elif defined(target_i386_linux)
+  init_ident(MACRO, "PNUT_I386");
+  init_ident(MACRO, "PNUT_I386_LINUX");
+#elif defined (target_x86_64_linux)
+  init_ident(MACRO, "PNUT_X86_64");
+  init_ident(MACRO, "PNUT_X86_64_LINUX");
+#elif defined (target_x86_64_mac)
+  init_ident(MACRO, "PNUT_X86_64");
+  init_ident(MACRO, "PNUT_X86_64_MAC");
+#endif
+
   FILE__ID      = init_ident(MACRO, "__FILE__");
   LINE__ID      = init_ident(MACRO, "__LINE__");
   DATE__ID      = init_ident(MACRO, "__DATE__");
@@ -1635,6 +1649,14 @@ void play_macro(int tokens, int args) {
   }
 }
 
+// Undoes the effect of get_tok by replacing the current token with the previous
+// token and saving the current token to be returned by the next call to get_tok.
+void undo_token(int prev_tok, int prev_val) {
+  play_macro(cons(cons(tok, val), 0), 0); // Push the current token back
+  tok = prev_tok;
+  val = prev_val;
+}
+
 // Try to expand a macro.
 // If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
@@ -1665,9 +1687,7 @@ bool attempt_macro_expansion(int macro) {
     // There was no argument list, i.e. not a function-like macro call even though it is a function-like macro
     if (new_macro_args == -1) {
       // get_macro_args_toks looked at the next token so we need to save it
-      play_macro(cons(cons(tok, val), 0), 0);
-      tok = IDENTIFIER;
-      val = macro;
+      undo_token(IDENTIFIER, macro);
       return false;
     } else {
       play_macro(tokens, new_macro_args);
@@ -2650,7 +2670,6 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       } else {
         parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
       }
-      return result;
   }
 
   // At this point, the only non-recursive declarator is an identifier
@@ -2991,8 +3010,16 @@ ast parse_unary_expression() {
     get_tok();
     if (tok == '(') {
       get_tok();
+      // May be a type or an expression
+      if (is_type_starter(tok)) {
       result = parse_declarator(true, parse_declaration_specifiers());
       expect_tok(')');
+      } else {
+        // We need to put the current token and '(' back on the token stream.
+        // Otherwise, sizeof (cast_expression) fails to parse.
+        undo_token('(', 0);
+        result = parse_unary_expression();
+      }
     } else {
       result = parse_unary_expression();
     }
@@ -3022,7 +3049,6 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
-  int tokens = 0;
   ast result;
   ast type;
 
@@ -3050,10 +3076,7 @@ ast parse_cast_expression() {
       return result;
     } else {
       // We need to put the current token and '(' back on the token stream.
-      tokens = cons(cons(tok, val), 0);
-      play_macro(tokens, 0);
-      tok = '(';
-      val = 0;
+      undo_token('(', 0);
     }
   }
 
