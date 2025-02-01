@@ -1514,6 +1514,20 @@ void init_builtin_int_macro(int macro_id, int value) {
 
 void init_pnut_macros() {
   init_ident(MACRO, "PNUT_CC");
+
+#if defined(sh)
+  init_ident(MACRO, "PNUT_SH");
+#elif defined(target_i386_linux)
+  init_ident(MACRO, "PNUT_I386");
+  init_ident(MACRO, "PNUT_I386_LINUX");
+#elif defined (target_x86_64_linux)
+  init_ident(MACRO, "PNUT_X86_64");
+  init_ident(MACRO, "PNUT_X86_64_LINUX");
+#elif defined (target_x86_64_mac)
+  init_ident(MACRO, "PNUT_X86_64");
+  init_ident(MACRO, "PNUT_X86_64_MAC");
+#endif
+
   FILE__ID      = init_ident(MACRO, "__FILE__");
   LINE__ID      = init_ident(MACRO, "__LINE__");
   DATE__ID      = init_ident(MACRO, "__DATE__");
