@@ -1649,6 +1649,14 @@ void play_macro(int tokens, int args) {
   }
 }
 
+// Undoes the effect of get_tok by replacing the current token with the previous
+// token and saving the current token to be returned by the next call to get_tok.
+void undo_token(int prev_tok, int prev_val) {
+  play_macro(cons(cons(tok, val), 0), 0); // Push the current token back
+  tok = prev_tok;
+  val = prev_val;
+}
+
 // Try to expand a macro.
 // If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
@@ -1679,9 +1687,7 @@ bool attempt_macro_expansion(int macro) {
     // There was no argument list, i.e. not a function-like macro call even though it is a function-like macro
     if (new_macro_args == -1) {
       // get_macro_args_toks looked at the next token so we need to save it
-      play_macro(cons(cons(tok, val), 0), 0);
-      tok = IDENTIFIER;
-      val = macro;
+      undo_token(IDENTIFIER, macro);
       return false;
     } else {
       play_macro(tokens, new_macro_args);
@@ -3036,7 +3042,6 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
-  int tokens = 0;
   ast result;
   ast type;
 
@@ -3064,10 +3069,7 @@ ast parse_cast_expression() {
       return result;
     } else {
       // We need to put the current token and '(' back on the token stream.
-      tokens = cons(cons(tok, val), 0);
-      play_macro(tokens, 0);
-      tok = '(';
-      val = 0;
+      undo_token('(', 0);
     }
   }
 
