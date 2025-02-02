@@ -624,9 +624,11 @@ int probe_string(int probe) {
   return heap[probe+1]; // return the start of the string
 }
 
+#define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
+
 void get_tok();
 void get_ident();
-void expect_tok(int expected);
+void expect_tok_(int expected_tok, char* file, int line);
 
 #define IFDEF_DEPTH_MAX 20
 bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
@@ -644,12 +646,13 @@ bool expand_macro_arg = true;
 // Don't produce newline tokens. Used when reading the tokens of a macro definition.
 bool skip_newlines = true;
 
-#define MACRO_RECURSION_MAX 100
+#define MACRO_RECURSION_MAX 180 // Supports up to 60 (180 / 3) nested macro expansions.
 int macro_stack[MACRO_RECURSION_MAX];
 int macro_stack_ix = 0;
 
 int macro_tok_lst = 0;  // Current list of tokens to replay for the macro being expanded
 int macro_args = 0;     // Current list of arguments for the macro being expanded
+int macro_ident = 0;    // The identifier of the macro being expanded (if any)
 int macro_args_count;   // Number of arguments for the current macro being expanded
 bool paste_last_token = false; // Whether the last token was a ## or not
 
@@ -1584,14 +1587,7 @@ void check_macro_arity(int macro_args_count, int macro) {
 int get_macro_args_toks(int macro) {
   int args = 0;
   int macro_args_count = 0;
-  bool prev_is_comma = false;
-  get_tok_macro_expand(); // Skip the macro identifier
-
-  if (tok != '(') { // Function-like macro with 0 arguments
-    check_macro_arity(macro_args_count, macro);
-    return -1; // No arguments
-  }
-
+  bool prev_is_comma = tok == ',';
   get_tok_macro_expand(); // Skip '('
 
   while (tok != ')' && tok != EOF) {
@@ -1633,65 +1629,89 @@ int get_macro_arg(int ix) {
   return car(arg);
 }
 
-void play_macro(int tokens, int args) {
-  if (tokens != 0) {
-    if (macro_tok_lst != 0) {
-      if (macro_stack_ix + 2 >= MACRO_RECURSION_MAX) {
-        syntax_error("Macro recursion depth exceeded.");
-      }
-      macro_stack[macro_stack_ix] = macro_tok_lst;
-      macro_stack[macro_stack_ix + 1] = macro_args;
-      macro_stack_ix += 2;
-    }
+// "Pops" the current macro expansion and restores the previous macro expansion context.
+// This is done when the current macro expansion is done.
+void return_to_parent_macro() {
+  if (macro_stack_ix == 0) fatal_error("return_to_parent_macro: no parent macro");
 
-    macro_tok_lst = tokens;
-    macro_args = args;
+  macro_stack_ix -= 3;
+  macro_tok_lst   = macro_stack[macro_stack_ix];
+  macro_args      = macro_stack[macro_stack_ix + 1];
+  macro_ident     = macro_stack[macro_stack_ix + 2];
+}
+
+// Begins a new macro expansion context, saving the current context onn the macro stack.
+// Takes as argument the name of the macro, the tokens to be expanded and the arguments.
+void begin_macro_expansion(int ident, int tokens, int args) {
+  if (macro_stack_ix + 3 >= MACRO_RECURSION_MAX) {
+    fatal_error("Macro recursion depth exceeded.");
   }
+
+  macro_stack[macro_stack_ix]     = macro_tok_lst;
+  macro_stack[macro_stack_ix + 1] = macro_args;
+  macro_stack[macro_stack_ix + 2] = macro_ident;
+  macro_stack_ix += 3;
+
+  macro_ident   = ident;
+  macro_tok_lst = tokens;
+  macro_args    = args;
+}
+
+// Search the macro stack to see if the macro is already expanding.
+bool macro_is_already_expanding(int ident) {
+  int i = macro_stack_ix;
+  if (ident == 0 || macro_ident == 0) return false; // Unnamed macro or no macro is expanding
+  if (ident == macro_ident)           return true;  // The same macro is already expanding
+
+  // Traverse the stack to see if the macro is already expanding
+  while (i > 0) {
+    i -= 3;
+    if (macro_stack[i + 2] == ident) return true;
+  }
+  return false;
 }
 
 // Undoes the effect of get_tok by replacing the current token with the previous
 // token and saving the current token to be returned by the next call to get_tok.
 void undo_token(int prev_tok, int prev_val) {
-  play_macro(cons(cons(tok, val), 0), 0); // Push the current token back
+  begin_macro_expansion(0, cons(cons(tok, val), 0), 0); // Push the current token back
   tok = prev_tok;
   val = prev_val;
 }
 
-// Try to expand a macro.
-// If a function-like macro is not called with (), it is not expanded and the identifier is returned as is.
+// Try to expand a macro and returns if the macro was expanded.
+// A macro is not expanded if it is already expanding or if it's a function-like
+// macro that is not called with parenthesis. In that case, the macro identifier
+// is returned as a normal identifier.
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
-// For object like macros, the macro tokens are played back without any other parsing.
-// Returns 1 if the macro was expanded, 0 otherwise.
 bool attempt_macro_expansion(int macro) {
-  int new_macro_args;
   // We must save the tokens because the macro may be redefined while reading the arguments
   int tokens = car(heap[macro + 3]);
-  macro = val;
-  if (cdr(heap[macro + 3]) == -1) { // Object-like macro
-    // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line
-    // directives is not supported.
+
+  if (macro_is_already_expanding(macro)) { // Self referencing macro
+    tok = IDENTIFIER;
+    val = macro;
+    return false;
+  } else if (cdr(heap[macro + 3]) == -1) { // Object-like macro
+    // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
-      play_macro(cons(cons(STRING, intern_str(fp_filepath)), 0), 0);
+      tokens = cons(cons(STRING, intern_str(fp_filepath)), 0);
     }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     else if (macro == LINE__ID) {
-      play_macro(cons(cons(INTEGER, -line_number), 0), 0);
+      tokens = cons(cons(INTEGER, -line_number), 0);
     }
 #endif
-    else {
-      play_macro(tokens, 0);
-    }
+    begin_macro_expansion(macro, tokens, 0);
     return true;
-  } else {
-    new_macro_args = get_macro_args_toks(macro);
-    // There was no argument list, i.e. not a function-like macro call even though it is a function-like macro
-    if (new_macro_args == -1) {
-      // get_macro_args_toks looked at the next token so we need to save it
+  } else { // Function-like macro
+    expect_tok(MACRO); // Skip macro identifier
+    if (tok == '(') {
+      begin_macro_expansion(macro, tokens, get_macro_args_toks(macro));
+      return true;
+    } else {
       undo_token(IDENTIFIER, macro);
       return false;
-    } else {
-      play_macro(tokens, new_macro_args);
-      return true;
     }
   }
 }
@@ -1741,7 +1761,7 @@ void paste_tokens(int left_tok, int left_val) {
       val = left_val;
       return;
     } else {
-      play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+      begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
       get_tok_macro();
     }
   }
@@ -1838,9 +1858,7 @@ void get_tok() {
             // checked by read_macro_tokens.
             syntax_error("## cannot appear at the end of a macro expansion");
           }
-          macro_stack_ix -= 2;
-          macro_tok_lst = macro_stack[macro_stack_ix];
-          macro_args = macro_stack[macro_stack_ix + 1];
+          return_to_parent_macro();
           paste_last_token = false; // We are done pasting
           paste_tokens(tok, val);
         }
@@ -1851,7 +1869,7 @@ void get_tok() {
           }
           break;
         } else if (tok == MACRO_ARG && expand_macro_arg) {
-          play_macro(get_macro_arg(val), 0); // Play the tokens of the macro argument
+          begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
         } else if (tok == '#') { // Stringizing!
           stringify();
@@ -1859,9 +1877,7 @@ void get_tok() {
         }
         break;
       } else if (macro_stack_ix != 0) {
-        macro_stack_ix -= 2;
-        macro_tok_lst = macro_stack[macro_stack_ix];
-        macro_args = macro_stack[macro_stack_ix + 1];
+        return_to_parent_macro();
         continue;
       } else if (ch <= ' ') {
 
@@ -2271,8 +2287,6 @@ void expect_tok_(int expected_tok, char* file, int line) {
   }
   get_tok();
 }
-
-#define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
 
 ast parse_comma_expression();
 ast parse_cast_expression();
