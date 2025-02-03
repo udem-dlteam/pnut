@@ -254,3 +254,49 @@ void show_ast(char* name, ast obj) {
 //     members = get_child(members, 2);
 //   }
 // }
+
+void print_tokens(int tokens) {
+  while (tokens != 0) {
+    print_tok(car(car(tokens)), cdr(car(tokens)));
+    tokens = cdr(tokens);
+  }
+}
+
+void print_macro_args(int args) {
+  int arg;
+  if (args != 0) {
+    print_macro_args(cdr(args));
+    print_tokens(car(args));
+    if (cdr(args) != 0) putchar(',');
+  }
+}
+
+void print_macro_ctx(int ix, int ident, int tokens, int args) {
+  int arg;
+  if (ident == 0) {
+    printf("# %-3d: <unnamed>", ix);
+  } else {
+    printf("# %-3d: %s", ix, STRING_BUF(ident));
+  }
+  if (args) {
+    putchar('(');
+    print_macro_args(args);
+    putchar(')');
+  }
+  if (tokens != 0) {
+    printf(" -> ");
+    print_tokens(tokens);
+  }
+}
+
+void print_macro_stack() {
+  int i = 0;
+  putstr("\n######### macro_stack: #########\n");
+  while (3 * i < macro_stack_ix) {
+    print_macro_ctx(i, macro_stack[i * 3 + 2], macro_stack[i * 3], macro_stack[i * 3 + 1]);
+    putchar('\n');
+    i += 1;
+  }
+  print_macro_ctx(i, macro_ident, macro_tok_lst, macro_args);
+  putstr("\n################################\n");
+}
