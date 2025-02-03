@@ -34,9 +34,46 @@ void print_tok_string(int string_probe) {
   }
 }
 
-int print_tok_indent = 0;
+int print_tok_indent_level = 0;
+int print_tok_preceding_nl_count = 0;
+void print_tok_indent() {
+  int i;
+  for (i = 0; i < print_tok_indent_level; i += 1) putchar(' ');
+}
+
 void print_tok(int tok, int val) {
   int i;
+
+  // print_tok treats '{', '}' and '\n' specially:
+  // - '{' increases the indent level by 2
+  // - '}' decreases the indent level by 2
+  // - '\n' prints a newline and increments print_tok_preceding_nl_count
+
+  // When print_tok_preceding_nl_count is not 0, print_tok_indent is called
+  // before printing the token This ensures that tokens are properly indented
+  // after a newline.
+
+  if (tok == '\n') {
+    if (print_tok_preceding_nl_count >= 2) return; // Skip consecutive newlines
+    print_tok_preceding_nl_count += 1;
+    putchar('\n');
+    return;
+  } else if (tok == '{') {
+    print_tok_indent();
+    putchar(tok);
+    print_tok_indent_level += 2;
+    return;
+  } else if (tok == '}') {
+    print_tok_indent_level -= 2;
+    print_tok_indent();
+    putchar(tok);
+    return;
+  }
+
+  if (print_tok_preceding_nl_count != 0) {
+    print_tok_indent();
+    print_tok_preceding_nl_count = 0;
+  }
 
   if      (tok == AUTO_KW)      putstr("auto");
   else if (tok == BREAK_KW)     putstr("break");
@@ -115,15 +152,6 @@ void print_tok(int tok, int val) {
     putchar('"');
   } else if (tok == MACRO_ARG) {
     putstr("ARG["); putint(val); putstr("]");
-  } else if (tok == '{') {
-    putchar(tok);
-    print_tok_indent += 2;
-  } else if (tok == '}') {
-    print_tok_indent -= 2;
-    putchar(tok);
-  } else if (tok == '\n') {
-    putchar(tok);
-    for (i = 0; i < print_tok_indent; i++) putchar(' ');
   } else {
     putchar(tok);
   }
