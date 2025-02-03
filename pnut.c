@@ -838,8 +838,8 @@ FILE *fopen_source_file(char *file_name, char *relative_to) {
   }
   fp = fopen(fp_filepath, "r");
   if (fp == 0) {
-    putstr("Could not open file: "); putstr(fp_filepath); putchar('\n');
-    exit(1);
+    putstr(fp_filepath); putchar('\n');
+    fatal_error("Could not open file");
   }
   return fp;
 }
