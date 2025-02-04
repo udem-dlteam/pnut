@@ -146,13 +146,23 @@ test_expect_failure_for_shells() {
   echo `sed -n -e "/\/\/ expect_failure_for: /p" "$1" | sed -e "s/^\/\/ expect_failure_for: //"`
 }
 
+# Pnut has a bug that causes it to miscompile when a certain feature is used.
+# // expect_failure
+test_expect_failure() {
+  if grep -q "// expect_failure" "$1"; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 # Some tests are expected to fail with a compilation error
 # // expect_comp_failure
 test_expect_comp_failure() {
   if grep -q "// expect_comp_failure" "$1"; then
-    return 1
-  else
     return 0
+  else
+    return 1
   fi
 }
 
@@ -163,15 +173,22 @@ test_timeout() {
   echo `sed -n -e "/\/\/ timeout: /p" "$1" | sed -e "s/^\/\/ timeout: //"`
 }
 
-test_expect_failure_for_shell() { # file: $1
+test_failure_is_expected() { # file: $1
+  if test_expect_failure "$1"; then
+    reason="Expected to fail"
+    return 0
+  fi
+
   failing_shells=$(test_expect_failure_for_shells "$1")
   for failing_shell in $failing_shells; do
     failing_shell_name=$(echo "$failing_shell" | sed 's/-.*//')
     failing_shell_version=$(echo "$failing_shell" | sed 's/.*-//')
     if [ "$failing_shell_name" = "$shell" ]; then # First match on the shell name, then on the version if any
       if [ -z "$failing_shell_version" ] || [ "$failing_shell_version" = "$failing_shell" ]; then
+        reason="Expected to fail on $failing_shell_name"
         return 0 # No version specified, match!
       elif shell_version "$shell" | grep -q -E "$failing_shell_version"; then
+        reason="Expected to fail on $failing_shell_name"
         return 0 # version matched!
       else
         return 1 # version didn't match!
@@ -214,7 +231,7 @@ run_test() { # file_to_test: $1
   failed_pnut_comp=0                  # Flag to indicate if compilation failed
 
   expect_failed_comp=0                # Flag to indicate if compilation is expected to fail
-  test_expect_comp_failure "$file" || expect_failed_comp=1
+  if test_expect_comp_failure "$file"; then expect_failed_comp=1; fi
 
   # Print file name before generating golden file so we know it's getting processed
   printf "$file: "
@@ -269,8 +286,8 @@ run_test() { # file_to_test: $1
       if [ $? -eq 0 ]; then # If the output matches the golden file
         echo "✅ Test passed"
         return 0
-      elif test_expect_failure_for_shell "$file"; then
-        echo "⚠️ Test disabled for $shell"
+      elif test_failure_is_expected "$file"; then
+        echo "⚠️  Test disabled ($reason)"
         return 0
       else
         echo "❌ Test failed"
@@ -278,8 +295,8 @@ run_test() { # file_to_test: $1
         echo "$diff_out"
         return 1
       fi
-    elif test_expect_failure_for_shell "$file"; then
-      echo "⚠️ Test disabled for $shell"
+    elif test_failure_is_expected "$file"; then
+      echo "⚠️  Test disabled ($reason)"
       return 0
     else
       echo "❌ Failed to run: $(cat "$dir/$filename.err")"

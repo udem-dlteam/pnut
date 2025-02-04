@@ -1,3 +1,16 @@
+
+#ifdef HANDLE_SIGNALS
+#include <signal.h>
+
+void signal_callback_handler(int signum) {
+  if (signum == SIGINT){
+    printf("Caught signal %d\n",signum);
+    printf("Tokenizer at %s:%d:%d\n", fp_filepath, line_number, column_number);
+    exit(1);
+  }
+}
+#endif
+
 void print_string_char(int c) {
   if (c == 7)       putstr("\\a");
   else if (c == 8)  putstr("\\b");
@@ -21,9 +34,46 @@ void print_tok_string(int string_probe) {
   }
 }
 
-int print_tok_indent = 0;
+int print_tok_indent_level = 0;
+int print_tok_preceding_nl_count = 0;
+void print_tok_indent() {
+  int i;
+  for (i = 0; i < print_tok_indent_level; i += 1) putchar(' ');
+}
+
 void print_tok(int tok, int val) {
   int i;
+
+  // print_tok treats '{', '}' and '\n' specially:
+  // - '{' increases the indent level by 2
+  // - '}' decreases the indent level by 2
+  // - '\n' prints a newline and increments print_tok_preceding_nl_count
+
+  // When print_tok_preceding_nl_count is not 0, print_tok_indent is called
+  // before printing the token This ensures that tokens are properly indented
+  // after a newline.
+
+  if (tok == '\n') {
+    if (print_tok_preceding_nl_count >= 2) return; // Skip consecutive newlines
+    print_tok_preceding_nl_count += 1;
+    putchar('\n');
+    return;
+  } else if (tok == '{') {
+    print_tok_indent();
+    putchar(tok);
+    print_tok_indent_level += 2;
+    return;
+  } else if (tok == '}') {
+    print_tok_indent_level -= 2;
+    print_tok_indent();
+    putchar(tok);
+    return;
+  }
+
+  if (print_tok_preceding_nl_count != 0) {
+    print_tok_indent();
+    print_tok_preceding_nl_count = 0;
+  }
 
   if      (tok == AUTO_KW)      putstr("auto");
   else if (tok == BREAK_KW)     putstr("break");
@@ -102,15 +152,6 @@ void print_tok(int tok, int val) {
     putchar('"');
   } else if (tok == MACRO_ARG) {
     putstr("ARG["); putint(val); putstr("]");
-  } else if (tok == '{') {
-    putchar(tok);
-    print_tok_indent += 2;
-  } else if (tok == '}') {
-    print_tok_indent -= 2;
-    putchar(tok);
-  } else if (tok == '\n') {
-    putchar(tok);
-    for (i = 0; i < print_tok_indent; i++) putchar(' ');
   } else {
     putchar(tok);
   }
@@ -213,3 +254,49 @@ void show_ast(char* name, ast obj) {
 //     members = get_child(members, 2);
 //   }
 // }
+
+void print_tokens(int tokens) {
+  while (tokens != 0) {
+    print_tok(car(car(tokens)), cdr(car(tokens)));
+    tokens = cdr(tokens);
+  }
+}
+
+void print_macro_args(int args) {
+  int arg;
+  if (args != 0) {
+    print_macro_args(cdr(args));
+    print_tokens(car(args));
+    if (cdr(args) != 0) putchar(',');
+  }
+}
+
+void print_macro_ctx(int ix, int ident, int tokens, int args) {
+  int arg;
+  if (ident == 0) {
+    printf("# %-3d: <unnamed>", ix);
+  } else {
+    printf("# %-3d: %s", ix, STRING_BUF(ident));
+  }
+  if (args) {
+    putchar('(');
+    print_macro_args(args);
+    putchar(')');
+  }
+  if (tokens != 0) {
+    printf(" -> ");
+    print_tokens(tokens);
+  }
+}
+
+void print_macro_stack() {
+  int i = 0;
+  putstr("\n######### macro_stack: #########\n");
+  while (3 * i < macro_stack_ix) {
+    print_macro_ctx(i, macro_stack[i * 3 + 2], macro_stack[i * 3], macro_stack[i * 3 + 1]);
+    putchar('\n');
+    i += 1;
+  }
+  print_macro_ctx(i, macro_ident, macro_tok_lst, macro_args);
+  putstr("\n################################\n");
+}
