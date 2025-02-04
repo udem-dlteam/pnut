@@ -1747,7 +1747,7 @@ int paste_integers(int left_val, int right_val) {
 }
 
 // Support token pasting between identifiers and non-negative integers
-bool paste_tokens(int left_tok, int left_val) {
+void paste_tokens(int left_tok, int left_val) {
   int right_tok;
   int right_val;
   expand_macro_arg = false;
@@ -1759,7 +1759,7 @@ bool paste_tokens(int left_tok, int left_val) {
     if (get_macro_arg(val) == 0) {
       tok = left_tok;
       val = left_val;
-      return false;
+      return;
     } else {
       begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
       get_tok_macro();
@@ -1802,13 +1802,6 @@ bool paste_tokens(int left_tok, int left_val) {
   } else {
     putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
     syntax_error("cannot paste a non-identifier or non-integer");
-  }
-
-  if (tok == MACRO) {
-    // If the result of the pasting is a macro, it is expanded
-    return attempt_macro_expansion(val);
-  } else {
-    return false;
   }
 }
 
@@ -1855,11 +1848,7 @@ void get_tok() {
           } else {
             // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
             macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
-            if (paste_tokens(tok, val)) {
-              continue;
-            } else {
-            break;
-            }
+            paste_tokens(tok, val);
           }
         } else if (macro_tok_lst == 0 && paste_last_token) { // We finished expanding the left-hand side of ##
           if (macro_stack_ix == 0) {
@@ -1870,11 +1859,7 @@ void get_tok() {
           }
           return_to_parent_macro();
           paste_last_token = false; // We are done pasting
-          if (paste_tokens(tok, val)) {
-            continue;
-          } else {
-            break;
-          }
+          paste_tokens(tok, val);
         }
 
         if (tok == MACRO) { // Nested macro expansion!
