@@ -292,14 +292,14 @@ int round_up_to_word_size(int n) {
 }
 
 void grow_stack(int words) {
-  add_reg_imm(reg_SP, -words * word_size);
+  if (words != 0) add_reg_imm(reg_SP, -words * word_size);
 }
 
 // Like grow_stack, but takes bytes instead of words.
 // To maintain alignment, the stack is grown by a multiple of word_size (rounded
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
+  if (bytes != 0) add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
 }
 
 // Label definition
@@ -680,7 +680,7 @@ int resolve_identifier(int ident_probe) {
   binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
   if (binding != 0) return binding;
 
-  putstr("ident = "); putstr(string_pool + probe_string(ident_probe)); putchar('\n');
+  putstr("ident = "); putstr(STRING_BUF(ident_probe)); putchar('\n');
   fatal_error("identifier not found");
   return 0;
 }
@@ -717,7 +717,7 @@ ast value_type(ast node) {
           return int_type;
         default:
           putstr("ident = ");
-          putstr(string_pool + probe_string(ident));
+          putstr(STRING_BUF(ident));
           putchar('\n');
           fatal_error("value_type: unknown identifier");
           return -1;
@@ -790,7 +790,7 @@ ast value_type(ast node) {
         return heap[binding+5];
       } else {
         putstr("ident = ");
-        putstr(string_pool + probe_string(get_val_(IDENTIFIER, child0)));
+        putstr(STRING_BUF(get_val_(IDENTIFIER, child0)));
         putchar('\n');
         fatal_error("value_type: function not found");
         return -1;
@@ -985,7 +985,7 @@ void codegen_call(ast node) {
 
   if (binding == 0) {
     putstr("ident = ");
-    putstr(string_pool + probe_string(ident_probe));
+    putstr(STRING_BUF(ident_probe));
     putchar('\n');
     fatal_error("codegen_call: function not found");
   }
@@ -999,7 +999,7 @@ void codegen_call(ast node) {
 }
 
 void codegen_goto(ast node) {
-  ast label_ident = get_val_(GOTO_KW, node);
+  ast label_ident = get_val_(IDENTIFIER, get_child__(GOTO_KW, IDENTIFIER, node, 0));
 
   int binding = cgc_lookup_goto_label(label_ident, cgc_locals_fun);
   int goto_lbl;
@@ -1190,7 +1190,7 @@ void codegen_rvalue(ast node) {
           break;
 
         default:
-          putstr("ident = "); putstr(string_pool + probe_string(get_val_(IDENTIFIER, node))); putchar('\n');
+          putstr("ident = "); putstr(STRING_BUF(get_val_(IDENTIFIER, node))); putchar('\n');
           fatal_error("codegen_rvalue: identifier not found");
           break;
       }
@@ -1836,11 +1836,15 @@ void codegen_statement(ast node) {
     def_label(lbl1);
     codegen_statement(get_child_(FOR_KW, node, 2)); // post loop action
     def_label(lbl3);
-    codegen_rvalue(get_child_(FOR_KW, node, 1)); // test
-    pop_reg(reg_X);
-    grow_fs(-1);
-    xor_reg_reg(reg_Y, reg_Y);
-    jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    if (get_child_(FOR_KW, node, 1) != 0) {
+      codegen_rvalue(get_child_(FOR_KW, node, 1)); // test
+      pop_reg(reg_X);
+      grow_fs(-1);
+      xor_reg_reg(reg_Y, reg_Y);
+      jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    }
+    // if no test, we always fall down to the body
+
     codegen_statement(get_child_(FOR_KW, node, 3));
     jump(lbl1);
     def_label(lbl2);

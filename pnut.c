@@ -126,6 +126,7 @@ char* include_search_path = 0; // Search path for include files
 
 // Tokens and AST nodes
 enum {
+  // Keywords
   AUTO_KW = 300,
   BREAK_KW,
   CASE_KW,
@@ -158,15 +159,12 @@ enum {
   VOID_KW,
   VOLATILE_KW,
   WHILE_KW,
-  DECL,
-  DECLS,
-  FUN_DECL,
-  CAST,
 
   // Non-character operands
   INTEGER    = 401,
   CHARACTER,
   STRING,
+
   AMP_AMP,
   AMP_EQ,
   ARROW,
@@ -196,10 +194,12 @@ enum {
   ELLIPSIS,
   PARENS,
   INITIALIZER_LIST,
-
-  // Other tokens
+  DECL,
+  DECLS,
+  FUN_DECL,
+  CAST,
   MACRO_ARG = 499,
-  IDENTIFIER = 500,
+  IDENTIFIER = 500, // 500 because it's easy to remember
   TYPE = 501,
   MACRO = 502,
 };
@@ -3424,7 +3424,7 @@ ast parse_statement() {
 
     get_tok();
     expect_tok(IDENTIFIER);
-    result = new_ast0(GOTO_KW, val);
+    result = new_ast1(GOTO_KW, new_ast0(IDENTIFIER, val));
     expect_tok(';');
 
   } else if (tok == CONTINUE_KW) {
@@ -3605,6 +3605,9 @@ int main(int argc, char **argv) {
     get_tok();
   while (tok != EOF) {
     decl = parse_declaration(false);
+    printf("%s:%d:%d\n", fp_filepath, line_number, column_number);
+    ast_to_sexp(decl);
+    putchar('\n');
   }
 #else
   codegen_begin();

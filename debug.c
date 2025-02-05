@@ -119,7 +119,7 @@ void print_tok(int tok, int val) {
   else if (tok == LSHIFT_EQ)    putstr("<<=");
   else if (tok == LSHIFT)       putstr("<<");
   else if (tok == LT_EQ)        putstr("<=");
-  else if (tok == MINUS_EQ)     putstr(" -= "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_EQ)     putstr("-=");
   else if (tok == MINUS_MINUS)  putstr("--");
   else if (tok == EXCL_EQ)      putstr("!=");
   else if (tok == PERCENT_EQ)   putstr("%=");
@@ -130,9 +130,9 @@ void print_tok(int tok, int val) {
   else if (tok == STAR_EQ)      putstr("*=");
   else if (tok == HASH_HASH)    putstr("##");
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
-  else if (tok == MINUS_MINUS_PRE)  putstr(" -- "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
-  else if (tok == MINUS_MINUS_POST) putstr(" -- "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_MINUS_POST) putstr("--");
 
   else if (tok == IDENTIFIER) {
     putstr(string_pool + heap[val+1]);
@@ -207,7 +207,7 @@ void print_tok_type(int tok) {
   else if (tok == LSHIFT_EQ)    putstr("<<=");
   else if (tok == LSHIFT)       putstr("<<");
   else if (tok == LT_EQ)        putstr("<=");
-  else if (tok == MINUS_EQ)     putstr(" -= "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_EQ)     putstr("-=");
   else if (tok == MINUS_MINUS)  putstr("--");
   else if (tok == EXCL_EQ)      putstr("!=");
   else if (tok == PERCENT_EQ)   putstr("%=");
@@ -218,9 +218,9 @@ void print_tok_type(int tok) {
   else if (tok == STAR_EQ)      putstr("*=");
   else if (tok == HASH_HASH)    putstr("##");
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
-  else if (tok == MINUS_MINUS_PRE)  putstr(" -- "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
-  else if (tok == MINUS_MINUS_POST) putstr(" -- "); // Adding spaces around -= so - is not interpreted as an option to printf
+  else if (tok == MINUS_MINUS_POST) putstr("--");
   else if (tok == IDENTIFIER)       putstr("identifier");
   else if (tok == INTEGER)          putstr("integer");
   else if (tok == CHARACTER)        putstr("character");
@@ -229,15 +229,110 @@ void print_tok_type(int tok) {
   else if (tok == MACRO_ARG)        putstr("macro argument");
   else if (tok == EOF)              putstr("end of file");
   else if (tok == '\n')             putstr("newline");
-  else                              { putchar('\''); putchar(tok); putchar('\''); }
+  else if (' ' < tok && tok < 127)  { putchar('\''); putchar(tok); putchar('\''); }
+  else {
+    printf("tok=%d\n", tok);
+    fatal_error("print_tok_type: unknown token");
+  }
 }
 
-void show_ast(char* name, ast obj) {
-  int i;
+void ast_to_sexp(ast obj);
+
+void type_ast_to_sexp(ast type) {
+  printf("type");
+}
+
+void ast_list_to_sexp(ast obj) {
+  while (obj != 0) {
+    ast_to_sexp(get_child_(',', obj, 0));
+    obj = get_child_opt_(',', ',', obj, 1);
+    if (obj != 0) putchar(' '); // Separate elements with a space
+  }
+}
+
+void ast_to_sexp(ast obj) {
+  if (obj == 0) return;
+
+  int i = 0;
   int nb_children = get_nb_children(obj);
-  if (nb_children == 0) nb_children = 1; // Account for value of ast nodes with no child
-  for (i = 0; i < nb_children + 1; i++) {
-    printf("%s[%d] = %d\n", name, i, (int) heap[obj + i]);
+  int op = get_op(obj);
+
+  // Except for terminal objects which don't have children, we print the
+  // operator and value of the object before printing its children.
+  switch (op) {
+    case IDENTIFIER:
+      putstr(STRING_BUF(get_val_(IDENTIFIER, obj)));
+      break;
+
+    case STRING:
+      putchar('"');
+      putstr(STRING_BUF(get_val_(STRING, obj)));
+      putchar('"');
+      break;
+
+    case INTEGER:
+      putint(-get_val_(INTEGER, obj));
+      break;
+
+    case CHARACTER:
+      // If printable ASCII: print as character, otherwise print as octal
+      putchar('\'');
+      print_string_char(get_val_(CHARACTER, obj));
+      putchar('\'');
+      break;
+
+    case DECLS:
+      // For clarity, we print the declarations without a parent `DECLS` node
+      ast_list_to_sexp(get_child_opt_(DECLS, ',', obj, 0));
+      break;
+
+    case TYPEDEF_KW:
+      printf("(typedef ");
+      ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, ',', obj, 0));
+      printf(")");
+      return;
+
+    case DECL:
+      // Nodes of type DECL are a bit special because they contain a type, and types have their own structure
+      putstr("(decl ");
+      ast_to_sexp(get_child__(DECL, IDENTIFIER, obj, 0));
+      putchar(' ');
+      type_ast_to_sexp(get_child_(DECL, obj, 1));
+      if (get_child_(DECL, obj, 2) != 0) {
+        putchar(' ');
+        ast_to_sexp(get_child_(DECL, obj, 2));
+      }
+      printf(")");
+      break;
+
+    case CAST:
+      printf("(cast ");
+      type_ast_to_sexp(get_child_(DECL, get_child__(CAST, DECL, obj, 0), 1)); // Get type out of decl
+      printf(" ");
+      ast_to_sexp(get_child_(CAST, obj, 1));
+      printf(")");
+      break;
+
+    case SIZEOF_KW:
+      printf("(sizeof ");
+      if (get_op(get_child_(SIZEOF_KW, obj, 0)) == DECL) {
+        type_ast_to_sexp(get_child_(DECL, get_child_(SIZEOF_KW, obj, 0), 1));
+      } else {
+        ast_to_sexp(get_child_(SIZEOF_KW, obj, 0));
+      }
+      printf(")");
+      break;
+
+    default:
+      putchar('(');
+      print_tok_type(op);
+      putchar(' ');
+      for (; i < get_nb_children(obj); i += 1) {
+        ast_to_sexp(get_child(obj, i));
+        if (get_child(obj, i) != 0 && i < get_nb_children(obj) - 1) putchar(' ');
+      }
+      putchar(')');
+      break;
   }
 }
 

@@ -166,8 +166,8 @@ text wrap_str_lit(char *s) {
   return wrap_str_imm(s, 0);
 }
 
-text wrap_str_pool(int s) {
-  return wrap_str_imm(string_pool + s, 0);
+text wrap_str_pool(int ident_probe) {
+  return wrap_str_imm(STRING_BUF(ident_probe), 0);
 }
 
 text concatenate_strings_with(text t1, text t2, text sep) {
@@ -443,15 +443,15 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
 }
 
 text struct_member_var(ast member_name_ident) {
-  return string_concat(wrap_str_lit("__"), wrap_str_pool(probe_string(get_val_(IDENTIFIER, member_name_ident))));
+  return string_concat(wrap_str_lit("__"), wrap_str_pool(get_val_(IDENTIFIER, member_name_ident)));
 }
 
 text struct_sizeof_var(ast struct_name_ident) {
-  return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(probe_string(get_val_(IDENTIFIER, struct_name_ident))));
+  return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(get_val_(IDENTIFIER, struct_name_ident)));
 }
 
 text global_var(ast ident) {
-  return string_concat(wrap_char('_'), wrap_str_pool(probe_string(ident)));
+  return string_concat(wrap_char('_'), wrap_str_pool(ident));
 }
 
 text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
@@ -461,7 +461,7 @@ text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
       if (get_val_(IDENTIFIER, ident) == ARGV_ID) {
         return wrap_str_lit("argv_");
       } else {
-        return wrap_str_pool(probe_string(get_val_(IDENTIFIER, ident)));
+        return wrap_str_pool(get_val_(IDENTIFIER, ident));
       }
     } else {
       return global_var(get_val_(IDENTIFIER, ident));
@@ -476,7 +476,7 @@ text env_var(ast ident) {
 }
 
 text function_name(int ident_tok) {
-  return string_concat(wrap_char('_'), wrap_str_pool(probe_string(ident_tok)));
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
 }
 
 ast fresh_ident() {
@@ -506,7 +506,7 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 
   // Make sure we're not shadowing an existing local variable
   if (cgc_lookup_var(ident_probe, cgc_locals)) {
-    putstr("var="); putstr(string_pool + probe_string(ident_probe)); putchar('\n');
+    putstr("var="); putstr(STRING_BUF(ident_probe)); putchar('\n');
     fatal_error("Variable is already in local environment");
   }
 
@@ -528,7 +528,7 @@ void add_fun_params_to_local_env(ast lst) {
 // Also, the shell backend doesn't support variables with aggregate types.
 void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for assert_idents_are_safe
   ast ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
-  char* name = string_pool + probe_string(ident_probe);
+  char* name = STRING_BUF(ident_probe);
   ast type = get_child_(DECL, variable, 1);
   if (name[0] == '_'
   || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
@@ -2109,7 +2109,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == ':') {
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(probe_string(get_val_(IDENTIFIER, get_child_(':', node, 0)))), wrap_char(':')));
+    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, get_child_(':', node, 0))), wrap_char(':')));
     return comp_statement(get_child_(':', node, 1), stmt_ctx);
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
@@ -2166,7 +2166,7 @@ void comp_glo_fun_decl(ast node) {
     // Show the mapping between the function parameters and $1, $2, etc.
     while (params != 0) {
       var = get_child__(',', DECL, params, 0);
-      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(probe_string(get_val_(IDENTIFIER, get_child_(DECL, var, 0)))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
+      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val_(IDENTIFIER, get_child_(DECL, var, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
       params = get_child_(',', params, 1);
       params_ix += 1;
     }
@@ -2311,7 +2311,7 @@ void comp_assignment_constant(text constant_name, ast rhs) {
 // it easy to implement enums.
 void comp_enum_cases(ast ident, ast cases) {
   if (ident != 0) {
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(probe_string(get_val_(IDENTIFIER, ident))), wrap_str_lit(" enum declaration")));
+    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, ident)), wrap_str_lit(" enum declaration")));
   } else {
     append_glo_decl(wrap_str_lit("# Enum declaration"));
   }
@@ -2353,7 +2353,7 @@ void comp_struct(ast ident, ast members) {
   int offset = new_ast0(INTEGER, 0);
   int field_type;
   if (ident != 0) {
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(probe_string(get_val_(IDENTIFIER, ident))), wrap_str_lit(" struct member declarations")));
+    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, ident)), wrap_str_lit(" struct member declarations")));
   } else {
     append_glo_decl(wrap_str_lit("# Struct member declarations"));
   }
