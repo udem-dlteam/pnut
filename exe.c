@@ -90,6 +90,7 @@ void mov_reg_mem(int dst, int base, int offset);
 void mov_reg_mem8(int dst, int base, int offset);
 
 void add_reg_imm(int dst, int imm);
+void add_reg_lbl(int dst, int lbl);
 void add_reg_reg(int dst, int src);
 void or_reg_reg (int dst, int src);
 void and_reg_reg(int dst, int src);
@@ -100,6 +101,7 @@ void div_reg_reg(int dst, int src);
 void rem_reg_reg(int dst, int src);
 void shl_reg_reg(int dst, int src);
 void sar_reg_reg(int dst, int src);
+void mov_reg_lbl(int reg, int lbl);
 
 void push_reg(int src);
 void pop_reg (int dst);
@@ -107,6 +109,7 @@ void pop_reg (int dst);
 void jump(int lbl);
 void jump_rel(int offset);
 void call(int lbl);
+void call_reg(int reg);
 void ret();
 
 void dup(int reg) {
