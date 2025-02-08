@@ -133,6 +133,13 @@ void print_tok(int tok, int val) {
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
+  else if (tok == PARENS)           putstr("(");
+
+  else if (tok == FUN_DECL)         putstr("fun_decl");
+  else if (tok == CAST)             putstr("cast");
+  else if (tok == INITIALIZER_LIST) putstr("initializer_list");
+  else if (tok == DECL)             putstr("decl");
+  else if (tok == DECLS)            putstr("decls");
 
   else if (tok == IDENTIFIER) {
     putstr(string_pool + heap[val+1]);
@@ -221,6 +228,15 @@ void print_tok_type(int tok) {
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
+
+  else if (tok == PARENS)           putstr("(");
+
+  else if (tok == FUN_DECL)         putstr("fun_decl");
+  else if (tok == CAST)             putstr("cast");
+  else if (tok == INITIALIZER_LIST) putstr("initializer_list");
+  else if (tok == DECL)             putstr("decl");
+  else if (tok == DECLS)            putstr("decls");
+
   else if (tok == IDENTIFIER)       putstr("identifier");
   else if (tok == INTEGER)          putstr("integer");
   else if (tok == CHARACTER)        putstr("character");
@@ -229,7 +245,7 @@ void print_tok_type(int tok) {
   else if (tok == MACRO_ARG)        putstr("macro argument");
   else if (tok == EOF)              putstr("end of file");
   else if (tok == '\n')             putstr("newline");
-  else if (' ' < tok && tok < 127)  { putchar('\''); putchar(tok); putchar('\''); }
+  else if (' ' < tok && tok < 127)  { putchar(tok); }
   else {
     printf("tok=%d\n", tok);
     fatal_error("print_tok_type: unknown token");
@@ -238,15 +254,67 @@ void print_tok_type(int tok) {
 
 void ast_to_sexp(ast obj);
 
-void type_ast_to_sexp(ast type) {
-  printf("type");
-}
-
 void ast_list_to_sexp(ast obj) {
   while (obj != 0) {
     ast_to_sexp(get_child_(',', obj, 0));
     obj = get_child_opt_(',', ',', obj, 1);
     if (obj != 0) putchar(' '); // Separate elements with a space
+  }
+}
+
+void type_ast_to_sexp(ast type) {
+  printf("<type>");
+  return;
+  switch (get_op(type)) {
+    case '*':
+      printf("(* ");
+      type_ast_to_sexp(get_child_('*', type, 1));
+      printf(")");
+      break;
+
+    case '[':
+      printf("[");
+      type_ast_to_sexp(get_child_('[', type, 0));
+      printf(" ");
+      putint(get_child_('[', type, 1));
+      printf("]");
+      break;
+
+    case '(':
+      printf("(-> (");
+      ast_list_to_sexp(get_child_('(', type, 1)); // Function args
+      printf(") ");
+      type_ast_to_sexp(get_child_('(', type, 0));
+      printf(")");
+      break;
+
+    case CHAR_KW:
+    case INT_KW:
+    case VOID_KW:
+    case SHORT_KW:
+    case SIGNED_KW:
+    case UNSIGNED_KW:
+    case LONG_KW:
+    case FLOAT_KW:
+    case DOUBLE_KW:
+      print_tok_type(get_op(type));
+      break;
+
+    case STRUCT_KW:
+    case UNION_KW:
+      printf("(");
+      print_tok_type(get_op(type));
+      printf(" ");
+      ast_to_sexp(get_child_(get_op(type), type, 0));
+      printf(")");
+      break;
+
+    default:
+      printf("<Unknown type %d>", get_op(type));
+      // ast_to_sexp(type);
+
+    // case UNION_KW:
+    // case ENUM_KW:
   }
 }
 
@@ -266,7 +334,7 @@ void ast_to_sexp(ast obj) {
 
     case STRING:
       putchar('"');
-      putstr(STRING_BUF(get_val_(STRING, obj)));
+      print_tok_string(get_val_(STRING, obj));
       putchar('"');
       break;
 
@@ -276,9 +344,15 @@ void ast_to_sexp(ast obj) {
 
     case CHARACTER:
       // If printable ASCII: print as character, otherwise print as octal
-      putchar('\'');
-      print_string_char(get_val_(CHARACTER, obj));
-      putchar('\'');
+      // if (get_val_(CHARACTER, obj) >= 32 && get_val_(CHARACTER, obj) < 127) {
+      //   putchar('\'');
+      //   print_string_char(get_val_(CHARACTER, obj));
+      //   putchar('\'');
+      // } else {
+      // }
+      printf("(char ");
+      putint(get_val_(CHARACTER, obj));
+      putchar(')');
       break;
 
     case DECLS:
@@ -305,6 +379,16 @@ void ast_to_sexp(ast obj) {
       printf(")");
       break;
 
+    case FUN_DECL:
+      printf("(define-fun ");
+      putstr(STRING_BUF(get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, get_child__(FUN_DECL, DECL, obj, 0), 0))));
+      putchar(' ');
+      type_ast_to_sexp(get_child_(DECL, get_child__(FUN_DECL, DECL, obj, 0), 1)); // Get type out of decl
+      putchar(' ');
+      ast_to_sexp(get_child_(FUN_DECL, obj, 1)); // Body
+      printf(")");
+      break;
+
     case CAST:
       printf("(cast ");
       type_ast_to_sexp(get_child_(DECL, get_child__(CAST, DECL, obj, 0), 1)); // Get type out of decl
@@ -321,6 +405,38 @@ void ast_to_sexp(ast obj) {
         ast_to_sexp(get_child_(SIZEOF_KW, obj, 0));
       }
       printf(")");
+      break;
+
+    case PARENS:
+      printf("(");
+      ast_to_sexp(get_child_(PARENS, obj, 0));
+      printf(")");
+      break;
+
+    case '[':
+      printf("(array_at");
+      ast_to_sexp(get_child_('[', obj, 0));
+      printf(" ");
+      ast_to_sexp(get_child_('[', obj, 1));
+      printf(")");
+      break;
+
+    case '(': // Function calls, we print the function and its arguments
+      printf("(");
+      ast_to_sexp(get_child_('(', obj, 0));
+      if (get_child_('(', obj, 1) != 0) {
+        printf(" ");
+        ast_to_sexp(get_child_('(', obj, 1));
+      }
+      printf(")");
+      break;
+
+    case '{':
+      while (obj != 0) {
+        ast_to_sexp(get_child_('{', obj, 0));
+        obj = get_child_opt_('{', '{', obj, 1);
+        if (obj != 0) putchar(' ');
+      }
       break;
 
     default:
