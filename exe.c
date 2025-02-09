@@ -484,6 +484,16 @@ bool is_pointer_type(ast type) {
   return op == '[' || op == '*';
 }
 
+bool is_function_type(ast type) {
+  int op = get_op(type);
+  if (op == '*') {
+    if (get_op(get_child_('*', type, 1)) == '(') {
+      return true;
+    }
+  }
+  return op == '(';
+}
+
 bool is_struct_or_union_type(ast type) {
   int op = get_op(type);
   return op == STRUCT_KW || op == UNION_KW;
@@ -680,6 +690,9 @@ int resolve_identifier(int ident_probe) {
   binding = cgc_lookup_var(ident_probe, cgc_globals);
   if (binding != 0) return binding;
 
+  binding = cgc_lookup_fun(ident_probe, cgc_globals);
+  if (binding != 0) return binding;
+
   binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
   if (binding != 0) return binding;
 
@@ -693,7 +706,6 @@ ast value_type(ast node) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int binding;
-  int ident;
   ast left_type, right_type;
   ast child0, child1;
 
@@ -708,8 +720,7 @@ ast value_type(ast node) {
     } else if (op == STRING) {
       return string_type;
     } else if (op == IDENTIFIER) {
-      ident = get_val_(IDENTIFIER, node);
-      binding = resolve_identifier(ident);
+      binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
@@ -718,9 +729,11 @@ ast value_type(ast node) {
           return heap[binding+4];
         case BINDING_ENUM_CST:
           return int_type;
+        case BINDING_FUN:
+          return heap[binding+5];
         default:
           putstr("ident = ");
-          putstr(STRING_BUF(ident));
+          putstr(STRING_BUF(get_val_(IDENTIFIER, node)));
           putchar('\n');
           fatal_error("value_type: unknown identifier");
           return -1;
@@ -736,7 +749,11 @@ ast value_type(ast node) {
 
     if (op == '*') {
       left_type = value_type(child0);
-      return dereference_type(left_type);
+      if (is_function_type(left_type)) {
+        return left_type;
+      } else {
+        return dereference_type(left_type);
+      }
     } else if (op == '&') {
       left_type = value_type(child0);
       return pointer_type(left_type, false);
@@ -971,21 +988,27 @@ int codegen_params(ast params) {
 }
 
 void codegen_call(ast node) {
-  ast fun_ident = get_child__('(', IDENTIFIER, node, 0);
-  ast ident_probe = get_val_(IDENTIFIER, fun_ident);
-  ast params = get_child(node, 1);
+  ast fun = get_child_('(', node, 0);
+  ast params = get_child_('(', node, 1);
   ast nb_params = codegen_params(params);
+  int binding = 0;
 
-  int binding = cgc_lookup_fun(ident_probe, cgc_globals);
-
-  if (binding == 0) {
-    putstr("ident = ");
-    putstr(STRING_BUF(ident_probe));
-    putchar('\n');
-    fatal_error("codegen_call: function not found");
+  // Check if the function is a direct call, find the binding if it is
+  if (get_op(fun) == IDENTIFIER) {
+    binding = resolve_identifier(get_val_(IDENTIFIER, fun));
+    if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }
 
-  call(heap[binding+4]);
+  if (binding != 0) {
+    // Generate a fast path for direct calls
+    call(heap[binding+4]);
+  } else {
+    // Otherwise we go through the function pointer
+    codegen_rvalue(fun);
+    pop_reg(reg_X);
+    grow_fs(-1);
+    call_reg(reg_X);
+  }
 
   grow_stack(-nb_params);
   grow_fs(-nb_params);
@@ -1033,6 +1056,10 @@ int codegen_lvalue(ast node) {
         case BINDING_VAR_GLOBAL:
           mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
+          push_reg(reg_X);
+          break;
+        case BINDING_FUN:
+          mov_reg_lbl(reg_X, heap[binding+4]);
           push_reg(reg_X);
           break;
         default:
@@ -1161,6 +1188,16 @@ void codegen_rvalue(ast node) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          add_reg_reg(reg_X, reg_SP);
+          // structs/unions are allocated on the stack, so no need to dereference
+          // For arrays, we need to dereference the pointer since they are passed as pointers
+          if (get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
+            mov_reg_mem(reg_X, reg_X, 0);
+          }
+          push_reg(reg_X);
+          break;
+
         case BINDING_VAR_LOCAL:
           mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
           add_reg_reg(reg_X, reg_SP);
@@ -1184,6 +1221,11 @@ void codegen_rvalue(ast node) {
           push_reg(reg_X);
           break;
 
+        case BINDING_FUN:
+          mov_reg_lbl(reg_X, heap[binding+4]);
+          push_reg(reg_X);
+          break;
+
         default:
           putstr("ident = "); putstr(STRING_BUF(get_val_(IDENTIFIER, node))); putchar('\n');
           fatal_error("codegen_rvalue: identifier not found");
@@ -1198,15 +1240,17 @@ void codegen_rvalue(ast node) {
 
   } else if (nb_children == 1) {
     if (op == '*') {
+      type1 = value_type(child0);
       codegen_rvalue(child0);
-      pop_reg(reg_Y);
       grow_fs(-1);
-      if (is_pointer_type(value_type(child0))) {
-        load_mem_location(reg_X, reg_Y, 0, ref_type_width(value_type(child0)));
+      if (is_function_type(type1)) {
+      } else if (is_pointer_type(type1)) {
+        pop_reg(reg_X);
+        load_mem_location(reg_X, reg_X, 0, ref_type_width(value_type(child0)));
+        push_reg(reg_X);
       } else {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
       }
-      push_reg(reg_X);
     } else if (op == '+' || op == PARENS) {
       codegen_rvalue(child0);
       grow_fs(-1);
