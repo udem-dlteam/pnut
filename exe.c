@@ -1423,46 +1423,46 @@ void codegen_begin() {
   void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
 
   main_lbl = alloc_label("main");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, void_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
 
   exit_lbl = alloc_label("exit");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, void_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
 
   getchar_lbl = alloc_label("getchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, char_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
 
   putchar_lbl = alloc_label("putchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, void_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
 
   fopen_lbl = alloc_label("fopen");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
 
   fclose_lbl = alloc_label("fclose");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, void_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, function_type1(int_type, int_type));
 
   fgetc_lbl = alloc_label("fgetc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, char_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, function_type1(int_type, int_type));
 
   malloc_lbl = alloc_label("malloc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, void_star_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, function_type1(void_star_type, int_type));
 
   free_lbl = alloc_label("free");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, char_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
 
   read_lbl = alloc_label("read");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
 
   write_lbl = alloc_label("write");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
 
   open_lbl = alloc_label("open");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, function_type3(int_type, string_type, int_type, int_type));
 
   close_lbl = alloc_label("close");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, int_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
 
   printf_lbl = alloc_label("printf");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, void_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, function_type1(int_type, string_type));
 
   jump(setup_lbl);
 }

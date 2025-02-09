@@ -2320,6 +2320,22 @@ ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', is_const ? MK_TYPE_SPECIFIER(CONST_KW) : 0, parent_type);
 }
 
+ast function_type(ast parent_type, ast params) {
+  return new_ast2('(', parent_type, params);
+}
+
+ast function_type1(ast parent_type, ast param1) {
+  return new_ast2('(', parent_type, cons(param1, 0));
+}
+
+ast function_type2(ast parent_type, ast param1, ast param2) {
+  return new_ast2('(', parent_type, cons(param1, cons(param2, 0)));
+}
+
+ast function_type3(ast parent_type, ast param1, ast param2, ast param3) {
+  return new_ast2('(', parent_type, cons(param1, cons(param2, cons(param3, 0))));
+}
+
 // Type and declaration parser
 int is_type_starter(int tok) {
   return tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW       // Numeric types
