@@ -290,34 +290,6 @@ int alloc_obj(int size) {
   return alloc_result;
 }
 
-int cons(int child0, int child1) {
-
-  int result = alloc_obj(2);
-
-  heap[result] = child0;
-  heap[result+1] = child1;
-
-  return result;
-}
-
-int car(int pair) {
-  return heap[pair];
-}
-
-int cdr(int pair) {
-  return heap[pair+1];
-}
-
-int set_car(int pair, int value) {
-  heap[pair] = value;
-  return value;
-}
-
-int set_cdr(int pair, int value) {
-  heap[pair+1] = value;
-  return value;
-}
-
 int get_op(ast node) {
   return heap[node] & 1023;
 }
@@ -522,6 +494,17 @@ ast clone_ast(ast orig) {
 
   return ast_result;
 }
+
+// TODO: Use macro to avoid indirection?
+// Functions used to create and access lists.
+ast cons(int child0, int child1)    { return new_ast2(LIST, child0, child1); }
+ast car(int pair)                   { return get_child_(LIST, pair, 0); }
+ast car_(int expected_op, int pair) { return get_child__(LIST, expected_op, pair, 0); }
+ast cdr(int pair)                   { return get_child_(LIST, pair, 1); }
+ast cdr_(int expected_op, int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
+void set_car(int pair, int value)    { return set_child(pair, 0, value); }
+void set_cdr(int pair, int value)    { return set_child(pair, 1, value); }
+#define tail(x) cdr_(LIST, x)
 
 // Simple accessor to get the string from the string pool
 #define STRING_BUF(string_val) (string_pool + heap[string_val+1])
@@ -1060,7 +1043,7 @@ int read_macro_tokens(int args) {
     tail = toks;
     get_tok_macro();
     while (tok != '\n' && tok != EOF) {
-      heap[tail + 1] = cons(lookup_macro_token(args, tok, val), 0);
+      set_cdr(tail, cons(lookup_macro_token(args, tok, val), 0));
       tail = cdr(tail); // Advance tail
       get_tok_macro();
     }
@@ -1563,7 +1546,7 @@ int macro_parse_argument() {
       arg_tokens = cons(cons(tok, val), 0);
       tail = arg_tokens;
     } else {
-      heap[tail + 1] = cons(cons(tok, val), 0);
+      set_cdr(tail, cons(cons(tok, val), 0));
       tail = cdr(tail);
     }
     get_tok_macro_expand();
@@ -2381,10 +2364,10 @@ ast parse_enum() {
       }
 
       if (result == 0) {
-        result = new_ast2(LIST, new_ast2('=', ident, value), 0);
+        result = cons(new_ast2('=', ident, value), 0);
         tail = result;
       } else {
-        set_child(tail, 1, new_ast2(LIST, new_ast2('=', ident, value), 0));
+        set_child(tail, 1, cons(new_ast2('=', ident, value), 0));
         tail = get_child_(LIST, tail, 1);
       }
 
@@ -2438,18 +2421,18 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         decl = new_ast3(DECL, 0, type_specifier, 0);
 
         if (result == 0) {
-          tail = result = new_ast2(LIST, decl, 0);
+          tail = result = cons(decl, 0);
         } else {
-          set_child(tail, 1, new_ast2(LIST, decl, 0));
+          set_child(tail, 1, cons(decl, 0));
           tail = get_child_(LIST, tail, 1);
         }
       } else {
         while (1) {
           decl = parse_declarator(false, type_specifier);
           if (result == 0) {
-            tail = result = new_ast2(LIST, decl, 0);
+            tail = result = cons(decl, 0);
           } else {
-            set_child(tail, 1, new_ast2(LIST, decl, 0));
+            set_child(tail, 1, cons(decl, 0));
             tail = get_child_(LIST, tail, 1);
           }
 
@@ -2635,9 +2618,9 @@ int parse_param_list() {
     if (tok == ',') get_tok();
 
     if (result == 0) {
-      tail = result = new_ast2(LIST, decl, 0);
+      tail = result = cons(decl, 0);
     } else {
-      set_child(tail, 1, new_ast2(LIST, decl, 0));
+      set_child(tail, 1, cons(decl, 0));
       tail = get_child_(LIST, tail, 1);
     }
   }
@@ -2733,9 +2716,9 @@ ast parse_initializer_list() {
     if (tok == '{') fatal_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
-      tail = result = new_ast2(LIST, parse_initializer(), 0);
+      tail = result = cons(parse_initializer(), 0);
     } else {
-      set_child(tail, 1, new_ast2(LIST, parse_initializer(), 0));
+      set_child(tail, 1, cons(parse_initializer(), 0));
       tail = get_child_(LIST, tail, 1);
     }
     if (tok == ',') get_tok();
@@ -2833,14 +2816,14 @@ ast parse_declaration(bool local) {
     return parse_fun_def(declarator);
   }
 
-  declarators = new_ast2(LIST, declarator, 0); // Wrap the declarators in a list
+  declarators = cons(declarator, 0); // Wrap the declarators in a list
   tail = declarators;
 
   // Otherwise, this is a variable or declaration
   while (tok != ';') {
     if (tok == ',') {
       get_tok();
-      set_child(tail, 1, new_ast2(LIST, parse_declarator_and_initializer(type_specifier), 0));
+      set_child(tail, 1, cons(parse_declarator_and_initializer(type_specifier), 0));
       tail = get_child__(LIST, LIST, tail, 1);
     } else {
       parse_error("';' or ',' expected", tok);
