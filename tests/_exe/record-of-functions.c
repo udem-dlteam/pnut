@@ -82,6 +82,23 @@ void out_string(struct IOFunctions *record, char *s) {
 
 struct IOFunctions stdin_stdout = { &getchar_, &putchar_, NULL };
 
+void zero_buf(char *buf, int size) {
+  int i;
+  for (i = 0; i < size; i++) {
+    ((char *)buf)[i] = 0;
+  }
+}
+
+struct IOBuffer *new_buf(int len) {
+  struct IOBuffer * buf = malloc(sizeof(struct IOBuffer));
+  int i = 0;
+  buf->buf = malloc(len);
+  zero_buf(buf->buf, len);
+  buf->len = len;
+  buf->pos = 0;
+  return buf;
+}
+
 struct IOFunctions *stub_io(char *input, int input_buf_len, int output_buf_len) {
   struct IOFunctions *record = malloc(sizeof(struct IOFunctions));
   struct StubbedIO *stubData = malloc(sizeof(struct StubbedIO));
@@ -93,16 +110,14 @@ struct IOFunctions *stub_io(char *input, int input_buf_len, int output_buf_len) 
   stubData->input.len = input_buf_len;
   stubData->input.pos = 0;
 
-  stubData->output.buf = malloc(output_buf_len);
-  stubData->output.len = output_buf_len;
-  stubData->output.pos = 0;
+  stubData->output = *new_buf(output_buf_len);
 
   return record;
 }
 
 int main() {
   // Testing default output, but not input since it requires user interaction
-  char in_buf[100];
+  char in_buf[100] = {0};
   out_string(&stdin_stdout, "hello\n");
 
   // Testing stubbed input/output, no user interaction required
