@@ -112,7 +112,11 @@ void print_tok(int tok, int val) {
   else if (tok == AMP_EQ)       putstr("&=");
   else if (tok == ARROW)        putstr("->");
   else if (tok == BAR_BAR)      putstr("||");
+#ifdef GAMBIT_MODE
+  else if (tok == BAR_EQ)       putstr("||=");
+#else
   else if (tok == BAR_EQ)       putstr("|=");
+#endif
   else if (tok == CARET_EQ)     putstr("^=");
   else if (tok == EQ_EQ)        putstr("==");
   else if (tok == GT_EQ)        putstr(">=");
@@ -140,6 +144,7 @@ void print_tok(int tok, int val) {
   else if (tok == INITIALIZER_LIST) putstr("initializer_list");
   else if (tok == DECL)             putstr("decl");
   else if (tok == DECLS)            putstr("decls");
+  else if (tok == LIST)             putstr("list");
 
   else if (tok == IDENTIFIER) {
     putstr(string_pool + heap[val+1]);
@@ -160,6 +165,10 @@ void print_tok(int tok, int val) {
   } else if (tok == MACRO_ARG) {
     putstr("ARG["); putint(val); putstr("]");
   } else {
+#ifdef GAMBIT_MODE
+    if (tok == '|') putstr("bar");
+    else
+#endif
     putchar(tok);
   }
 
@@ -207,7 +216,11 @@ void print_tok_type(int tok) {
   else if (tok == AMP_EQ)       putstr("&=");
   else if (tok == ARROW)        putstr("->");
   else if (tok == BAR_BAR)      putstr("||");
+#ifdef GAMBIT_MODE
+  else if (tok == BAR_EQ)       putstr("||=");
+#else
   else if (tok == BAR_EQ)       putstr("|=");
+#endif
   else if (tok == CARET_EQ)     putstr("^=");
   else if (tok == EQ_EQ)        putstr("==");
   else if (tok == GT_EQ)        putstr(">=");
@@ -236,6 +249,7 @@ void print_tok_type(int tok) {
   else if (tok == INITIALIZER_LIST) putstr("initializer_list");
   else if (tok == DECL)             putstr("decl");
   else if (tok == DECLS)            putstr("decls");
+  else if (tok == LIST)             putstr("list");
 
   else if (tok == IDENTIFIER)       putstr("identifier");
   else if (tok == INTEGER)          putstr("integer");
@@ -245,7 +259,15 @@ void print_tok_type(int tok) {
   else if (tok == MACRO_ARG)        putstr("macro argument");
   else if (tok == EOF)              putstr("end of file");
   else if (tok == '\n')             putstr("newline");
-  else if (' ' < tok && tok < 127)  { putchar(tok); }
+  else if (' ' < tok && tok < 127) {
+#ifdef GAMBIT_MODE
+    if (tok == '|') {
+      putstr("bar");
+    } else
+#endif
+
+    putchar(tok);
+  }
   else {
     printf("tok=%d\n", tok);
     fatal_error("print_tok_type: unknown token");
@@ -256,15 +278,13 @@ void ast_to_sexp(ast obj);
 
 void ast_list_to_sexp(ast obj) {
   while (obj != 0) {
-    ast_to_sexp(get_child_(',', obj, 0));
-    obj = get_child_opt_(',', ',', obj, 1);
+    ast_to_sexp(car(obj));
+    obj = tail(obj);
     if (obj != 0) putchar(' '); // Separate elements with a space
   }
 }
 
 void type_ast_to_sexp(ast type) {
-  printf("<type>");
-  return;
   switch (get_op(type)) {
     case '*':
       printf("(* ");
@@ -282,7 +302,7 @@ void type_ast_to_sexp(ast type) {
 
     case '(':
       printf("(-> (");
-      ast_list_to_sexp(get_child_('(', type, 1)); // Function args
+      ast_list_to_sexp(get_child_opt_('(', LIST, type, 1)); // Function args
       printf(") ");
       type_ast_to_sexp(get_child_('(', type, 0));
       printf(")");
@@ -302,31 +322,33 @@ void type_ast_to_sexp(ast type) {
 
     case STRUCT_KW:
     case UNION_KW:
+    case ENUM_KW:
       printf("(");
       print_tok_type(get_op(type));
       printf(" ");
-      ast_to_sexp(get_child_(get_op(type), type, 0));
+      ast_to_sexp(get_child(type, 0)); // Struct/union name
+      printf(" ");
+      ast_list_to_sexp(get_child(type, 2)); // Struct/union members
       printf(")");
       break;
 
+
     default:
       printf("<Unknown type %d>", get_op(type));
-      // ast_to_sexp(type);
-
-    // case UNION_KW:
-    // case ENUM_KW:
+      exit(1);
   }
 }
 
 void ast_to_sexp(ast obj) {
-  if (obj == 0) return;
+  if (obj == 0) {
+    printf("#f");
+    return;
+  }
 
   int i = 0;
   int nb_children = get_nb_children(obj);
   int op = get_op(obj);
 
-  // Except for terminal objects which don't have children, we print the
-  // operator and value of the object before printing its children.
   switch (op) {
     case IDENTIFIER:
       putstr(STRING_BUF(get_val_(IDENTIFIER, obj)));
@@ -343,12 +365,12 @@ void ast_to_sexp(ast obj) {
       break;
 
     case CHARACTER:
+      // Removed so gambit scheme can read the output
       // If printable ASCII: print as character, otherwise print as octal
       // if (get_val_(CHARACTER, obj) >= 32 && get_val_(CHARACTER, obj) < 127) {
       //   putchar('\'');
       //   print_string_char(get_val_(CHARACTER, obj));
       //   putchar('\'');
-      // } else {
       // }
       printf("(char ");
       putint(get_val_(CHARACTER, obj));
@@ -357,14 +379,20 @@ void ast_to_sexp(ast obj) {
 
     case DECLS:
       // For clarity, we print the declarations without a parent `DECLS` node
-      ast_list_to_sexp(get_child_opt_(DECLS, ',', obj, 0));
+      ast_list_to_sexp(get_child_opt_(DECLS, LIST, obj, 0));
       break;
 
     case TYPEDEF_KW:
       printf("(typedef ");
-      ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, ',', obj, 0));
+      ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, LIST, obj, 0));
       printf(")");
       return;
+
+    case ENUM_KW:
+    case STRUCT_KW:
+    case UNION_KW:
+      type_ast_to_sexp(obj);
+      break;
 
     case DECL:
       // Nodes of type DECL are a bit special because they contain a type, and types have their own structure
@@ -372,10 +400,8 @@ void ast_to_sexp(ast obj) {
       ast_to_sexp(get_child__(DECL, IDENTIFIER, obj, 0));
       putchar(' ');
       type_ast_to_sexp(get_child_(DECL, obj, 1));
-      if (get_child_(DECL, obj, 2) != 0) {
-        putchar(' ');
-        ast_to_sexp(get_child_(DECL, obj, 2));
-      }
+      putchar(' ');
+      ast_to_sexp(get_child_(DECL, obj, 2));
       printf(")");
       break;
 
@@ -408,9 +434,8 @@ void ast_to_sexp(ast obj) {
       break;
 
     case PARENS:
-      printf("(");
+      // Ignore parens nodes
       ast_to_sexp(get_child_(PARENS, obj, 0));
-      printf(")");
       break;
 
     case '[':
@@ -428,6 +453,12 @@ void ast_to_sexp(ast obj) {
         printf(" ");
         ast_to_sexp(get_child_('(', obj, 1));
       }
+      printf(")");
+      break;
+
+    case LIST:
+      printf("(list ");
+      ast_list_to_sexp(obj);
       printf(")");
       break;
 
