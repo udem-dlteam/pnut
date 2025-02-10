@@ -537,11 +537,11 @@ ast canonicalize_type(ast type) {
   ast res = type;
   int binding;
 
-  if (get_op(type) == STRUCT_KW && get_child_opt_(STRUCT_KW, ',', type, 2) == 0) { // struct with empty def => reference
+  if (get_op(type) == STRUCT_KW && get_child_opt_(STRUCT_KW, LIST, type, 2) == 0) { // struct with empty def => reference
     binding = cgc_lookup_struct(get_val_(IDENTIFIER, get_child__(STRUCT_KW, IDENTIFIER, type, 1)), cgc_globals);
-  } else if (get_op(type) == UNION_KW && get_child_opt_(UNION_KW, ',', type, 2) == 0) { // union with empty def => reference
+  } else if (get_op(type) == UNION_KW && get_child_opt_(UNION_KW, LIST, type, 2) == 0) { // union with empty def => reference
     binding = cgc_lookup_union(get_val_(IDENTIFIER, get_child__(UNION_KW, IDENTIFIER, type, 1)), cgc_globals);
-  } else if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, ',', type, 2) == 0) { // enum with empty def => reference
+  } else if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, LIST, type, 2) == 0) { // enum with empty def => reference
     binding = cgc_lookup_enum(get_val_(IDENTIFIER, get_child__(ENUM_KW, IDENTIFIER, type, 1)), cgc_globals);
   } else {
     return res;
@@ -566,9 +566,9 @@ int struct_union_size(ast type) {
   type = canonicalize_type(type);
   members = get_child(type, 2);
 
-  while (get_op(members) == ',') {
-    member_type = get_child_(DECL, get_child__(',', DECL, members, 0), 1);
-    members = get_child_opt_(',', ',', members, 1);
+  while (members != 0) {
+    member_type = get_child_(DECL, car_(DECL, members), 1);
+    members = tail(members);
     member_size = type_width(member_type, true, true);
     sum_size += member_size;                            // Struct size is the sum of its members
     if (member_size > max_size) max_size = member_size; // Union size is the max of its members
@@ -586,7 +586,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast decl, ident;
 
   while (members != 0) {
-    decl = get_child_opt_(',', DECL, members, 0);
+    decl = car_(DECL, members);
     ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
       sub_offset = struct_member_offset_go(get_child_(DECL, decl, 1), member_ident);
@@ -601,7 +601,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // final offset is not 0.
       offset += round_up_to_word_size(type_width(get_child_(DECL, decl, 1), true, true));
     }
-    members = get_child_opt_(',', ',', members, 1);
+    members = tail(members);
   }
 
   return -1;
@@ -619,7 +619,7 @@ ast struct_member_go(ast struct_type, ast member_ident) {
   ast decl, ident;
 
   while (members != 0) {
-    decl = get_child_opt_(',', DECL, members, 0);
+    decl = car_(DECL, members);
     ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
       ident = struct_member_go(get_child_(DECL, decl, 1), member_ident);
@@ -627,7 +627,7 @@ ast struct_member_go(ast struct_type, ast member_ident) {
     } else if (get_val_(IDENTIFIER, member_ident) == get_val_(IDENTIFIER, ident)) {
       return decl;
     }
-    members = get_child_opt_(',', ',', members, 1);
+    members = tail(members);
   }
 
   return -1;
@@ -959,17 +959,9 @@ int codegen_params(ast params) {
 
   int fs = 0;
 
-  // Function params are comma expressions that aren't exactly like comma lists.
-  // Comma lists end with a new_ast2(',', last, 0) node, while function params
-  // end with a new_ast2(',', second_last, last) if there are more than one param
-  // and are just the last param if there is only one.
   if (params != 0) {
-    if (get_op(params) == ',') {
-      fs = codegen_params(get_child_(',', params, 1));
-      fs += codegen_param(get_child_(',', params, 0));
-    } else {
-      fs = codegen_param(params);
-    }
+    fs = codegen_params(get_child_opt_(LIST, LIST, params, 1));
+    fs += codegen_param(get_child_(LIST, params, 0));
   }
 
   return fs;
@@ -1476,7 +1468,8 @@ void handle_enum_struct_union_type_decl(ast type);
 
 void codegen_enum(ast node) {
   ast name = get_child_opt_(ENUM_KW, IDENTIFIER, node, 1);
-  ast cases = get_child_opt_(ENUM_KW, ',', node, 2);
+  ast cases = get_child_opt_(ENUM_KW, LIST, node, 2);
+  ast cas;
   int binding;
 
   if (name != 0 && cases != 0) { // if enum has a name and members (not a reference to an existing type)
@@ -1485,9 +1478,10 @@ void codegen_enum(ast node) {
     cgc_add_typedef(get_val_(IDENTIFIER, name), BINDING_TYPE_ENUM, node);
   }
 
-  while (get_op(cases) == ',') {
-    cgc_add_enum(get_val_(IDENTIFIER, get_child__(',', IDENTIFIER, cases, 0)), get_child__(',', INTEGER, cases, 1));
-    cases = get_child_opt_(',', ',', cases, 2);
+  while (cases != 0) {
+    cas = car_('=', cases);
+    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child__('=', INTEGER, cas, 1));
+    cases = tail(cases);
   }
 }
 
@@ -1509,8 +1503,8 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   // This is not the right semantic because inner declarations are scoped to
   // this declaration, but it's probably good enough for TCC.
   while (members != 0) {
-    handle_enum_struct_union_type_decl(get_child_(DECL, get_child__(',', DECL, members, 0), 1));
-    members = get_child_opt_(',', ',', members, 1);
+    handle_enum_struct_union_type_decl(get_child_(DECL, car_(DECL, members), 1));
+    members = tail(members);
   }
 }
 
@@ -1580,9 +1574,9 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           inner_type_width = type_width(get_child_('[', type, 0), true, false);
 
           while (init != 0 && arr_len != 0) {
-            codegen_initializer(local, get_child_(',', init, 0), inner_type, base_reg, offset, true);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset, true);
             offset += inner_type_width;
-            init = get_child_opt_(',', ',', init, 1);
+            init = tail(init);
             arr_len -= 1; // decrement the number of elements left to initialize to make sure we don't overflow
           }
 
@@ -1599,38 +1593,38 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         case STRUCT_KW:
           members = get_child_(STRUCT_KW, type, 2);
           while (init != 0 && members != 0) {
-            inner_type = get_child_(DECL, get_child__(',', DECL, members, 0), 1);
-            codegen_initializer(local, get_child_(',', init, 0), inner_type, base_reg, offset, false);
+            inner_type = get_child_(DECL, car_(DECL, members), 1);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset, false);
             offset += type_width(inner_type, true, true);
-            init = get_child_opt_(',', ',', init, 1);
-            members = get_child_opt_(',', ',', members, 1);
+            init = tail(init);
+            members = tail(members);
           }
 
           //  Initialize rest of the members to 0
           while (local && members != 0) {
-            inner_type = get_child_(DECL, get_child__(',', DECL, members, 0), 1);
+            inner_type = get_child_(DECL, car_(DECL, members), 1);
             initialize_memory(0, base_reg, offset, type_width(inner_type, true, true));
             offset += type_width(inner_type, true, true);
-            members = get_child_opt_(',', ',', members, 1);
+            members = tail(members);
           }
           break;
 
         case UNION_KW:
           members = get_child_(STRUCT_KW, type, 2);
-          if (get_child_opt_(',', ',', init, 1) != 0) {
+          if (tail(init) != 0) {
             fatal_error("codegen_initializer: union initializer list has more than one element");
           } else if (members == 0) {
             fatal_error("codegen_initializer: union has no members");
           }
-          codegen_initializer(local, get_child_(',', init, 0), get_child_(DECL, get_child__(',', DECL, members, 0), 1), base_reg, offset, false);
+          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset, false);
           break;
 
         default:
-          if (get_child_opt_(',', ',', init, 1) != 0 // More than 1 element
-           || get_op(get_child_(',', init, 0)) == INITIALIZER_LIST) { // Or nested initializer list
+          if (tail(init) != 0 // More than 1 element
+           || get_op(car(init)) == INITIALIZER_LIST) { // Or nested initializer list
             fatal_error("codegen_initializer: scalar initializer list has more than one element");
           }
-          codegen_rvalue(get_child_(',', init, 0));
+          codegen_rvalue(car(init));
           pop_reg(reg_X);
           grow_fs(-1);
           write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
@@ -1669,7 +1663,7 @@ int initializer_size(ast initializer) {
       initializer = get_child_(INITIALIZER_LIST, initializer, 0);
       while (initializer != 0) {
         size += 1;
-        initializer = get_child_opt_(',', ',', initializer, 1);
+        initializer = tail(initializer);
       }
       return size;
 
@@ -1754,10 +1748,10 @@ void codegen_body(ast node) {
   while (node != 0) {
     stmt = get_child_('{', node, 0);
     if (get_op(stmt) == DECLS) { // Variable declaration
-      declarations = get_child__(DECLS, ',', stmt, 0);
+      declarations = get_child__(DECLS, LIST, stmt, 0);
       while (declarations != 0) { // Multiple variable declarations
-        codegen_local_var_decl(get_child__(',', DECL, declarations, 0));
-        declarations = get_child_opt_(',', ',', declarations, 1);
+        codegen_local_var_decl(car_(DECL, declarations));
+        declarations = tail(declarations);
       }
     } else {
       codegen_statement(stmt);
@@ -2000,14 +1994,14 @@ void add_params(ast params) {
   int ident;
 
   while (params != 0) {
-    decl = get_child__(',', DECL, params, 0);
+    decl = car_(DECL, params);
     ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
     type = get_child_(DECL, decl, 1);
 
     if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
     cgc_add_local_param(ident, type_width(type, false, true) / word_size, type);
-    params = get_child_opt_(',', ',',  params, 1);
+    params = tail(params);
   }
 }
 
@@ -2016,7 +2010,7 @@ void codegen_glo_fun_decl(ast node) {
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
   ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
   ast fun_type = get_child__(DECL, '(', decl, 1);
-  ast params = get_child_opt_('(', ',', fun_type, 1);
+  ast params = get_child_opt_('(', LIST, fun_type, 1);
   ast fun_return_type = get_child_('(', fun_type, 0);
   int binding;
   int save_locals_fun = cgc_locals_fun;
@@ -2052,7 +2046,6 @@ void codegen_glo_fun_decl(ast node) {
 
   ret();
 
-
   cgc_locals_fun = save_locals_fun;
 }
 
@@ -2060,8 +2053,8 @@ void codegen_glo_fun_decl(ast node) {
 // The only thing we need to do is to call handle_enum_struct_union_type_decl
 // on the type specifier, which is the same for all declarations.
 void handle_typedef(ast node) {
-  ast decls = get_child__(TYPEDEF_KW, ',', node, 0);
-  ast decl = get_child__(',', DECL, decls, 0);
+  ast decls = get_child__(TYPEDEF_KW, LIST, node, 0);
+  ast decl = car_(DECL, decls);
   ast type = get_child_(DECL, decl, 1);
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
@@ -2072,10 +2065,10 @@ void codegen_glo_decl(ast node) {
   int op = get_op(node);
 
   if (op == DECLS) {
-    decls = get_child__(DECLS, ',', node, 0); // Declaration list
+    decls = get_child__(DECLS, LIST, node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations
-      codegen_glo_var_decl(get_child__(',', DECL, decls, 0));
-      decls = get_child_opt_(',', ',', decls, 1); // Next variable declaration
+      codegen_glo_var_decl(car_(DECL, decls));
+      decls = tail(decls); // Next variable declaration
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
