@@ -975,14 +975,36 @@ int codegen_param(ast param) {
   return type_width(type, false, true) / word_size;
 }
 
+#ifdef SAFE_MODE
+int codegen_params(ast params, ast params_type, bool allow_extra_params) {
+#else
 int codegen_params(ast params) {
+#endif
 
   int fs = 0;
 
   if (params != 0) {
-    fs = codegen_params(get_child_opt_(LIST, LIST, params, 1));
-    fs += codegen_param(get_child_(LIST, params, 0));
+#ifdef SAFE_MODE
+    if (!allow_extra_params && params_type == 0) {
+      fatal_error("codegen_params: Function expects less parameters than provided");
+    }
+
+    // Check that the number of parameters is correct
+    if (params_type != 0) params_type = tail(params_type);
+#endif
+
+#ifdef SAFE_MODE
+    fs = codegen_params(tail(params), params_type, allow_extra_params);
+#else
+    fs = codegen_params(tail(params));
+#endif
+    fs += codegen_param(car(params));
   }
+  #ifdef SAFE_MODE
+  else if (params_type != 0) {
+    fatal_error("codegen_params: Function expects more parameters than provided");
+  }
+  #endif
 
   return fs;
 }
@@ -990,7 +1012,7 @@ int codegen_params(ast params) {
 void codegen_call(ast node) {
   ast fun = get_child_('(', node, 0);
   ast params = get_child_('(', node, 1);
-  ast nb_params = codegen_params(params);
+  ast nb_params;
   int binding = 0;
 
   // Check if the function is a direct call, find the binding if it is
@@ -998,6 +1020,20 @@ void codegen_call(ast node) {
     binding = resolve_identifier(get_val_(IDENTIFIER, fun));
     if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }
+
+#ifdef SAFE_MODE
+  // Make sure fun has a type that can be called, either a function pointer or a function
+  ast type = value_type(fun);
+  if (!is_function_type(type)) {
+    putstr("type="); putint(get_op(type)); putchar('\n');
+    fatal_error("Called object is not a function or function pointer");
+  }
+  if (get_op(type) == '*') type = get_child_('*', type, 1); // Dereference function pointer
+  // allow_extra_params is true if the function is called indirectly or if the function is variadic
+  nb_params = codegen_params(params, get_child_('(', type, 1), get_child_('(', type, 2) || binding == 0);
+#else
+  nb_params = codegen_params(params);
+#endif
 
   if (binding != 0) {
     // Generate a fast path for direct calls
@@ -1506,7 +1542,7 @@ void codegen_begin() {
   cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
 
   printf_lbl = alloc_label("printf");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, function_type1(int_type, string_type));
+  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
 
   jump(setup_lbl);
 }
