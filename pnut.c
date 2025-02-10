@@ -2849,10 +2849,11 @@ void add_typedef(ast declarator) {
 }
 
 ast parse_fun_def(ast declarator) {
-  ast params = get_child_(DECL, declarator, 1);
+  ast fun_type = get_child__(DECL, '(', declarator, 1);
+  ast params = get_child_('(', fun_type, 1);
 
   // Check that the parameters are all named since declarator may be abstract
-  while (get_op(params) == ',') {
+  while (params != 0) {
     if (get_child_(DECL, get_child__(',', DECL, params, 0), 0) == 0) {
       parse_error("Parameter name expected", tok);
     }
