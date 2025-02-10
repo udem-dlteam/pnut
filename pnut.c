@@ -202,6 +202,8 @@ enum {
   IDENTIFIER = 500, // 500 because it's easy to remember
   TYPE = 501,
   MACRO = 502,
+
+  LIST = 600, // List object
 };
 
 void putstr(char *str) {
@@ -2379,11 +2381,11 @@ ast parse_enum() {
       }
 
       if (result == 0) {
-        result = new_ast3(',', ident, value, 0);
+        result = new_ast2(LIST, new_ast2('=', ident, value), 0);
         tail = result;
       } else {
-        set_child(tail, 2, new_ast3(',', ident, value, 0));
-        tail = get_child_(',', tail, 2);
+        set_child(tail, 1, new_ast2(LIST, new_ast2('=', ident, value), 0));
+        tail = get_child_(LIST, tail, 1);
       }
 
       if (tok == ',') {
@@ -2436,19 +2438,19 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         decl = new_ast3(DECL, 0, type_specifier, 0);
 
         if (result == 0) {
-          tail = result = new_ast2(',', decl, 0);
+          tail = result = new_ast2(LIST, decl, 0);
         } else {
-          set_child(tail, 1, new_ast2(',', decl, 0));
-          tail = get_child_(',', tail, 1);
+          set_child(tail, 1, new_ast2(LIST, decl, 0));
+          tail = get_child_(LIST, tail, 1);
         }
       } else {
         while (1) {
           decl = parse_declarator(false, type_specifier);
           if (result == 0) {
-            tail = result = new_ast2(',', decl, 0);
+            tail = result = new_ast2(LIST, decl, 0);
           } else {
-            set_child(tail, 1, new_ast2(',', decl, 0));
-            tail = get_child_(',', tail, 1);
+            set_child(tail, 1, new_ast2(LIST, decl, 0));
+            tail = get_child_(LIST, tail, 1);
           }
 
           if (get_child_(DECL, decl, 1) == VOID_KW) parse_error("member with void type not allowed in struct/union", tok);
@@ -2633,10 +2635,10 @@ int parse_param_list() {
     if (tok == ',') get_tok();
 
     if (result == 0) {
-      tail = result = new_ast2(',', decl, 0);
+      tail = result = new_ast2(LIST, decl, 0);
     } else {
-      set_child(tail, 1, new_ast2(',', decl, 0));
-      tail = get_child_(',', tail, 1);
+      set_child(tail, 1, new_ast2(LIST, decl, 0));
+      tail = get_child_(LIST, tail, 1);
     }
   }
 
@@ -2791,10 +2793,10 @@ ast parse_initializer_list() {
     if (tok == '{') fatal_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
-      tail = result = new_ast2(',', parse_initializer(), 0);
+      tail = result = new_ast2(LIST, parse_initializer(), 0);
     } else {
-      set_child(tail, 1, new_ast2(',', parse_initializer(), 0));
-      tail = get_child_(',', tail, 1);
+      set_child(tail, 1, new_ast2(LIST, parse_initializer(), 0));
+      tail = get_child_(LIST, tail, 1);
     }
     if (tok == ',') get_tok();
     else break;
@@ -2854,10 +2856,10 @@ ast parse_fun_def(ast declarator) {
 
   // Check that the parameters are all named since declarator may be abstract
   while (params != 0) {
-    if (get_child_(DECL, get_child__(',', DECL, params, 0), 0) == 0) {
+    if (get_child_(DECL, get_child__(LIST, DECL, params, 0), 0) == 0) {
       parse_error("Parameter name expected", tok);
     }
-    params = get_child_(',', params, 1);
+    params = get_child_(LIST, params, 1);
   }
   if (get_child_(DECL, declarator, 2) != 0) parse_error("Initializer not allowed in function definition", tok);
   return new_ast2(FUN_DECL, declarator, parse_compound_statement());
@@ -2891,15 +2893,15 @@ ast parse_declaration(bool local) {
     return parse_fun_def(declarator);
   }
 
-  declarators = new_ast2(',', declarator, 0); // Wrap the declarators in a list
+  declarators = new_ast2(LIST, declarator, 0); // Wrap the declarators in a list
   tail = declarators;
 
   // Otherwise, this is a variable or declaration
   while (tok != ';') {
     if (tok == ',') {
       get_tok();
-      set_child(tail, 1, new_ast2(',', parse_declarator_and_initializer(type_specifier), 0));
-      tail = get_child__(',', ',', tail, 1);
+      set_child(tail, 1, new_ast2(LIST, parse_declarator_and_initializer(type_specifier), 0));
+      tail = get_child__(LIST, LIST, tail, 1);
     } else {
       parse_error("';' or ',' expected", tok);
     }
@@ -2910,9 +2912,9 @@ ast parse_declaration(bool local) {
   // type table.
   if (get_child(type_specifier, 0) & MK_TYPE_SPECIFIER(TYPEDEF_KW)) {
     type_specifier = declarators; // Save declarators in type_specifier
-    while (get_op(declarators) == ',') {
-      add_typedef(get_child__(',', DECL, declarators, 0));
-      declarators = get_child_opt_(',', ',', declarators, 1);
+    while (declarators != 0) {
+      add_typedef(get_child__(LIST, DECL, declarators, 0));
+      declarators = get_child_opt_(LIST, LIST, declarators, 1);
     }
     result = new_ast1(TYPEDEF_KW, type_specifier);
   } else {
@@ -3666,7 +3668,7 @@ int main(int argc, char **argv) {
     get_tok();
   while (tok != EOF) {
     decl = parse_declaration(false);
-    printf("%s:%d:%d\n", fp_filepath, line_number, column_number);
+    // printf("%s:%d:%d\n", fp_filepath, line_number, column_number);
     ast_to_sexp(decl);
     putchar('\n');
   }
