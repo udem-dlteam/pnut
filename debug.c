@@ -339,16 +339,14 @@ void type_ast_to_sexp(ast type) {
 }
 
 void ast_to_sexp(ast obj) {
+  int i = 0;
+
   if (obj == 0) {
     printf("#f");
     return;
   }
 
-  int i = 0;
-  int nb_children = get_nb_children(obj);
-  int op = get_op(obj);
-
-  switch (op) {
+  switch (get_op(obj)) {
     case IDENTIFIER:
       putstr(STRING_BUF(get_val_(IDENTIFIER, obj)));
       break;
@@ -385,7 +383,7 @@ void ast_to_sexp(ast obj) {
       printf("(typedef ");
       ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, LIST, obj, 0));
       printf(")");
-      return;
+      break;
 
     case ENUM_KW:
     case STRUCT_KW:
@@ -471,7 +469,7 @@ void ast_to_sexp(ast obj) {
 
     default:
       putchar('(');
-      print_tok_type(op);
+      print_tok_type(get_op(obj));
       putchar(' ');
       for (; i < get_nb_children(obj); i += 1) {
         ast_to_sexp(get_child(obj, i));
