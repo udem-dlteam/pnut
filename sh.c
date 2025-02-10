@@ -268,7 +268,7 @@ void print_text(text t) {
       putstr((char*) text_pool[t + 1]);
     } else { // string ends at the address in text_pool[t + 2]
       s = (char*) text_pool[t + 1]; // start
-      while (s < text_pool[t + 2] || *s != 0) {
+      while (s < (char*) text_pool[t + 2] || *s != 0) {
         putchar(*s);
         s += 1;
       }
