@@ -35,7 +35,8 @@ bootstrap_with_gcc() {
 
   chmod +x $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe
 
-  ./$TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-x86-by-pnut-x86-by-pnut-x86-by-gcc.exe
+  printf_timing "pnut-x86-by-gcc.exe compiling pnut.c -> pnut-x86-by-pnut-x86-by-gcc.exe" \
+                "./$TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-x86-by-pnut-x86-by-pnut-x86-by-gcc.exe"
 
   if [ -s $TEMP_DIR/pnut-x86-by-pnut-x86-by-pnut-x86-by-gcc.exe ] ; then
     if diff $TEMP_DIR/pnut-x86-by-pnut-x86-by-gcc.exe $TEMP_DIR/pnut-x86-by-pnut-x86-by-pnut-x86-by-gcc.exe 2>&1 > /dev/null ; then
