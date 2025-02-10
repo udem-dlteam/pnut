@@ -2213,7 +2213,7 @@ void get_tok() {
 }
 
 // parser
-#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG || defined HANDLE_SIGNALS
+#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG || defined HANDLE_SIGNALS || defined DEBUG_PARSER_SEXP
 #include "debug.c"
 #endif
 
@@ -3675,8 +3675,12 @@ int main(int argc, char **argv) {
     get_tok();
   while (tok != EOF) {
     decl = parse_declaration(false);
+#ifdef DEBUG_PARSER_SEXP
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     printf("# %s:%d:%d\n", fp_filepath, line_number, column_number);
+#endif
     ast_to_sexp(decl);
+#endif
     putchar('\n');
   }
 #else
