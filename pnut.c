@@ -126,6 +126,7 @@ char* include_search_path = 0; // Search path for include files
 
 // Tokens and AST nodes
 enum {
+  // Keywords
   AUTO_KW = 300,
   BREAK_KW,
   CASE_KW,
@@ -158,15 +159,12 @@ enum {
   VOID_KW,
   VOLATILE_KW,
   WHILE_KW,
-  DECL,
-  DECLS,
-  FUN_DECL,
-  CAST,
 
   // Non-character operands
   INTEGER    = 401,
   CHARACTER,
   STRING,
+
   AMP_AMP,
   AMP_EQ,
   ARROW,
@@ -196,10 +194,12 @@ enum {
   ELLIPSIS,
   PARENS,
   INITIALIZER_LIST,
-
-  // Other tokens
+  DECL,
+  DECLS,
+  FUN_DECL,
+  CAST,
   MACRO_ARG = 499,
-  IDENTIFIER = 500,
+  IDENTIFIER = 500, // 500 because it's easy to remember
   TYPE = 501,
   MACRO = 502,
 
@@ -519,6 +519,7 @@ ast list_singleton(ast list) {
 // Simple accessor to get the string from the string pool
 #define STRING_BUF(string_val) (string_pool + heap[string_val+1])
 #define STRING_LEN(string_val) (heap[string_val+4])
+#define STRING_BUF_END(string_val) (STRING_BUF(string_val) + STRING_LEN(string_val))
 
 void begin_string() {
   string_start = string_pool_alloc;
@@ -2212,7 +2213,7 @@ void get_tok() {
 }
 
 // parser
-#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG || defined HANDLE_SIGNALS
+#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG || defined HANDLE_SIGNALS || defined DEBUG_PARSER_SEXP
 #include "debug.c"
 #endif
 
@@ -2641,32 +2642,88 @@ int parse_param_list() {
   return result;
 }
 
-// abstract_decl: true if the declarator may omit the identifier
+ast get_inner_type(ast type) {
+  switch (get_op(type)) {
+    case DECL:
+    case '*':
+      return get_child(type, 1);
+    case '[':
+    case '(':
+      return get_child(type, 0);
+    default:
+      fatal_error("Invalid type");
+      return 0;
+  }
+}
+
+void update_inner_type(ast parent_type, ast inner_type) {
+  switch (get_op(parent_type)) {
+    case DECL:
+    case '*':
+      set_child(parent_type, 1, inner_type);
+      break;
+
+    case '[':
+    case '(':
+      set_child(parent_type, 0, inner_type);
+      break;
+  }
+}
+
+// Parse a declarator. In C, declarators are written as they are used, meaning
+// that the identifier appears inside the declarator, and is surrounded by the
+// operators that are used to access the declared object.
+//
+// When manipulating declarator and type objects, it's much more convenient to
+// have the identifier as the outermost node, and the order of the operators
+// reversed, ending with the type specifier (base type).
+// For example, `int *a[10]` is parsed as `(decl a (array 10 (pointer int)))`
+// even if the parser parses `int`, `*`, identifier and `[10]` in that order.
+//
+// To achieve this, parse_declarator takes the inner type as an argument, and
+// the inner type is extended as the declarator is parsed. The parent_type is
+// then used in the declarator base case, the identifier, and which
+// creates the DECL node.
+//
+// There's a small twist to this however, caused by array and function
+// declarators appearing postfixed to the declarator. Because tokens are only
+// read once, we can't skip ahead to expand the inner type with array/function
+// declarator and then recursively call parse_declarator with the extended type.
+// Instead, parse_declarator keeps track of the node that wraps the inner type
+// and returns it in `parse_declarator_parent_type_parent`. Using the reference
+// to the node containing the inner type, it is then possible to insert the
+// array/function declarator in the right location, that is around the inner
+// type.
+//
+// Parameters: abstract_decl: true if the declarator may omit the identifier
+ast parse_declarator_parent_type_parent;
 ast parse_declarator(bool abstract_decl, ast parent_type) {
   bool first_tok = tok; // Indicates if the declarator is a noptr-declarator
   ast result = 0;
   ast decl;
   ast arr_size_expr;
+  ast parent_type_parent;
 
   switch (tok) {
     case IDENTIFIER:
       result = new_ast3(DECL, new_ast0(IDENTIFIER, val), parent_type, 0); // child#2 is the initializer
+      parent_type_parent = result;
       get_tok();
       break;
 
     case '*':
       get_tok();
       // Pointers may be const-qualified
-      result = pointer_type(parent_type, tok == CONST_KW);
+      parent_type_parent = pointer_type(parent_type, tok == CONST_KW);
       if (tok == CONST_KW) get_tok();
-
-      result = parse_declarator(abstract_decl, result);
+      result = parse_declarator(abstract_decl, parent_type_parent);
       break;
 
     // Parenthesis delimit the specifier-and-qualifier part of the declaration from the declarator
     case '(':
       get_tok();
       result = parse_declarator(abstract_decl, parent_type);
+      parent_type_parent = parse_declarator_parent_type_parent;
       expect_tok(')');
       break;
 
@@ -2676,6 +2733,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       // In that case, we create a DECL node with no identifier.
       if (abstract_decl) {
         result = new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
+        parent_type_parent = result;
       } else {
         parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
       }
@@ -2686,7 +2744,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   // Because we want the DECL to stay as the outermost node, we temporarily
   // unwrap the DECL parent_type.
   decl = result;
-  result = get_child_(DECL, result, 1); // child#1 is the type
+  result = get_child_(DECL, decl, 1);
 
   while (first_tok != '*') {
     // noptr-declarator may be followed by [ constant-expression ] to declare an
@@ -2695,7 +2753,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
     if (tok == '[') {
       // Check if not a void array
       if (get_op(result) == VOID_KW) parse_error("void array not allowed", tok);
-      get_tok();
+        get_tok();
       if (tok == ']') {
         val = 0;
       } else {
@@ -2703,17 +2761,20 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
         if (arr_size_expr == 0) parse_error("Array size must be an integer constant", tok);
         val = eval_constant(arr_size_expr, false);
       }
-      result = new_ast2('[', result, val); // 0 is used to represent an unsized array
+      result = new_ast2('[', get_inner_type(parent_type_parent), val);
+      update_inner_type(parent_type_parent, result);
+      parent_type_parent = result;
       expect_tok(']');
     } else if (tok == '(') {
-      result = new_ast2('(', result, parse_param_list());
+      result = new_ast2('(', get_inner_type(parent_type_parent), parse_param_list());
+      update_inner_type(parent_type_parent, result);
+      parent_type_parent = result;
     } else {
       break;
     }
   }
 
-  // And now we wrap the DECL back around the result.
-  set_child(decl, 1, result); // child#1 is the type
+  parse_declarator_parent_type_parent = parent_type_parent;
   return decl;
 }
 
@@ -3433,7 +3494,7 @@ ast parse_statement() {
 
     get_tok();
     expect_tok(IDENTIFIER);
-    result = new_ast0(GOTO_KW, val);
+    result = new_ast1(GOTO_KW, new_ast0(IDENTIFIER, val));
     expect_tok(';');
 
   } else if (tok == CONTINUE_KW) {
@@ -3614,6 +3675,13 @@ int main(int argc, char **argv) {
     get_tok();
   while (tok != EOF) {
     decl = parse_declaration(false);
+#ifdef DEBUG_PARSER_SEXP
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+    printf("# %s:%d:%d\n", fp_filepath, line_number, column_number);
+#endif
+    ast_to_sexp(decl);
+#endif
+    putchar('\n');
   }
 #else
   codegen_begin();
