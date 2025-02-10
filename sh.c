@@ -859,17 +859,10 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
 
   // Traverse the arguments and replace them with the result of
   // handle_side_effects_go sub is the parent node of the current argument
-  sub2 = get_child_('(', node, 1);
-  if (sub2 != 0) { // Check if not an empty list
-    sub1 = node;   // For 1 param, the parent node is the fun call node
-    // If there are 2 or more params, we traverse the ',' nodes ...
-    while (get_op(sub2) == ',') {
-      sub1 = sub2; // .. and the parent node is the ',' node
-      set_child(sub1, 0, handle_side_effects_go(get_child_(',', sub2, 0), executes_conditionally));
-      sub2 = get_child_(',', sub2, 1);
-    }
-    // Handle the last argument
-    set_child(sub1, 1, handle_side_effects_go(sub2, executes_conditionally));
+  sub1 = get_child_('(', node, 1);
+  while (sub1 != 0) {
+    set_child(sub1, 0, handle_side_effects_go(car(sub1), executes_conditionally));
+    sub1 = tail(sub1);
   }
 
   // All the temporary variables used for the function parameters can be
@@ -1459,14 +1452,10 @@ text fun_call_params(ast params) {
   ast param;
   text code_params = 0;
 
-  if (params != 0) { // Check if not an empty list
-    while (get_op(params) == ',') {
-      param = comp_rvalue(get_child_(',', params, 0), RVALUE_CTX_BASE);
-      code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
-      params = get_child_(',', params, 1);
-    }
-    param = comp_rvalue(params, RVALUE_CTX_BASE); // Last parameter
+  while (params != 0) {
+    param = comp_rvalue(car(params), RVALUE_CTX_BASE);
     code_params = concatenate_strings_with(code_params, param, wrap_char(' '));
+    params = tail(params);
   }
 
   return code_params;
@@ -1551,13 +1540,8 @@ void handle_printf_call(char *format_str, ast params) {
   while (*format_str != '\0') {
     // Param is consumed, get the next one
     if (param == 0 && params != 0) {
-      if (get_op(params) == ',') {
-        param = get_child_(',', params, 0);
-        params = get_child_(',', params, 1);
-      } else {
-        param = params;
-        params = 0;
-      }
+      param = car(params);
+      params = tail(params);
     }
 
     if (mod) {
@@ -1682,25 +1666,27 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast name = get_child__('(', IDENTIFIER, node, 0);
   ast params = get_child_('(', node, 1);
   int name_id = get_val_(IDENTIFIER, name);
+  ast param;
   text res;
 
 #ifdef SH_AVOID_PRINTF_USE
   if (get_op(assign_to) == IDENTIFIER_EMPTY) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
-        && params != 0 && get_op(params) == STRING)) { // puts("..."), putstr("..."), printf("...")
-      return printf_call(STRING_BUF(get_val_(STRING, params)), 0, 0, true);
-    } else if (name_id == PRINTF_ID && get_op(get_child(params, 0)) == STRING) {
-      handle_printf_call(STRING_BUF(get_val_(STRING, get_child(params, 0))), get_child(params, 1));
+        && (param = list_singleton(params)) != 0
+        && get_op(param) == STRING)) { // puts("..."), putstr("..."), printf("...")
+      return printf_call(STRING_BUF(get_val_(STRING, param)), 0, 0, true);
+    } else if (name_id == PRINTF_ID && params != 0 && get_op(car(params)) == STRING) { // printf("...", ...)
+      handle_printf_call(STRING_BUF(get_val_(STRING, car(params))), tail(params));
       return 0;
     }
 #ifdef SH_INLINE_PUTCHAR
-    else if (name_id == PUTCHAR_ID && params != 0 && get_op(params) != ',') { // putchar with 1 param
-      return comp_putchar_inline(params);
+    else if (name_id == PUTCHAR_ID && (param = list_singleton(params)) != 0) { // putchar with 1 param
+      return comp_putchar_inline(param);
     }
 #endif
 #ifdef SH_INLINE_EXIT
-    else if (name_id == EXIT_ID && params != 0 && get_op(params) != ',') { // exit with 1 param
-      res = comp_rvalue(params, RVALUE_CTX_BASE);
+    else if (name_id == EXIT_ID && (param = list_singleton(params)) != 0) { // exit with 1 param
+      res = comp_rvalue(param, RVALUE_CTX_BASE);
       return string_concat(wrap_str_lit("exit "), res);
     }
 #endif

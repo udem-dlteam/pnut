@@ -959,17 +959,9 @@ int codegen_params(ast params) {
 
   int fs = 0;
 
-  // Function params are comma expressions that aren't exactly like comma lists.
-  // Comma lists end with a new_ast2(',', last, 0) node, while function params
-  // end with a new_ast2(',', second_last, last) if there are more than one param
-  // and are just the last param if there is only one.
   if (params != 0) {
-    if (get_op(params) == ',') {
-      fs = codegen_params(get_child_(',', params, 1));
-      fs += codegen_param(get_child_(',', params, 0));
-    } else {
-      fs = codegen_param(params);
-    }
+    fs = codegen_params(get_child_opt_(LIST, LIST, params, 1));
+    fs += codegen_param(get_child_(LIST, params, 0));
   }
 
   return fs;

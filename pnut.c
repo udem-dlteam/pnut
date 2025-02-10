@@ -506,6 +506,16 @@ void set_car(int pair, int value)    { return set_child(pair, 0, value); }
 void set_cdr(int pair, int value)    { return set_child(pair, 1, value); }
 #define tail(x) cdr_(LIST, x)
 
+// Returns the only element of a singleton list, if it is a singleton list.
+// Otherwise, returns 0.
+ast list_singleton(ast list) {
+  if (list != 0 && tail(list) == 0) {
+    return car(list);
+  } else {
+    return 0;
+  }
+}
+
 // Simple accessor to get the string from the string pool
 #define STRING_BUF(string_val) (string_pool + heap[string_val+1])
 #define STRING_LEN(string_val) (heap[string_val+4])
@@ -2273,6 +2283,7 @@ void expect_tok_(int expected_tok, char* file, int line) {
 }
 
 ast parse_comma_expression();
+ast parse_call_params();
 ast parse_cast_expression();
 ast parse_compound_statement();
 ast parse_conditional_expression();
@@ -2999,7 +3010,7 @@ ast parse_postfix_expression() {
       if (tok == ')') {
         child = 0;
       } else {
-        child = parse_comma_expression();
+        child = parse_call_params();
       }
       result = new_ast2('(', result, child);
       expect_tok(')');
@@ -3360,6 +3371,18 @@ ast parse_comma_expression() {
     get_tok();
     result = new_ast2(',', result, 0);
     set_child(result, 1, parse_comma_expression());
+  }
+
+  return result;
+}
+
+ast parse_call_params() {
+  ast result = parse_assignment_expression();
+  result = new_ast2(LIST, result, 0);
+
+  if (tok == ',') {
+    get_tok();
+    set_child(result, 1, parse_call_params());
   }
 
   return result;
