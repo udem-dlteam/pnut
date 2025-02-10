@@ -845,7 +845,7 @@ bool contains_side_effects = 0;
 
 ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_conditionally) {
   int start_gensym_ix = gensym_ix;
-  ast sub1, sub2;
+  ast sub1;
 
   if (assign_to == 0) {
     assign_to = fresh_ident(); // Unique identifier for the function call
