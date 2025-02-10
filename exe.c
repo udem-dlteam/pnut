@@ -680,7 +680,7 @@ int resolve_identifier(int ident_probe) {
   binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
   if (binding != 0) return binding;
 
-  putstr("ident = "); putstr(string_pool + probe_string(ident_probe)); putchar('\n');
+  putstr("ident = "); putstr(STRING_BUF(ident_probe)); putchar('\n');
   fatal_error("identifier not found");
   return 0;
 }
@@ -717,7 +717,7 @@ ast value_type(ast node) {
           return int_type;
         default:
           putstr("ident = ");
-          putstr(string_pool + probe_string(ident));
+          putstr(STRING_BUF(ident));
           putchar('\n');
           fatal_error("value_type: unknown identifier");
           return -1;
@@ -790,7 +790,7 @@ ast value_type(ast node) {
         return heap[binding+5];
       } else {
         putstr("ident = ");
-        putstr(string_pool + probe_string(get_val_(IDENTIFIER, child0)));
+        putstr(STRING_BUF(get_val_(IDENTIFIER, child0)));
         putchar('\n');
         fatal_error("value_type: function not found");
         return -1;
@@ -977,7 +977,7 @@ void codegen_call(ast node) {
 
   if (binding == 0) {
     putstr("ident = ");
-    putstr(string_pool + probe_string(ident_probe));
+    putstr(STRING_BUF(ident_probe));
     putchar('\n');
     fatal_error("codegen_call: function not found");
   }
@@ -1120,7 +1120,7 @@ int codegen_lvalue(ast node) {
 
 void codegen_string(int string_probe) {
   int lbl = alloc_label(0);
-  char *string_start = string_pool + heap[string_probe + 1];
+  char *string_start = STRING_BUF(string_probe);
   char *string_end = string_start + heap[string_probe + 4];
 
   call(lbl);
@@ -1182,7 +1182,7 @@ void codegen_rvalue(ast node) {
           break;
 
         default:
-          putstr("ident = "); putstr(string_pool + probe_string(get_val_(IDENTIFIER, node))); putchar('\n');
+          putstr("ident = "); putstr(STRING_BUF(get_val_(IDENTIFIER, node))); putchar('\n');
           fatal_error("codegen_rvalue: identifier not found");
           break;
       }
@@ -1521,7 +1521,7 @@ void handle_enum_struct_union_type_decl(ast type) {
 }
 
 void codegen_initializer_string(int string_probe, ast type, int base_reg, int offset) {
-  char *string_start = string_pool + heap[string_probe + 1];
+  char *string_start = STRING_BUF(string_probe);
   int i = 0;
   int str_len = heap[string_probe + 4];
   int arr_len;
