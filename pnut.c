@@ -3434,7 +3434,7 @@ ast parse_statement() {
 
     get_tok();
     expect_tok(IDENTIFIER);
-    result = new_ast0(GOTO_KW, val);
+    result = new_ast1(GOTO_KW, new_ast0(IDENTIFIER, val));
     expect_tok(';');
 
   } else if (tok == CONTINUE_KW) {

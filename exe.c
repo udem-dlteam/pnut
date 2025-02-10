@@ -991,7 +991,7 @@ void codegen_call(ast node) {
 }
 
 void codegen_goto(ast node) {
-  ast label_ident = get_val_(GOTO_KW, node);
+  ast label_ident = get_val_(IDENTIFIER, get_child__(GOTO_KW, IDENTIFIER, node, 0));
 
   int binding = cgc_lookup_goto_label(label_ident, cgc_locals_fun);
   int goto_lbl;
