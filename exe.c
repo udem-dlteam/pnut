@@ -1830,11 +1830,15 @@ void codegen_statement(ast node) {
     def_label(lbl1);
     codegen_statement(get_child_(FOR_KW, node, 2)); // post loop action
     def_label(lbl3);
-    codegen_rvalue(get_child_(FOR_KW, node, 1)); // test
-    pop_reg(reg_X);
-    grow_fs(-1);
-    xor_reg_reg(reg_Y, reg_Y);
-    jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    if (get_child_(FOR_KW, node, 1) != 0) {
+      codegen_rvalue(get_child_(FOR_KW, node, 1)); // test
+      pop_reg(reg_X);
+      grow_fs(-1);
+      xor_reg_reg(reg_Y, reg_Y);
+      jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    }
+    // if no test, we always fall down to the body
+
     codegen_statement(get_child_(FOR_KW, node, 3));
     jump(lbl1);
     def_label(lbl2);
