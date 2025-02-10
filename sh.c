@@ -516,8 +516,8 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 
 void add_fun_params_to_local_env(ast lst) {
   while (lst != 0) {
-    add_var_to_local_env(get_child__(LIST, DECL, lst, 0), BINDING_PARAM_LOCAL);
-    lst = get_child_opt_(LIST, LIST, lst, 1);
+    add_var_to_local_env(car_(DECL, lst), BINDING_PARAM_LOCAL);
+    lst = tail(lst);
   }
 }
 
@@ -566,8 +566,8 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 
 void check_decls(ast lst) {
   while (lst != 0) {
-    assert_var_decl_is_safe(get_child__(LIST, DECL, lst, 0), true);
-    lst = get_child_opt_(LIST, LIST, lst, 1);
+    assert_var_decl_is_safe(car_(DECL, lst), true);
+    lst = tail(lst);
   }
 }
 
@@ -659,9 +659,9 @@ text let_params(int params) {
 
   while (params != 0) {
     // TODO: Constant param optimization
-    ident = get_child__(DECL, IDENTIFIER, get_child__(LIST, DECL, params, 0), 0);
+    ident = get_child__(DECL, IDENTIFIER, car_(DECL, params), 0);
     res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str_lit("; "));
-    params = get_child_opt_(LIST, LIST, params, 1);
+    params = tail(params);
     params_ix += 1;
   }
 
@@ -876,8 +876,7 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
   // reused after the function call, so resetting the gensym counter.
   gensym_ix = start_gensym_ix;
 
-  sub1 = new_ast2('=', assign_to, node);
-  sub1 = new_ast2(LIST, sub1, 0);
+  sub1 = cons(new_ast2('=', assign_to, node), 0);
   if (executes_conditionally) {
     if (conditional_fun_calls == 0) { conditional_fun_calls = sub1; }
     else { set_child(conditional_fun_calls_tail, 1, sub1); }
@@ -915,7 +914,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
       sub1 = fresh_string_ident(get_val_(STRING, node));
-      literals_inits = new_ast2(LIST, new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
+      literals_inits = cons(new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
       return sub1;
     } else {
       printf("op=%d %c", op, op);
@@ -1039,7 +1038,7 @@ int initializer_list_len(ast node) {
   // Each element of the list has size 1 since nested initializers are not allowed
   while (node != 0) {
     res += 1;
-    node = get_child_(LIST, node, 1);
+    node = tail(node);
   }
 
   return res;
@@ -1053,7 +1052,7 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
   runtime_use_initialize = true;
 
   while (initializer_list != 0) {
-    element = get_child_(LIST, initializer_list, 0);
+    element = car(initializer_list);
     switch (get_op(element)) {
       case INTEGER:
         args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
@@ -1071,7 +1070,7 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
         // TODO: Support nested initializers and constant expressions
         fatal_error("comp_initializer: unexpected operator");
     }
-    initializer_list = get_child_opt_(LIST, LIST, initializer_list, 1);
+    initializer_list = tail(initializer_list);
   }
 
   return args;
@@ -1089,12 +1088,12 @@ text with_prefixed_side_effects(ast test_side_effects, text code) {
   ast side_effect;
 
   while (test_side_effects != 0) {
-    side_effect = get_child__(LIST, '=', test_side_effects, 0);
+    side_effect = car_('=', test_side_effects);
     test_side_effects_code =
       string_concat3(test_side_effects_code,
                      comp_fun_call_code(get_child_('=', side_effect, 1), get_child_('=', side_effect, 0)),
                      wrap_str_lit("; "));
-    test_side_effects = get_child_(LIST, test_side_effects, 1);
+    test_side_effects = tail(test_side_effects);
   }
   if (test_side_effects_code != 0) {
     return string_concat4(wrap_str_lit("{ "), test_side_effects_code, code, wrap_str_lit("; }"));
@@ -1353,9 +1352,9 @@ text comp_rvalue(ast node, int context) {
   fun_call_decl_start = glo_decl_ix;
 
   while (literals_inits != 0) {
-    side_effect = get_child__(LIST, '=', literals_inits, 0);
+    side_effect = car_('=', literals_inits);
     comp_defstr(get_child_('=', side_effect, 0), get_child_('=', side_effect, 1), -1);
-    literals_inits = get_child_opt_(LIST, LIST, literals_inits, 1);
+    literals_inits = tail(literals_inits);
   }
 
   // We don't want to call defstr on every iteration, so we only capture fun
@@ -1366,9 +1365,9 @@ text comp_rvalue(ast node, int context) {
     fun_call_decl_start = glo_decl_ix;
 
   while (replaced_fun_calls2 != 0) {
-    side_effect = get_child__(LIST, '=', replaced_fun_calls2, 0);
+    side_effect = car_('=', replaced_fun_calls2);
     comp_fun_call(get_child_('=', side_effect, 1), get_child_('=', side_effect, 0));
-    replaced_fun_calls2 = get_child_opt_(LIST, LIST, replaced_fun_calls2, 1);
+    replaced_fun_calls2 = tail(replaced_fun_calls2);
   }
 
   // When compiling a test, we place the function side effects inline with the condition.
@@ -2020,7 +2019,7 @@ bool comp_return(ast return_value) {
       append_glo_decl(wrap_str_lit("break"));
     }
   } else if (!in_tail_position) {
-    rest_loc_var_fixups = new_ast2(LIST, append_glo_decl_fixup(), rest_loc_var_fixups);
+    rest_loc_var_fixups = cons(append_glo_decl_fixup(), rest_loc_var_fixups);
     append_glo_decl(wrap_str_lit("return"));
   }
 
@@ -2033,7 +2032,7 @@ void comp_var_decls(ast node) {
   node = get_child_opt_(DECLS, LIST, node, 0);
   while (node != 0) {
     // Add to local env and cummulative env, then initialize
-    var_decl = get_child__(LIST, DECL, node, 0);
+    var_decl = car_(DECL, node);
     assert_var_decl_is_safe(var_decl, true);
     add_var_to_local_env(var_decl, BINDING_VAR_LOCAL);
     if (get_child_(DECL, var_decl, 2) != 0) { // Initializer
@@ -2044,7 +2043,7 @@ void comp_var_decls(ast node) {
       comp_assignment(new_ast0(IDENTIFIER, get_child__(DECL, IDENTIFIER, var, 0)), new_ast0(INTEGER, 0));
     }
 #endif
-    node = get_child_opt_(LIST, LIST, node, 1); // Next variable
+    node = tail(node); // Next variable
   }
 }
 
@@ -2165,9 +2164,9 @@ void comp_glo_fun_decl(ast node) {
   if (trailing_txt == 0) {
     // Show the mapping between the function parameters and $1, $2, etc.
     while (params != 0) {
-      var = get_child__(LIST, DECL, params, 0);
+      var = car_(DECL, params);
       trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val_(IDENTIFIER, get_child_(DECL, var, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
-      params = get_child_opt_(LIST, LIST, params, 1);
+      params = tail(params);
       params_ix += 1;
     }
     if (trailing_txt != 0) trailing_txt = string_concat(wrap_str_lit(" # "), trailing_txt);
@@ -2190,11 +2189,11 @@ void comp_glo_fun_decl(ast node) {
   params = get_child_opt_('(', LIST, fun_type, 1); // Reload params because params is now = 0
   params_ix = 2;
   while (params != 0) {
-    var = get_child__(LIST, DECL, params, 0);
+    var = car_(DECL, params);
     // TODO: Constant param optimization
     // Constant parameters don't need to be initialized
     comp_assignment(get_child_(DECL, var, 0), new_ast0(IDENTIFIER_DOLLAR, params_ix));
-    params = get_child_opt_(LIST, LIST, params, 1);
+    params = tail(params);
     params_ix += 1;
   }
 #endif
@@ -2210,8 +2209,8 @@ void comp_glo_fun_decl(ast node) {
   // So we fixup the calls to save_vars and unsave_vars at the end.
   fixup_glo_decl(save_loc_vars_fixup, save_local_vars());
   while (rest_loc_var_fixups != 0) {
-    fixup_glo_decl(get_child_(LIST, rest_loc_var_fixups, 0), restore_local_vars(params_ix - 1));
-    rest_loc_var_fixups = get_child_opt_(LIST, LIST, rest_loc_var_fixups, 1);
+    fixup_glo_decl(car(rest_loc_var_fixups), restore_local_vars(params_ix - 1));
+    rest_loc_var_fixups = tail(rest_loc_var_fixups);
   }
 
   // functions cannot be empty so we insert ':' if it's empty
@@ -2318,9 +2317,9 @@ void comp_enum_cases(ast ident, ast cases) {
   }
 
   while (cases != 0) {
-    cas = get_child__(LIST, '=', cases, 0);
+    cas = car_('=', cases);
     comp_assignment_constant(env_var(get_child__('=', IDENTIFIER, cas, 0)), get_child_('=', cas, 1));
-    cases = get_child_opt_(LIST, LIST, cases, 1);
+    cases = tail(cases);
   }
 }
 
@@ -2361,7 +2360,8 @@ void comp_struct(ast ident, ast members) {
     append_glo_decl(wrap_str_lit("# Struct member declarations"));
   }
   while (members != 0) {
-    decl = get_child__(LIST, DECL, members, 0);
+    decl = car_(DECL, members);
+    members = tail(members);
     field_type = get_child_(DECL, decl, 1);
     // Arrays and struct value types are not supported for now.
     // When we have type information on the local and global variables, we'll
@@ -2371,7 +2371,6 @@ void comp_struct(ast ident, ast members) {
     }
 
     comp_assignment_constant(struct_member_var(get_child_opt_(DECL, IDENTIFIER, decl, 0)), offset);
-    members = get_child_opt_(LIST, LIST, members, 1);
     set_val(offset, get_val_(INTEGER, offset) - 1);
   }
 
@@ -2399,7 +2398,7 @@ void handle_enum_struct_union_type_decl(ast type) {
 // on the type specifier.
 void handle_typedef(ast node) {
   ast decls = get_child__(TYPEDEF_KW, LIST, node, 0);
-  ast decl = get_child__(LIST, DECL, decls, 0);
+  ast decl = car_(DECL, decls);
   ast type = get_child_(DECL, decl, 1);
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
@@ -2424,8 +2423,8 @@ void comp_glo_decl(ast node) {
   } else if (op == DECLS) { // Variable declarations
     declarations = get_child__(DECLS, LIST, node, 0);
     while (declarations != 0) { // Multiple variable declarations
-      comp_glo_var_decl(get_child__(LIST, DECL, declarations, 0));
-      declarations = get_child_opt_(LIST, LIST, declarations, 1);
+      comp_glo_var_decl(car_(DECL, declarations));
+      declarations = tail(declarations);
     }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);

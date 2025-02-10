@@ -567,8 +567,8 @@ int struct_union_size(ast type) {
   members = get_child(type, 2);
 
   while (members != 0) {
-    member_type = get_child_(DECL, get_child__(LIST, DECL, members, 0), 1);
-    members = get_child_opt_(LIST, LIST, members, 1);
+    member_type = get_child_(DECL, car_(DECL, members), 1);
+    members = tail(members);
     member_size = type_width(member_type, true, true);
     sum_size += member_size;                            // Struct size is the sum of its members
     if (member_size > max_size) max_size = member_size; // Union size is the max of its members
@@ -586,7 +586,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast decl, ident;
 
   while (members != 0) {
-    decl = get_child_opt_(LIST, DECL, members, 0);
+    decl = car_(DECL, members);
     ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
       sub_offset = struct_member_offset_go(get_child_(DECL, decl, 1), member_ident);
@@ -601,7 +601,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // final offset is not 0.
       offset += round_up_to_word_size(type_width(get_child_(DECL, decl, 1), true, true));
     }
-    members = get_child_opt_(LIST, LIST, members, 1);
+    members = tail(members);
   }
 
   return -1;
@@ -619,7 +619,7 @@ ast struct_member_go(ast struct_type, ast member_ident) {
   ast decl, ident;
 
   while (members != 0) {
-    decl = get_child_opt_(LIST, DECL, members, 0);
+    decl = car_(DECL, members);
     ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
       ident = struct_member_go(get_child_(DECL, decl, 1), member_ident);
@@ -627,7 +627,7 @@ ast struct_member_go(ast struct_type, ast member_ident) {
     } else if (get_val_(IDENTIFIER, member_ident) == get_val_(IDENTIFIER, ident)) {
       return decl;
     }
-    members = get_child_opt_(LIST, LIST, members, 1);
+    members = tail(members);
   }
 
   return -1;
@@ -1487,9 +1487,9 @@ void codegen_enum(ast node) {
   }
 
   while (cases != 0) {
-    cas = get_child_(LIST, cases, 0);
+    cas = car_('=', cases);
     cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child__('=', INTEGER, cas, 1));
-    cases = get_child_opt_(LIST, LIST, cases, 1);
+    cases = tail(cases);
   }
 }
 
@@ -1511,8 +1511,8 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   // This is not the right semantic because inner declarations are scoped to
   // this declaration, but it's probably good enough for TCC.
   while (members != 0) {
-    handle_enum_struct_union_type_decl(get_child_(DECL, get_child__(LIST, DECL, members, 0), 1));
-    members = get_child_opt_(LIST, LIST, members, 1);
+    handle_enum_struct_union_type_decl(get_child_(DECL, car_(DECL, members), 1));
+    members = tail(members);
   }
 }
 
@@ -1582,9 +1582,9 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           inner_type_width = type_width(get_child_('[', type, 0), true, false);
 
           while (init != 0 && arr_len != 0) {
-            codegen_initializer(local, get_child_(LIST, init, 0), inner_type, base_reg, offset, true);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset, true);
             offset += inner_type_width;
-            init = get_child_opt_(LIST, LIST, init, 1);
+            init = tail(init);
             arr_len -= 1; // decrement the number of elements left to initialize to make sure we don't overflow
           }
 
@@ -1601,38 +1601,38 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         case STRUCT_KW:
           members = get_child_(STRUCT_KW, type, 2);
           while (init != 0 && members != 0) {
-            inner_type = get_child_(DECL, get_child__(LIST, DECL, members, 0), 1);
-            codegen_initializer(local, get_child_(LIST, init, 0), inner_type, base_reg, offset, false);
+            inner_type = get_child_(DECL, car_(DECL, members), 1);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset, false);
             offset += type_width(inner_type, true, true);
-            init = get_child_opt_(LIST, LIST, init, 1);
-            members = get_child_opt_(LIST, LIST, members, 1);
+            init = tail(init);
+            members = tail(members);
           }
 
           //  Initialize rest of the members to 0
           while (local && members != 0) {
-            inner_type = get_child_(DECL, get_child__(LIST, DECL, members, 0), 1);
+            inner_type = get_child_(DECL, car_(DECL, members), 1);
             initialize_memory(0, base_reg, offset, type_width(inner_type, true, true));
             offset += type_width(inner_type, true, true);
-            members = get_child_opt_(LIST, LIST, members, 1);
+            members = tail(members);
           }
           break;
 
         case UNION_KW:
           members = get_child_(STRUCT_KW, type, 2);
-          if (get_child_opt_(LIST, LIST, init, 1) != 0) {
+          if (tail(init) != 0) {
             fatal_error("codegen_initializer: union initializer list has more than one element");
           } else if (members == 0) {
             fatal_error("codegen_initializer: union has no members");
           }
-          codegen_initializer(local, get_child_(LIST, init, 0), get_child_(DECL, get_child__(LIST, DECL, members, 0), 1), base_reg, offset, false);
+          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset, false);
           break;
 
         default:
-          if (get_child_opt_(LIST, LIST, init, 1) != 0 // More than 1 element
-           || get_op(get_child_(LIST, init, 0)) == INITIALIZER_LIST) { // Or nested initializer list
+          if (tail(init) != 0 // More than 1 element
+           || get_op(car(init)) == INITIALIZER_LIST) { // Or nested initializer list
             fatal_error("codegen_initializer: scalar initializer list has more than one element");
           }
-          codegen_rvalue(get_child_(LIST, init, 0));
+          codegen_rvalue(car(init));
           pop_reg(reg_X);
           grow_fs(-1);
           write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
@@ -1671,7 +1671,7 @@ int initializer_size(ast initializer) {
       initializer = get_child_(INITIALIZER_LIST, initializer, 0);
       while (initializer != 0) {
         size += 1;
-        initializer = get_child_opt_(LIST, LIST, initializer, 1);
+        initializer = tail(initializer);
       }
       return size;
 
@@ -1758,8 +1758,8 @@ void codegen_body(ast node) {
     if (get_op(stmt) == DECLS) { // Variable declaration
       declarations = get_child__(DECLS, LIST, stmt, 0);
       while (declarations != 0) { // Multiple variable declarations
-        codegen_local_var_decl(get_child__(LIST, DECL, declarations, 0));
-        declarations = get_child_opt_(LIST, LIST, declarations, 1);
+        codegen_local_var_decl(car_(DECL, declarations));
+        declarations = tail(declarations);
       }
     } else {
       codegen_statement(stmt);
@@ -2006,14 +2006,14 @@ void add_params(ast params) {
   int ident;
 
   while (params != 0) {
-    decl = get_child__(LIST, DECL, params, 0);
+    decl = car_(DECL, params);
     ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
     type = get_child_(DECL, decl, 1);
 
     if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
     cgc_add_local_param(ident, type_width(type, false, true) / word_size, type);
-    params = get_child_opt_(LIST, LIST, params, 1);
+    params = tail(params);
   }
 }
 
@@ -2066,7 +2066,7 @@ void codegen_glo_fun_decl(ast node) {
 // on the type specifier, which is the same for all declarations.
 void handle_typedef(ast node) {
   ast decls = get_child__(TYPEDEF_KW, LIST, node, 0);
-  ast decl = get_child__(LIST, DECL, decls, 0);
+  ast decl = car_(DECL, decls);
   ast type = get_child_(DECL, decl, 1);
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
@@ -2079,8 +2079,8 @@ void codegen_glo_decl(ast node) {
   if (op == DECLS) {
     decls = get_child__(DECLS, LIST, node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations
-      codegen_glo_var_decl(get_child__(LIST, DECL, decls, 0));
-      decls = get_child_opt_(LIST, LIST, decls, 1); // Next variable declaration
+      codegen_glo_var_decl(car_(DECL, decls));
+      decls = tail(decls); // Next variable declaration
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
