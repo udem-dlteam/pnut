@@ -303,6 +303,7 @@ void type_ast_to_sexp(ast type) {
     case '(':
       printf("(-> (");
       ast_list_to_sexp(get_child_opt_('(', LIST, type, 1)); // Function args
+      if (get_child_('(', type, 2)) printf(" ..."); // Varargs
       printf(") ");
       type_ast_to_sexp(get_child_('(', type, 0));
       printf(")");
@@ -397,8 +398,10 @@ void ast_to_sexp(ast obj) {
       ast_to_sexp(get_child__(DECL, IDENTIFIER, obj, 0));
       putchar(' ');
       type_ast_to_sexp(get_child_(DECL, obj, 1));
-      putchar(' ');
-      ast_to_sexp(get_child_(DECL, obj, 2));
+      if (get_child_(DECL, obj, 2)) { // Initializer, if present
+        putchar(' ');
+        ast_to_sexp(get_child_(DECL, obj, 2));
+      }
       printf(")");
       break;
 

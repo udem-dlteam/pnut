@@ -2320,6 +2320,27 @@ ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', is_const ? MK_TYPE_SPECIFIER(CONST_KW) : 0, parent_type);
 }
 
+ast function_type(ast parent_type, ast params) {
+  return new_ast3('(', parent_type, params, false);
+}
+
+ast function_type1(ast parent_type, ast param1) {
+  return new_ast3('(', parent_type, cons(param1, 0), 0);
+}
+
+ast function_type2(ast parent_type, ast param1, ast param2) {
+  return new_ast3('(', parent_type, cons(param1, cons(param2, 0)), 0);
+}
+
+ast function_type3(ast parent_type, ast param1, ast param2, ast param3) {
+  return new_ast3('(', parent_type, cons(param1, cons(param2, cons(param3, 0))), 0);
+}
+
+ast make_variadic_func(ast func_type) {
+  set_child(func_type, 2, true); // Set the variadic flag
+  return func_type;
+}
+
 // Type and declaration parser
 int is_type_starter(int tok) {
   return tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW       // Numeric types
@@ -2601,10 +2622,13 @@ ast parse_declaration_specifiers() {
   return type_specifier;
 }
 
+bool parse_param_list_is_variadic = false;
 int parse_param_list() {
   ast result = 0;
   ast tail;
   ast decl;
+
+  parse_param_list_is_variadic = false;
 
   expect_tok('(');
 
@@ -2621,7 +2645,9 @@ int parse_param_list() {
       get_tok();
     } else if (tok == ELLIPSIS) {
       // ignore ELLIPSIS nodes for now, but it should be the last parameter
+      if (result == 0) parse_error("Function must have a named parameter before ellipsis parameter", tok);
       get_tok();
+      parse_param_list_is_variadic = true;
       break;
     } else {
       parse_error("Parameter declaration expected", tok);
@@ -2766,7 +2792,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       parent_type_parent = result;
       expect_tok(']');
     } else if (tok == '(') {
-      result = new_ast2('(', get_inner_type(parent_type_parent), parse_param_list());
+      result = new_ast3('(', get_inner_type(parent_type_parent), parse_param_list(), false);
+      if (parse_param_list_is_variadic) result = make_variadic_func(result);
       update_inner_type(parent_type_parent, result);
       parent_type_parent = result;
     } else {
@@ -3680,8 +3707,8 @@ int main(int argc, char **argv) {
     printf("# %s:%d:%d\n", fp_filepath, line_number, column_number);
 #endif
     ast_to_sexp(decl);
-#endif
     putchar('\n');
+#endif
   }
 #else
   codegen_begin();
