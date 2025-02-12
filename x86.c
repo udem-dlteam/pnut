@@ -88,10 +88,18 @@ void mod_rm(int reg1, int reg2) {
 // ModR/M byte with /digit opcode extension => The reg1 field is repurposed as an opcode extension.
 #define mod_rm_slash_digit(digit, reg1) mod_rm(digit, reg1)
 
+// For instructions with 2 register operands
 void op_reg_reg(int opcode, int dst, int src) {
   rex_prefix(src, dst);
   emit_i8(opcode);
   mod_rm(src, dst);
+}
+
+// For instructions with 1 register operand and /digit opcode extension
+void op_reg_slash_digit(int opcode, int digit, int reg) {
+  rex_prefix(0, reg);
+  emit_i8(opcode);
+  mod_rm_slash_digit(digit, reg);
 }
 
 #ifdef SKIP
@@ -294,8 +302,15 @@ void idiv_reg(int src) {
   // IDIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
   // See: https://web.archive.org/web/20240407195950/https://www.felixcloutier.com/x86/idiv
 
-  rex_prefix(src, 0);
-  emit_2_i8(0xf7, 0xf8 + (src & 7));
+  op_reg_slash_digit(0xf7, 7, src);
+}
+
+void div_reg(int src) {
+
+  // DIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
+  // See: https://web.archive.org/web/20250202075400/https://www.felixcloutier.com/x86/div
+
+  op_reg_slash_digit(0xf7, 6, src);
 }
 
 void cdq_cqo() {
@@ -334,33 +349,31 @@ void rem_reg_reg(int dst, int src) {
   mov_reg_reg(dst, DX);
 }
 
-void shl_reg_cl(int dst) {
+void s_l_reg_cl(int dst) {
 
-  // SHL dst_reg, cl ;; dst_reg = dst_reg << cl
+  // SHL dst_reg, cl ;; dst_reg = dst_reg << cl (arithmetic or logical shift, they are the same)
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
 
-  rex_prefix(0, dst);
-  emit_2_i8(0xd3, 0xe0 + (dst & 7));
+  op_reg_slash_digit(0xd3, 4, dst);
 }
 
-void shl_reg_reg(int dst, int src) {
+void s_l_reg_reg(int dst, int src) {
 
-  // Computes dst_reg = dst_reg << src_reg
+  // Computes dst_reg = dst_reg << src_reg (arithmetic or logical shift, they are the same)
   // This is not an actual instruction on x86. The operation
   // is emulated with a sequence of instructions that clobbers the
   // register CX, and does not work if dst = CX.
 
   mov_reg_reg(CX, src);
-  shl_reg_cl(dst);
+  s_l_reg_cl(dst);
 }
 
 void sar_reg_cl(int dst) {
 
-  // SAR dst_reg, cl ;; dst_reg = dst_reg >> cl
+  // SAR dst_reg, cl ;; dst_reg = dst_reg >> cl (arithmetic shift)
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
 
-  rex_prefix(0, dst);
-  emit_2_i8(0xd3, 0xf8 + (dst & 7));
+  op_reg_slash_digit(0xd3, 7, dst);
 }
 
 void sar_reg_reg(int dst, int src) {
