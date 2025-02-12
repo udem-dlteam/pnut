@@ -162,6 +162,11 @@ enum {
 
   // Non-character operands
   INTEGER    = 401,
+  INTEGER_L,
+  INTEGER_LL,
+  INTEGER_U,
+  INTEGER_UL,
+  INTEGER_ULL,
   CHARACTER,
   STRING,
 
@@ -1123,7 +1128,13 @@ int eval_constant(ast expr, bool if_macro) {
 
   switch (op) {
     case PARENS:    return eval_constant(child0, if_macro);
-    case INTEGER:   return -get_val_(INTEGER, expr);
+    case INTEGER:
+    case INTEGER_L:
+    case INTEGER_LL:
+    case INTEGER_U:
+    case INTEGER_UL:
+    case INTEGER_ULL:
+      return -get_val(expr);
     case CHARACTER: return get_val_(CHARACTER, expr);
     case '~':       return ~eval_constant(child0, if_macro);
     case '!':       return !eval_constant(child0, if_macro);
@@ -1770,7 +1781,7 @@ void paste_tokens(int left_tok, int left_val) {
 
     if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO || right_tok <= WHILE_KW) {
       accum_string_string(right_val);
-    } else if (right_tok == INTEGER) {
+    } else if (right_tok == INTEGER || right_tok == INTEGER_L || right_tok == INTEGER_LL || right_tok == INTEGER_U || right_tok == INTEGER_UL || right_tok == INTEGER_ULL) {
       accum_string_integer(-right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
@@ -1781,8 +1792,8 @@ void paste_tokens(int left_tok, int left_val) {
 
     val = end_ident();
     tok = heap[val+2]; // The kind of the identifier
-  } else if (left_tok == INTEGER) {
-    if (right_tok == INTEGER) {
+  } else if (left_tok == INTEGER || left_tok == INTEGER_L || left_tok == INTEGER_LL || left_tok == INTEGER_U || left_tok == INTEGER_UL || left_tok == INTEGER_ULL) {
+    if (right_tok == INTEGER || right_tok == INTEGER_L || right_tok == INTEGER_LL || right_tok == INTEGER_U || right_tok == INTEGER_UL || right_tok == INTEGER_ULL) {
       val = -paste_integers(-left_val, -right_val);
     } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
       begin_string();
@@ -1949,7 +1960,33 @@ void get_tok() {
           while (accum_digit(10));
         }
 
-        tok = INTEGER;
+        tok = INTEGER; // Default to int
+#ifndef sh
+        if (ch == 'u' || ch == 'U') {
+          // Note: allows suffixes with mixed case, such as lL for simplicity
+          tok = INTEGER_U;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_UL;
+            get_ch();
+            if (ch == 'l' || ch == 'L') {
+              tok = INTEGER_ULL;
+              get_ch();
+            }
+          }
+        } else if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_L;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_LL;
+            get_ch();
+          }
+          if (ch == 'u' || ch == 'U') {
+            tok = tok == INTEGER_LL ? INTEGER_ULL : INTEGER_UL;
+            get_ch();
+          }
+        }
+#endif
 
         break;
 
@@ -2981,22 +3018,13 @@ ast parse_parenthesized_expression() {
 
 ast parse_primary_expression() {
 
-  ast result;
+  ast result = 0;
   ast tail;
 
-  if (tok == IDENTIFIER) {
+  if ( tok == IDENTIFIER || tok == CHARACTER
+    || tok == INTEGER || tok == INTEGER_L ||  tok == INTEGER_LL ||  tok == INTEGER_U ||  tok == INTEGER_UL ||  tok == INTEGER_ULL) {
 
-    result = new_ast0(IDENTIFIER, val);
-    get_tok();
-
-  } else if (tok == INTEGER) {
-
-    result = new_ast0(INTEGER, val);
-    get_tok();
-
-  } else if (tok == CHARACTER) {
-
-    result = new_ast0(CHARACTER, val);
+    result = new_ast0(tok, val);
     get_tok();
 
   } else if (tok == STRING) {
@@ -3029,7 +3057,6 @@ ast parse_primary_expression() {
 
   } else {
     parse_error("identifier, literal, or '(' expected", tok);
-    return 0;
   }
 
   return result;
