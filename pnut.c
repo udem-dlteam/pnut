@@ -162,6 +162,11 @@ enum {
 
   // Non-character operands
   INTEGER    = 401,
+  INTEGER_L,
+  INTEGER_LL,
+  INTEGER_U,
+  INTEGER_UL,
+  INTEGER_ULL,
   CHARACTER,
   STRING,
 
@@ -1949,7 +1954,33 @@ void get_tok() {
           while (accum_digit(10));
         }
 
-        tok = INTEGER;
+        tok = INTEGER; // Default to int
+#ifndef sh
+        if (ch == 'u' || ch == 'U') {
+          // Note: allows suffixes with mixed case, such as lL for simplicity
+          tok = INTEGER_U;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_UL;
+            get_ch();
+            if (ch == 'l' || ch == 'L') {
+              tok = INTEGER_ULL;
+              get_ch();
+            }
+          }
+        } else if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_L;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_LL;
+            get_ch();
+          }
+          if (ch == 'u' || ch == 'U') {
+            tok = tok == INTEGER_LL ? INTEGER_ULL : INTEGER_UL;
+            get_ch();
+          }
+        }
+#endif
 
         break;
 

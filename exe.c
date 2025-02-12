@@ -665,6 +665,7 @@ int ref_type_width(ast type) {
 }
 
 ast int_type;
+ast uint_type;
 ast char_type;
 ast string_type;
 ast void_type;
@@ -713,8 +714,10 @@ ast value_type(ast node) {
   if (nb_children >= 2) child1 = get_child(node, 1);
 
   if (nb_children == 0) {
-    if (op == INTEGER) {
+    if (op == INTEGER || op == INTEGER_L || op == INTEGER_LL) {
       return int_type;
+    } if (op == INTEGER_U || op == INTEGER_UL || op == INTEGER_ULL) {
+      return uint_type;
     } else if (op == CHARACTER) {
       return char_type;
     } else if (op == STRING) {
@@ -1215,7 +1218,7 @@ void codegen_rvalue(ast node) {
   if (nb_children >= 2) child1 = get_child(node, 1);
 
   if (nb_children == 0) {
-    if (op == INTEGER) {
+    if (op == INTEGER || op == INTEGER_L || op == INTEGER_LL || op == INTEGER_U || op == INTEGER_UL || op == INTEGER_ULL) {
       mov_reg_imm(reg_X, -get_val_(INTEGER, node));
       push_reg(reg_X);
     } else if (op == CHARACTER) {
@@ -1498,6 +1501,7 @@ void codegen_begin() {
   cgc_global_alloc += 2 * word_size;
 
   int_type = new_ast0(INT_KW, 0);
+  uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
   char_type = new_ast0(CHAR_KW, 0);
   string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
   void_type = new_ast0(VOID_KW, 0);
