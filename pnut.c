@@ -2663,12 +2663,14 @@ ast parse_type_specifier() {
       if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
       return type_specifier;
 
-#ifdef DEBUG_PARSER
+#ifndef sh
     case UNSIGNED_KW:
       get_tok();
       type_specifier = parse_type_specifier();
       // Just "unsigned" is equivalent to "unsigned int"
-      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
+      // Set the unsigned flag
+      else set_val(type_specifier, get_val(type_specifier) | MK_TYPE_SPECIFIER(UNSIGNED_KW));
       return type_specifier;
 #endif
 
@@ -2770,7 +2772,14 @@ ast parse_declaration_specifiers(bool allow_typedef) {
   // Note: Remove to support K&R C syntax
   if (type_specifier == 0) parse_error("Type expected", tok);
 
-  set_child(type_specifier, 0, type_qualifier);
+  if (type_qualifier != 0) {
+    // This can only happen if an array/function type is typedef'ed
+    if (get_op(type_specifier) == '[' || get_op(type_specifier) == '(')
+      parse_error("Type qualifiers not allowed on typedef'ed array or function type", tok);
+
+    // Set the type qualifier, keeping the storage class specifier from the typedef if it exists
+    set_child(type_specifier, 0, get_child(type_specifier, 0) | type_qualifier);
+  }
   glo_specifier_storage_class = specifier_storage_class;
 
   return type_specifier;
