@@ -58,8 +58,35 @@ void rex_prefix(int reg1, int reg2) {
 }
 
 void mod_rm(int reg1, int reg2) {
-  emit_i8(0xc0 + 8*(reg1 & 7) + (reg2 & 7)); // ModR/M
+  // ModR/M byte
+  //
+  // It is used to encode the operand(s) to an instruction.
+  // The format is the following:
+  // Bit    7   6   5   4   3   2   1   0
+  //        -----   ---------   ---------
+  // Usage   Mod       Reg         R/M
+  //
+  // Operations that use 1 operand generally use the R/M field to specify it.
+  // In that case, the Reg field may be repurposed as an "opcode extension" to
+  // allow multiple instructions to share the same opcode. This is generally
+  // indicated as /digit in the opcode table.
+  //
+  // The mod field encodes the addressing mode for the register/memory ("r/m") operand.
+  // When the mod field is 11, the r/m field is used to specify a register operand.
+  // Otherwise, 00, 01 and 10 specify different addressing modes.
+  //
+  // When mod specifies an addressing mode, the ModR/M byte may be followed by
+  // a SIB byte (Scale Index Base) and/or a displacement.
+  //
+  // See https://web.archive.org/web/20250207155122/https://en.wikipedia.org/wiki/ModR/M
+  //
+  // For our purposes, we only use the case where both operands are registers,
+  // and so we always emit 0xc0 (mod = 11) with the reg1 and reg2 fields.
+  emit_i8(0xc0 + ((reg1 & 7) << 3) + (reg2 & 7));
 }
+
+// ModR/M byte with /digit opcode extension => The reg1 field is repurposed as an opcode extension.
+#define mod_rm_slash_digit(digit, reg1) mod_rm(digit, reg1)
 
 void op_reg_reg(int opcode, int dst, int src) {
   rex_prefix(src, dst);
