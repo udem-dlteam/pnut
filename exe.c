@@ -821,7 +821,8 @@ ast value_type(ast node) {
     } else if (op == '(') {
       binding = cgc_lookup_fun(get_val_(IDENTIFIER, child0), cgc_globals);
       if (binding != 0) {
-        return heap[binding+5];
+        // heap[binding+5] is the '(' type
+        return get_child_('(', heap[binding+5], 0);
       } else {
         putstr("ident = ");
         putstr(STRING_BUF(get_val_(IDENTIFIER, child0)));
