@@ -94,6 +94,11 @@
 #define PARSE_NUMERIC_LITERAL_WITH_BASE
 #endif
 
+// Shell codegen doesn't support suffixes for numeric literals, but other backends do
+#ifndef sh
+#define PARSE_NUMERIC_LITERAL_SUFFIX
+#endif
+
 // 64 bit literals are only supported on 64 bit platforms for now
 #if defined(target_x86_64_linux) || defined(target_x86_64_mac)
 #define SUPPORT_64_BIT_LITERALS
@@ -177,10 +182,17 @@ enum {
   INTEGER_HEX = 402, // Integer written in hexadecimal
   INTEGER_OCT = 403, // Integer written in octal
 #endif
-  CHARACTER,
-  STRING,
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+  INTEGER_L   = 404,
+  INTEGER_LL,
+  INTEGER_U,
+  INTEGER_UL,
+  INTEGER_ULL,
+#endif
+  CHARACTER = 410, // Fixed value so the ifdef above don't change the value
+  STRING    = 411,
 
-  AMP_AMP,
+  AMP_AMP   = 450,
   AMP_EQ,
   ARROW,
   BAR_BAR,
@@ -1214,6 +1226,13 @@ int eval_constant(ast expr, bool if_macro) {
   switch (op) {
     case PARENS:      return eval_constant(child0, if_macro);
     case INTEGER:
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+    case INTEGER_L:
+    case INTEGER_LL:
+    case INTEGER_U:
+    case INTEGER_UL:
+    case INTEGER_ULL:
+#endif
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
     case INTEGER_HEX:
     case INTEGER_OCT:
@@ -1884,6 +1903,9 @@ void paste_tokens(int left_tok, int left_val) {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
 #endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+            || right_tok == INTEGER_L || right_tok == INTEGER_LL || right_tok == INTEGER_U || right_tok == INTEGER_UL || right_tok == INTEGER_ULL
+#endif
               ) {
       accum_string_integer(-right_val);
     } else {
@@ -1899,10 +1921,16 @@ void paste_tokens(int left_tok, int left_val) {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
           || left_tok == INTEGER_HEX || left_tok == INTEGER_OCT
 #endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+          || left_tok == INTEGER_L || left_tok == INTEGER_LL || left_tok == INTEGER_U || left_tok == INTEGER_UL || left_tok == INTEGER_ULL
+#endif
             ) {
     if (right_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
      || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
+#endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+    || right_tok == INTEGER_L || right_tok == INTEGER_LL || right_tok == INTEGER_U || right_tok == INTEGER_UL || right_tok == INTEGER_ULL
 #endif
        ) {
       val = -paste_integers(-left_val, -right_val);
@@ -2085,6 +2113,34 @@ void get_tok() {
         u64_to_obj(val_32);
 #endif
 
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+        // If this is enabled with PARSE_NUMERIC_LITERAL_WITH_BASE, using a
+        // suffix replaces INTEGER_OCT and INTEGER_HEX with base 10 INTEGER.
+        if (ch == 'u' || ch == 'U') {
+          // Note: allows suffixes with mixed case, such as lL for simplicity
+          tok = INTEGER_U;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_UL;
+            get_ch();
+            if (ch == 'l' || ch == 'L') {
+              tok = INTEGER_ULL;
+              get_ch();
+            }
+          }
+        } else if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_L;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_LL;
+            get_ch();
+          }
+          if (ch == 'u' || ch == 'U') {
+            tok = tok == INTEGER_LL ? INTEGER_ULL : INTEGER_UL;
+            get_ch();
+          }
+        }
+#endif
 
         break;
 
@@ -3132,12 +3188,15 @@ ast parse_parenthesized_expression() {
 
 ast parse_primary_expression() {
 
-  ast result;
+  ast result = 0;
   ast tail;
 
   if (tok == IDENTIFIER || tok == CHARACTER || tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
      || tok == INTEGER_HEX || tok == INTEGER_OCT
+#endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+     || tok == INTEGER_L ||  tok == INTEGER_LL ||  tok == INTEGER_U ||  tok == INTEGER_UL ||  tok == INTEGER_ULL
 #endif
      ) {
 
@@ -3174,7 +3233,6 @@ ast parse_primary_expression() {
 
   } else {
     parse_error("identifier, literal, or '(' expected", tok);
-    return 0;
   }
 
   return result;
