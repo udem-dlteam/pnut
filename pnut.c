@@ -2488,6 +2488,7 @@ ast parse_initializer();
 
 // The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
 #define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
+#define TEST_TYPE_SPECIFIER(specifier, tok) ((specifier) & (1 << (tok - AUTO_KW)))
 
 ast get_type_specifier(ast type_or_decl) {
   while (1) {

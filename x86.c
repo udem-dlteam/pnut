@@ -436,12 +436,16 @@ void ret() {
 
 // Conditions for use by jump_cond:
 
-const int EQ = 0x4; // x == y
-const int NE = 0x5; // x != y
-const int LT = 0xc; // x < y
-const int GE = 0xd; // x >= y
-const int LE = 0xe; // x <= y
-const int GT = 0xf; // x > y
+const int EQ   = 0x4; // x == y
+const int NE   = 0x5; // x != y
+const int LT   = 0xc; // x < y
+const int LT_U = 0x2; // x < y  (Jump near if not above or equal (CF=1))
+const int GE   = 0xd; // x >= y
+const int GE_U = 0x3; // x >= y (Jump near if above or equal (CF=0))
+const int LE   = 0xe; // x <= y
+const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
+const int GT   = 0xf; // x > y
+const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
 
 void jump_cond(int cond, int lbl) {
 

@@ -262,9 +262,13 @@ void div_for_pointer_arith(int reg, int width) {
 const int EQ; // x == y
 const int NE; // x != y
 const int LT; // x < y
+const int LT_U; // x < y  (unsigned)
 const int GE; // x >= y
+const int GE_U; // x >= y (unsigned)
 const int LE; // x <= y
+const int LE_U; // x <= y (unsigned)
 const int GT; // x > y
+const int GT_U; // x > y  (unsigned)
 
 void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 
@@ -521,6 +525,20 @@ bool is_aggregate_type(ast type) {
 
 bool is_not_pointer_type(ast type) {
   return !is_pointer_type(type);
+}
+
+bool is_numeric_type(ast type) {
+  switch (get_op(type)) {
+    case CHAR_KW:
+    case INT_KW:
+    case FLOAT_KW:
+    case DOUBLE_KW:
+    case SHORT_KW:
+    case LONG_KW:
+      return true;
+    default:
+      return false;
+  }
 }
 
 // Size an object of the given type would occupy in memory (in bytes).
@@ -889,17 +907,24 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   int cond = -1;
   ast left_type = value_type(lhs);
   ast right_type = value_type(rhs);
+  bool left_is_numeric = is_numeric_type(left_type);
+  bool right_is_numeric = is_numeric_type(right_type);
+  bool left_is_unsigned = false;
+  bool right_is_unsigned = false;
   int width;
+
+  if (left_is_numeric) left_is_unsigned = TEST_TYPE_SPECIFIER(get_val(left_type), UNSIGNED_KW);
+  if (right_is_numeric) right_is_unsigned = TEST_TYPE_SPECIFIER(get_val(right_type), UNSIGNED_KW);
 
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
 
-  if      (op == '<')     cond = LT;
-  else if (op == '>')     cond = GT;
+  if      (op == '<')     cond = left_is_unsigned || right_is_unsigned ? LT_U : LT;
+  else if (op == '>')     cond = left_is_unsigned || right_is_unsigned ? GT_U : GT;
+  else if (op == LT_EQ)   cond = left_is_unsigned || right_is_unsigned ? LE_U : LE;
+  else if (op == GT_EQ)   cond = left_is_unsigned || right_is_unsigned ? GE_U : GE;
   else if (op == EQ_EQ)   cond = EQ;
   else if (op == EXCL_EQ) cond = NE;
-  else if (op == LT_EQ)   cond = LE;
-  else if (op == GT_EQ)   cond = GE;
 
   if (cond != -1) {
 
