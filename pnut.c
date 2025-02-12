@@ -2426,7 +2426,7 @@ ast parse_conditional_expression();
 ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
 ast parse_declarator(bool abstract_decl, ast parent_type);
-ast parse_declaration_specifiers();
+ast parse_declaration_specifiers(bool allow_typedef);
 ast parse_initializer_list();
 ast parse_initializer();
 
@@ -2591,7 +2591,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
     while (tok != '}') {
       if (!is_type_starter(tok)) parse_error("type expected in struct declaration", tok);
       if (ends_in_flex_array)    parse_error("flexible array member must be last", tok);
-      type_specifier = parse_declaration_specifiers();
+      type_specifier = parse_declaration_specifiers(false);
 
       // If the decl has no name, it's an anonymous struct/union member
       // and there can only be 1 declarator so not looping.
@@ -2701,11 +2701,13 @@ ast parse_type_specifier() {
 //    1. specifiers and qualifiers
 //    2. declarators and initializers
 // This function parses the first part
-ast parse_declaration_specifiers() {
+// Storage class specifiers affect declarations instead of types, so it's easier to extract it from the type
+int glo_specifier_storage_class = 0;
+ast parse_declaration_specifiers(bool allow_typedef) {
   ast type_specifier = 0;
-  int type_storage_class = 0;
   int type_qualifier = 0;
   bool loop = true;
+  int specifier_storage_class = 0;
 
   while (loop) {
     switch (tok) {
@@ -2714,7 +2716,9 @@ ast parse_declaration_specifiers() {
       case STATIC_KW:
       case EXTERN_KW:
       case TYPEDEF_KW:
-        type_storage_class |= MK_TYPE_SPECIFIER(tok);
+        if (specifier_storage_class != 0) fatal_error("Multiple storage classes not supported");
+        if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
+        specifier_storage_class = tok;
         get_tok();
         break;
 
@@ -2750,9 +2754,10 @@ ast parse_declaration_specifiers() {
         break;
 
       case TYPE:
-        // Look in types table. It's a type, not a type_kw, but we reuse the variable
-        type_specifier = heap[val + 3]; // For TYPE tokens, the tag is the type
-        type_specifier = clone_ast(type_specifier); // Clone the type so it can be modified
+        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+        // Lookup type in the types table. It is stored in the tag of the
+        // interned string object. The type is cloned so it can be modified.
+        type_specifier = clone_ast(heap[val + 3]);
         get_tok();
         break;
 
@@ -2765,7 +2770,8 @@ ast parse_declaration_specifiers() {
   // Note: Remove to support K&R C syntax
   if (type_specifier == 0) parse_error("Type expected", tok);
 
-  set_child(type_specifier, 0, type_storage_class | type_qualifier); // Set the storage class and type qualifier
+  set_child(type_specifier, 0, type_qualifier);
+  glo_specifier_storage_class = specifier_storage_class;
 
   return type_specifier;
 }
@@ -2782,7 +2788,7 @@ int parse_param_list() {
 
   while (tok != ')' && tok != EOF) {
     if (is_type_starter(tok)) {
-      decl = parse_declarator(true, parse_declaration_specifiers());
+      decl = parse_declarator(true, parse_declaration_specifiers(false));
       if (get_op(decl) == VOID_KW) {
         if (tok != ')' || result != 0) parse_error("void must be the only parameter", tok);
         break;
@@ -2985,10 +2991,10 @@ ast parse_initializer() {
   }
 }
 
-ast parse_declarator_and_initializer(ast type_specifier) {
+ast parse_declarator_and_initializer(bool is_for_typedef, ast type_specifier) {
   ast declarator = parse_declarator(false, type_specifier);
 
-  if ((get_child(type_specifier, 0) & MK_TYPE_SPECIFIER(TYPEDEF_KW)) == 0) {
+  if (is_for_typedef == 0) {
     if (tok == '=') {
       get_tok();
       // parse_declarator returns a DECL node where the initializer is child#2
@@ -2997,6 +3003,24 @@ ast parse_declarator_and_initializer(ast type_specifier) {
   }
 
   return declarator;
+}
+
+ast parse_declarators(bool is_for_typedef, ast type_specifier, ast first_declarator) {
+  ast declarators = cons(first_declarator, 0); // Wrap the declarators in a list
+  ast tail = declarators;
+
+  // Otherwise, this is a variable or declaration
+  while (tok != ';') {
+    if (tok == ',') {
+      get_tok();
+      set_child(tail, 1, cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
+      tail = get_child__(LIST, LIST, tail, 1);
+    } else {
+      parse_error("';' or ',' expected", tok);
+    }
+  }
+
+  return declarators;
 }
 
 void add_typedef(ast declarator) {
@@ -3036,12 +3060,11 @@ ast parse_fun_def(ast declarator) {
 }
 
 ast parse_declaration(bool local) {
+  ast result;
   ast declarator;
   ast declarators;
-  ast tail;
   // First we parse the specifiers:
-  ast type_specifier = parse_declaration_specifiers();
-  ast result;
+  ast type_specifier = parse_declaration_specifiers(true);
 
   // From cppreference:
   // > The enum, struct, and union declarations may omit declarators, in which
@@ -3050,37 +3073,17 @@ ast parse_declaration(bool local) {
     if (get_op(type_specifier) != ENUM_KW && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW) {
       parse_error("enum/struct/union declaration expected", tok);
     }
-    get_tok(); // Skip the ;
-    return type_specifier;
-  }
-
-  // Then we parse the declarators and initializers
-  declarator = parse_declarator_and_initializer(type_specifier);
-
-  // The declarator may be a function definition, in which case we parse the function body
-  if (get_op(get_child_(DECL, declarator, 1)) == '(' && tok == '{') {
-    if (local) parse_error("Function definition not allowed in local scope", tok);
-    return parse_fun_def(declarator);
-  }
-
-  declarators = cons(declarator, 0); // Wrap the declarators in a list
-  tail = declarators;
-
-  // Otherwise, this is a variable or declaration
-  while (tok != ';') {
-    if (tok == ',') {
-      get_tok();
-      set_child(tail, 1, cons(parse_declarator_and_initializer(type_specifier), 0));
-      tail = get_child__(LIST, LIST, tail, 1);
-    } else {
-      parse_error("';' or ',' expected", tok);
-    }
-  }
-
-  // The type_specifier may be a typedef, in that case, it's not a variable or
-  // function declaration, and we instead want to add the typedef'ed type to the
-  // type table.
-  if (get_child(type_specifier, 0) & MK_TYPE_SPECIFIER(TYPEDEF_KW)) {
+    // If the specifier is a typedef, we add the typedef'ed type to the type table
+    // Note: Should this return a DECL node instead of a ENUM, STRUCT, or UNION node?
+    // It doesn't have a name so maybe it makes more sense to have a separate node type?
+    if (glo_specifier_storage_class == TYPEDEF_KW) add_typedef(new_ast3(DECL, 0, type_specifier, 0));
+    result = type_specifier;
+  } else if (glo_specifier_storage_class == TYPEDEF_KW) {
+    // The type_specifier contained a typedef, it can't be a function or a
+    // variable declaration, and the declarators cannot be initialized.
+    // The typedef'ed types will be added to the type table.
+    declarator = parse_declarator_and_initializer(true, type_specifier); // First declarator
+    declarators = parse_declarators(true, type_specifier, declarator);
     type_specifier = declarators; // Save declarators in type_specifier
     while (declarators != 0) {
       add_typedef(get_child__(LIST, DECL, declarators, 0));
@@ -3088,11 +3091,20 @@ ast parse_declaration(bool local) {
     }
     result = new_ast1(TYPEDEF_KW, type_specifier);
   } else {
+    // Then we parse the declarators and initializers
+    declarator = parse_declarator_and_initializer(false, type_specifier);
+
+    // The declarator may be a function definition, in which case we parse the function body
+    if (get_op(get_child_(DECL, declarator, 1)) == '(' && tok == '{') {
+      if (local) parse_error("Function definition not allowed in local scope", tok);
+      return parse_fun_def(declarator);
+    }
+
+    declarators = parse_declarators(false, type_specifier, declarator);
     result = new_ast1(DECLS, declarators);
   }
 
   expect_tok(';');
-
   return result;
 }
 
@@ -3252,7 +3264,7 @@ ast parse_unary_expression() {
       get_tok();
       // May be a type or an expression
       if (is_type_starter(tok)) {
-      result = parse_declarator(true, parse_declaration_specifiers());
+      result = parse_declarator(true, parse_declaration_specifiers(false));
       expect_tok(')');
       } else {
         // We need to put the current token and '(' back on the token stream.
@@ -3309,7 +3321,7 @@ ast parse_cast_expression() {
     get_tok();
 
     if (is_type_starter(tok)) {
-      type = parse_declarator(true, parse_declaration_specifiers());
+      type = parse_declarator(true, parse_declaration_specifiers(false));
 
       expect_tok(')');
       result = new_ast2(CAST, type, parse_cast_expression());
