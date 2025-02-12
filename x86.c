@@ -294,6 +294,10 @@ void imul_reg_reg(int dst, int src) {
 }
 
 void mul_reg_reg(int dst, int src) {
+
+  // For our purposes, this is the same as imul_reg_reg.
+  // https://web.archive.org/web/20240914145321/https://stackoverflow.com/questions/42587607/why-is-imul-used-for-multiplying-unsigned-numbers
+
   imul_reg_reg(dst, src);
 }
 
@@ -323,7 +327,7 @@ void cdq_cqo() {
   emit_i8(0x99);
 }
 
-void div_reg_reg(int dst, int src) {
+void idiv_reg_reg(int dst, int src) {
 
   // Computes dst_reg = dst_reg / src_reg
   // This is not an actual instruction on x86. The operation
@@ -336,7 +340,7 @@ void div_reg_reg(int dst, int src) {
   mov_reg_reg(dst, AX);
 }
 
-void rem_reg_reg(int dst, int src) {
+void irem_reg_reg(int dst, int src) {
 
   // Computes dst_reg = dst_reg % src_reg
   // This is not an actual instruction on x86. The operation
@@ -346,6 +350,32 @@ void rem_reg_reg(int dst, int src) {
   mov_reg_reg(AX, dst);
   cdq_cqo(); // sign extend AX to DX:AX
   idiv_reg(src);
+  mov_reg_reg(dst, DX);
+}
+
+void div_reg_reg(int dst, int src) {
+
+  // Computes dst_reg = dst_reg / src_reg
+  // This is not an actual instruction on x86. The operation
+  // is emulated with a sequence of instructions that will clobber the
+  // registers AX and DX.
+
+  mov_reg_reg(AX, dst);
+  mov_reg_imm(DX, 0); // Clear DX
+  div_reg(src);
+  mov_reg_reg(dst, AX);
+}
+
+void rem_reg_reg(int dst, int src) {
+
+  // Computes dst_reg = dst_reg % src_reg
+  // This is not an actual instruction on x86. The operation
+  // is emulated with a sequence of instructions that will clobber the
+  // registers AX and DX.
+
+  mov_reg_reg(AX, dst);
+  mov_reg_imm(DX, 0); // Clear DX
+  div_reg(src);
   mov_reg_reg(dst, DX);
 }
 
@@ -378,13 +408,32 @@ void sar_reg_cl(int dst) {
 
 void sar_reg_reg(int dst, int src) {
 
-  // Computes dst_reg = dst_reg >> src_reg
+  // Computes dst_reg = dst_reg >> src_reg (arithmetic shift)
   // This is not an actual instruction on x86. The operation
   // is emulated with a sequence of instructions that clobbers the
   // register CX, and does not work if dst = CX.
 
   mov_reg_reg(CX, src);
   sar_reg_cl(dst);
+}
+
+void shr_reg_cl(int dst) {
+
+  // SHR dst_reg, cl ;; dst_reg = dst_reg >> cl (logical shift)
+  // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
+
+  op_reg_slash_digit(0xd3, 5, dst);
+}
+
+void shr_reg_reg(int dst, int src) {
+
+  // Computes dst_reg = dst_reg >> src_reg (logical shift)
+  // This is not an actual instruction on x86. The operation
+  // is emulated with a sequence of instructions that clobbers the
+  // register CX, and does not work if dst = CX.
+
+  mov_reg_reg(CX, src);
+  shr_reg_cl(dst);
 }
 
 void push_reg(int src) {

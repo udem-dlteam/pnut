@@ -110,11 +110,15 @@ void or_reg_reg (int dst, int src);
 void and_reg_reg(int dst, int src);
 void sub_reg_reg(int dst, int src);
 void xor_reg_reg(int dst, int src);
-void mul_reg_reg(int dst, int src);
-void div_reg_reg(int dst, int src);
-void rem_reg_reg(int dst, int src);
-void shl_reg_reg(int dst, int src);
-void sar_reg_reg(int dst, int src);
+void imul_reg_reg(int dst, int src); // signed multiplication
+void idiv_reg_reg(int dst, int src); // signed division
+void irem_reg_reg(int dst, int src); // signed remainder
+void mul_reg_reg(int dst, int src);  // unsigned multiplication
+void div_reg_reg(int dst, int src);  // unsigned division
+void rem_reg_reg(int dst, int src);  // unsigned remainder
+void s_l_reg_reg(int dst, int src);  // signed/unsigned left shift
+void sar_reg_reg(int dst, int src);  // signed right shift
+void shr_reg_reg(int dst, int src);  // unsigned right shift
 void mov_reg_lbl(int reg, int lbl);
 
 void push_reg(int src);
@@ -943,9 +947,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
 
     if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
       mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-    }
-
-    if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
+    } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
       mul_for_pointer_arith(reg_X, ref_type_width(right_type));
     }
 
@@ -969,14 +971,42 @@ void codegen_binop(int op, ast lhs, ast rhs) {
       sub_reg_reg(reg_X, reg_Y);
     }
   }
-  else if (op == '*' || op == STAR_EQ)      mul_reg_reg(reg_X, reg_Y);
-  else if (op == '/' || op == SLASH_EQ)     div_reg_reg(reg_X, reg_Y);
-  else if (op == '%' || op == PERCENT_EQ)   rem_reg_reg(reg_X, reg_Y);
-  else if (op == '&' || op == AMP_EQ)       and_reg_reg(reg_X, reg_Y);
-  else if (op == '|' || op == BAR_EQ)       or_reg_reg(reg_X, reg_Y);
-  else if (op == '^' || op == CARET_EQ)     xor_reg_reg(reg_X, reg_Y);
-  else if (op == LSHIFT || op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
-  else if (op == RSHIFT || op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
+  else if (op == '*' || op == STAR_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to *");
+    if (left_is_unsigned || right_is_unsigned) mul_reg_reg(reg_X, reg_Y);
+    else imul_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == '/' || op == SLASH_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to /");
+    if (left_is_unsigned || right_is_unsigned) div_reg_reg(reg_X, reg_Y);
+    else idiv_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == '%' || op == PERCENT_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to %");
+    if (left_is_unsigned || right_is_unsigned) rem_reg_reg(reg_X, reg_Y);
+    else irem_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == RSHIFT || op == RSHIFT_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to >>");
+    if (left_is_unsigned || right_is_unsigned) shr_reg_reg(reg_X, reg_Y);
+    else sar_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == LSHIFT || op == LSHIFT_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to <<");
+    s_l_reg_reg(reg_X, reg_Y); // Shift left, independent of sign
+  }
+  else if (op == '&' || op == AMP_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to &");
+    and_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == '|' || op == BAR_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to |");
+    or_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == '^' || op == CARET_EQ) {
+    if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to ^");
+    xor_reg_reg(reg_X, reg_Y);
+  }
   else if (op == ',')                       mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
   else if (op == '[') {
     // Same as pointer addition for address calculation
