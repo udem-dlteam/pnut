@@ -937,67 +937,65 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     mov_reg_imm(reg_X, 1);
     def_label(lbl2);
 
-  } else {
-    if (op == '+' || op == PLUS_EQ || op == PLUS_PLUS_PRE || op == PLUS_PLUS_POST) {
-      // Check if one of the operands is a pointer
-      // If so, multiply the other operand by the width of the pointer target object.
+  } else if (op == '+' || op == PLUS_EQ || op == PLUS_PLUS_PRE || op == PLUS_PLUS_POST) {
+    // Check if one of the operands is a pointer
+    // If so, multiply the other operand by the width of the pointer target object.
 
-      if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
-        mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-      }
-
-      if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
-        mul_for_pointer_arith(reg_X, ref_type_width(right_type));
-      }
-
-      add_reg_reg(reg_X, reg_Y);
+    if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
+      mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
     }
-    else if (op == '-' || op == MINUS_EQ || op == MINUS_MINUS_PRE || op == MINUS_MINUS_POST) {
-      // Pointer subtraction is only valid if one of the operands is a pointer
-      // When both operands are pointers, the result is the difference between the two pointers divided by the width of the target object.
-      // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
 
-      if (is_pointer_type(left_type) && is_pointer_type(right_type)) {
-        sub_reg_reg(reg_X, reg_Y);
-        div_for_pointer_arith(reg_X, ref_type_width(left_type));
-      } else if (is_pointer_type(left_type)) {
-        mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-        sub_reg_reg(reg_X, reg_Y);
-      } else if (is_pointer_type(right_type)) {
-        mul_for_pointer_arith(reg_X, ref_type_width(right_type));
-        sub_reg_reg(reg_X, reg_Y);
-      } else {
-        sub_reg_reg(reg_X, reg_Y);
-      }
+    if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
+      mul_for_pointer_arith(reg_X, ref_type_width(right_type));
     }
-    else if (op == '*' || op == STAR_EQ)      mul_reg_reg(reg_X, reg_Y);
-    else if (op == '/' || op == SLASH_EQ)     div_reg_reg(reg_X, reg_Y);
-    else if (op == '%' || op == PERCENT_EQ)   rem_reg_reg(reg_X, reg_Y);
-    else if (op == '&' || op == AMP_EQ)       and_reg_reg(reg_X, reg_Y);
-    else if (op == '|' || op == BAR_EQ)       or_reg_reg(reg_X, reg_Y);
-    else if (op == '^' || op == CARET_EQ)     xor_reg_reg(reg_X, reg_Y);
-    else if (op == LSHIFT || op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
-    else if (op == RSHIFT || op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
-    else if (op == ',')                       mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
-    else if (op == '[') {
-      // Same as pointer addition for address calculation
-      if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
-        mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-        width = ref_type_width(left_type);
-      } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
-        mul_for_pointer_arith(reg_X, ref_type_width(right_type));
-        width = ref_type_width(right_type);
-      } else {
-        fatal_error("codegen_binop: invalid array access operands");
-        return;
-      }
 
-      add_reg_reg(reg_X, reg_Y);
-      load_mem_location(reg_X, reg_X, 0, width);
+    add_reg_reg(reg_X, reg_Y);
+  }
+  else if (op == '-' || op == MINUS_EQ || op == MINUS_MINUS_PRE || op == MINUS_MINUS_POST) {
+    // Pointer subtraction is only valid if one of the operands is a pointer
+    // When both operands are pointers, the result is the difference between the two pointers divided by the width of the target object.
+    // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
+
+    if (is_pointer_type(left_type) && is_pointer_type(right_type)) {
+      sub_reg_reg(reg_X, reg_Y);
+      div_for_pointer_arith(reg_X, ref_type_width(left_type));
+    } else if (is_pointer_type(left_type)) {
+      mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
+      sub_reg_reg(reg_X, reg_Y);
+    } else if (is_pointer_type(right_type)) {
+      mul_for_pointer_arith(reg_X, ref_type_width(right_type));
+      sub_reg_reg(reg_X, reg_Y);
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("codegen_binop: unknown op");
+      sub_reg_reg(reg_X, reg_Y);
     }
+  }
+  else if (op == '*' || op == STAR_EQ)      mul_reg_reg(reg_X, reg_Y);
+  else if (op == '/' || op == SLASH_EQ)     div_reg_reg(reg_X, reg_Y);
+  else if (op == '%' || op == PERCENT_EQ)   rem_reg_reg(reg_X, reg_Y);
+  else if (op == '&' || op == AMP_EQ)       and_reg_reg(reg_X, reg_Y);
+  else if (op == '|' || op == BAR_EQ)       or_reg_reg(reg_X, reg_Y);
+  else if (op == '^' || op == CARET_EQ)     xor_reg_reg(reg_X, reg_Y);
+  else if (op == LSHIFT || op == LSHIFT_EQ) shl_reg_reg(reg_X, reg_Y);
+  else if (op == RSHIFT || op == RSHIFT_EQ) sar_reg_reg(reg_X, reg_Y);
+  else if (op == ',')                       mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
+  else if (op == '[') {
+    // Same as pointer addition for address calculation
+    if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
+      mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
+      width = ref_type_width(left_type);
+    } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
+      mul_for_pointer_arith(reg_X, ref_type_width(right_type));
+      width = ref_type_width(right_type);
+    } else {
+      fatal_error("codegen_binop: invalid array access operands");
+      return;
+    }
+
+    add_reg_reg(reg_X, reg_Y);
+    load_mem_location(reg_X, reg_X, 0, width);
+  } else {
+    putstr("op="); putint(op); putchar('\n');
+    fatal_error("codegen_binop: unknown op");
   }
 
   push_reg(reg_X);
