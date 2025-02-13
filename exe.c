@@ -2217,27 +2217,29 @@ void codegen_end() {
 
   def_label(setup_lbl);
 
-  // Set to 0 the part of the stack that's used for global variables
-  mov_reg_imm(reg_X, 0);              // reg_X = 0 constant
-  mov_reg_reg(reg_Y, reg_SP);         // reg_Y = end of global variables (excluded)
-  grow_stack_bytes(cgc_global_alloc); // Allocate space for global variables
-  mov_reg_reg(reg_glo, reg_SP);       // reg_glo = start of global variables
-
-  def_label(glo_setup_loop_lbl);      // Loop over words of global variables table
-  mov_mem_reg(reg_glo, 0, reg_X);     // Set to 0
-  add_reg_imm(reg_glo, word_size);    // Move to next entry
-  jump_cond_reg_reg(LT, glo_setup_loop_lbl, reg_glo, reg_Y);
-
-  mov_reg_reg(reg_glo, reg_SP); // Reset global variables pointer
+  // Allocate some space for the global variables.
+  // The global variables used to be on the stack, but because the stack has a
+  // limited size, it is better to allocate a separate memory region so global
+  // variables are not limited by the stack size.
+  //
+  // We then allocate a separate memory region for the heap. Having a separate
+  // memory space for the heap makes it easier to detect out-of-bound accesses
+  // on global variables.
+  //
+  // Regarding initialization, os_allocate_memory uses mmap with the
+  // MAP_ANONYMOUS flag so the memory should already be zeroed.
+  //
+  os_allocate_memory(cgc_global_alloc);   // Returns the globals table start address in reg_X
+  mov_reg_reg(reg_glo, reg_X);            // reg_glo = globals table start
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
-  mov_mem_reg(reg_glo, 0, reg_X);         // init heap start
+  mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
   mov_mem_reg(reg_glo, word_size, reg_X); // init bump pointer
 
   jump(init_start_lbl);
 
   def_label(init_next_lbl);
-  setup_proc_args(cgc_global_alloc);
+  setup_proc_args(0);
   call(main_lbl);
   if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main

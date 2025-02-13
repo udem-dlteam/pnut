@@ -443,6 +443,8 @@ void setup_proc_args(int global_vars_size) {
   // [esp + 8] : global table start (global_vars_size bytes long)
   // ...
   // For x86-64, it works similarly with [rsp + 0] for argc and [rsp + 8] for argv.
+  //
+  // Note(13/02/2025): Global variables are now allocated in a separate memory region so global_vars_size is 0.
 
   mov_reg_reg(reg_X, SP);
   add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
