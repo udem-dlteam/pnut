@@ -2213,8 +2213,6 @@ void rt_free() {
 
 void codegen_end() {
 
-  int glo_setup_loop_lbl = alloc_label("glo_setup_loop");
-
   def_label(setup_lbl);
 
   // Allocate some space for the global variables.
