@@ -262,7 +262,7 @@ int prev_ch = EOF;
 int tok;
 int val;
 
-#define STRING_POOL_SIZE 50000
+#define STRING_POOL_SIZE 500000
 char string_pool[STRING_POOL_SIZE];
 int string_pool_alloc = 0;
 int string_start;
@@ -271,7 +271,7 @@ int hash;
 // These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
-#define HEAP_SIZE 200000
+#define HEAP_SIZE 2000000
 intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
