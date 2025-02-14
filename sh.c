@@ -1638,7 +1638,15 @@ void handle_printf_call(char *format_str, ast params) {
           break;
 
         // The following options are the same between the shell's printf and C's printf
-        case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
+        case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
+          if (*format_str == 'l') {
+            while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
+            if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
+              printf("*format_str=%c%c\n", *(format_str - 1), *format_str);
+              fatal_error("Invalid printf format: Unsupported long specifier");
+            }
+          }
+
           if (param == 0) fatal_error("Not enough parameters for printf");
           params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
           params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed

@@ -636,6 +636,7 @@ DEPENDS_ON(put_pstr)
   putstr("          printf \"%%\"\n");
   putstr("          printf_reset\n");
   putstr("          ;;\n");
+  // TODO: Support %l format specifier
   putstr("        'd'|'i'|'o'|'u'|'x'|'X')\n");
   putstr("          printf \"%${__flags}${__width}${__precision}${__head_char}\" $1\n");
   putstr("          shift\n");
