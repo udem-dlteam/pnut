@@ -152,8 +152,11 @@ void print_tok(int tok, int val) {
     putchar('[');
     putstr(string_pool + heap[val+1]);
     putchar(']');
-  }  else if (tok == INTEGER) {
+  } else if (tok == INTEGER || tok == INTEGER_L || tok == INTEGER_LL) {
     putint(-val);
+  } else if (tok == INTEGER_U || tok == INTEGER_UL || tok == INTEGER_ULL) {
+    putint(-val);
+    putchar('U');
   } else if (tok == CHARACTER) {
     putchar('\'');
     print_string_char(val);
@@ -253,6 +256,11 @@ void print_tok_type(int tok) {
 
   else if (tok == IDENTIFIER)       putstr("identifier");
   else if (tok == INTEGER)          putstr("integer");
+  else if (tok == INTEGER_L)        putstr("integer_l");
+  else if (tok == INTEGER_LL)       putstr("integer_ll");
+  else if (tok == INTEGER_U)        putstr("integer_u");
+  else if (tok == INTEGER_UL)       putstr("integer_ul");
+  else if (tok == INTEGER_ULL)      putstr("integer_ull");
   else if (tok == CHARACTER)        putstr("character");
   else if (tok == STRING)           putstr("string");
   else if (tok == MACRO)            putstr("macro");
