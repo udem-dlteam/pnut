@@ -861,7 +861,131 @@ void include_file(char *file_name, char *relative_to) {
   include_stack = include_stack2;
 }
 
-int accum_digit(int base) {
+//############################### LARGE INTEGERS ###############################
+//
+// POSIX shell requires shells to signed integers at least 32 bits wide, but we
+// want to be able to read 64 bit unsigned integers. To do this, we emulate
+// larger integers by splitting them into smaller 24-bit chunks.
+//
+// 24-bit integers are used because the largest base read by accum_digit is 16 (2^4),
+// and so we must be able to detect overflow without overflowing the 32-bit int.
+// 24 is the largest multiple of 8 that is less than 32 that can accommodate this.
+//
+// The large ints are stored in little-endian order, large_int[0] stores the
+// lowest 24 bits, large_int[1] stores the next 24 bits, and so on.
+#define LARGE_INT_MAX 0xFFFFFF
+#define LARGE_INT_LOG 24
+#define LARGE_INT_SIZE 4
+
+int large_int[LARGE_INT_SIZE];
+// Index of the largest component. This is used to avoid iterating over empty components.
+int large_int_i = 0;
+
+void large_int_init() {
+  int i = 0;
+  large_int_i = 0; // Reset index
+  for (; i < LARGE_INT_SIZE; i += 1) large_int[i] = 0;
+}
+
+#ifdef SAFE_MODE
+void large_int_printf() {
+  int i = LARGE_INT_SIZE - 1;
+  printf("##### large int #####\n");
+  printf("# large_int_i = %d\n", large_int_i);
+  printf("# dec: %ld\n", large_int[0] + ((long) large_int[1] << LARGE_INT_LOG));
+
+  printf("# hex:");
+  while (i >= 0) {
+    printf(" %x", large_int[i]);
+    i -= 1;
+  }
+  printf("\n");
+}
+#endif
+
+// Add value to the i^th component of the large integer. If the value overflows
+// the component, the carry is propagated to the next component until the carry
+// is 0 or we reach the last component.
+// This function assumes that value is less than 2^24
+void large_int_add(int i, int value) {
+#ifdef SAFE_MODE
+  if (value > LARGE_INT_MAX) { // Bug!?
+    printf("large_int_add: value %d is greater than %d\n", value, LARGE_INT_MAX);
+    exit(1);
+  }
+  if (i >= LARGE_INT_SIZE) { // Overflow!
+    printf("large_int_add: number exceed %d-bit precision\n", LARGE_INT_SIZE * LARGE_INT_LOG);
+    exit(1);
+  }
+#endif
+
+  while (value != 0) {
+    if (i >= LARGE_INT_SIZE) fatal_error("large_int_add: index is out of bounds");
+
+    large_int[i] += value;
+    value = 0; // No carry by default
+    if (large_int[i] > LARGE_INT_MAX) {
+      value = large_int[i] >> LARGE_INT_LOG; // Carry
+      large_int[i] &= LARGE_INT_MAX;
+      i += 1;
+    }
+  }
+
+  large_int_i = large_int_i > i ? large_int_i : i;
+}
+
+// Multiply by positive integer value. Value must be less than 2^8.
+void large_int_mul(int value) {
+#ifdef SAFE_MODE
+  if (value > 255 || value < 0) {
+    printf("large_int_mul: value %d must be between 1 and 255\n", value);
+    exit(1);
+  }
+#endif
+
+  // Note that we loop from the largest component first to avoid multiplying the
+  // carry. This saves us from having a separate buffer for the carry, but in
+  // some pathological cases, it we may end up traversing the components N
+  // times, for a complexity of O(N^2)
+  int i = large_int_i;
+  int carry = 0;
+
+  while (i >= 0) {
+    large_int[i] *= value;
+    if (large_int[i] > LARGE_INT_MAX) {
+      carry = large_int[i] >> LARGE_INT_LOG;
+      large_int[i] &= LARGE_INT_MAX;
+      large_int_add(i + 1, carry);
+    }
+
+    i -= 1;
+  }
+}
+
+int large_int_to_int32() {
+#if LARGE_INT_SIZE > 1
+  // Take the first 24 bits and the next 8 bits
+  int result = large_int[0] + (large_int[1] << 24);
+#else
+  // If we only have one component, we can just return it
+  int result = large_int[0];
+#endif
+
+#ifdef SAFE_MODE
+#if LARGE_INT_SIZE > 1
+  // Make sure the integer doesn't overflow
+  if (large_int[1] >= 256 || large_int_i > 1) {
+    large_int_printf();
+    fatal_error("large_int_to_int32: integer overflow");
+  }
+#endif
+#endif
+  return result;
+}
+
+// Accumulate a digit in the large integer. If the current character is not a
+// digit in the given base, return false, otherwise return true.
+bool accum_digit(int base) {
   int digit = 99;
   if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
@@ -871,16 +995,14 @@ int accum_digit(int base) {
     digit = ch - 'a' + 10;
   }
   if (digit >= base) {
-    return 0; // character is not a digit in that base
+    return false; // character is not a digit in that base
   } else {
-    // TODO: Put overflow check back
-    // if ((val < limit) || ((val == limit) && (digit > limit * base - MININT))) {
-    //   fatal_error("literal integer overflow");
-    // }
 
-    val = val * base - digit;
+    large_int_mul(base);
+    large_int_add(0, digit);
+
     get_ch();
-    return 1;
+    return true;
   }
 }
 
@@ -894,21 +1016,21 @@ void get_string_char() {
       // Parse octal character, up to 3 digits.
       // Note that \1111 is parsed as '\111' followed by '1'
       // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
-      val = 0;
+      large_int_init();
       accum_digit(8);
       accum_digit(8);
       accum_digit(8);
-      val = -(val % 256); // keep low 8 bits, without overflowing
+      val = large_int_to_int32() % 256; // keep low 8 bits, without overflowing
     } else if (ch == 'x' || ch == 'X') {
       get_ch();
-      val = 0;
+      large_int_init();
       // Allow 1 or 2 hex digits.
       if (accum_digit(16)) {
         accum_digit(16);
       } else {
         syntax_error("invalid hex escape -- it must have at least one digit");
       }
-      val = -(val % 256); // keep low 8 bits, without overflowing
+      val = large_int_to_int32() % 256; // keep low 8 bits, without overflowing
     } else {
       if (ch == 'a') {
         val = 7;
@@ -1931,9 +2053,10 @@ void get_tok() {
 
         val = '0' - ch;
 
-        get_ch();
+        large_int_init(); // Initialize the large integer to 0
 
         if (val == 0) { // val == 0 <=> ch == '0'
+          get_ch();     // Skip 0
           if (ch == 'x' || ch == 'X') {
             get_ch();
             val = 0;
@@ -1950,6 +2073,7 @@ void get_tok() {
         }
 
         tok = INTEGER;
+        val = -large_int_to_int32();
 
         break;
 
