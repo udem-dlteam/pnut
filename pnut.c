@@ -113,8 +113,8 @@ struct IncludeStack {
   FILE* fp;
   struct IncludeStack *next;
   char *dirname;  // The base path of the file, used to resolve relative paths
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   char *filepath; // The path of the file, used to print error messages
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   int line_number;
   int column_number;
 #endif
@@ -735,8 +735,8 @@ void get_ch() {
       include_stack2 = include_stack;
       include_stack = include_stack->next;
       fp = include_stack->fp;
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
       fp_filepath = include_stack->filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
       line_number = include_stack->line_number;
       column_number = include_stack->column_number;
 #endif
@@ -846,8 +846,8 @@ void include_file(char *file_name, char *relative_to) {
   include_stack2->next = include_stack;
   include_stack2->fp = fp;
   include_stack2->dirname = file_parent_directory(fp_filepath);
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   include_stack2->filepath = fp_filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   include_stack2->line_number = 1;
   include_stack2->column_number = 0;
   // Save the current file position so we can return to it after the included file is done
