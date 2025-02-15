@@ -152,7 +152,30 @@ void mov_reg_imm(int dst, int imm) {
 
   rex_prefix(0, dst);
   emit_i8(0xb8 + (dst & 7));
-  emit_word_le(imm);
+  if (word_size == 4) {
+    emit_i32_le(imm);
+  } else if (word_size == 8) {
+    emit_i64_le(imm);
+  } else {
+    fatal_error("mov_reg_imm: unknown word size");
+  }
+}
+
+void mov_reg_large_imm(int dst, int large_imm) {
+
+  // MOV dst_reg, large_imm  ;; Move 32 bit or 64 bit immediate value to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  rex_prefix(0, dst);
+  emit_i8(0xb8 + (dst & 7));
+
+  if (word_size == 4) {
+    emit_i32_le_large_imm(large_imm);
+  } else if (word_size == 8) {
+    emit_i64_le_large_imm(large_imm);
+  } else {
+    fatal_error("mov_reg_large_imm: unknown word size");
+  }
 }
 
 void add_reg_imm(int dst, int imm) {

@@ -18,6 +18,13 @@ int large_int[LARGE_INT_SIZE];
 // Index of the largest component. This is used to avoid iterating over empty components.
 int large_int_i = 0;
 
+// Not using LARGE_INT_LOG to write generic code that works with any size
+// because pnut-sh doesn't perform constant folding and we want to avoid the
+// extra computation.
+#define LOW_32_BITS(base)   ((base)[0]       | (((base)[1] & 0xFF  ) << 24)) // low 32 bits : 24 bits from #0, 8  bits from #1
+#define HIGH_32_BITS(base)  ((base)[1] >> 8  | (((base)[2] & 0xFFFF) << 16)) // high 32 bits: 16 bits from #1, 16 bits from #2
+#define OVERFLOW_BITS(base) ((base)[2] >> 16 | (((base)[3] & 0xFFFF) << 8))  // overflow bits: 8 bits from #2, 16 bits from #3
+
 void large_int_init() {
   int i = 0;
   large_int_i = 0; // Reset index
@@ -100,22 +107,14 @@ void large_int_mul(int value) {
 }
 
 int large_int_to_int32() {
-#if LARGE_INT_SIZE > 1
-  // Take the first 24 bits and the next 8 bits
-  int result = large_int[0] + ((large_int[1] & 0xFF) << 24);
-#else
-  // If we only have one component, we can just return it
-  int result = large_int[0];
-#endif
+  int result = LOW_32_BITS(large_int);
 
 #ifdef SAFE_MODE
-#if LARGE_INT_SIZE > 1
   // Make sure the integer doesn't overflow
-  if (large_int[1] >= 256 || large_int_i > 1) {
+  if (HIGH_32_BITS(large_int) != 0 || OVERFLOW_BITS(large_int) != 0) {
     large_int_printf();
     fatal_error("large_int_to_int32: integer overflow");
   }
-#endif
 #endif
   return result;
 }
@@ -128,7 +127,6 @@ int large_int_to_int32() {
 int large_int_to_obj() {
   int result;
 
-#if LARGE_INT_SIZE > 1
   // If the integer is larger than 31 bits, it must be stored as a "large int"
   if (large_int[1] >= 127 || large_int_i > 1) {
     result = alloc_obj(4);
@@ -138,11 +136,10 @@ int large_int_to_obj() {
     heap[result+3] = large_int[3];
 
   } else
-#endif
   // Otherwise, it may be stored as a regular integer.
   // To distinguish between large ints and regular ints, we use the sign bit.
   {
-    result = -(large_int[0] + ((large_int[1] & 0xFF) << 24));
+    result = -LOW_32_BITS(large_int);
   }
 
   return result;
