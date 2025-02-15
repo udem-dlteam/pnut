@@ -557,14 +557,12 @@ void accum_string_string(int string_probe) {
 }
 
 // Similar to accum_string_string, but writes an integer to the string pool
+// Note that this function only supports small integers, represented as positive number.
 void accum_string_integer(int n) {
-  if (n < 0) {
-    accum_string_char('-');
-    accum_string_integer(-n);
-  } else {
-    if (n > 9) accum_string_integer(n / 10);
-    accum_string_char('0' + n % 10);
-  }
+  if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
+
+  if (n > 9) accum_string_integer(n / 10);
+  accum_string_char('0' + n % 10);
 }
 
 int probe;
@@ -1148,7 +1146,9 @@ int eval_constant(ast expr, bool if_macro) {
 
   switch (op) {
     case PARENS:    return eval_constant(child0, if_macro);
-    case INTEGER:   return -get_val_(INTEGER, expr);
+    case INTEGER:
+      if (get_val_(INTEGER, expr) > 0) fatal_error("constant expression too large");
+      return -get_val_(INTEGER, expr);
     case CHARACTER: return get_val_(CHARACTER, expr);
     case '~':       return ~eval_constant(child0, if_macro);
     case '!':       return !eval_constant(child0, if_macro);
@@ -1757,7 +1757,10 @@ void stringify() {
   }
 }
 
+// Concatenates two non-negative integers into a single integer
+// Note that this function only supports small integers, represented as positive integers.
 int paste_integers(int left_val, int right_val) {
+  if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
   int result = left_val;
   int right_digits = right_val;
   while (right_digits > 0) {
@@ -2414,7 +2417,7 @@ ast parse_enum() {
         get_tok();
         value = parse_assignment_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
-        value = new_ast0(INTEGER, -eval_constant(value, false));
+        value = new_ast0(INTEGER, -eval_constant(value, false)); // negative value to indicate it's a small integer
         next_value = get_val_(INTEGER, value) - 1; // Next value is the current value + 1, but val is negative
       } else {
         value = new_ast0(INTEGER, next_value);
