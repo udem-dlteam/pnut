@@ -567,11 +567,17 @@ void accum_string_string(int string_probe) {
 }
 
 // Similar to accum_string_string, but writes an integer to the string pool
+// Note that this function only supports small integers, represented as positive number.
 void accum_string_integer(int n) {
+#ifdef SUPPORT_64_BIT_LITERALS
+  if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
+#else
   if (n < 0) {
     accum_string_char('-');
     accum_string_integer(-n);
-  } else {
+  } else
+#endif
+  {
     if (n > 9) accum_string_integer(n / 10);
     accum_string_char('0' + n % 10);
   }
@@ -1208,6 +1214,10 @@ int eval_constant(ast expr, bool if_macro) {
     case INTEGER_HEX:
     case INTEGER_OCT:
 #endif
+#ifdef SUPPORT_64_BIT_LITERALS
+      // Disable large integers for now, hopefully they don't appear in TCC in enums and #if expressions
+      if (get_val(expr) > 0) fatal_error("constant expression too large");
+#endif
       return -get_val(expr);
     case CHARACTER:   return get_val_(CHARACTER, expr);
     case '~':         return ~eval_constant(child0, if_macro);
@@ -1817,7 +1827,12 @@ void stringify() {
   }
 }
 
+// Concatenates two non-negative integers into a single integer
+// Note that this function only supports small integers, represented as positive integers.
 int paste_integers(int left_val, int right_val) {
+#ifdef SUPPORT_64_BIT_LITERALS
+  if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
+#endif
   int result = left_val;
   int right_digits = right_val;
   while (right_digits > 0) {
@@ -2511,7 +2526,7 @@ ast parse_enum() {
         }
         last_literal_type = get_op(value);
 #else
-        value = new_ast0(last_literal_type, -eval_constant(value, false));
+        value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
 #endif
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
       } else {
