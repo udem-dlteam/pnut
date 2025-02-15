@@ -868,6 +868,10 @@ void include_file(char *file_name, char *relative_to) {
 #define MUL_LARGE_INT(x)        val = (val * x);
 #define LARGE_INT_TO_INTEGER()  val
 #define LARGE_INT_TO_BYTE()     (-(val % 256)) // keep low 8 bits, without overflowing
+#define OVERFLOW_CHECK(digit, base) \
+  int MININT = -2147483648;         \
+  int limit = MININT / base;        \
+  if ((val < limit) || ((val == limit) && (digit > limit * base - MININT))) fatal_error("literal integer overflow");
 
 #else
 #include "bigint.c"
@@ -875,7 +879,7 @@ void include_file(char *file_name, char *relative_to) {
 #define INIT_LARGE_INT()        large_int_init()
 #define ADD_LARGE_INT(x)        large_int_add(0, x)
 #define MUL_LARGE_INT(x)        large_int_mul(x)
-#define LARGE_INT_TO_INTEGER()  (-large_int_to_int32())
+#define LARGE_INT_TO_INTEGER()  large_int_to_obj()
 #define LARGE_INT_TO_BYTE()     (large_int_to_int32() % 256)
 #endif
 
@@ -893,6 +897,9 @@ bool accum_digit(int base) {
   if (digit >= base) {
     return false; // character is not a digit in that base
   } else {
+#ifdef OVERFLOW_CHECK
+    OVERFLOW_CHECK(digit, base);
+#endif
 
     MUL_LARGE_INT(base);
     ADD_LARGE_INT(digit);
