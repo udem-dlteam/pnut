@@ -35,6 +35,8 @@ int text_alloc = 1; // Start at 1 because 0 is the empty text
 enum TEXT_NODES {
   TEXT_TREE,
   TEXT_INTEGER,
+  TEXT_INTEGER_HEX,
+  TEXT_INTEGER_OCT,
   TEXT_STRING,
   TEXT_ESCAPED
 };
@@ -82,6 +84,33 @@ text wrap_int(int i) {
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
+}
+
+text wrap_int_hex(int i) {
+  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_HEX);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
+  return (text_alloc += 2) - 2;
+}
+
+text wrap_int_oct(int i) {
+  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
+  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_OCT);
+  text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
+  return (text_alloc += 2) - 2;
+}
+
+text wrap_integer(int multiply, int obj) {
+  switch (get_op(obj)) {
+    case INTEGER:
+      return wrap_int(multiply * -get_val_(INTEGER, obj));
+    case INTEGER_HEX:
+      return wrap_int_hex(multiply * -get_val_(INTEGER_HEX, obj));
+    case INTEGER_OCT:
+      return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
+    default:
+      fatal_error("wrap_integer: unknown integer type");
+  }
 }
 
 text escape_text(text t, bool for_printf) {
@@ -176,6 +205,19 @@ text concatenate_strings_with(text t1, text t2, text sep) {
   return string_concat3(t1, sep, t2);
 }
 
+// Output unsigned integer in hex
+void puthex_unsigned(int n) {
+  // Because n is signed, we clear the upper bits after shifting in case n was negative
+  if (n & ~15) puthex_unsigned((n >> 4) & 0x0fffffff);
+  putchar("0123456789abcdef"[n & 15]);
+}
+
+void putoct_unsigned(int n) {
+  // Because n is signed, we clear the upper bits after shifting in case n was negative
+  if (n & ~7) putoct_unsigned((n >> 3) & 0x1fffffff);
+  putchar('0' + (n & 7));
+}
+
 void print_escaped_char(char c, int for_printf) {
   // C escape sequences
   if      (c == '\0') { putchar('\\');  putchar('0'); }
@@ -234,6 +276,11 @@ void print_escaped_text(text t, bool for_printf) {
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
+    putchar('0'); putchar('x');
+    puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
+    putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     print_escaped_string((char*) text_pool[t + 1],  (char*) text_pool[t + 2], for_printf);
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
@@ -263,6 +310,11 @@ void print_text(text t) {
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
+    putchar('0'); putchar('x');
+    puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
+  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
+    putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     if (TEXT_TO_INT(text_pool[t + 2]) == 0) { // null-terminated string
       putstr((char*) text_pool[t + 1]);
@@ -903,7 +955,8 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
   if (nb_children >= 3) { child2 = get_child(node, 2); }
 
   if (nb_children == 0) {
-    if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR || op == INTEGER || op == CHARACTER) {
+    if ( op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR
+      || op == CHARACTER  || op == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
@@ -1049,7 +1102,9 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
     element = car(initializer_list);
     switch (get_op(element)) {
       case INTEGER:
-        args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
+      case INTEGER_HEX:
+      case INTEGER_OCT:
+        args = concatenate_strings_with(args, wrap_integer(1, element), wrap_char(' '));
         break;
       case CHARACTER:
         // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
@@ -1127,14 +1182,6 @@ text wrap_if_needed(int parens_otherwise, int context, ast test_side_effects, te
   }
 }
 
-int non_parenthesized_operand(ast node) {
-  while (get_op(node) == PARENS) {
-    node = get_child_(PARENS, node, 0);
-  }
-
-  return node;
-}
-
 // Used to supports the case `if/while (c) { ... }`, where c is a variable or a literal.
 // This is otherwise handled by wrap-if-needed, but we don't want to wrap in $(( ... )) here.
 text wrap_in_condition_if_needed(int context, ast test_side_effects, text code) {
@@ -1157,8 +1204,8 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
   if (nb_children >= 4) { child3 = get_child(node, 3); }
 
   if (nb_children == 0) {
-    if (op == INTEGER) {
-      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val_(INTEGER, node)));
+    if (op == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(1, node));
     } else if (op == CHARACTER) {
 #ifdef SH_INLINE_CHAR_LITERAL
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(CHARACTER, node)));
@@ -1190,8 +1237,8 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == '-') {
       // Check if the rest of ast is a literal, if so directly return the negated value.
       // Note: I think this can be simplified by not wrapped in () in the else case.
-      if (get_op(child0) == INTEGER) {
-        return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(INTEGER, child0)));
+      if (get_op(child0) == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
+        return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(-1, child0));
       } else {
         sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
         return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("-("), sub1, wrap_char(')')), outer_op, op);
