@@ -88,6 +88,12 @@
 #undef OPTIMIZE_LONG_LINES
 #endif
 
+// Toggles parsing literals with their base (octal, decimal or hexadecimal).
+// This is used by the shell code generator to output the literal in the correct base.
+#ifdef sh
+#define PARSE_NUMERIC_LITERAL_WITH_BASE
+#endif
+
 // Options that turns Pnut into a C preprocessor or some variant of it
 // DEBUG_GETCHAR: Read and print the input character by character.
 // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
@@ -162,7 +168,7 @@ enum {
 
   // Non-character operands
   INTEGER     = 401, // Integer written in decimal
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
   INTEGER_HEX = 402, // Integer written in hexadecimal
   INTEGER_OCT = 403, // Integer written in octal
 #endif
@@ -1138,7 +1144,7 @@ int eval_constant(ast expr, bool if_macro) {
   switch (op) {
     case PARENS:      return eval_constant(child0, if_macro);
     case INTEGER:
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
     case INTEGER_HEX:
     case INTEGER_OCT:
 #endif
@@ -1790,7 +1796,7 @@ void paste_tokens(int left_tok, int left_val) {
     if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO || right_tok <= WHILE_KW) {
       accum_string_string(right_val);
     } else if (right_tok == INTEGER
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
 #endif
               ) {
@@ -1805,12 +1811,12 @@ void paste_tokens(int left_tok, int left_val) {
     val = end_ident();
     tok = heap[val+2]; // The kind of the identifier
   } else if (left_tok == INTEGER
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
           || left_tok == INTEGER_HEX || left_tok == INTEGER_OCT
 #endif
             ) {
     if (right_tok == INTEGER
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
      || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
 #endif
        ) {
@@ -1967,7 +1973,7 @@ void get_tok() {
         tok = INTEGER;
         if (val == 0) { // val == 0 <=> ch == '0'
           if (ch == 'x' || ch == 'X') {
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             tok = INTEGER_HEX;
 #endif
             get_ch();
@@ -1979,7 +1985,7 @@ void get_tok() {
             }
           } else {
             while (accum_digit(8));
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
             tok = val == 0 ? INTEGER : INTEGER_OCT;
 #endif
@@ -2429,7 +2435,7 @@ ast parse_enum() {
         value = parse_assignment_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
 
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
         // Preserve the type of integer literals (dec/hex/oct) by only creating
         // a new node if the value is not already a literal. We use the last
         // literal type to determine which type to use when creating a new node.
@@ -3018,7 +3024,7 @@ ast parse_primary_expression() {
   ast tail;
 
   if (tok == IDENTIFIER || tok == CHARACTER || tok == INTEGER
-#ifdef sh
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
      || tok == INTEGER_HEX || tok == INTEGER_OCT
 #endif
      ) {
