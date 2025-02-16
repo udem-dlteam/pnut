@@ -1103,9 +1103,12 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
     element = car(initializer_list);
     switch (get_op(element)) {
       case INTEGER:
+        args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
+        break;
       case INTEGER_HEX:
       case INTEGER_OCT:
-        args = concatenate_strings_with(args, wrap_integer(1, element), wrap_char(' '));
+        // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
+        args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
         break;
       case CHARACTER:
         // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
@@ -1205,9 +1208,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
   if (nb_children >= 4) { child3 = get_child(node, 3); }
 
   if (nb_children == 0) {
-    if (op == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
-      return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(1, node));
-    } else if (op == CHARACTER) {
+    if (op == INTEGER) {
+      return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val_(INTEGER, node)));
+    } else if (op == INTEGER_HEX || op == INTEGER_OCT) {
+      // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
+      return wrap_if_needed(false, context, test_side_effects, wrap_integer(1, node), outer_op, op);
+    }
+    else if (op == CHARACTER) {
 #ifdef SH_INLINE_CHAR_LITERAL
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(CHARACTER, node)));
 #else

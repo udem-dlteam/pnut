@@ -1978,10 +1978,11 @@ void get_tok() {
               syntax_error("invalid hex integer -- it must have at least one digit");
             }
           } else {
-#ifdef sh
-            tok = INTEGER_OCT;
-#endif
             while (accum_digit(8));
+#ifdef sh
+            // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
+            tok = val == 0 ? INTEGER : INTEGER_OCT;
+#endif
           }
         } else {
           while (accum_digit(10));
