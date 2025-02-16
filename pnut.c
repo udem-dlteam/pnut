@@ -2433,12 +2433,12 @@ ast parse_enum() {
         // a new node if the value is not already a literal. We use the last
         // literal type to determine which type to use when creating a new node.
         value = non_parenthesized_operand(value);
-        if (get_op(value) != INTEGER || get_op(value) != INTEGER_HEX || get_op(value) != INTEGER_OCT) {
+        if (get_op(value) != INTEGER && get_op(value) != INTEGER_HEX && get_op(value) != INTEGER_OCT) {
           value = new_ast0(last_literal_type, -eval_constant(value, false));
         }
         last_literal_type = get_op(value);
 #else
-        value = new_ast0(INTEGER, -eval_constant(value, false));
+        value = new_ast0(last_literal_type, -eval_constant(value, false));
 #endif
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
       } else {
