@@ -209,13 +209,13 @@ text concatenate_strings_with(text t1, text t2, text sep) {
 // Output unsigned integer in hex
 void puthex_unsigned(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if (n & ~15) puthex_unsigned((n >> 4) & 0x0fffffff);
+  if ((n >> 4) & 0x0fffffff) puthex_unsigned((n >> 4) & 0x0fffffff);
   putchar("0123456789abcdef"[n & 15]);
 }
 
 void putoct_unsigned(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if (n & ~7) putoct_unsigned((n >> 3) & 0x1fffffff);
+  if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
   putchar('0' + (n & 7));
 }
 
