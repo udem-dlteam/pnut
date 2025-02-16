@@ -908,10 +908,9 @@ void u64_mul_u32(int *x, int y) {
 
 // x = x + y
 void u64_add_u32(int *x, int y) {
-  int a = x[0]; int b = x[1];
   int lo = x[0] + y;
   // Carry (using signed integers)
-  x[1] += (x[0] < 0 != lo < 0);
+  x[1] += ((x[0] < 0) != (lo < 0));
   x[0] = lo;
 }
 
