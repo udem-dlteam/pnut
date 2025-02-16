@@ -110,6 +110,7 @@ text wrap_integer(int multiply, int obj) {
       return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
     default:
       fatal_error("wrap_integer: unknown integer type");
+      return 0;
   }
 }
 
