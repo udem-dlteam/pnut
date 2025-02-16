@@ -88,6 +88,12 @@
 #undef OPTIMIZE_LONG_LINES
 #endif
 
+// Toggles parsing literals with their base (octal, decimal or hexadecimal).
+// This is used by the shell code generator to output the literal in the correct base.
+#ifdef sh
+#define PARSE_NUMERIC_LITERAL_WITH_BASE
+#endif
+
 // Options that turns Pnut into a C preprocessor or some variant of it
 // DEBUG_GETCHAR: Read and print the input character by character.
 // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
@@ -161,7 +167,11 @@ enum {
   WHILE_KW,
 
   // Non-character operands
-  INTEGER    = 401,
+  INTEGER     = 401, // Integer written in decimal
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+  INTEGER_HEX = 402, // Integer written in hexadecimal
+  INTEGER_OCT = 403, // Integer written in octal
+#endif
   CHARACTER,
   STRING,
 
@@ -1112,6 +1122,16 @@ void handle_define() {
 
 }
 
+#ifdef sh
+// Remove PARENS node from an expression, useful when we want to check what's
+// the top level operator of an expression without considering the parenthesis.
+ast non_parenthesized_operand(ast node) {
+  while (get_op(node) == PARENS) node = get_child_(PARENS, node, 0);
+
+  return node;
+}
+#endif
+
 int eval_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
   int op1;
@@ -1122,11 +1142,16 @@ int eval_constant(ast expr, bool if_macro) {
   if (get_nb_children(expr) >= 2) child1 = get_child(expr, 1);
 
   switch (op) {
-    case PARENS:    return eval_constant(child0, if_macro);
-    case INTEGER:   return -get_val_(INTEGER, expr);
-    case CHARACTER: return get_val_(CHARACTER, expr);
-    case '~':       return ~eval_constant(child0, if_macro);
-    case '!':       return !eval_constant(child0, if_macro);
+    case PARENS:      return eval_constant(child0, if_macro);
+    case INTEGER:
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+    case INTEGER_HEX:
+    case INTEGER_OCT:
+#endif
+      return -get_val(expr);
+    case CHARACTER:   return get_val_(CHARACTER, expr);
+    case '~':         return ~eval_constant(child0, if_macro);
+    case '!':         return !eval_constant(child0, if_macro);
     case '-':
     case '+':
       op1 = eval_constant(child0, if_macro);
@@ -1770,7 +1795,11 @@ void paste_tokens(int left_tok, int left_val) {
 
     if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO || right_tok <= WHILE_KW) {
       accum_string_string(right_val);
-    } else if (right_tok == INTEGER) {
+    } else if (right_tok == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+            || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
+#endif
+              ) {
       accum_string_integer(-right_val);
     } else {
       putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
@@ -1781,8 +1810,16 @@ void paste_tokens(int left_tok, int left_val) {
 
     val = end_ident();
     tok = heap[val+2]; // The kind of the identifier
-  } else if (left_tok == INTEGER) {
-    if (right_tok == INTEGER) {
+  } else if (left_tok == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+          || left_tok == INTEGER_HEX || left_tok == INTEGER_OCT
+#endif
+            ) {
+    if (right_tok == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+     || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
+#endif
+       ) {
       val = -paste_integers(-left_val, -right_val);
     } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
       begin_string();
@@ -1933,8 +1970,12 @@ void get_tok() {
 
         get_ch();
 
+        tok = INTEGER;
         if (val == 0) { // val == 0 <=> ch == '0'
           if (ch == 'x' || ch == 'X') {
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+            tok = INTEGER_HEX;
+#endif
             get_ch();
             val = 0;
             if (accum_digit(16)) {
@@ -1944,12 +1985,15 @@ void get_tok() {
             }
           } else {
             while (accum_digit(8));
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+            // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
+            tok = val == 0 ? INTEGER : INTEGER_OCT;
+#endif
           }
         } else {
           while (accum_digit(10));
         }
 
-        tok = INTEGER;
 
         break;
 
@@ -2362,6 +2406,7 @@ ast parse_enum() {
   ast tail;
   ast value = 0;
   int next_value = 0;
+  int last_literal_type = INTEGER; // Default to decimal integer for enum values
 
   expect_tok(ENUM_KW);
 
@@ -2389,10 +2434,22 @@ ast parse_enum() {
         get_tok();
         value = parse_assignment_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
-        value = new_ast0(INTEGER, -eval_constant(value, false));
-        next_value = get_val_(INTEGER, value) - 1; // Next value is the current value + 1, but val is negative
+
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+        // Preserve the type of integer literals (dec/hex/oct) by only creating
+        // a new node if the value is not already a literal. We use the last
+        // literal type to determine which type to use when creating a new node.
+        value = non_parenthesized_operand(value);
+        if (get_op(value) != INTEGER && get_op(value) != INTEGER_HEX && get_op(value) != INTEGER_OCT) {
+          value = new_ast0(last_literal_type, -eval_constant(value, false));
+        }
+        last_literal_type = get_op(value);
+#else
+        value = new_ast0(last_literal_type, -eval_constant(value, false));
+#endif
+        next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
       } else {
-        value = new_ast0(INTEGER, next_value);
+        value = new_ast0(last_literal_type, next_value);
         next_value -= 1;
       }
 
@@ -2966,19 +3023,13 @@ ast parse_primary_expression() {
   ast result;
   ast tail;
 
-  if (tok == IDENTIFIER) {
+  if (tok == IDENTIFIER || tok == CHARACTER || tok == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+     || tok == INTEGER_HEX || tok == INTEGER_OCT
+#endif
+     ) {
 
-    result = new_ast0(IDENTIFIER, val);
-    get_tok();
-
-  } else if (tok == INTEGER) {
-
-    result = new_ast0(INTEGER, val);
-    get_tok();
-
-  } else if (tok == CHARACTER) {
-
-    result = new_ast0(CHARACTER, val);
+    result = new_ast0(tok, val);
     get_tok();
 
   } else if (tok == STRING) {

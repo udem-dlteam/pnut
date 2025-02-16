@@ -337,7 +337,7 @@ _expr() { # lev: $2
     while [ $_tk = $__DQUOTE__ ]; do
       _next __
     done
-    _data=$(((_data + 1) & -(1)))
+    _data=$(((_data + 1) & -1))
     _ty=$_PTR
   elif [ $_tk = $_Sizeof ] ; then
     _next __
@@ -483,7 +483,7 @@ _expr() { # lev: $2
     _next __
     : $((_$((_e += 1)) = _IMM))
     if [ $_tk = $_Num ] ; then
-      : $((_$((_e += 1)) = -(_ival)))
+      : $((_$((_e += 1)) = -_ival))
       _next __
     else
       : $((_$((_e += 1)) = -1))
