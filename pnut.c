@@ -94,6 +94,11 @@
 #define PARSE_NUMERIC_LITERAL_WITH_BASE
 #endif
 
+// 64 bit literals are only supported on 64 bit platforms for now
+#if defined(target_x86_64_linux) || defined(target_x86_64_mac)
+#define SUPPORT_64_BIT_LITERALS
+#endif
+
 // Options that turns Pnut into a C preprocessor or some variant of it
 // DEBUG_GETCHAR: Read and print the input character by character.
 // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
@@ -119,8 +124,8 @@ struct IncludeStack {
   FILE* fp;
   struct IncludeStack *next;
   char *dirname;  // The base path of the file, used to resolve relative paths
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   char *filepath; // The path of the file, used to print error messages
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   int line_number;
   int column_number;
 #endif
@@ -567,11 +572,17 @@ void accum_string_string(int string_probe) {
 }
 
 // Similar to accum_string_string, but writes an integer to the string pool
+// Note that this function only supports small integers, represented as positive number.
 void accum_string_integer(int n) {
+#ifdef SUPPORT_64_BIT_LITERALS
+  if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
+#else
   if (n < 0) {
     accum_string_char('-');
     accum_string_integer(-n);
-  } else {
+  } else
+#endif
+  {
     if (n > 9) accum_string_integer(n / 10);
     accum_string_char('0' + n % 10);
   }
@@ -745,8 +756,8 @@ void get_ch() {
       include_stack2 = include_stack;
       include_stack = include_stack->next;
       fp = include_stack->fp;
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
       fp_filepath = include_stack->filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
       line_number = include_stack->line_number;
       column_number = include_stack->column_number;
 #endif
@@ -856,8 +867,8 @@ void include_file(char *file_name, char *relative_to) {
   include_stack2->next = include_stack;
   include_stack2->fp = fp;
   include_stack2->dirname = file_parent_directory(fp_filepath);
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   include_stack2->filepath = fp_filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   include_stack2->line_number = 1;
   include_stack2->column_number = 0;
   // Save the current file position so we can return to it after the included file is done
@@ -870,6 +881,60 @@ void include_file(char *file_name, char *relative_to) {
 #endif
   include_stack = include_stack2;
 }
+
+#ifdef SUPPORT_64_BIT_LITERALS
+// Array used to accumulate 64 bit unsigned integers on 32 bit systems
+int val_32[2];
+
+// x = x * y
+void u64_mul_u32(int *x, int y) {
+
+  // Note, because we are using 32 bit **signed** integers, we need to clear the
+  // sign bit when shifting right to avoid sign extension.
+  #define I32_LOGICAL_RSHIFT_16(x) ((x >> 16) & 0xffff)
+
+  int xlo = x[0] & 0xffff;
+  int xhi = I32_LOGICAL_RSHIFT_16(x[0]);
+  int ylo = y & 0xffff;
+  int yhi = I32_LOGICAL_RSHIFT_16(y);
+  int lo = xlo * ylo; /* 0 .. 0xfffe0001 */
+  int m1 = xlo * yhi + (lo >> 16); /* 0 .. 0xfffeffff */
+  int m2 = xhi * ylo; /* 0 .. 0xfffe0001 */
+  int m3 = (m1 & 0xffff) + (m2 & 0xffff); /* 0 .. 0x1fffe */
+  int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); /* 0 .. 0xfffffffe */
+  x[0] = ((m3 & 0xffff) << 16) + (lo & 0xffff);
+  x[1] = x[1] * y + hi;
+}
+
+// x = x + y
+void u64_add_u32(int *x, int y) {
+  int lo = x[0] + y;
+  // Carry (using signed integers)
+  x[1] += ((x[0] < 0) != (lo < 0));
+  x[0] = lo;
+}
+
+// Pack a 64 bit unsigned integer into an object.
+// Because most integers are small and we want to save memory, we only store the
+// large int object ("large ints") if it is larger than 31 bits. Otherwise, we
+// store it as a regular integer. The sign bit is used to distinguish between
+// large ints (positive) and regular ints (negative).
+void u64_to_obj(int *x) {
+  if (x[0] >= 0 && x[1] == 0) { // "small int"
+    val = -x[0];
+  } else {
+    val = alloc_obj(2);
+    heap[val    ] = x[0];
+    heap[val + 1] = x[1];
+  }
+}
+
+#define DIGIT_BYTE (val_32[0] % 256)
+#define INIT_ACCUM_DIGIT() val_32[0] = 0; val_32[1] = 0;
+#else
+#define DIGIT_BYTE (-val % 256)
+#define INIT_ACCUM_DIGIT() val = 0;
+#endif
 
 int accum_digit(int base) {
   int digit = 99;
@@ -888,7 +953,12 @@ int accum_digit(int base) {
     //   fatal_error("literal integer overflow");
     // }
 
+#ifdef SUPPORT_64_BIT_LITERALS
+    u64_mul_u32(val_32, base);
+    u64_add_u32(val_32, digit);
+#else
     val = val * base - digit;
+#endif
     get_ch();
     return 1;
   }
@@ -904,21 +974,21 @@ void get_string_char() {
       // Parse octal character, up to 3 digits.
       // Note that \1111 is parsed as '\111' followed by '1'
       // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
-      val = 0;
+      INIT_ACCUM_DIGIT();
       accum_digit(8);
       accum_digit(8);
       accum_digit(8);
-      val = -(val % 256); // keep low 8 bits, without overflowing
+      val = DIGIT_BYTE; // keep low 8 bits, without overflowing
     } else if (ch == 'x' || ch == 'X') {
       get_ch();
-      val = 0;
+      INIT_ACCUM_DIGIT();
       // Allow 1 or 2 hex digits.
       if (accum_digit(16)) {
         accum_digit(16);
       } else {
         syntax_error("invalid hex escape -- it must have at least one digit");
       }
-      val = -(val % 256); // keep low 8 bits, without overflowing
+      val = DIGIT_BYTE; // keep low 8 bits, without overflowing
     } else {
       if (ch == 'a') {
         val = 7;
@@ -1147,6 +1217,10 @@ int eval_constant(ast expr, bool if_macro) {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
     case INTEGER_HEX:
     case INTEGER_OCT:
+#endif
+#ifdef SUPPORT_64_BIT_LITERALS
+      // Disable large integers for now, hopefully they don't appear in TCC in enums and #if expressions
+      if (get_val(expr) > 0) fatal_error("constant expression too large");
 #endif
       return -get_val(expr);
     case CHARACTER:   return get_val_(CHARACTER, expr);
@@ -1542,12 +1616,18 @@ void init_pnut_macros() {
 #if defined(sh)
   init_ident(MACRO, "PNUT_SH");
 #elif defined(target_i386_linux)
+  init_ident(MACRO, "PNUT_EXE");
+  init_ident(MACRO, "PNUT_EXE_32");
   init_ident(MACRO, "PNUT_I386");
   init_ident(MACRO, "PNUT_I386_LINUX");
 #elif defined (target_x86_64_linux)
+  init_ident(MACRO, "PNUT_EXE");
+  init_ident(MACRO, "PNUT_EXE_64");
   init_ident(MACRO, "PNUT_X86_64");
   init_ident(MACRO, "PNUT_X86_64_LINUX");
 #elif defined (target_x86_64_mac)
+  init_ident(MACRO, "PNUT_EXE");
+  init_ident(MACRO, "PNUT_EXE_64");
   init_ident(MACRO, "PNUT_X86_64");
   init_ident(MACRO, "PNUT_X86_64_MAC");
 #endif
@@ -1757,7 +1837,12 @@ void stringify() {
   }
 }
 
+// Concatenates two non-negative integers into a single integer
+// Note that this function only supports small integers, represented as positive integers.
 int paste_integers(int left_val, int right_val) {
+#ifdef SUPPORT_64_BIT_LITERALS
+  if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
+#endif
   int result = left_val;
   int right_digits = right_val;
   while (right_digits > 0) {
@@ -1966,18 +2051,16 @@ void get_tok() {
         break;
       } else if ('0' <= ch && ch <= '9') {
 
-        val = '0' - ch;
-
-        get_ch();
+        INIT_ACCUM_DIGIT();
 
         tok = INTEGER;
-        if (val == 0) { // val == 0 <=> ch == '0'
+        if (ch == '0') { // val == 0 <=> ch == '0'
+          get_ch();
           if (ch == 'x' || ch == 'X') {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             tok = INTEGER_HEX;
 #endif
             get_ch();
-            val = 0;
             if (accum_digit(16)) {
               while (accum_digit(16));
             } else {
@@ -1987,12 +2070,20 @@ void get_tok() {
             while (accum_digit(8));
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
+#ifdef SUPPORT_64_BIT_LITERALS
+            tok = val_32[0] == 0 && val_32[1] == 0 ? INTEGER : INTEGER_OCT;
+#else
             tok = val == 0 ? INTEGER : INTEGER_OCT;
+#endif
 #endif
           }
         } else {
           while (accum_digit(10));
         }
+
+#ifdef SUPPORT_64_BIT_LITERALS
+        u64_to_obj(val_32);
+#endif
 
 
         break;
@@ -2445,7 +2536,7 @@ ast parse_enum() {
         }
         last_literal_type = get_op(value);
 #else
-        value = new_ast0(last_literal_type, -eval_constant(value, false));
+        value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
 #endif
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
       } else {
