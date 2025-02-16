@@ -94,6 +94,11 @@
 #define PARSE_NUMERIC_LITERAL_WITH_BASE
 #endif
 
+// 64 bit literals are only supported on 64 bit platforms for now
+#if defined(target_x86_64_linux) || defined(target_x86_64_mac)
+#define SUPPORT_64_BIT_LITERALS
+#endif
+
 // Options that turns Pnut into a C preprocessor or some variant of it
 // DEBUG_GETCHAR: Read and print the input character by character.
 // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
@@ -1612,12 +1617,18 @@ void init_pnut_macros() {
 #if defined(sh)
   init_ident(MACRO, "PNUT_SH");
 #elif defined(target_i386_linux)
+  init_ident(MACRO, "PNUT_EXE");
+  init_ident(MACRO, "PNUT_EXE_32");
   init_ident(MACRO, "PNUT_I386");
   init_ident(MACRO, "PNUT_I386_LINUX");
 #elif defined (target_x86_64_linux)
+  init_ident(MACRO, "PNUT_EXE");
+  init_ident(MACRO, "PNUT_EXE_64");
   init_ident(MACRO, "PNUT_X86_64");
   init_ident(MACRO, "PNUT_X86_64_LINUX");
 #elif defined (target_x86_64_mac)
+  init_ident(MACRO, "PNUT_EXE");
+  init_ident(MACRO, "PNUT_EXE_64");
   init_ident(MACRO, "PNUT_X86_64");
   init_ident(MACRO, "PNUT_X86_64_MAC");
 #endif

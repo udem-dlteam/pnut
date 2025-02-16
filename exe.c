@@ -38,15 +38,26 @@ void emit_i64_le(int n) {
   emit_i32_le(n >> 31);
 }
 
-void emit_word_le(int n) {
-  if (word_size == 4) {
-    emit_i32_le(n);
-  } else if (word_size == 8) {
-    emit_i64_le(n);
+#ifdef SUPPORT_64_BIT_LITERALS
+void emit_i32_le_large_imm(int imm_obj) {
+  if (imm_obj <= 0) {
+    emit_i32_le(-imm_obj);
   } else {
-    fatal_error("emit_word_le: unknown word size");
+    // Check that the number doesn't overflow 64 bits
+    if (heap[imm_obj + 1] != 0) fatal_error("emit_i32_le_large_imm: integer overflow");
+    emit_i32_le(heap[imm_obj]);
   }
 }
+
+void emit_i64_le_large_imm(int imm_obj) {
+  if (imm_obj <= 0) {
+    emit_i64_le(-imm_obj);
+  } else {
+    emit_i32_le(heap[imm_obj]);
+    emit_i32_le(heap[imm_obj + 1]);
+  }
+}
+#endif
 
 void write_i8(int n) {
   putchar(n & 0xff);
@@ -82,7 +93,10 @@ const int reg_Z;
 const int reg_SP;
 const int reg_glo;
 
-void mov_reg_imm(int dst, int imm);
+void mov_reg_imm(int dst, int imm);             // Move 32 bit immediate to register
+#ifdef SUPPORT_64_BIT_LITERALS
+void mov_reg_large_imm(int dst, int large_imm); // Move large immediate to register
+#endif
 void mov_reg_reg(int dst, int src);
 void mov_mem_reg(int base, int offset, int src);
 void mov_mem8_reg(int base, int offset, int src);
@@ -1215,7 +1229,11 @@ void codegen_rvalue(ast node) {
 
   if (nb_children == 0) {
     if (op == INTEGER) {
+#ifdef SUPPORT_64_BIT_LITERALS
+      mov_reg_large_imm(reg_X, get_val_(INTEGER, node));
+#else
       mov_reg_imm(reg_X, -get_val_(INTEGER, node));
+#endif
       push_reg(reg_X);
     } else if (op == CHARACTER) {
       mov_reg_imm(reg_X, get_val_(CHARACTER, node));
@@ -1253,7 +1271,11 @@ void codegen_rvalue(ast node) {
           push_reg(reg_X);
           break;
         case BINDING_ENUM_CST:
+#ifdef SUPPORT_64_BIT_LITERALS
+          mov_reg_large_imm(reg_X, get_val_(INTEGER, heap[binding+3]));
+#else
           mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
+#endif
           push_reg(reg_X);
           break;
 
