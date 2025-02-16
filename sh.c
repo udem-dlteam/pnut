@@ -1242,21 +1242,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == '+' || op == PARENS) {
       // +x is equivalent to x
       return comp_rvalue_go(child0, context, test_side_effects, outer_op);
-    } else if (op == '-') {
-      // Check if the rest of ast is a literal, if so directly return the negated value.
-      // Note: I think this can be simplified by not wrapped in () in the else case.
+    } else if (op == '-' || op == '~' || op == '!') {
       if (get_op(child0) == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(-1, child0));
       } else {
         sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-        return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("-("), sub1, wrap_char(')')), outer_op, op);
+        return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char(op), sub1), outer_op, op);
       }
-    } else if (op == '~') {
-      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_str_lit("~("), sub1, wrap_char(')')), outer_op, op);
-    } else if (op == '!') {
-      sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-      return wrap_if_needed(true, context, test_side_effects, string_concat(wrap_char('!'), sub1), outer_op, op);
     } else if (op == MINUS_MINUS_PRE) {
       sub1 = comp_lvalue(child0);
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" -= 1")), outer_op, op);

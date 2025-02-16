@@ -123,7 +123,7 @@ _sha256_add_block() { let bytes $2
   i=0
   while [ $i -lt 64 ]; do
     s1=$(((((_$((_temp + 4)) >> 6) & (0x7fffffff >> (6 - 1))) | ((_$((_temp + 4)) << (32 - 6)) & 0xffffffff)) ^ (((_$((_temp + 4)) >> 11) & (0x7fffffff >> (11 - 1))) | ((_$((_temp + 4)) << (32 - 11)) & 0xffffffff)) ^ (((_$((_temp + 4)) >> 25) & (0x7fffffff >> (25 - 1))) | ((_$((_temp + 4)) << (32 - 25)) & 0xffffffff))))
-    ch=$(((_$((_temp + 4)) & _$((_temp + 5))) ^ (~(_$((_temp + 4))) & _$((_temp + 6)))))
+    ch=$(((_$((_temp + 4)) & _$((_temp + 5))) ^ (~_$((_temp + 4)) & _$((_temp + 6)))))
     t1=$(((_$((_temp + 7)) + s1 + ch + _$((_k + i)) + _$((_w + i))) & 0xffffffff))
     s0=$(((((_$((_temp + 0)) >> 2) & (0x7fffffff >> (2 - 1))) | ((_$((_temp + 0)) << (32 - 2)) & 0xffffffff)) ^ (((_$((_temp + 0)) >> 13) & (0x7fffffff >> (13 - 1))) | ((_$((_temp + 0)) << (32 - 13)) & 0xffffffff)) ^ (((_$((_temp + 0)) >> 22) & (0x7fffffff >> (22 - 1))) | ((_$((_temp + 0)) << (32 - 22)) & 0xffffffff))))
     ma=$(((_$((_temp + 0)) & _$((_temp + 1))) ^ (_$((_temp + 0)) & _$((_temp + 2))) ^ (_$((_temp + 1)) & _$((_temp + 2)))))
