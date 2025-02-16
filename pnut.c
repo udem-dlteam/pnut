@@ -871,6 +871,61 @@ void include_file(char *file_name, char *relative_to) {
   include_stack = include_stack2;
 }
 
+#ifdef SUPPORT_64_BIT_LITERALS
+// Array used to accumulate 64 bit unsigned integers on 32 bit systems
+int val_32[2];
+
+// x = x * y
+void u64_mul_u32(int *x, int y) {
+
+  // Note, because we are using 32 bit **signed** integers, we need to clear the
+  // sign bit when shifting right to avoid sign extension.
+  #define I32_LOGICAL_RSHIFT_16(x) ((x >> 16) & 0xffff)
+
+  int xlo = x[0] & 0xffff;
+  int xhi = I32_LOGICAL_RSHIFT_16(x[0]);
+  int ylo = y & 0xffff;
+  int yhi = I32_LOGICAL_RSHIFT_16(y);
+  int lo = xlo * ylo; /* 0 .. 0xfffe0001 */
+  int m1 = xlo * yhi + (lo >> 16); /* 0 .. 0xfffeffff */
+  int m2 = xhi * ylo; /* 0 .. 0xfffe0001 */
+  int m3 = (m1 & 0xffff) + (m2 & 0xffff); /* 0 .. 0x1fffe */
+  int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); /* 0 .. 0xfffffffe */
+  x[0] = ((m3 & 0xffff) << 16) + (lo & 0xffff);
+  x[1] = x[1] * y + hi;
+}
+
+// x = x + y
+void u64_add_u32(int *x, int y) {
+  int a = x[0]; int b = x[1];
+  int lo = x[0] + y;
+  // Carry (using signed integers)
+  x[1] += (x[0] < 0 != lo < 0);
+  x[0] = lo;
+}
+
+// Pack a 64 bit unsigned integer into an object.
+// Because most integers are small and we want to save memory, we only store the
+// large int object ("large ints") if it is larger than 31 bits. Otherwise, we
+// store it as a regular integer. The sign bit is used to distinguish between
+// large ints (positive) and regular ints (negative).
+void u64_to_obj(int *x) {
+  if (x[0] >= 0 && x[1] == 0) { // "small int"
+    val = -x[0];
+  } else {
+    val = alloc_obj(2);
+    heap[val    ] = x[0];
+    heap[val + 1] = x[1];
+  }
+}
+
+#define DIGIT_BYTE (val_32[0] % 256)
+#define INIT_ACCUM_DIGIT() val_32[0] = 0; val_32[1] = 0;
+#else
+#define DIGIT_BYTE (-val % 256)
+#define INIT_ACCUM_DIGIT() val = 0;
+#endif
+
 int accum_digit(int base) {
   int digit = 99;
   if ('0' <= ch && ch <= '9') {
@@ -888,7 +943,12 @@ int accum_digit(int base) {
     //   fatal_error("literal integer overflow");
     // }
 
+#ifdef SUPPORT_64_BIT_LITERALS
+    u64_mul_u32(val_32, base);
+    u64_add_u32(val_32, digit);
+#else
     val = val * base - digit;
+#endif
     get_ch();
     return 1;
   }
@@ -904,21 +964,21 @@ void get_string_char() {
       // Parse octal character, up to 3 digits.
       // Note that \1111 is parsed as '\111' followed by '1'
       // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Notes
-      val = 0;
+      INIT_ACCUM_DIGIT();
       accum_digit(8);
       accum_digit(8);
       accum_digit(8);
-      val = -(val % 256); // keep low 8 bits, without overflowing
+      val = DIGIT_BYTE; // keep low 8 bits, without overflowing
     } else if (ch == 'x' || ch == 'X') {
       get_ch();
-      val = 0;
+      INIT_ACCUM_DIGIT();
       // Allow 1 or 2 hex digits.
       if (accum_digit(16)) {
         accum_digit(16);
       } else {
         syntax_error("invalid hex escape -- it must have at least one digit");
       }
-      val = -(val % 256); // keep low 8 bits, without overflowing
+      val = DIGIT_BYTE; // keep low 8 bits, without overflowing
     } else {
       if (ch == 'a') {
         val = 7;
@@ -1966,18 +2026,16 @@ void get_tok() {
         break;
       } else if ('0' <= ch && ch <= '9') {
 
-        val = '0' - ch;
-
-        get_ch();
+        INIT_ACCUM_DIGIT();
 
         tok = INTEGER;
-        if (val == 0) { // val == 0 <=> ch == '0'
+        if (ch == '0') { // val == 0 <=> ch == '0'
+          get_ch();
           if (ch == 'x' || ch == 'X') {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             tok = INTEGER_HEX;
 #endif
             get_ch();
-            val = 0;
             if (accum_digit(16)) {
               while (accum_digit(16));
             } else {
@@ -1987,12 +2045,20 @@ void get_tok() {
             while (accum_digit(8));
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
+#ifdef SUPPORT_64_BIT_LITERALS
+            tok = val_32[0] == 0 && val_32[1] == 0 ? INTEGER : INTEGER_OCT;
+#else
             tok = val == 0 ? INTEGER : INTEGER_OCT;
+#endif
 #endif
           }
         } else {
           while (accum_digit(10));
         }
+
+#ifdef SUPPORT_64_BIT_LITERALS
+        u64_to_obj(val_32);
+#endif
 
 
         break;
