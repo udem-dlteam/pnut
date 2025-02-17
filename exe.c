@@ -917,8 +917,14 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   bool right_is_unsigned = false;
   int width;
 
-  if (left_is_numeric) left_is_unsigned = TEST_TYPE_SPECIFIER(get_val(left_type), UNSIGNED_KW);
+  if (left_is_numeric)  left_is_unsigned  = TEST_TYPE_SPECIFIER(get_val(left_type), UNSIGNED_KW);
   if (right_is_numeric) right_is_unsigned = TEST_TYPE_SPECIFIER(get_val(right_type), UNSIGNED_KW);
+
+  // Consider enums as numeric types. We update *_is_numeric after
+  // computing *_is_unsigned because we don't want to use TEST_TYPE_SPECIFIER on
+  // ENUM nodes
+  if (get_op(left_type) == ENUM_KW)  left_is_numeric = true;
+  if (get_op(right_type) == ENUM_KW) right_is_numeric = true;
 
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
