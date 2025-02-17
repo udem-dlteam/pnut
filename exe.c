@@ -1114,7 +1114,9 @@ void codegen_call(ast node) {
   }
   if (get_op(type) == '*') type = get_child_('*', type, 1); // Dereference function pointer
   // allow_extra_params is true if the function is called indirectly or if the function is variadic
-  nb_params = codegen_params(params, get_child_('(', type, 1), get_child_('(', type, 2) || binding == 0);
+  bool allow_extra_params = binding == 0;
+  if (get_child_('(', type, 2)) allow_extra_params = true;
+  nb_params = codegen_params(params, get_child_('(', type, 1), allow_extra_params);
 #else
   nb_params = codegen_params(params);
 #endif
