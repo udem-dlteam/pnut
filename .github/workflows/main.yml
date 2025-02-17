@@ -172,7 +172,11 @@ jobs:
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast
+          if [ ${{ matrix.shell }} = "ksh" ]; then
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }}
+          else
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast
+          fi
 
   bootstrap-pnut-sh-with-pnut-exe:
     strategy:
