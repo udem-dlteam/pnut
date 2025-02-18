@@ -1464,6 +1464,8 @@ text comp_lvalue_address(ast node) {
     return string_concat3(sub1, wrap_str_lit(" + "), sub2);
   } else if (op == CAST) {
     return comp_lvalue_address(get_child_(CAST, node, 1));
+  } else if (op == PARENS) {
+    return comp_lvalue_address(get_child_(PARENS, node, 0));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue_address: unknown lvalue");
@@ -1491,6 +1493,8 @@ text comp_lvalue(ast node) {
     return string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))"));
   } else if (op == CAST) {
     return comp_lvalue(get_child_(CAST, node, 1));
+  } else if (op == PARENS) {
+    return comp_lvalue_address(get_child_(PARENS, node, 0));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue: unknown lvalue");
