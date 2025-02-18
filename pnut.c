@@ -2783,7 +2783,7 @@ int parse_param_list() {
   while (tok != ')' && tok != EOF) {
     if (is_type_starter(tok)) {
       decl = parse_declarator(true, parse_declaration_specifiers());
-      if (get_op(decl) == VOID_KW) {
+      if (get_op(get_child_(DECL, decl, 1)) == VOID_KW) {
         if (tok != ')' || result != 0) parse_error("void must be the only parameter", tok);
         break;
       }
