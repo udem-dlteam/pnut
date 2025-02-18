@@ -1334,6 +1334,9 @@ int codegen_lvalue(ast node) {
       codegen_lvalue(child1);
       lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
+    } else if (op == PARENS) {
+      lvalue_width = codegen_lvalue(child0);
+      grow_fs(-1);
     } else {
       fatal_error("codegen_lvalue: unknown lvalue with 2 children");
     }
