@@ -2684,7 +2684,12 @@ ast parse_enum() {
         }
         last_literal_type = get_op(value);
 #else
+        if (get_op(value) != INTEGER
+        && get_op(value) != INTEGER_U && get_op(value) != INTEGER_UL && get_op(value) != INTEGER_ULL
+        && get_op(value) != INTEGER_L && get_op(value) != INTEGER_LL
+           ) {
         value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+        }
 #endif
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
       } else {

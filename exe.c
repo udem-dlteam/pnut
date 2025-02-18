@@ -1854,7 +1854,7 @@ void codegen_enum(ast node) {
 
   while (cases != 0) {
     cas = car_('=', cases);
-    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child__('=', INTEGER, cas, 1));
+    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child_('=', cas, 1));
     cases = tail(cases);
   }
 }
