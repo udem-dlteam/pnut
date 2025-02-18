@@ -152,17 +152,54 @@ void mov_reg_imm(int dst, int imm) {
 
   rex_prefix(0, dst);
   emit_i8(0xb8 + (dst & 7));
-  emit_word_le(imm);
+  if (word_size == 4) {
+    emit_i32_le(imm);
+  } else if (word_size == 8) {
+    emit_i64_le(imm);
+  } else {
+    fatal_error("mov_reg_imm: unknown word size");
+  }
 }
+
+#ifdef SUPPORT_64_BIT_LITERALS
+void mov_reg_large_imm(int dst, int large_imm) {
+
+  // MOV dst_reg, large_imm  ;; Move 32 bit or 64 bit immediate value to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  rex_prefix(0, dst);
+  emit_i8(0xb8 + (dst & 7));
+
+  if (word_size == 4) {
+    emit_i32_le_large_imm(large_imm);
+  } else if (word_size == 8) {
+    emit_i64_le_large_imm(large_imm);
+  } else {
+    fatal_error("mov_reg_large_imm: unknown word size");
+  }
+}
+#endif
 
 void add_reg_imm(int dst, int imm) {
 
   // ADD dst_reg, imm  ;; Add 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
+
   rex_prefix(0, dst);
   emit_i8(0x81);
   mod_rm(0, dst);
   emit_i32_le(imm);
+}
+
+void add_reg_lbl(int dst, int lbl) {
+
+  // ADD dst_reg, rel addr  ;; Add 32 bit displacement between next instruction and label to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
+
+  rex_prefix(0, dst);
+  emit_i8(0x81);
+  mod_rm(0, dst);
+  use_label(lbl); // 32 bit placeholder for distance
 }
 
 void mov_memory(int op, int reg, int base, int offset) {
@@ -318,16 +355,6 @@ void push_reg(int src) {
   emit_i8(0x50 + src);
 }
 
-void push_imm32_le(int imm) {
-
-  // PUSH imm32  ;; Push 32 bit immediate value to stack
-  // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
-
-  emit_i8(0x68);
-  emit_i32_le(imm);
-}
-
-
 void pop_reg (int dst) {
 
   // POP dst_reg  ;; Pop word from stack to register
@@ -361,6 +388,15 @@ void call(int lbl) {
 
   emit_i8(0xe8);
   use_label(lbl);
+}
+
+void call_reg(int reg) {
+
+  // CALL reg  ;; Indirect call to address in register
+  // See: https://web.archive.org/web/20240323052931/https://www.felixcloutier.com/x86/call
+
+  emit_i8(0xff);
+  mod_rm(2, reg);
 }
 
 void ret() {
@@ -432,6 +468,8 @@ void setup_proc_args(int global_vars_size) {
   // [esp + 8] : global table start (global_vars_size bytes long)
   // ...
   // For x86-64, it works similarly with [rsp + 0] for argc and [rsp + 8] for argv.
+  //
+  // Note(13/02/2025): Global variables are now allocated in a separate memory region so global_vars_size is 0.
 
   mov_reg_reg(reg_X, SP);
   add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
@@ -441,11 +479,26 @@ void setup_proc_args(int global_vars_size) {
   push_reg(reg_Y); // push argc
 }
 
+void mov_reg_lbl(int reg, int lbl) {
+  // Since we can't do rip-relative addressing in 32 bit mode, we need to push
+  // the address to the stack and then some arithmetic to get the address in a
+  // register.
+
+  int lbl_for_pc = alloc_label("lbl_for_pc");
+
+  call(lbl_for_pc);        // call lbl
+  def_label(lbl_for_pc);   // end label
+                           // <--- The stack now has the address of the next instruction
+  pop_reg(reg);            // pop reg_X (1 byte)
+  add_reg_lbl(reg, lbl);   // load address of label to reg_X (6 or 7 bytes if 32 or 64 bit)
+  add_reg_imm(reg, word_size == 8 ? 8 : 7); // adjust for the pop and add instructions
+}
+
 // For 32 bit linux.
 #ifdef target_i386_linux
 
 void os_getchar() {
-  int lbl = alloc_label();
+  int lbl = alloc_label("get_char_eof");
   push_reg(BX);           // save address of global variables table
   mov_reg_imm(AX, 0);     // mov  eax, 0
   push_reg(AX);           // push eax      # buffer to read byte
@@ -494,7 +547,7 @@ void os_fclose() {
 }
 
 void os_fgetc() {
-  int lbl = alloc_label();  // label for EOF
+  int lbl = alloc_label("fgetc_eof"); // label for EOF
   push_reg(BX);             // save address of global variables table
   mov_reg_reg(BX, reg_X);   // mov  ebx, file descriptor
   mov_reg_imm(AX, 3);       // mov  eax, 3 == SYS_READ
@@ -600,7 +653,7 @@ void os_close() {
 #ifdef SYSTEM_V_ABI
 
 void os_getchar() {
-  int lbl = alloc_label();
+  int lbl = alloc_label("get_char_eof");
   mov_reg_imm(AX, 0);    // mov  eax, 0
   push_reg(AX);          // push eax      # buffer to read byte
   mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
@@ -641,7 +694,7 @@ void os_fclose() {
 }
 
 void os_fgetc() {
-  int lbl = alloc_label(); // label for EOF
+  int lbl = alloc_label("fgetc_eof"); // label for EOF
   mov_reg_reg(DI, reg_X);  // mov  edi, file descriptor
   mov_reg_imm(AX, 0);      // mov  eax, 0
   push_reg(AX);            // push eax      # buffer to read byte

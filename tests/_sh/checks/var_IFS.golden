@@ -1,0 +1,1 @@
+"IFS" tests/_sh/checks/var_IFS.c:5:0  variable name is invalid. It can't be 'IFS' or 'argv_'.

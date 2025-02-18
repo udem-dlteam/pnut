@@ -13,18 +13,13 @@ _malloc() { # $2 = object size
 defarr() { _malloc $1 $2; }
 
 defarr _buf 1024
-: $((fd = 0))
-_cat_fd() { let fd $2
-  :
-  endlet $1 fd
-}
 
-
-unpack_escaped_string() {
+unpack_escaped_string() { # $1 = string, $2 = size (optional)
   __buf="$1"
   # Allocates enough space for all characters, assuming that no character is escaped
-  _malloc __addr $((${#__buf} + 1))
+  _malloc __addr $((${2:-${#__buf} + 1}))
   __ptr=$__addr
+  __end=$((__ptr + ${2:-${#__buf} + 1})) # End of allocated memory
   while [ -n "$__buf" ] ; do
     case "$__buf" in
       '\'*)
@@ -55,16 +50,19 @@ unpack_escaped_string() {
     : $((_$__ptr = __c))
     : $((__ptr += 1))
   done
-  : $((_$__ptr = 0))
+  while [ $__ptr -le $__end ]; do
+    : $((_$__ptr = 0))
+    : $((__ptr += 1))
+  done
 }
 
 # Define a string, and return a reference to it in the varible taken as argument.
 # If the variable is already defined, this function does nothing.
 # Note that it's up to the caller to ensure that no 2 strings share the same variable.
-defstr() { # $1 = variable name, $2 = string
+defstr() { # $1 = variable name, $2 = string, $3 = size (optional)
   set +u # Necessary to allow the variable to be empty
   if [ $(($1)) -eq 0 ]; then
-    unpack_escaped_string "$2"
+    unpack_escaped_string "$2" $3
     : $(($1 = __addr))
   fi
   set -u
@@ -83,20 +81,20 @@ _encode() {
     _getchar b2
     printf \\$(((_$((_codes + (b1 >> 2))))/64))$(((_$((_codes + (b1 >> 2))))/8%8))$(((_$((_codes + (b1 >> 2))))%8))
     if [ $b2 -lt 0 ] ; then
-      printf \\$(((_$((_codes + (63 & (b1 << 4)))))/64))$(((_$((_codes + (63 & (b1 << 4)))))/8%8))$(((_$((_codes + (63 & (b1 << 4)))))%8))
+      printf \\$(((_$((_codes + (0x3f & (b1 << 4)))))/64))$(((_$((_codes + (0x3f & (b1 << 4)))))/8%8))$(((_$((_codes + (0x3f & (b1 << 4)))))%8))
       printf "="
       printf "="
       break
     else
-      printf \\$(((_$((_codes + (63 & ((b1 << 4) | (b2 >> 4))))))/64))$(((_$((_codes + (63 & ((b1 << 4) | (b2 >> 4))))))/8%8))$(((_$((_codes + (63 & ((b1 << 4) | (b2 >> 4))))))%8))
+      printf \\$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))/64))$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))/8%8))$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))%8))
       _getchar b3
       if [ $b3 -lt 0 ] ; then
-        printf \\$(((_$((_codes + (63 & (b2 << 2)))))/64))$(((_$((_codes + (63 & (b2 << 2)))))/8%8))$(((_$((_codes + (63 & (b2 << 2)))))%8))
+        printf \\$(((_$((_codes + (0x3f & (b2 << 2)))))/64))$(((_$((_codes + (0x3f & (b2 << 2)))))/8%8))$(((_$((_codes + (0x3f & (b2 << 2)))))%8))
         printf "="
         break
       else
-        printf \\$(((_$((_codes + (63 & ((b2 << 2) | (b3 >> 6))))))/64))$(((_$((_codes + (63 & ((b2 << 2) | (b3 >> 6))))))/8%8))$(((_$((_codes + (63 & ((b2 << 2) | (b3 >> 6))))))%8))
-        printf \\$(((_$((_codes + (63 & b3))))/64))$(((_$((_codes + (63 & b3))))/8%8))$(((_$((_codes + (63 & b3))))%8))
+        printf \\$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))/64))$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))/8%8))$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))%8))
+        printf \\$(((_$((_codes + (0x3f & b3))))/64))$(((_$((_codes + (0x3f & b3))))/8%8))$(((_$((_codes + (0x3f & b3))))%8))
       fi
     fi
   done
@@ -127,7 +125,7 @@ _decode() {
   done
   i=0
   while [ $i -lt 64 ]; do
-    : $((_$((_lut + 255 & _$((_codes + i)))) = i))
+    : $((_$((_lut + 0xff & _$((_codes + i)))) = i))
     : $((i += 1))
   done
   while _get c1; [ $c1 -ge 0 ]; do
@@ -138,11 +136,11 @@ _decode() {
     if _get c3; [ $c3 -lt 0 ] ; then
       break
     fi
-    printf \\$(((255 & ((c2 << 4) | (c3 >> 2)))/64))$(((255 & ((c2 << 4) | (c3 >> 2)))/8%8))$(((255 & ((c2 << 4) | (c3 >> 2)))%8))
+    printf \\$(((0xff & ((c2 << 4) | (c3 >> 2)))/64))$(((0xff & ((c2 << 4) | (c3 >> 2)))/8%8))$(((0xff & ((c2 << 4) | (c3 >> 2)))%8))
     if _get c4; [ $c4 -lt 0 ] ; then
       break
     fi
-    printf \\$(((255 & ((c3 << 6) | c4))/64))$(((255 & ((c3 << 6) | c4))/8%8))$(((255 & ((c3 << 6) | c4))%8))
+    printf \\$(((0xff & ((c3 << 6) | c4))/64))$(((0xff & ((c3 << 6) | c4))/8%8))$(((0xff & ((c3 << 6) | c4))%8))
   done
   endlet $1 c4 c3 c2 c1 i
 }
