@@ -1,3 +1,4 @@
+// comp_pnut_opt: -DSUPPORT_LINE_CONTINUATION
 #include <stdio.h>
 
 void putint_aux(int n, int base) {
@@ -17,7 +18,7 @@ void putint(int n, int base) {
   }
 }
 
-void main() {
+int main() {
 
 /**/
 int foo = 0;
@@ -25,6 +26,8 @@ int foo = 0;
 /\
 *
 */ fo\
+\
+\
 o +\
 = 0\
 x\
