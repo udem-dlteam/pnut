@@ -803,7 +803,9 @@ ast value_type(ast node) {
     } else if (op == '&') {
       left_type = value_type(child0);
       return pointer_type(left_type, false);
-    } else if (op == '+' || op == '-' || op == '~' || op == '!' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PARENS) {
+    } else if (op == '!') {
+      return int_type; // Logical not always returns an integer
+    } else if (op == '+' || op == '-' || op == '~' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PARENS) {
       // Unary operation don't change the type
       return value_type(child0);
     } else if (op == SIZEOF_KW) {
