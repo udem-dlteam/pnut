@@ -1701,6 +1701,10 @@ void handle_enum_struct_union_type_decl(ast type) {
     codegen_struct_or_union(type, BINDING_TYPE_STRUCT);
   } else if (get_op(type) == UNION_KW) {
     codegen_struct_or_union(type, BINDING_TYPE_UNION);
+  } else if (get_op(type) == '*') {
+    handle_enum_struct_union_type_decl(get_child_('*', type, 1));
+  } else if (get_op(type) == '[') {
+    handle_enum_struct_union_type_decl(get_child_('[', type, 0));
   }
 
   // If not an enum, struct, or union, do nothing
