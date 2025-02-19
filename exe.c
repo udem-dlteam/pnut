@@ -4,7 +4,7 @@ void generate_exe();
 // 1MB heap
 #define RT_HEAP_SIZE 104857600
 
-#define MAX_CODE_SIZE 500000
+#define MAX_CODE_SIZE 5000000
 int code[MAX_CODE_SIZE];
 int code_alloc = 0;
 
