@@ -94,11 +94,11 @@ void switch_in_while(){
 }
 
 void bodiless_switch() {
-  switch (123) 
-    case 123: 
+  switch (123)
+    case 123:
       putchar('F');
 
-  switch (456) 
+  switch (456)
       case 123:
       case 456:
           putchar('E');

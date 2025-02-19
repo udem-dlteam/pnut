@@ -217,10 +217,10 @@ void state_machine_switch() {
 
 void bodiless_switch() {
   switch (123)
-    case 123: 
+    case 123:
       putchar('E');
 
-  switch (456) 
+  switch (456)
       case 123:
       case 456:
           putchar('E');
