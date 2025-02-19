@@ -1866,8 +1866,14 @@ bool comp_switch(ast node) {
 
   node = get_child_(SWITCH_KW, node, 1);
 
-  if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
+  if(get_op(node) == CASE_KW) {
+    // This is for the edge case where the entire 'statement' part of < switch ( expression ) statement >
+    // is a single < case constant-expression : statement >
+    // therefore we wrap the case statement with a block statement to simplify down to the typical syntax
+    node = new_ast2('{', node, 0);
+  }
 
+  if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
   while (get_op(node) == '{') {
     statement = get_child_('{', node, 0);
     node = get_child_('{', node, 1);
