@@ -3915,7 +3915,7 @@ int main(int argc, char **argv) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
         case 'D':
-          init_ident(MACRO, argv[i] + 2);
+          init_builtin_int_macro(init_ident(MACRO, argv[i] + 2), 1);
           break;
 
         case 'U':
