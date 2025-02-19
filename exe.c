@@ -1713,13 +1713,13 @@ void handle_enum_struct_union_type_decl(ast type) {
 void codegen_initializer_string(int string_probe, ast type, int base_reg, int offset) {
   char *string_start = STRING_BUF(string_probe);
   int i = 0;
-  int str_len = heap[string_probe + 4];
+  int str_len = STRING_LEN(string_probe);
   int arr_len;
 
   // Only acceptable types are char[] or char*
   if (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == CHAR_KW) {
     arr_len = get_child_('[', type, 1);
-    if (str_len >= arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
+    if (str_len > arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
 
     // Place the bytes of the string in the memory location allocated for the array
     for (; i < arr_len; i += 1) {
