@@ -236,16 +236,16 @@ readonly __NEWLINE__=10
 # Runtime library
 
 unpack_escaped_string() { # $1 = string, $2 = size (optional)
-  __buf="$1"
+  __str="$1"
   # Allocates enough space for all characters, assuming that no character is escaped
-  _malloc __addr $((${2:-${#__buf} + 1}))
+  _malloc __addr $((${2:-${#__str} + 1}))
   __ptr=$__addr
-  __end=$((__ptr + ${2:-${#__buf} + 1})) # End of allocated memory
-  while [ -n "$__buf" ] ; do
-    case "$__buf" in
+  __end=$((__ptr + ${2:-${#__str} + 1})) # End of allocated memory
+  while [ -n "$__str" ] ; do
+    case "$__str" in
       '\'*)
-        __buf="${__buf#?}" # Remove the current char from $__buf
-        case "$__buf" in
+        __str="${__str#?}" # Remove the current char from $__str
+        case "$__str" in
           '0'*) __c=0 ;;
           'a'*) __c=7 ;;
           'b'*) __c=8 ;;
@@ -259,13 +259,13 @@ unpack_escaped_string() { # $1 = string, $2 = size (optional)
           "'"*) __c=39 ;;
           '?'*) __c=63 ;;
           '$'*) __c=36 ;; # Not in C, used to escape variable expansion between double quotes
-          *) echo "invalid escape in string: $__buf"; exit 1 ;;
+          *) echo "invalid escape in string: $__str"; exit 1 ;;
         esac
-        __buf="${__buf#?}" # Remove the current char from $__buf
+        __str="${__str#?}" # Remove the current char from $__str
         ;;
       *)
-        __c=$(printf "%d" "'${__buf%"${__buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-        __buf="${__buf#?}" # Remove the current char from $__buf
+        __c=$(printf "%d" "'${__str%"${__str#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+        __str="${__str#?}" # Remove the current char from $__str
         ;;
     esac
     : $((_$__ptr = __c))

@@ -281,6 +281,7 @@ void print_escaped_text(text t, bool for_printf) {
     putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
+    putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     print_escaped_string((char*) text_pool[t + 1],  (char*) text_pool[t + 2], for_printf);
@@ -315,6 +316,7 @@ void print_text(text t) {
     putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
+    putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     if (TEXT_TO_INT(text_pool[t + 2]) == 0) { // null-terminated string
@@ -1866,8 +1868,14 @@ bool comp_switch(ast node) {
 
   node = get_child_(SWITCH_KW, node, 1);
 
-  if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
+  if(get_op(node) == CASE_KW) {
+    // This is for the edge case where the entire 'statement' part of < switch ( expression ) statement >
+    // is a single < case constant-expression : statement >
+    // therefore we wrap the case statement with a block statement to simplify down to the typical syntax
+    node = new_ast2('{', node, 0);
+  }
 
+  if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
   while (get_op(node) == '{') {
     statement = get_child_('{', node, 0);
     node = get_child_('{', node, 1);

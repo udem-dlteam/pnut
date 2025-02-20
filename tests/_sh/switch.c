@@ -93,9 +93,21 @@ void switch_in_while(){
   }
 }
 
+void bodiless_switch() {
+  switch (123)
+    case 123:
+      putchar('F');
+
+  switch (456)
+      case 123:
+      case 456:
+          putchar('E');
+}
+
 void main() {
   simple_switch();
   simple_switch_fall_through();
   multiple_labels();
   switch_in_while();
+  bodiless_switch();
 }

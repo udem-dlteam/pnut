@@ -450,20 +450,20 @@ DEPENDS_ON(malloc)
 DEPENDS_ON(char_to_int)
 #ifdef OPTIMIZE_LONG_LINES
   putstr("next_sub_buffer() {\n");
-    extract_line_head("  ", "__us_buf256", "__buf", ANY_STRING_256, "256", "")
+    extract_line_head("  ", "__us_buf256", "__str", ANY_STRING_256, "256", "")
     extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
   putstr("}\n");
 #endif
   putstr("unpack_escaped_string() { # $1 = string, $2 = size (optional)\n");
-  putstr("  __buf=\"$1\"\n");
+  putstr("  __str=\"$1\"\n");
   putstr("  # Allocates enough space for all characters, assuming that no character is escaped\n");
-  putstr("  _malloc __addr $((${2:-${#__buf} + 1}))\n");
+  putstr("  _malloc __addr $((${2:-${#__str} + 1}))\n");
   putstr("  __ptr=$__addr\n");
-  putstr("  __end=$((__ptr + ${2:-${#__buf} + 1})) # End of allocated memory\n");
+  putstr("  __end=$((__ptr + ${2:-${#__str} + 1})) # End of allocated memory\n");
 #ifdef OPTIMIZE_LONG_LINES
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");
-  putstr("  while [ ! -z \"$__buf\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
+  putstr("  while [ ! -z \"$__str\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
   putstr("    next_sub_buffer\n");
   putstr("    while [ ! -z \"$__us_buf16\" ]; do\n");
   handle_escaped_chars("      ", "__us_buf16", "__c")
@@ -472,8 +472,8 @@ DEPENDS_ON(char_to_int)
   putstr("    done\n");
   putstr("  done\n");
 #else
-  putstr("  while [ -n \"$__buf\" ] ; do\n");
-  handle_escaped_chars("    ", "__buf", "__c")
+  putstr("  while [ -n \"$__str\" ] ; do\n");
+  handle_escaped_chars("    ", "__str", "__c")
   putstr("    : $((_$__ptr = __c))\n");
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
