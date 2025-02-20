@@ -143,6 +143,7 @@ void jump_rel(int offset);
 void call(int lbl);
 void call_reg(int reg);
 void ret();
+void debug_interrupt();
 
 void dup(int reg) {
   pop_reg(reg);
@@ -1223,6 +1224,11 @@ void codegen_call(ast node) {
 
   // Check if the function is a direct call, find the binding if it is
   if (get_op(fun) == IDENTIFIER) {
+    if (get_val_(IDENTIFIER, fun) == intern_str("PNUT_INLINE_INTERRUPT")) {
+      debug_interrupt();
+      push_reg(reg_X); // Dummy push to keep the stack balanced
+      return;
+    }
     binding = resolve_identifier(get_val_(IDENTIFIER, fun));
     if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }

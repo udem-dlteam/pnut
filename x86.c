@@ -600,6 +600,14 @@ void ret() {
   emit_i8(0xc3);
 }
 
+void debug_interrupt() {
+
+  // INT 3  ;; Debug interrupt
+  // See: https://web.archive.org/web/20250118000553/https://www.felixcloutier.com/x86/intn:into:int3:int1
+
+  emit_i8(0xcc);
+}
+
 // Conditions for use by jump_cond:
 
 const int EQ   = 0x4; // x == y
