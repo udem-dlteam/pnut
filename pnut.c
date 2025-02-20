@@ -2248,6 +2248,11 @@ void get_tok() {
             tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
             get_ch();
           }
+        } else if (ch == 'f' || ch == '.') {
+          get_ch();
+          tok = INTEGER;
+          while (accum_digit(10)); // Skip the fractional part
+          val = 0; // Force the value to be 0 for now. TODO: Convert to float
         }
 #endif
 
@@ -2820,7 +2825,7 @@ ast parse_type_specifier() {
     case CHAR_KW:
     case INT_KW:
     case VOID_KW:
-#ifdef DEBUG_PARSER
+#ifndef sh
     case FLOAT_KW:
     case DOUBLE_KW:
 #endif
@@ -2853,7 +2858,7 @@ ast parse_type_specifier() {
 
     case LONG_KW:
       get_tok();
-#ifdef DEBUG_PARSER
+#ifndef sh
       if (tok == DOUBLE_KW) {
         get_tok();
         return new_ast0(DOUBLE_KW, 0);
