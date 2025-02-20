@@ -36,20 +36,12 @@ case $backend in
     ;;
 esac
 
-# Increase the stack because pnut-sh's global variables are initialized on the stack
-ulimit -s 16384
-stack_limit=$(ulimit -s)
-if [ "$stack_limit" = "unlimited" ] || [ "$stack_limit" -lt 16384 ]; then
-  echo "Stack size is too small: $stack_limit"
-  exit 1
-fi
-
 # Compile pnut with gcc
 gcc -o $TEMP_DIR/pnut-exe-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c
 gcc -o $TEMP_DIR/pnut-sh-by-gcc.exe $PNUT_SH_OPTIONS pnut.c
 
-# Generate pnut.sh with pnut-sh-by-gcc.exe. This is the reference pnut.sh
-./$TEMP_DIR/pnut-sh-by-gcc.exe $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut.sh"
+# Generate pnut-sh.sh with pnut-sh-by-gcc.exe. This is the reference pnut-sh.sh
+./$TEMP_DIR/pnut-sh-by-gcc.exe $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
 
 # Compile pnut-exe with pnut-exe compiled by gcc
 ./$TEMP_DIR/pnut-exe-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > "$TEMP_DIR/pnut-exe-by-pnut-exe.exe"
@@ -63,10 +55,10 @@ chmod +x $TEMP_DIR/pnut-sh-by-pnut-exe.exe
 
 ./$TEMP_DIR/pnut-sh-by-pnut-exe.exe $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh-by-pnut-sh-by-pnut-exe.sh"
 
-diff -q $TEMP_DIR/pnut.sh $TEMP_DIR/pnut-sh-by-pnut-sh-by-pnut-exe.sh || {
-  echo "pnut.sh != pnut-sh-by-pnut-sh-by-pnut-exe.sh"
+diff -q $TEMP_DIR/pnut-sh.sh $TEMP_DIR/pnut-sh-by-pnut-sh-by-pnut-exe.sh || {
+  echo "pnut-sh.sh != pnut-sh-by-pnut-sh-by-pnut-exe.sh"
   exit 1
 }
 
 echo "Success!"
-sha256sum $TEMP_DIR/pnut.sh $TEMP_DIR/pnut-sh-by-pnut-sh-by-pnut-exe.sh
+sha256sum $TEMP_DIR/pnut-sh.sh $TEMP_DIR/pnut-sh-by-pnut-sh-by-pnut-exe.sh
