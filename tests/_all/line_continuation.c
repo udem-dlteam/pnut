@@ -1,20 +1,17 @@
 // comp_pnut_opt: -DSUPPORT_LINE_CONTINUATION
 #include <stdio.h>
 
-void putint_aux(int n, int base) {
-  int d = n % base;
-  int top = n / base;
-  if (n == 0) return;
-  putint_aux(top, base);
-  putchar("0123456789abcdef"[d & 15]);
+void putint_aux(int n) {
+  if (n >= 10) putint_aux(n / 10);
+  putchar('0' + (n % 10));
 }
 
-void putint(int n, int base) {
+void putint(int n) {
   if (n < 0) {
     putchar('-');
-    putint_aux(-n, base);
+    putint_aux(-n);
   } else {
-    putint_aux(n, base);
+    putint_aux(n);
   }
 }
 
@@ -34,6 +31,6 @@ x\
 10\
 200;
 
-    putint(foo, 10);
+    putint(foo);
     return 0;
 }
