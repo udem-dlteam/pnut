@@ -14,61 +14,70 @@ void no_case_switch() {
   }
 }
 
-void basic_switch(){
-  int a = 2;
+void basic_switch() {
+  int a = 0;
 
-  switch (a) {
-    case 1:
-      putchar('A');
-      break;
-    case 2:
-      putchar('B');
-      break;
-    case 3:
-      putchar('C');
-      break;
-    default:
-      putchar('D');
-      break;
+  while (a < 5) {
+    switch (a) {
+      case 1:
+        putchar('A');
+        break;
+      case 2:
+        putchar('B');
+        break;
+      case 3:
+        putchar('C');
+        break;
+      default:
+        putchar('D');
+        break;
+    }
+    a++;
   }
 }
 
-void no_default_break_switch(){
-  int a = 2;
+void no_default_break_switch() {
+  int a = 0;
 
-  switch (a) {
-    case 1:
-      putchar('A');
-      break;
-    case 2:
-      putchar('B');
-      break;
-    case 3:
-      putchar('C');
-      break;
-    default:
-      putchar('D');
-      // break;
+  while (a < 5) {
+    switch (a) {
+      case 1:
+        putchar('A');
+        break;
+      case 2:
+        putchar('B');
+        break;
+      case 3:
+        putchar('C');
+        break;
+      default:
+        putchar('D');
+        // break;
+    }
+    a++;
   }
 }
 
-void no_default_switch(){
-  int a = 2;
+void no_default_switch() {
+  int a = 0;
 
-  switch (a) {
-    case 1:
-      putchar('A');
-      break;
-    case 2:
-      putchar('B');
-      break;
-    case 3:
-      putchar('C');
-      break;
+  while (a < 5) {
+    switch (a) {
+      case 1:
+        putchar('A');
+        break;
+      case 2:
+        putchar('B');
+        break;
+      case 3:
+        putchar('C');
+        break;
+    }
+    a++;
   }
 }
 
-void goto_switch(int a){
+void goto_switch(int a) {
 
   switch (a) {
     case 1:
@@ -91,7 +100,7 @@ void goto_switch(int a){
   putchar('E');
 }
 
-void gotos_switch(){
+void gotos_switch() {
   int a = 0;
 
   start:
@@ -118,7 +127,7 @@ void gotos_switch(){
   putchar('E');
 }
 
-void switch_while(){
+void switch_while() {
   int i = 0;
 
   while (i < 5) {
@@ -198,12 +207,23 @@ void state_machine_switch() {
   switch (state) {
     case 0:
       for (i = 0; i < 10; i++) {
-          state = 1; // Next call will start at case 1
-          putchar('A');
-          return;
-          case 1: putchar('B');
+        state = 1; // Next call will start at case 1
+        putchar('A');
+        return;
+        case 1: putchar('B');
       }
   }
+}
+
+void bodiless_switch() {
+  switch (123)
+    case 123:
+      putchar('E');
+
+  switch (456)
+      case 123:
+      case 456:
+          putchar('E');
 }
 
 int main() {
@@ -220,5 +240,6 @@ int main() {
   duff_device_switch(15);     putchar('\n');
   state_machine_switch();
   state_machine_switch();     putchar('\n');
+  bodiless_switch();          putchar('\n');
   return 0;
 }

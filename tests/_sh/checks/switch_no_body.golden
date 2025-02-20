@@ -1,0 +1,1 @@
+tests/_sh/checks/switch_no_body.c:5:0  comp_statement: switch without body

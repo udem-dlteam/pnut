@@ -3,209 +3,211 @@
 // putchar
 #include <stdio.h>
 
-// Generally, the recursion limit for macros is 100 / 2 as defined by MACRO_RECURSION_MAX.
-// However, when the macro is in "tail position", there's no limit on nesting depth.
-// Testing with a chain of 200 macros to test this "tail call optimization".
-#define A1 1
-#define A2 A1
-#define A3 A2
-#define A4 A3
-#define A5 A4
-#define A6 A5
-#define A7 A6
-#define A8 A7
-#define A9 A8
-#define A10 A9
-#define A11 A10
-#define A12 A11
-#define A13 A12
-#define A14 A13
-#define A15 A14
-#define A16 A15
-#define A17 A16
-#define A18 A17
-#define A19 A18
-#define A20 A19
-#define A21 A20
-#define A22 A21
-#define A23 A22
-#define A24 A23
-#define A25 A24
-#define A26 A25
-#define A27 A26
-#define A28 A27
-#define A29 A28
-#define A30 A29
-#define A31 A30
-#define A32 A31
-#define A33 A32
-#define A34 A33
-#define A35 A34
-#define A36 A35
-#define A37 A36
-#define A38 A37
-#define A39 A38
-#define A40 A39
-#define A41 A40
-#define A42 A41
-#define A43 A42
-#define A44 A43
-#define A45 A44
-#define A46 A45
-#define A47 A46
-#define A48 A47
-#define A49 A48
-#define A50 A49
-#define A51 A50
-#define A52 A51
-#define A53 A52
-#define A54 A53
-#define A55 A54
-#define A56 A55
-#define A57 A56
-#define A58 A57
-#define A59 A58
-#define A60 A59
-#define A61 A60
-#define A62 A61
-#define A63 A62
-#define A64 A63
-#define A65 A64
-#define A66 A65
-#define A67 A66
-#define A68 A67
-#define A69 A68
-#define A70 A69
-#define A71 A70
-#define A72 A71
-#define A73 A72
-#define A74 A73
-#define A75 A74
-#define A76 A75
-#define A77 A76
-#define A78 A77
-#define A79 A78
-#define A80 A79
-#define A81 A80
-#define A82 A81
-#define A83 A82
-#define A84 A83
-#define A85 A84
-#define A86 A85
-#define A87 A86
-#define A88 A87
-#define A89 A88
-#define A90 A89
-#define A91 A90
-#define A92 A91
-#define A93 A92
-#define A94 A93
-#define A95 A94
-#define A96 A95
-#define A97 A96
-#define A98 A97
-#define A99 A98
-#define A100 A99
-#define A101 A100
-#define A102 A101
-#define A103 A102
-#define A104 A103
-#define A105 A104
-#define A106 A105
-#define A107 A106
-#define A108 A107
-#define A109 A108
-#define A110 A109
-#define A111 A110
-#define A112 A111
-#define A113 A112
-#define A114 A113
-#define A115 A114
-#define A116 A115
-#define A117 A116
-#define A118 A117
-#define A119 A118
-#define A120 A119
-#define A121 A120
-#define A122 A121
-#define A123 A122
-#define A124 A123
-#define A125 A124
-#define A126 A125
-#define A127 A126
-#define A128 A127
-#define A129 A128
-#define A130 A129
-#define A131 A130
-#define A132 A131
-#define A133 A132
-#define A134 A133
-#define A135 A134
-#define A136 A135
-#define A137 A136
-#define A138 A137
-#define A139 A138
-#define A140 A139
-#define A141 A140
-#define A142 A141
-#define A143 A142
-#define A144 A143
-#define A145 A144
-#define A146 A145
-#define A147 A146
-#define A148 A147
-#define A149 A148
-#define A150 A149
-#define A151 A150
-#define A152 A151
-#define A153 A152
-#define A154 A153
-#define A155 A154
-#define A156 A155
-#define A157 A156
-#define A158 A157
-#define A159 A158
-#define A160 A159
-#define A161 A160
-#define A162 A161
-#define A163 A162
-#define A164 A163
-#define A165 A164
-#define A166 A165
-#define A167 A166
-#define A168 A167
-#define A169 A168
-#define A170 A169
-#define A171 A170
-#define A172 A171
-#define A173 A172
-#define A174 A173
-#define A175 A174
-#define A176 A175
-#define A177 A176
-#define A178 A177
-#define A179 A178
-#define A180 A179
-#define A181 A180
-#define A182 A181
-#define A183 A182
-#define A184 A183
-#define A185 A184
-#define A186 A185
-#define A187 A186
-#define A188 A187
-#define A189 A188
-#define A190 A189
-#define A191 A190
-#define A192 A191
-#define A193 A192
-#define A194 A193
-#define A195 A194
-#define A196 A195
-#define A197 A196
-#define A198 A197
-#define A199 A198
-#define A200 A199
+// Note(2025-02-01): The tail call optimization was removed to support self-referencing macros.
+//
+// // Generally, the recursion limit for macros is 100 / 2 as defined by MACRO_RECURSION_MAX.
+// // However, when the macro is in "tail position", there's no limit on nesting depth.
+// // Testing with a chain of 200 macros to test this "tail call optimization".
+// #define A1 1
+// #define A2 A1
+// #define A3 A2
+// #define A4 A3
+// #define A5 A4
+// #define A6 A5
+// #define A7 A6
+// #define A8 A7
+// #define A9 A8
+// #define A10 A9
+// #define A11 A10
+// #define A12 A11
+// #define A13 A12
+// #define A14 A13
+// #define A15 A14
+// #define A16 A15
+// #define A17 A16
+// #define A18 A17
+// #define A19 A18
+// #define A20 A19
+// #define A21 A20
+// #define A22 A21
+// #define A23 A22
+// #define A24 A23
+// #define A25 A24
+// #define A26 A25
+// #define A27 A26
+// #define A28 A27
+// #define A29 A28
+// #define A30 A29
+// #define A31 A30
+// #define A32 A31
+// #define A33 A32
+// #define A34 A33
+// #define A35 A34
+// #define A36 A35
+// #define A37 A36
+// #define A38 A37
+// #define A39 A38
+// #define A40 A39
+// #define A41 A40
+// #define A42 A41
+// #define A43 A42
+// #define A44 A43
+// #define A45 A44
+// #define A46 A45
+// #define A47 A46
+// #define A48 A47
+// #define A49 A48
+// #define A50 A49
+// #define A51 A50
+// #define A52 A51
+// #define A53 A52
+// #define A54 A53
+// #define A55 A54
+// #define A56 A55
+// #define A57 A56
+// #define A58 A57
+// #define A59 A58
+// #define A60 A59
+// #define A61 A60
+// #define A62 A61
+// #define A63 A62
+// #define A64 A63
+// #define A65 A64
+// #define A66 A65
+// #define A67 A66
+// #define A68 A67
+// #define A69 A68
+// #define A70 A69
+// #define A71 A70
+// #define A72 A71
+// #define A73 A72
+// #define A74 A73
+// #define A75 A74
+// #define A76 A75
+// #define A77 A76
+// #define A78 A77
+// #define A79 A78
+// #define A80 A79
+// #define A81 A80
+// #define A82 A81
+// #define A83 A82
+// #define A84 A83
+// #define A85 A84
+// #define A86 A85
+// #define A87 A86
+// #define A88 A87
+// #define A89 A88
+// #define A90 A89
+// #define A91 A90
+// #define A92 A91
+// #define A93 A92
+// #define A94 A93
+// #define A95 A94
+// #define A96 A95
+// #define A97 A96
+// #define A98 A97
+// #define A99 A98
+// #define A100 A99
+// #define A101 A100
+// #define A102 A101
+// #define A103 A102
+// #define A104 A103
+// #define A105 A104
+// #define A106 A105
+// #define A107 A106
+// #define A108 A107
+// #define A109 A108
+// #define A110 A109
+// #define A111 A110
+// #define A112 A111
+// #define A113 A112
+// #define A114 A113
+// #define A115 A114
+// #define A116 A115
+// #define A117 A116
+// #define A118 A117
+// #define A119 A118
+// #define A120 A119
+// #define A121 A120
+// #define A122 A121
+// #define A123 A122
+// #define A124 A123
+// #define A125 A124
+// #define A126 A125
+// #define A127 A126
+// #define A128 A127
+// #define A129 A128
+// #define A130 A129
+// #define A131 A130
+// #define A132 A131
+// #define A133 A132
+// #define A134 A133
+// #define A135 A134
+// #define A136 A135
+// #define A137 A136
+// #define A138 A137
+// #define A139 A138
+// #define A140 A139
+// #define A141 A140
+// #define A142 A141
+// #define A143 A142
+// #define A144 A143
+// #define A145 A144
+// #define A146 A145
+// #define A147 A146
+// #define A148 A147
+// #define A149 A148
+// #define A150 A149
+// #define A151 A150
+// #define A152 A151
+// #define A153 A152
+// #define A154 A153
+// #define A155 A154
+// #define A156 A155
+// #define A157 A156
+// #define A158 A157
+// #define A159 A158
+// #define A160 A159
+// #define A161 A160
+// #define A162 A161
+// #define A163 A162
+// #define A164 A163
+// #define A165 A164
+// #define A166 A165
+// #define A167 A166
+// #define A168 A167
+// #define A169 A168
+// #define A170 A169
+// #define A171 A170
+// #define A172 A171
+// #define A173 A172
+// #define A174 A173
+// #define A175 A174
+// #define A176 A175
+// #define A177 A176
+// #define A178 A177
+// #define A179 A178
+// #define A180 A179
+// #define A181 A180
+// #define A182 A181
+// #define A183 A182
+// #define A184 A183
+// #define A185 A184
+// #define A186 A185
+// #define A187 A186
+// #define A188 A187
+// #define A189 A188
+// #define A190 A189
+// #define A191 A190
+// #define A192 A191
+// #define A193 A192
+// #define A194 A193
+// #define A195 A194
+// #define A196 A195
+// #define A197 A196
+// #define A198 A197
+// #define A199 A198
+// #define A200 A199
 
 // Testing with a chain of 50 non-tail macro expansions to test the recursion limit.
 #define B1 0 + 0
@@ -312,14 +314,12 @@
 #define B101 B100 + 0
 #define B102 B101 + 0
 
-// Testing with a chain of 200 macros to test this "tail call optimization".
-
 void putdigit(int n) {
   putchar('0' + n);
   putchar('\n');
 }
 
 void main() {
-  putdigit(A200);
+  // putdigit(A200); // Disabled, see note above
   putdigit(B50);
 }
