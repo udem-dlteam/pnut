@@ -448,6 +448,9 @@ void grow_stack_bytes(int bytes) {
   add_reg_imm(reg_SP, -word_size_align(bytes));
 }
 
+void rt_debug(char* msg);
+void rt_crash(char* msg);
+
 // Label definition
 
 enum {
@@ -461,9 +464,13 @@ enum {
 #define END_INIT_BLOCK()   \
   jump(init_next_lbl);
 
-#ifdef SAFE_MODE
+#if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
 int labels[100000];
 int labels_ix = 0;
+
+#ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+void def_label(int lbl);
+#endif
 
 void assert_all_labels_defined() {
   int i = 0;
@@ -471,6 +478,19 @@ void assert_all_labels_defined() {
   // Check that all labels are defined
   for (; i < labels_ix; i++) {
     lbl = labels[i];
+#ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+    if (heap[lbl + 1] > 0) {
+      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
+        def_label(lbl);
+        rt_debug("Function or label is not defined\n");
+        rt_debug("name = ");
+        rt_debug((char*) heap[lbl + 2]);
+        rt_debug("\n");
+        // TODO: This should crash but let's just return for now to see how far we can get
+        ret();
+      }
+    }
+#else
     if (heap[lbl + 1] > 0) {
       putstr("Label ");
       if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
@@ -481,18 +501,25 @@ void assert_all_labels_defined() {
       putstr(" is not defined\n");
       exit(1);
     }
+#endif
   }
 }
 
 void add_label(int lbl) {
+  if (labels_ix >= sizeof(labels) / sizeof(labels[0])) fatal_error("labels array is full");
+
   labels[labels_ix++] = lbl;
 }
 
 int alloc_label(char* name) {
-  int lbl = alloc_obj(3);
+  int lbl = alloc_obj(5);
   heap[lbl] = GENERIC_LABEL;
   heap[lbl + 1] = 0; // Address of label
   heap[lbl + 2] = (intptr_t) name; // Name of label
+  heap[lbl + 3] = (intptr_t) fp_filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  heap[lbl + 4] = line_number;
+#endif
   add_label(lbl);
   return lbl;
 }
@@ -565,7 +592,21 @@ void def_label(int lbl) {
   if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
 
   if (addr < 0) {
-    fatal_error("label defined more than once");
+#ifdef SAFE_MODE
+    putstr("Label ");
+    if (heap[lbl + 2] != 0) {
+      putstr((char*) heap[lbl + 2]);
+    } else {
+      putint(lbl);
+    }
+    putstr(" previously defined at ");
+    putstr((char*) heap[lbl + 3]);
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+    putstr(":");
+    putint(heap[lbl + 4]);
+#endif
+    fatal_error(" being redefined");
+#endif
   } else {
     heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
@@ -2558,6 +2599,7 @@ void rt_debug(char* msg) {
 
 void rt_crash(char* msg) {
   rt_debug(msg);
+  mov_reg_imm(reg_X, 42); // exit code
   os_exit();
 }
 
@@ -2604,7 +2646,7 @@ void rt_malloc() {
   // Make sure the heap is large enough.
   // new bump pointer (reg_x) >= end of heap (reg_y)
   jump_cond_reg_reg(LE, end_lbl, reg_X, reg_Y);
-  rt_crash("Heap overflow");
+  rt_crash("Heap overflow\n");
 
   def_label(end_lbl);
   mov_reg_mem(reg_Y, reg_glo, WORD_SIZE); // Old bump pointer
@@ -2743,7 +2785,7 @@ void codegen_builtin() {
 
   // printf function stub
   declare_builtin("printf", true, int_type, list1(string_type));
-  rt_crash("printf is not supported yet.");
+  rt_crash("printf is not supported yet.\n");
   ret();
   init_forward_jump_table(cgc_globals);
 #endif
