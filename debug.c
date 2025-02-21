@@ -147,10 +147,10 @@ void print_tok(int tok, int val) {
   else if (tok == LIST)             putstr("list");
 
   else if (tok == IDENTIFIER) {
-    putstr(string_pool + heap[val+1]);
+    putstr(STRING_BUF(val));
   } else if (tok == MACRO) {
     putchar('[');
-    putstr(string_pool + heap[val+1]);
+    putstr(STRING_BUF(val));
     putchar(']');
   }
   else if (tok == INTEGER) {
@@ -420,7 +420,7 @@ void ast_to_sexp(ast obj) {
     case DECL:
       // Nodes of type DECL are a bit special because they contain a type, and types have their own structure
       putstr("(decl ");
-      ast_to_sexp(get_child__(DECL, IDENTIFIER, obj, 0));
+      ast_to_sexp(get_child_opt_(DECL, IDENTIFIER, obj, 0));
       putchar(' ');
       type_ast_to_sexp(get_child_(DECL, obj, 1));
       if (get_child_(DECL, obj, 2)) { // Initializer, if present
