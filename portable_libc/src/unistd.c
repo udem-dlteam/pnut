@@ -1,5 +1,5 @@
-#include "include/unistd.h"
-#include "include/crt1.h"
+#include "../include/unistd.h"
+#include "../include/crt1.h"
 
 /* These are assumed to be builtin
 
@@ -30,6 +30,10 @@ char *getcwd(char *buf, size_t size) {
   return _getcwd (buf, size);
   */
   return 0; /*TODO*/
+}
+
+void unlink(const char *pathname) {
+  // printf("unlink: %s\n", pathname);
 }
 
 #endif
