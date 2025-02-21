@@ -1663,6 +1663,7 @@ void codegen_begin() {
   putchar_lbl = alloc_label("putchar");
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
 
+#ifndef NO_BUILTIN_LIBC
   fopen_lbl = alloc_label("fopen");
   cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
 
@@ -1677,6 +1678,7 @@ void codegen_begin() {
 
   free_lbl = alloc_label("free");
   cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
+#endif
 
   read_lbl = alloc_label("read");
   cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
@@ -1690,8 +1692,10 @@ void codegen_begin() {
   close_lbl = alloc_label("close");
   cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
 
+#ifndef NO_BUILTIN_LIBC
   printf_lbl = alloc_label("printf");
   cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
+#endif
 
   jump(setup_lbl);
 }
@@ -2491,6 +2495,7 @@ void codegen_end() {
   os_putchar();
   ret();
 
+#ifndef NO_BUILTIN_LIBC
   // fopen function
   def_label(fopen_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
@@ -2520,6 +2525,7 @@ void codegen_end() {
   mov_reg_mem(reg_X, reg_SP, word_size);
   rt_free();
   ret();
+#endif
 
   // read function
   def_label(read_lbl);
@@ -2561,9 +2567,11 @@ void codegen_end() {
   ret();
 
   // printf function stub
+#ifndef NO_BUILTIN_LIBC
   def_label(printf_lbl);
   rt_crash("printf is not supported yet.\n");
   ret();
+#endif
 
   assert_all_labels_defined();
 
