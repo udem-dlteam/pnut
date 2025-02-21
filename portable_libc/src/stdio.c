@@ -1,7 +1,8 @@
-#include "include/stdio.h"
+#include "../include/stdio.h"
 
-#include "include/stdlib.h"
-#include "include/unistd.h"
+#include "../include/stdlib.h"
+#include "../include/unistd.h"
+#include "../include/fcntl.h"
 
 FILE _standard_files[4];
 
@@ -21,32 +22,61 @@ int _get_fd(FILE *f) {
   } else if (f == _standard_files+2) {
     return 2;
   } else {
-#ifdef USE_STRUCT
-    return f->fd;
-#else
     return *f;
-#endif
   }
 }
 
-FILE *fopen(const char *pathname, const char *mode) {
-  return 0; /*TODO*/
+int fopen_flags(const char *mode) {
+  int res = 0;
+  while (*mode == 'b') ++mode; // Ignore binary mode
+
+  printf("fopen_flags: mode=%s\n", mode);
+
+  if (*mode == 'r') {
+    res = O_RDONLY;
+  } else if (*mode == 'w') {
+    res = O_WRONLY | O_CREAT | O_TRUNC;
+  } else if (*mode == 'a') {
+    res = O_WRONLY | O_CREAT | O_APPEND;
+  } else {
+    return 0;
+  }
+
+  mode += 1;
+  while (*mode == 'b') ++mode; // Ignore binary mode (it can appear after r, w, a)
+
+  if (*mode == '+') {
+    res = res & ~(O_RDONLY | O_WRONLY) | O_RDWR;
+  }
+
+  return res;
 }
 
 FILE *fdopen(int fd, const char *mode) {
   FILE *result = malloc(sizeof(FILE));
   if (result) {
-#ifdef USE_STRUCT
-    result->fd = fd;
-#else
     *result = fd;
-#endif
   }
   return result;
 }
 
+FILE *fopen(const char *pathname, const char *mode) {
+  int fd = open(pathname, fopen_flags(mode), 0);
+  if (fd == -1) {
+    return 0;
+  } else {
+    return fdopen(fd, mode);
+  }
+}
+
 int fclose(FILE *stream) {
-  return 0; /*TODO*/
+  int fd = _get_fd(stream);
+  free(stream);
+  if (close(fd) == 0) {
+    return 0;
+  } else {
+    return EOF;
+  }
 }
 
 char _output_buf[1];
@@ -88,12 +118,16 @@ int _fputstr(const char *str, FILE *stream) {
 
 int fputs(const char *s, FILE *stream) {
   _fputstr(s, stream);
-  fputc('\n', stream);
+  // fputc('\n', stream);
   return 0;
 }
 
 int puts(const char *s) {
   return fputs(s, stdout);
+}
+
+int fflush(FILE *stream) {
+  return 0; // no buffering so nothing to do
 }
 
 #define SIZEOF_NUM_BUF 100
