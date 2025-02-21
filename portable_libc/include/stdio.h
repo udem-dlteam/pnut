@@ -4,6 +4,8 @@
 #include "sys/types.h"
 #include "stdarg.h"
 
+#define EOF (-1)
+
 #ifdef USE_STRUCT
 
 typedef struct {
@@ -34,6 +36,7 @@ extern FILE *stderr;
 
 #endif
 
+int fgetc(FILE *stream);
 FILE *fopen(const char *pathname, const char *mode);
 FILE *fdopen(int fd, const char *mode);
 int fclose(FILE *stream);
@@ -51,9 +54,13 @@ int remove(const char *_Filename);
 int vfprintf(FILE *stream, const char *format, va_list ap);
 int fprintf(FILE *stream, const char *format VAR_ARGS);
 int printf(const char *format VAR_ARGS);
+int fflush(FILE *stream);
+int sscanf(const char *_Src, const char *_Format, ...);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 int snprintf(char *str, size_t size, const char *format VAR_ARGS);
 int sprintf(char *str, const char *format VAR_ARGS);
+
+#include "../src/stdio.c"
 
 #endif
