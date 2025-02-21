@@ -2520,6 +2520,10 @@ void codegen_glo_fun_decl(ast node) {
     if (get_op(fun_return_type) != VOID_KW) main_returns = true;
   }
 
+  // Poor man's debug info
+  debug_interrupt(); // Marker to helps us find the function in the disassembly
+  codegen_string(name_probe);
+
   def_label(fun_binding_lbl(binding));
 
   // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
