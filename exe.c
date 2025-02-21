@@ -819,7 +819,7 @@ ast value_type(ast node) {
   } else if (nb_children == 2) {
 
     if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^'
-     || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ) {
+     || op == LSHIFT || op == RSHIFT) {
       left_type = value_type(child0);
       right_type = value_type(child1);
       if (is_pointer_type(left_type) && is_pointer_type(right_type) && op == '-') {
@@ -831,6 +831,8 @@ ast value_type(ast node) {
         // if left is not a pointer, the type is the type of the right operand
         return right_type;
       }
+    } else if (op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ) {
+      return int_type; // Comparison always returns an integer
     } else if (op == ',') {
       return value_type(child1); // The type of the right operand
     } else if (op == '[') {
