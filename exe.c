@@ -2279,6 +2279,10 @@ void codegen_glo_fun_decl(ast node) {
     binding = cgc_globals;
   }
 
+  // Poor man's debug info
+  debug_interrupt(); // Marker to helps us find the function in the disassembly
+  codegen_string(name_probe);
+
   def_label(heap[binding+4]);
 
   cgc_fs = -1; // space for return address
