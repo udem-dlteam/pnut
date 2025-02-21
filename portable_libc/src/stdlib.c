@@ -1,22 +1,42 @@
-#include "include/stdlib.h"
+#include "../include/stdlib.h"
 
-#define HEAP_SIZE 1000000
+#define HEAP_SIZE 1000000000
 
 char _heap[HEAP_SIZE];
 int _heap_alloc = 0;
 
 void *malloc(size_t size) {
+  size += sizeof(size_t); // size + size_t (for size)
   char *result = _heap + _heap_alloc;
-  if (_heap_alloc + size > HEAP_SIZE) return 0;
   _heap_alloc += size;
-  return result;
+  if (_heap_alloc > HEAP_SIZE) return 0; // out of memory
+  *((size_t*)result) = size; // store size
+  return result + sizeof(size_t); // return pointer to memory, after size field
 }
 
 void free(void *ptr) {
+  return; // no-op
 }
 
 void *realloc(void *ptr, size_t size) {
-  return 0; /*TODO*/
+  int i, new_ptr;
+  size_t old_size;
+  if (size == 0) {
+    free(ptr);
+  } else {
+    new_ptr = malloc(size);
+    if (ptr) {
+      old_size = *((size_t*)((char *) ptr - sizeof(size_t)));
+      if (old_size < size) size = old_size; //
+      // Copy memory
+      for (i = 0; i < size; i++) {
+        ((char*)new_ptr)[i] = ((char*)ptr)[i];
+      }
+    }
+    ptr = new_ptr;
+  }
+
+  return ptr;
 }
 
 #ifndef PNUT_CC
@@ -92,4 +112,8 @@ long int strtol(const char *str, char **endptr, int base) {
 
 int atoi(const char *str) {
   return strtol(str, 0, 10);
+}
+
+char *getenv(const char *name) {
+  return 0; /*TODO*/
 }
