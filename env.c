@@ -173,12 +173,13 @@ void cgc_add_enclosing_loop(int loop_fs, int break_lbl, ast continue_lbl) {
 }
 
 void cgc_add_enclosing_switch(int loop_fs, int break_lbl, int next_case_lbl) {
-  int binding = alloc_obj(5);
+  int binding = alloc_obj(6);
   heap[binding+0] = cgc_locals;
   heap[binding+1] = BINDING_SWITCH;
   heap[binding+2] = loop_fs;
   heap[binding+3] = break_lbl;
   heap[binding+4] = next_case_lbl;
+  heap[binding+5] = 0; // Default label
   cgc_locals = binding;
 }
 
