@@ -1,6 +1,4 @@
 // common part of machine code generators
-const int word_size;
-
 void generate_exe();
 
 // 1MB heap
@@ -141,7 +139,7 @@ void dup(int reg) {
 void load_mem_location(int dst, int base, int offset, int width) {
   if (width == 1) {
     mov_reg_mem8(dst, base, offset);
-  } else if (width == word_size) {
+  } else if (width == WORD_SIZE) {
     mov_reg_mem(dst, base, offset);
   } else {
     fatal_error("load_mem_location: unknown width");
@@ -152,7 +150,7 @@ void load_mem_location(int dst, int base, int offset, int width) {
 void write_mem_location(int base, int offset, int src, int width) {
   if (width == 1) {
     mov_mem8_reg(base, offset, src);
-  } else if (width == word_size) {
+  } else if (width == WORD_SIZE) {
     mov_mem_reg(base, offset, src);
   } else {
     fatal_error("write_mem_location: unknown width");
@@ -162,13 +160,13 @@ void write_mem_location(int base, int offset, int src, int width) {
 void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int width) {
   int i;
   // move the words
-  for (i = 0; i < width / word_size; i += 1) {
-    mov_reg_mem(reg_Z, src_base, src_offset + i * word_size);
-    mov_mem_reg(dst_base, dst_offset + i * word_size, reg_Z);
+  for (i = 0; i < width / WORD_SIZE; i += 1) {
+    mov_reg_mem(reg_Z, src_base, src_offset + i * WORD_SIZE);
+    mov_mem_reg(dst_base, dst_offset + i * WORD_SIZE, reg_Z);
   }
 
   // then move the remaining bytes
-  for (i = width - width % word_size; i < width; i += 1) {
+  for (i = width - width % WORD_SIZE; i < width; i += 1) {
     mov_reg_mem8(reg_Z, src_base, src_offset + i);
     mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
   }
@@ -178,10 +176,10 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
 void initialize_memory(int val, int base, int offset, int width) {
   int i;
   mov_reg_imm(reg_Z, val);
-  for (i = 0; i < width / word_size; i += 1) {
-    mov_mem_reg(base, offset + i * word_size, reg_Z);
+  for (i = 0; i < width / WORD_SIZE; i += 1) {
+    mov_mem_reg(base, offset + i * WORD_SIZE, reg_Z);
   }
-  for (i = width - width % word_size; i < width; i += 1) {
+  for (i = width - width % WORD_SIZE; i < width; i += 1) {
     mov_mem8_reg(base, offset + i, reg_Z);
   }
 }
@@ -314,15 +312,15 @@ int open_lbl;
 int close_lbl;
 
 int round_up_to_word_size(int n) {
-  return (n + word_size - 1) / word_size * word_size;
+  return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
 }
 
 void grow_stack(int words) {
-  add_reg_imm(reg_SP, -words * word_size);
+  add_reg_imm(reg_SP, -words * WORD_SIZE);
 }
 
 // Like grow_stack, but takes bytes instead of words.
-// To maintain alignment, the stack is grown by a multiple of word_size (rounded
+// To maintain alignment, the stack is grown by a multiple of WORD_SIZE (rounded
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
   add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
@@ -601,12 +599,12 @@ int type_width(ast type, bool array_value, bool word_align) {
       if (array_value) {
         return round_up_to_word_size(get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false));
       } else {
-        return word_size; // Array is a pointer to the first element
+        return WORD_SIZE; // Array is a pointer to the first element
       }
     case '*':
-      return word_size;
+      return WORD_SIZE;
     case CHAR_KW:
-      return word_align ? word_size : 1;
+      return word_align ? WORD_SIZE : 1;
     case STRUCT_KW:
     case UNION_KW:
       return struct_union_size(type);
@@ -614,7 +612,7 @@ int type_width(ast type, bool array_value, bool word_align) {
       fatal_error("type_width: void type");
       return 0;
     default:
-      return word_size;
+      return WORD_SIZE;
   }
 }
 
@@ -738,7 +736,7 @@ int ref_type_width(ast type) {
     case '*':
       return type_width(get_child_('*', type, 1), false, false); // size of inner type;
     default:
-      return word_size;
+      return WORD_SIZE;
   }
 }
 
@@ -1096,13 +1094,13 @@ int codegen_param(ast param) {
     pop_reg(reg_X);
     grow_fs(-1);
     grow_stack_bytes(round_up_to_word_size(left_width));
-    grow_fs(round_up_to_word_size(left_width) / word_size);
+    grow_fs(round_up_to_word_size(left_width) / WORD_SIZE);
     copy_obj(reg_SP, 0, reg_X, 0, left_width);
   } else {
     codegen_rvalue(param);
   }
 
-  return type_width(type, false, true) / word_size;
+  return type_width(type, false, true) / WORD_SIZE;
 }
 
 #ifdef SAFE_MODE
@@ -1222,7 +1220,7 @@ int codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           push_reg(reg_X);
           break;
@@ -1372,7 +1370,7 @@ void codegen_rvalue(ast node) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // structs/unions are allocated on the stack, so no need to dereference
           // For arrays, we need to dereference the pointer since they are passed as pointers
@@ -1383,7 +1381,7 @@ void codegen_rvalue(ast node) {
           break;
 
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // local arrays/structs/unions are allocated on the stack, so no need to dereference
           if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
@@ -1594,7 +1592,7 @@ void codegen_rvalue(ast node) {
           add_reg_imm(reg_Y, struct_member_offset(type1, child1));
         }
         if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, word_size);
+          mov_reg_mem(reg_Y, reg_Y, 0);
         }
         push_reg(reg_Y);
       } else {
@@ -1645,8 +1643,8 @@ void codegen_begin() {
 
   // Make room for heap start and malloc bump pointer.
   // reg_glo[0]: heap start
-  // reg_glo[word_size]: malloc bump pointer
-  cgc_global_alloc += 2 * word_size;
+  // reg_glo[WORD_SIZE]: malloc bump pointer
+  cgc_global_alloc += 2 * WORD_SIZE;
 
   int_type = new_ast0(INT_KW, 0);
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
@@ -1784,7 +1782,7 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
     // Create the string and assign global variable to the pointer
     codegen_string(string_probe);
     pop_reg(reg_X);
-    write_mem_location(base_reg, offset, reg_X, word_size);
+    mov_mem_reg(base_reg, offset, reg_X);
   } else {
     fatal_error("codegen_initializer: string initializer must be assigned to a char[] or char*");
   }
@@ -1969,7 +1967,7 @@ void codegen_local_var_decl(ast node) {
   infer_array_length(type, init);
 
   if (is_aggregate_type(type)) { // Array/struct/union declaration
-    size = type_width(type, true, true) / word_size;  // size in bytes (word aligned)
+    size = type_width(type, true, true) / WORD_SIZE;  // size in bytes (word aligned)
   } else {
     size = 1;
   }
@@ -2281,7 +2279,7 @@ void add_params(ast params) {
 
     if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
-    cgc_add_local_param(ident, type_width(type, false, true) / word_size, type);
+    cgc_add_local_param(ident, type_width(type, false, true) / WORD_SIZE, type);
     params = tail(params);
   }
 }
@@ -2385,7 +2383,7 @@ void rt_crash(char* msg) {
 void rt_malloc() {
   int end_lbl = alloc_label("rt_malloc_success");
 
-  mov_reg_mem(reg_Y, reg_glo, word_size); // Bump pointer
+  mov_reg_mem(reg_Y, reg_glo, WORD_SIZE); // Bump pointer
   add_reg_reg(reg_X, reg_Y);              // New bump pointer
   mov_reg_mem(reg_Y, reg_glo, 0);         // Heap start
   add_reg_imm(reg_Y, RT_HEAP_SIZE);       // End of heap
@@ -2396,8 +2394,8 @@ void rt_malloc() {
   rt_crash("Heap overflow\n");
 
   def_label(end_lbl);
-  mov_reg_mem(reg_Y, reg_glo, word_size); // Old bump pointer
-  mov_mem_reg(reg_glo, word_size, reg_X); // Adjust the bump pointer
+  mov_reg_mem(reg_Y, reg_glo, WORD_SIZE); // Old bump pointer
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // Adjust the bump pointer
   mov_reg_reg(reg_X, reg_Y);              // Return the old bump pointer
 }
 
@@ -2429,7 +2427,7 @@ void codegen_end() {
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
-  mov_mem_reg(reg_glo, word_size, reg_X); // init bump pointer
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // init bump pointer
 
   jump(init_start_lbl);
 
@@ -2442,7 +2440,7 @@ void codegen_end() {
 
   // exit function
   def_label(exit_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_exit();
 
   // getchar function
@@ -2452,69 +2450,69 @@ void codegen_end() {
 
   // putchar function
   def_label(putchar_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_putchar();
   ret();
 
 #ifndef NO_BUILTIN_LIBC
   // fopen function
   def_label(fopen_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_fopen();
   ret();
 
   // fclose function
   def_label(fclose_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_fclose();
   ret();
 
   // fgetc function
   def_label(fgetc_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_fgetc();
   ret();
 
   // malloc function
   def_label(malloc_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   rt_malloc();
   ret();
 
   // free function
   def_label(free_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   rt_free();
   ret();
 #endif
 
   // read function
   def_label(read_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
-  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
-  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_read();
   ret();
 
   // write function
   def_label(write_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
-  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
-  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_write();
   ret();
 
   // open function
   def_label(open_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
-  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
-  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_open();
   ret();
 
   // close function
   def_label(close_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_close();
   ret();
 
