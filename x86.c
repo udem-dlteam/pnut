@@ -246,24 +246,19 @@ void add_reg_lbl(int dst, int lbl) {
   use_label(lbl); // 32 bit placeholder for distance
 }
 
-void mov_memory(int op, int reg, int base, int offset) {
+void mov_memory(int op, int reg, int base, int offset, int reg_width) {
 
   // Move word between register and memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  rex_prefix(reg, base);
+  // 16-bit operand size override prefix
+  // See section on Legacy Prefixes: https://web.archive.org/web/20250210181519/https://wiki.osdev.org/X86-64_Instruction_Encoding#ModR/M
+  if (reg_width == 2) emit_i8(0x66);
+  if (reg_width == 8) rex_prefix(reg, base);
   emit_i8(op);
   emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
   if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
   emit_i32_le(offset);
-}
-
-void mov_mem_reg(int base, int offset, int src) {
-
-  // MOV [base_reg + offset], src_reg  ;; Move word from register to memory
-  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
-
-  mov_memory(0x89, src, base, offset);
 }
 
 void mov_mem8_reg(int base, int offset, int src) {
@@ -271,25 +266,67 @@ void mov_mem8_reg(int base, int offset, int src) {
   // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  mov_memory(0x88, src, base, offset);
+  mov_memory(0x88, src, base, offset, 1);
 }
 
-void mov_reg_mem(int dst, int base, int offset) {
+void mov_mem16_reg(int base, int offset, int src) {
 
-  // MOV dst_reg, [base_reg + offset]  ;; Move word from memory to register
+  // MOVB [base_reg + offset], src_reg  ;; Move word (2 bytes) from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  mov_memory(0x8b, dst, base, offset);
+  mov_memory(0x89, src, base, offset, 2);
+}
+
+void mov_mem32_reg(int base, int offset, int src) {
+
+  // MOVB [base_reg + offset], src_reg  ;; Move dword (4 bytes) from register to memory
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x89, src, base, offset, 4);
+}
+
+void mov_mem64_reg(int base, int offset, int src) {
+
+  // MOVB [base_reg + offset], src_reg  ;; Move qword (8 bytes) from register to memory
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x89, src, base, offset, 8);
 }
 
 void mov_reg_mem8(int dst, int base, int offset) {
 
-  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to rezister
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  mov_memory(0x8a, dst, base, offset);
+  mov_memory(0x8a, dst, base, offset, 1);
   mov_reg_imm(DI, 0xff); // mask off the upper bits
   and_reg_reg(dst, DI);
+}
+
+void mov_reg_mem16(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x8b, dst, base, offset, 2);
+  mov_reg_imm(DI, 0xffff); // mask off the upper bits
+  and_reg_reg(dst, DI);
+}
+
+void mov_reg_mem32(int dst, int base, int offset) {
+
+  // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x8b, dst, base, offset, 4);
+}
+
+void mov_reg_mem64(int dst, int base, int offset) {
+
+  // MOV dst_reg, [base_reg + offset]  ;; Move qword (8 bytes) from memory to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x8b, dst, base, offset, 8);
 }
 
 void imul_reg_reg(int dst, int src) {
