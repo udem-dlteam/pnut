@@ -96,10 +96,23 @@ void mov_reg_imm(int dst, int imm);             // Move 32 bit immediate to regi
 void mov_reg_large_imm(int dst, int large_imm); // Move large immediate to register
 #endif
 void mov_reg_reg(int dst, int src);
-void mov_mem_reg(int base, int offset, int src);
 void mov_mem8_reg(int base, int offset, int src);
-void mov_reg_mem(int dst, int base, int offset);
+void mov_mem16_reg(int base, int offset, int src);
+void mov_mem32_reg(int base, int offset, int src);
+void mov_mem64_reg(int base, int offset, int src);
+void mov_mem8_reg(int base, int offset, int src);
 void mov_reg_mem8(int dst, int base, int offset);
+void mov_reg_mem16(int dst, int base, int offset);
+void mov_reg_mem32(int dst, int base, int offset);
+void mov_reg_mem64(int dst, int base, int offset);
+
+#if WORD_SIZE == 4
+#define mov_mem_reg(base, offset, src) mov_mem32_reg(base, offset, src)
+#define mov_reg_mem(dst, base, offset) mov_reg_mem32(dst, base, offset)
+#elif WORD_SIZE == 8
+#define mov_mem_reg(base, offset, src) mov_mem64_reg(base, offset, src)
+#define mov_reg_mem(dst, base, offset) mov_reg_mem64(dst, base, offset)
+#endif
 
 void add_reg_imm(int dst, int imm);
 void add_reg_lbl(int dst, int lbl);
@@ -136,23 +149,31 @@ void dup(int reg) {
 }
 
 void load_mem_location(int dst, int base, int offset, int width) {
-  if (width == 1) {
-    mov_reg_mem8(dst, base, offset);
-  } else if (width == WORD_SIZE) {
-    mov_reg_mem(dst, base, offset);
-  } else {
-    fatal_error("load_mem_location: unknown width");
+  if (width > WORD_SIZE) {
+    fatal_error("load_mem_location: width > WORD_SIZE");
+  }
+
+  switch (width) {
+    case 1: mov_reg_mem8(dst, base, offset); break;
+    case 2: mov_reg_mem16(dst, base, offset); break;
+    case 4: mov_reg_mem32(dst, base, offset); break;
+    case 8: mov_reg_mem64(dst, base, offset); break;
+    default: fatal_error("load_mem_location: unknown width");
   }
 }
 
 // Write a value from a register to a memory location
 void write_mem_location(int base, int offset, int src, int width) {
-  if (width == 1) {
-    mov_mem8_reg(base, offset, src);
-  } else if (width == WORD_SIZE) {
-    mov_mem_reg(base, offset, src);
-  } else {
-    fatal_error("write_mem_location: unknown width");
+  if (width > WORD_SIZE) {
+    fatal_error("write_mem_location: width > WORD_SIZE");
+  }
+
+  switch (width) {
+    case 1: mov_mem8_reg(base, offset, src); break;
+    case 2: mov_mem16_reg(base, offset, src); break;
+    case 4: mov_mem32_reg(base, offset, src); break;
+    case 8: mov_mem64_reg(base, offset, src); break;
+    default: fatal_error("write_mem_location: unknown width");
   }
 }
 
