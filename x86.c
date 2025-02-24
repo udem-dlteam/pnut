@@ -1,22 +1,29 @@
+#ifdef target_i386_linux
+  #define WORD_SIZE 4
+#endif
+
+#ifdef target_x86_64_linux
+  #define WORD_SIZE 8
+#endif
+
+#ifdef target_x86_64_mac
+  #define WORD_SIZE 8
+#endif
+
 // x86 codegen
 #include "exe.c"
 
 #ifdef target_i386_linux
   #include "elf.c"
-  const int word_size = 4; // generating for i386 Linux
 #endif
 
 #ifdef target_x86_64_linux
   #include "elf.c"
-  const int word_size = 8; // generating for x86-64 Linux
 #endif
 
 #ifdef target_x86_64_mac
   #include "mach-o.c"
-  const int word_size = 8; // generating for x86-64 Linux
 #endif
-
-
 
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
 
@@ -45,17 +52,19 @@ const int reg_Z = 5; // BP: temporary register
 const int reg_SP = 4; // SP: stack pointer
 const int reg_glo = 3; // BX: global variables table
 
+#if WORD_SIZE == 8
 void rex_prefix(int reg1, int reg2) {
-  if (word_size == 8) {
-    // REX prefix encodes:
-    //  0x40: fixed value
-    //  0x08: REX.W: a 64-bit operand size is used.
-    //  0x04: REX.R: 1-bit extension for first register encoded for mod_rm
-    //  0x02: REX.X: 1-bit extension for SIB index encoded for mod_rm (Not used)
-    //  0x01: REX.B: 1-bit extension for second register encoded for mod_rm
-    emit_i8(0x48 + 0x04 * (reg1 >= R8) + 0x01 * (reg2 >= R8));
-  }
+  // REX prefix encodes:
+  //  0x40: fixed value
+  //  0x08: REX.W: a 64-bit operand size is used.
+  //  0x04: REX.R: 1-bit extension for first register encoded for mod_rm
+  //  0x02: REX.X: 1-bit extension for SIB index encoded for mod_rm (Not used)
+  //  0x01: REX.B: 1-bit extension for second register encoded for mod_rm
+  emit_i8(0x48 + 0x04 * (reg1 >= R8) + 0x01 * (reg2 >= R8));
 }
+#else
+#define rex_prefix(reg1, reg2)
+#endif
 
 void mod_rm(int reg1, int reg2) {
   // ModR/M byte
@@ -187,13 +196,13 @@ void mov_reg_imm(int dst, int imm) {
 
   rex_prefix(0, dst);
   emit_i8(0xb8 + (dst & 7));
-  if (word_size == 4) {
-    emit_i32_le(imm);
-  } else if (word_size == 8) {
-    emit_i64_le(imm);
-  } else {
-    fatal_error("mov_reg_imm: unknown word size");
-  }
+#if WORD_SIZE == 4
+  emit_i32_le(imm);
+#elif WORD_SIZE == 8
+  emit_i64_le(imm);
+#else
+  #error "mov_reg_imm: unknown word size"
+#endif
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -205,13 +214,13 @@ void mov_reg_large_imm(int dst, int large_imm) {
   rex_prefix(0, dst);
   emit_i8(0xb8 + (dst & 7));
 
-  if (word_size == 4) {
-    emit_i32_le_large_imm(large_imm);
-  } else if (word_size == 8) {
-    emit_i64_le_large_imm(large_imm);
-  } else {
-    fatal_error("mov_reg_large_imm: unknown word size");
-  }
+#if WORD_SIZE == 4
+  emit_i32_le_large_imm(large_imm);
+#elif WORD_SIZE == 8
+  emit_i64_le_large_imm(large_imm);
+#else
+  #error "mov_reg_large_imm: unknown word size"
+#endif
 }
 #endif
 
@@ -565,10 +574,10 @@ void setup_proc_args(int global_vars_size) {
   // Note(13/02/2025): Global variables are now allocated in a separate memory region so global_vars_size is 0.
 
   mov_reg_reg(reg_X, SP);
-  add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
+  add_reg_imm(reg_X, global_vars_size + WORD_SIZE); // compute address of argv
   push_reg(reg_X); // push argv address
 
-  mov_reg_mem(reg_Y, reg_X, -word_size); // load argc
+  mov_reg_mem(reg_Y, reg_X, -WORD_SIZE); // load argc
   push_reg(reg_Y); // push argc
 }
 
@@ -584,7 +593,7 @@ void mov_reg_lbl(int reg, int lbl) {
                            // <--- The stack now has the address of the next instruction
   pop_reg(reg);            // pop reg_X (1 byte)
   add_reg_lbl(reg, lbl);   // load address of label to reg_X (6 or 7 bytes if 32 or 64 bit)
-  add_reg_imm(reg, word_size == 8 ? 8 : 7); // adjust for the pop and add instructions
+  add_reg_imm(reg, WORD_SIZE == 8 ? 8 : 7); // adjust for the pop and add instructions
 }
 
 // For 32 bit linux.
