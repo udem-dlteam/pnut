@@ -58,13 +58,48 @@ void rex_prefix(int reg1, int reg2) {
 }
 
 void mod_rm(int reg1, int reg2) {
-  emit_i8(0xc0 + 8*(reg1 & 7) + (reg2 & 7)); // ModR/M
+  // ModR/M byte
+  //
+  // It is used to encode the operand(s) to an instruction.
+  // The format is the following:
+  // Bit    7   6   5   4   3   2   1   0
+  //        -----   ---------   ---------
+  // Usage   Mod       Reg         R/M
+  //
+  // Operations that use 1 operand generally use the R/M field to specify it.
+  // In that case, the Reg field may be repurposed as an "opcode extension" to
+  // allow multiple instructions to share the same opcode. This is generally
+  // indicated as /digit in the opcode table.
+  //
+  // The mod field encodes the addressing mode for the register/memory ("r/m") operand.
+  // When the mod field is 11, the r/m field is used to specify a register operand.
+  // Otherwise, 00, 01 and 10 specify different addressing modes.
+  //
+  // When mod specifies an addressing mode, the ModR/M byte may be followed by
+  // a SIB byte (Scale Index Base) and/or a displacement.
+  //
+  // See https://web.archive.org/web/20250207155122/https://en.wikipedia.org/wiki/ModR/M
+  //
+  // For our purposes, we only use the case where both operands are registers,
+  // and so we always emit 0xc0 (mod = 11) with the reg1 and reg2 fields.
+  emit_i8(0xc0 + ((reg1 & 7) << 3) + (reg2 & 7));
 }
 
+// ModR/M byte with /digit opcode extension => The reg1 field is repurposed as an opcode extension.
+#define mod_rm_slash_digit(digit, reg1) mod_rm(digit, reg1)
+
+// For instructions with 2 register operands
 void op_reg_reg(int opcode, int dst, int src) {
   rex_prefix(src, dst);
   emit_i8(opcode);
   mod_rm(src, dst);
+}
+
+// For instructions with 1 register operand and /digit opcode extension
+void op_reg_slash_digit(int opcode, int digit, int reg) {
+  rex_prefix(0, reg);
+  emit_i8(opcode);
+  mod_rm_slash_digit(digit, reg);
 }
 
 #ifdef SKIP
@@ -259,6 +294,10 @@ void imul_reg_reg(int dst, int src) {
 }
 
 void mul_reg_reg(int dst, int src) {
+
+  // For our purposes, this is the same as imul_reg_reg.
+  // https://web.archive.org/web/20240914145321/https://stackoverflow.com/questions/42587607/why-is-imul-used-for-multiplying-unsigned-numbers
+
   imul_reg_reg(dst, src);
 }
 
@@ -267,8 +306,15 @@ void idiv_reg(int src) {
   // IDIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
   // See: https://web.archive.org/web/20240407195950/https://www.felixcloutier.com/x86/idiv
 
-  rex_prefix(src, 0);
-  emit_2_i8(0xf7, 0xf8 + (src & 7));
+  op_reg_slash_digit(0xf7, 7, src);
+}
+
+void div_reg(int src) {
+
+  // DIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
+  // See: https://web.archive.org/web/20250202075400/https://www.felixcloutier.com/x86/div
+
+  op_reg_slash_digit(0xf7, 6, src);
 }
 
 void cdq_cqo() {
@@ -281,7 +327,7 @@ void cdq_cqo() {
   emit_i8(0x99);
 }
 
-void div_reg_reg(int dst, int src) {
+void idiv_reg_reg(int dst, int src) {
 
   // Computes dst_reg = dst_reg / src_reg
   // This is not an actual instruction on x86. The operation
@@ -294,7 +340,7 @@ void div_reg_reg(int dst, int src) {
   mov_reg_reg(dst, AX);
 }
 
-void rem_reg_reg(int dst, int src) {
+void irem_reg_reg(int dst, int src) {
 
   // Computes dst_reg = dst_reg % src_reg
   // This is not an actual instruction on x86. The operation
@@ -307,44 +353,87 @@ void rem_reg_reg(int dst, int src) {
   mov_reg_reg(dst, DX);
 }
 
-void shl_reg_cl(int dst) {
+void div_reg_reg(int dst, int src) {
 
-  // SHL dst_reg, cl ;; dst_reg = dst_reg << cl
-  // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
+  // Computes dst_reg = dst_reg / src_reg
+  // This is not an actual instruction on x86. The operation
+  // is emulated with a sequence of instructions that will clobber the
+  // registers AX and DX.
 
-  rex_prefix(0, dst);
-  emit_2_i8(0xd3, 0xe0 + (dst & 7));
+  mov_reg_reg(AX, dst);
+  mov_reg_imm(DX, 0); // Clear DX
+  div_reg(src);
+  mov_reg_reg(dst, AX);
 }
 
-void shl_reg_reg(int dst, int src) {
+void rem_reg_reg(int dst, int src) {
 
-  // Computes dst_reg = dst_reg << src_reg
+  // Computes dst_reg = dst_reg % src_reg
+  // This is not an actual instruction on x86. The operation
+  // is emulated with a sequence of instructions that will clobber the
+  // registers AX and DX.
+
+  mov_reg_reg(AX, dst);
+  mov_reg_imm(DX, 0); // Clear DX
+  div_reg(src);
+  mov_reg_reg(dst, DX);
+}
+
+void s_l_reg_cl(int dst) {
+
+  // SHL dst_reg, cl ;; dst_reg = dst_reg << cl (arithmetic or logical shift, they are the same)
+  // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
+
+  op_reg_slash_digit(0xd3, 4, dst);
+}
+
+void s_l_reg_reg(int dst, int src) {
+
+  // Computes dst_reg = dst_reg << src_reg (arithmetic or logical shift, they are the same)
   // This is not an actual instruction on x86. The operation
   // is emulated with a sequence of instructions that clobbers the
   // register CX, and does not work if dst = CX.
 
   mov_reg_reg(CX, src);
-  shl_reg_cl(dst);
+  s_l_reg_cl(dst);
 }
 
 void sar_reg_cl(int dst) {
 
-  // SAR dst_reg, cl ;; dst_reg = dst_reg >> cl
+  // SAR dst_reg, cl ;; dst_reg = dst_reg >> cl (arithmetic shift)
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
 
-  rex_prefix(0, dst);
-  emit_2_i8(0xd3, 0xf8 + (dst & 7));
+  op_reg_slash_digit(0xd3, 7, dst);
 }
 
 void sar_reg_reg(int dst, int src) {
 
-  // Computes dst_reg = dst_reg >> src_reg
+  // Computes dst_reg = dst_reg >> src_reg (arithmetic shift)
   // This is not an actual instruction on x86. The operation
   // is emulated with a sequence of instructions that clobbers the
   // register CX, and does not work if dst = CX.
 
   mov_reg_reg(CX, src);
   sar_reg_cl(dst);
+}
+
+void shr_reg_cl(int dst) {
+
+  // SHR dst_reg, cl ;; dst_reg = dst_reg >> cl (logical shift)
+  // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
+
+  op_reg_slash_digit(0xd3, 5, dst);
+}
+
+void shr_reg_reg(int dst, int src) {
+
+  // Computes dst_reg = dst_reg >> src_reg (logical shift)
+  // This is not an actual instruction on x86. The operation
+  // is emulated with a sequence of instructions that clobbers the
+  // register CX, and does not work if dst = CX.
+
+  mov_reg_reg(CX, src);
+  shr_reg_cl(dst);
 }
 
 void push_reg(int src) {
@@ -409,12 +498,16 @@ void ret() {
 
 // Conditions for use by jump_cond:
 
-const int EQ = 0x4; // x == y
-const int NE = 0x5; // x != y
-const int LT = 0xc; // x < y
-const int GE = 0xd; // x >= y
-const int LE = 0xe; // x <= y
-const int GT = 0xf; // x > y
+const int EQ   = 0x4; // x == y
+const int NE   = 0x5; // x != y
+const int LT   = 0xc; // x < y
+const int LT_U = 0x2; // x < y  (Jump near if not above or equal (CF=1))
+const int GE   = 0xd; // x >= y
+const int GE_U = 0x3; // x >= y (Jump near if above or equal (CF=0))
+const int LE   = 0xe; // x <= y
+const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
+const int GT   = 0xf; // x > y
+const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
 
 void jump_cond(int cond, int lbl) {
 
