@@ -2,11 +2,6 @@
 
 #include <stdio.h>
 
-#ifdef PNUT_CC
-// pnut does not support unsigned and we want gcc to use unsigned chars
-#define unsigned
-#endif
-
 struct S1 {
   int a;
   int b;
