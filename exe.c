@@ -104,6 +104,9 @@ void mov_mem8_reg(int base, int offset, int src);
 void mov_reg_mem8(int dst, int base, int offset);
 void mov_reg_mem16(int dst, int base, int offset);
 void mov_reg_mem32(int dst, int base, int offset);
+void mov_reg_mem8_sign_ext(int dst, int base, int offset);
+void mov_reg_mem16_sign_ext(int dst, int base, int offset);
+void mov_reg_mem32_sign_ext(int dst, int base, int offset);
 void mov_reg_mem64(int dst, int base, int offset);
 
 #if WORD_SIZE == 4
@@ -148,17 +151,29 @@ void dup(int reg) {
   grow_fs(1);
 }
 
-void load_mem_location(int dst, int base, int offset, int width) {
-  if (width > WORD_SIZE) {
-    fatal_error("load_mem_location: width > WORD_SIZE");
-  }
-
-  switch (width) {
-    case 1: mov_reg_mem8(dst, base, offset); break;
-    case 2: mov_reg_mem16(dst, base, offset); break;
-    case 4: mov_reg_mem32(dst, base, offset); break;
-    case 8: mov_reg_mem64(dst, base, offset); break;
-    default: fatal_error("load_mem_location: unknown width");
+void load_mem_location(int dst, int base, int offset, int width, bool is_signed) {
+  if (is_signed) {
+    switch (width) {
+      case 1: mov_reg_mem8_sign_ext(dst, base, offset);  break;
+      case 2: mov_reg_mem16_sign_ext(dst, base, offset); break;
+#if WORD_SIZE == 4
+      case 4: mov_reg_mem32(dst, base, offset); break;
+#elif WORD_SIZE == 8
+      case 4: mov_reg_mem32_sign_ext(dst, base, offset); break; // This instruction is only available in 64-bit mode
+      case 8: mov_reg_mem64(dst, base, offset);          break; // no sign extension needed
+#endif
+      default: fatal_error("load_mem_location: unknown width");
+    }
+  } else {
+    switch (width) {
+      case 1: mov_reg_mem8(dst, base, offset);  break;
+      case 2: mov_reg_mem16(dst, base, offset); break;
+      case 4: mov_reg_mem32(dst, base, offset); break;
+#if WORD_SIZE == 8
+      case 8: mov_reg_mem64(dst, base, offset); break;
+#endif
+      default: fatal_error("load_mem_location: unknown width");
+    }
   }
 }
 
@@ -516,6 +531,26 @@ void def_goto_label(int lbl) {
   }
 }
 
+ast int_type;
+ast uint_type;
+ast char_type;
+ast string_type;
+ast void_type;
+ast void_star_type;
+
+ast dereference_type(ast type) {
+  switch (get_op(type)) {
+    case '[': // Array type
+      return get_child_('[', type, 0);
+    case '*': // Pointer type
+      return get_child_('*', type, 1);
+    default:
+      putstr("type="); putint(get_op(type)); putchar('\n');
+      fatal_error("dereference_type: non pointer is being dereferenced with *");
+      return -1;
+  }
+}
+
 // Type, structure and union handling
 int struct_union_size(ast struct_type);
 
@@ -608,6 +643,11 @@ int type_width(ast type, bool array_value, bool word_align) {
     default:
       return WORD_SIZE;
   }
+}
+
+// Width of an object pointed to by a reference type.
+ast ref_type_width(ast type) {
+  return type_width(dereference_type(type), false, false);
 }
 
 // Structs, enums and unions types come in 2 variants:
@@ -720,38 +760,6 @@ ast struct_member(ast struct_type, ast member_ident) {
   ast member = struct_member_go(struct_type, member_ident);
   if (member == -1) fatal_error("struct_member: member not found");
   return member;
-}
-
-// Width of an object pointed to by a reference type.
-int ref_type_width(ast type) {
-  switch (get_op(type)) {
-    case '[':
-      return type_width(get_child_('[', type, 0), false, false); // size of inner type
-    case '*':
-      return type_width(get_child_('*', type, 1), false, false); // size of inner type;
-    default:
-      return WORD_SIZE;
-  }
-}
-
-ast int_type;
-ast uint_type;
-ast char_type;
-ast string_type;
-ast void_type;
-ast void_star_type;
-
-ast dereference_type(ast type) {
-  switch (get_op(type)) {
-    case '[': // Array type
-      return get_child_('[', type, 0);
-    case '*': // Pointer type
-      return get_child_('*', type, 1);
-    default:
-      putstr("type="); putint(get_op(type)); putchar('\n');
-      fatal_error("dereference_type: non pointer is being dereferenced with *");
-      return -1;
-  }
 }
 
 int resolve_identifier(int ident_probe) {
@@ -1049,16 +1057,18 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
       mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
       width = ref_type_width(left_type);
+      is_signed = is_signed_numeric_type(dereference_type(left_type));
     } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
       mul_for_pointer_arith(reg_X, ref_type_width(right_type));
       width = ref_type_width(right_type);
+      is_signed = is_signed_numeric_type(dereference_type(right_type));
     } else {
       fatal_error("codegen_binop: invalid array access operands");
       return;
     }
 
     add_reg_reg(reg_X, reg_Y);
-    load_mem_location(reg_X, reg_X, 0, width);
+    load_mem_location(reg_X, reg_X, 0, width, is_signed);
   } else {
     putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_binop: unknown op");
@@ -1353,7 +1363,7 @@ void codegen_rvalue(ast node) {
           // structs/unions are allocated on the stack, so no need to dereference
           // For arrays, we need to dereference the pointer since they are passed as pointers
           if (get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            mov_reg_mem(reg_X, reg_X, 0);
+            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
           break;
@@ -1363,7 +1373,7 @@ void codegen_rvalue(ast node) {
           add_reg_reg(reg_X, reg_SP);
           // local arrays/structs/unions are allocated on the stack, so no need to dereference
           if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            mov_reg_mem(reg_X, reg_X, 0);
+            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
           break;
@@ -1372,7 +1382,7 @@ void codegen_rvalue(ast node) {
           add_reg_reg(reg_X, reg_glo);
           // global arrays/structs/unions are also allocated on the stack, so no need to dereference
           if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            mov_reg_mem(reg_X, reg_X, 0);
+            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
           break;
@@ -1410,7 +1420,7 @@ void codegen_rvalue(ast node) {
       if (is_function_type(type1)) {
       } else if (is_pointer_type(type1)) {
         pop_reg(reg_X);
-        load_mem_location(reg_X, reg_X, 0, ref_type_width(value_type(child0)));
+        load_mem_location(reg_X, reg_X, 0, ref_type_width(type1), is_signed_numeric_type(dereference_type(type1)));
         push_reg(reg_X);
       } else {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
@@ -1439,10 +1449,10 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(child0);
       codegen_binop(EQ_EQ, new_ast0(INTEGER, 0), child0);
       grow_fs(-2);
-    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST){
-      codegen_lvalue(child0);
+    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST) {
+      left_width = codegen_lvalue(child0);
       pop_reg(reg_Y);
-      mov_reg_mem(reg_X, reg_Y, 0);
+      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X); // saves the original value of lvalue
       push_reg(reg_Y);
       push_reg(reg_X); // saves the value of lvalue to be modified
@@ -1452,22 +1462,20 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_X); // result
       pop_reg(reg_Y); // address
       grow_fs(-1);
-      mov_mem_reg(reg_Y, 0, reg_X); // Store the result in the address
+      write_mem_location(reg_Y, 0, reg_X, left_width); // Store the result in the address
     } else if (op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
-      codegen_lvalue(child0);
+      left_width = codegen_lvalue(child0);
       pop_reg(reg_Y);
       push_reg(reg_Y);
-      mov_reg_mem(reg_X, reg_Y, 0);
+      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X);
-      grow_fs(1);
       mov_reg_imm(reg_X, 1); // equivalent to calling codegen rvalue with INTEGER 1 (subtraction or addition handled in codegen_binop)
       push_reg(reg_X);
-      grow_fs(1);
       codegen_binop(op, child0, new_ast0(INTEGER, 0)); // Pops two values off the stack and pushes the result
       pop_reg(reg_X); // result
       pop_reg(reg_Y); // address
-      grow_fs(-3);
-      mov_mem_reg(reg_Y, 0, reg_X); //store the result in the address
+      grow_fs(-1);
+      write_mem_location(reg_Y, 0, reg_X, left_width); // store the result in the address
       push_reg(reg_X);
     } else if (op == '&') {
       codegen_lvalue(child0);
@@ -1512,7 +1520,7 @@ void codegen_rvalue(ast node) {
       left_width = codegen_lvalue(child0);
       pop_reg(reg_Y);
       push_reg(reg_Y);
-      load_mem_location(reg_X, reg_Y, 0, left_width);
+      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(child1);
@@ -1547,7 +1555,7 @@ void codegen_rvalue(ast node) {
           add_reg_imm(reg_Y, struct_member_offset(type1, child1));
         }
         if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false));
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
         }
         push_reg(reg_Y);
       } else {
@@ -1566,7 +1574,7 @@ void codegen_rvalue(ast node) {
           add_reg_imm(reg_Y, struct_member_offset(type1, child1));
         }
         if (!is_aggregate_type(type2)) {
-          mov_reg_mem(reg_Y, reg_Y, 0);
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
         }
         push_reg(reg_Y);
       } else {
