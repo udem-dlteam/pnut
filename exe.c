@@ -1502,11 +1502,7 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_X);
       push_reg(reg_X);
       xor_reg_reg(reg_Y, reg_Y);
-      if (op == AMP_AMP) {
-        jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
-      } else {
-        jump_cond_reg_reg(NE, lbl1, reg_X, reg_Y);
-      }
+      jump_cond_reg_reg(op == AMP_AMP ? EQ : NE, lbl1, reg_X, reg_Y);
       pop_reg(reg_X); grow_fs(-1);
       codegen_rvalue(child1);
       grow_fs(-1);
