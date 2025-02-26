@@ -331,7 +331,7 @@ int write_lbl;
 int open_lbl;
 int close_lbl;
 
-int round_up_to_word_size(int n) {
+int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
 }
 
@@ -343,7 +343,7 @@ void grow_stack(int words) {
 // To maintain alignment, the stack is grown by a multiple of WORD_SIZE (rounded
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
+  add_reg_imm(reg_SP, -word_size_align(bytes));
 }
 
 // Label definition
@@ -576,7 +576,7 @@ int type_width(ast type, bool array_value, bool word_align) {
       // sizeof, in struct definitions, etc.) while in other contexts we care
       // about the pointer (i.e. when passing an array to a function, etc.)
       if (array_value) {
-        return round_up_to_word_size(get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false));
+        return word_size_align(get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false));
       } else {
         return WORD_SIZE; // Array is a pointer to the first element
       }
@@ -667,7 +667,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // For unions, fields are always at offset 0. We must still iterate
       // because the field may be in an anonymous struct, in which case the
       // final offset is not 0.
-      offset += round_up_to_word_size(type_width(get_child_(DECL, decl, 1), true, true));
+      offset += word_size_align(type_width(get_child_(DECL, decl, 1), true, true));
     }
     members = tail(members);
   }
@@ -1072,8 +1072,8 @@ int codegen_param(ast param) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
-    grow_stack_bytes(round_up_to_word_size(left_width));
-    grow_fs(round_up_to_word_size(left_width) / WORD_SIZE);
+    grow_stack_bytes(word_size_align(left_width));
+    grow_fs(word_size_align(left_width) / WORD_SIZE);
     copy_obj(reg_SP, 0, reg_X, 0, left_width);
   } else {
     codegen_rvalue(param);
