@@ -3,7 +3,7 @@
 #include <signal.h>
 
 void signal_callback_handler(int signum) {
-  if (signum == SIGINT){
+  if (signum == SIGINT) {
     printf("Caught signal %d\n",signum);
     printf("Tokenizer at %s:%d:%d\n", fp_filepath, line_number, column_number);
     exit(1);
@@ -464,7 +464,7 @@ void ast_to_sexp(ast obj) {
       break;
 
     case '[':
-      printf("(array_at");
+      printf("(array_at ");
       ast_to_sexp(get_child_('[', obj, 0));
       printf(" ");
       ast_to_sexp(get_child_('[', obj, 1));
