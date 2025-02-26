@@ -558,9 +558,24 @@ bool is_numeric_type(ast type) {
     case DOUBLE_KW:
     case SHORT_KW:
     case LONG_KW:
+    case ENUM_KW: // Enums are considered numeric types
       return true;
-    default:
+    default: // Struct/union/pointer/array
       return false;
+  }
+}
+
+bool is_signed_numeric_type(ast type) {
+  switch (get_op(type)) {
+    case CHAR_KW:
+    case INT_KW:
+    case FLOAT_KW:
+    case DOUBLE_KW:
+    case SHORT_KW:
+    case LONG_KW:
+      return !TEST_TYPE_SPECIFIER(get_val(type), UNSIGNED_KW);
+    default:
+      return true; // Not a numeric type => it's a struct/union/pointer/array and we consider it signed
   }
 }
 
@@ -936,26 +951,18 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   ast right_type = value_type(rhs);
   bool left_is_numeric = is_numeric_type(left_type);
   bool right_is_numeric = is_numeric_type(right_type);
-  bool left_is_unsigned = false;
-  bool right_is_unsigned = false;
   int width;
-
-  if (left_is_numeric)  left_is_unsigned  = TEST_TYPE_SPECIFIER(get_val(left_type), UNSIGNED_KW);
-  if (right_is_numeric) right_is_unsigned = TEST_TYPE_SPECIFIER(get_val(right_type), UNSIGNED_KW);
-
-  // Consider enums as numeric types. We update *_is_numeric after
-  // computing *_is_unsigned because we don't want to use TEST_TYPE_SPECIFIER on
-  // ENUM nodes
-  if (get_op(left_type) == ENUM_KW)  left_is_numeric = true;
-  if (get_op(right_type) == ENUM_KW) right_is_numeric = true;
+  // If any of the operands is unsigned, the result is unsigned
+  bool is_signed = false;
+  if (is_signed_numeric_type(left_type) && is_signed_numeric_type(right_type)) is_signed = true;
 
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
 
-  if      (op == '<')     cond = left_is_unsigned || right_is_unsigned ? LT_U : LT;
-  else if (op == '>')     cond = left_is_unsigned || right_is_unsigned ? GT_U : GT;
-  else if (op == LT_EQ)   cond = left_is_unsigned || right_is_unsigned ? LE_U : LE;
-  else if (op == GT_EQ)   cond = left_is_unsigned || right_is_unsigned ? GE_U : GE;
+  if      (op == '<')     cond = is_signed ? LT : LT_U;
+  else if (op == '>')     cond = is_signed ? GT : GT_U;
+  else if (op == LT_EQ)   cond = is_signed ? LE : LE_U;
+  else if (op == GT_EQ)   cond = is_signed ? GE : GE_U;
   else if (op == EQ_EQ)   cond = EQ;
   else if (op == EXCL_EQ) cond = NE;
 
@@ -1002,23 +1009,23 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   }
   else if (op == '*' || op == STAR_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to *");
-    if (left_is_unsigned || right_is_unsigned) mul_reg_reg(reg_X, reg_Y);
-    else imul_reg_reg(reg_X, reg_Y);
+    if (is_signed) imul_reg_reg(reg_X, reg_Y);
+    else mul_reg_reg(reg_X, reg_Y);
   }
   else if (op == '/' || op == SLASH_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to /");
-    if (left_is_unsigned || right_is_unsigned) div_reg_reg(reg_X, reg_Y);
-    else idiv_reg_reg(reg_X, reg_Y);
+    if (is_signed) idiv_reg_reg(reg_X, reg_Y);
+    else div_reg_reg(reg_X, reg_Y);
   }
   else if (op == '%' || op == PERCENT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to %");
-    if (left_is_unsigned || right_is_unsigned) rem_reg_reg(reg_X, reg_Y);
-    else irem_reg_reg(reg_X, reg_Y);
+    if (is_signed) irem_reg_reg(reg_X, reg_Y);
+    else rem_reg_reg(reg_X, reg_Y);
   }
   else if (op == RSHIFT || op == RSHIFT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to >>");
-    if (left_is_unsigned || right_is_unsigned) shr_reg_reg(reg_X, reg_Y);
-    else sar_reg_reg(reg_X, reg_Y);
+    if (is_signed) sar_reg_reg(reg_X, reg_Y);
+    else shr_reg_reg(reg_X, reg_Y);
   }
   else if (op == LSHIFT || op == LSHIFT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to <<");
