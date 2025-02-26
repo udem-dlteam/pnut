@@ -63,7 +63,7 @@ void rex_prefix(int reg1, int reg2) {
   emit_i8(0x48 + 0x04 * (reg1 >= R8) + 0x01 * (reg2 >= R8));
 }
 #else
-#define rex_prefix(reg1, reg2)
+#define rex_prefix(reg1, reg2) ((void)0)
 #endif
 
 void mod_rm(int reg1, int reg2) {
@@ -98,8 +98,11 @@ void mod_rm(int reg1, int reg2) {
 #define mod_rm_slash_digit(digit, reg1) mod_rm(digit, reg1)
 
 // For instructions with 2 register operands
-void op_reg_reg(int opcode, int dst, int src) {
-  rex_prefix(src, dst);
+void op_reg_reg(int opcode, int dst, int src, int reg_width) {
+  // 16-bit operand size override prefix
+  // See section on Legacy Prefixes: https://web.archive.org/web/20250210181519/https://wiki.osdev.org/X86-64_Instruction_Encoding#ModR/M
+  if (reg_width == 2) emit_i8(0x66);
+  if (reg_width == 8) rex_prefix(src, dst);
   emit_i8(opcode);
   mod_rm(src, dst);
 }
@@ -128,7 +131,7 @@ void test_reg_reg(int dst, int src) {
   // TEST dst_reg, src_reg ;; set Z condition flag based on result of dst_reg&src_reg
   // See: https://web.archive.org/web/20231004142335/https://www.felixcloutier.com/x86/test
 
-  op_reg_reg(0x85, dst, src);
+  op_reg_reg(0x85, dst, src, WORD_SIZE);
 }
 
 #endif
@@ -138,7 +141,7 @@ void add_reg_reg(int dst, int src) {
   // ADD dst_reg, src_reg ;; dst_reg = dst_reg + src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
 
-  op_reg_reg(0x01, dst, src);
+  op_reg_reg(0x01, dst, src, WORD_SIZE);
 }
 
 void or_reg_reg (int dst, int src) {
@@ -146,7 +149,7 @@ void or_reg_reg (int dst, int src) {
   // OR dst_reg, src_reg ;; dst_reg = dst_reg | src_reg
   // See: https://web.archive.org/web/20231002205127/https://www.felixcloutier.com/x86/or
 
-  op_reg_reg(0x09, dst, src);
+  op_reg_reg(0x09, dst, src, WORD_SIZE);
 }
 
 void and_reg_reg(int dst, int src) {
@@ -154,7 +157,7 @@ void and_reg_reg(int dst, int src) {
   // AND dst_reg, src_reg ;; dst_reg = dst_reg & src_reg
   // See: https://web.archive.org/web/20240228122102/https://www.felixcloutier.com/x86/and
 
-  op_reg_reg(0x21, dst, src);
+  op_reg_reg(0x21, dst, src, WORD_SIZE);
 }
 
 void sub_reg_reg(int dst, int src) {
@@ -162,7 +165,7 @@ void sub_reg_reg(int dst, int src) {
   // SUB dst_reg, src_reg ;; dst_reg = dst_reg - src_reg
   // See: https://web.archive.org/web/20240118202232/https://www.felixcloutier.com/x86/sub
 
-  op_reg_reg(0x29, dst, src);
+  op_reg_reg(0x29, dst, src, WORD_SIZE);
 }
 
 void xor_reg_reg(int dst, int src) {
@@ -170,15 +173,16 @@ void xor_reg_reg(int dst, int src) {
   // XOR dst_reg, src_reg ;; dst_reg = dst_reg ^ src_reg
   // See: https://web.archive.org/web/20240323052259/https://www.felixcloutier.com/x86/xor
 
-  op_reg_reg(0x31, dst, src);
+  op_reg_reg(0x31, dst, src, WORD_SIZE);
 }
 
 void cmp_reg_reg(int dst, int src) {
 
   // CMP dst_reg, src_reg  ;; Set condition flags according to dst_reg-src_reg
   // See: https://web.archive.org/web/20240407051947/https://www.felixcloutier.com/x86/cmp
+  // Note: For byte comparison, opcode is 0x38, for word/dword/qword comparison, opcode is 0x39
 
-  op_reg_reg(0x39, dst, src);
+  op_reg_reg(0x39, dst, src, WORD_SIZE);
 }
 
 void mov_reg_reg(int dst, int src) {
@@ -186,7 +190,7 @@ void mov_reg_reg(int dst, int src) {
   // MOV dst_reg, src_reg  ;; dst_reg = src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  op_reg_reg(0x89, dst, src);
+  op_reg_reg(0x89, dst, src, WORD_SIZE);
 }
 
 void mov_reg_imm(int dst, int imm) {
@@ -261,6 +265,23 @@ void mov_memory(int op, int reg, int base, int offset, int reg_width) {
   emit_i32_le(offset);
 }
 
+void mov_memory_extend(int op, int reg, int base, int offset, bool include_0f) {
+
+  // Move word between register and memory with sign extension
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+  // And  https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
+
+  // From webpage:
+  //  > The use of MOVSXD without REX.W in 64-bit mode is discouraged. Regular
+  //  > MOV should be used instead of using MOVSXD without REX.W.
+  rex_prefix(reg, base);
+  if (include_0f) emit_i8(0x0f); // Most sign/zero extend instructions have a 0x0f prefix
+  emit_i8(op);
+  emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
+  if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
+  emit_i32_le(offset);
+}
+
 void mov_mem8_reg(int base, int offset, int src) {
 
   // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
@@ -295,30 +316,52 @@ void mov_mem64_reg(int base, int offset, int src) {
 
 void mov_reg_mem8(int dst, int base, int offset) {
 
-  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to rezister
-  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register, zero-extended
+  // See: https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
 
-  mov_memory(0x8a, dst, base, offset, 1);
-  mov_reg_imm(DI, 0xff); // mask off the upper bits
-  and_reg_reg(dst, DI);
+  mov_memory_extend(0xb6, dst, base, offset, true);
 }
 
 void mov_reg_mem16(int dst, int base, int offset) {
 
-  // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register
-  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+  // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register, zero-extended
+  // See: https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
 
-  mov_memory(0x8b, dst, base, offset, 2);
-  mov_reg_imm(DI, 0xffff); // mask off the upper bits
-  and_reg_reg(dst, DI);
+  mov_memory_extend(0xb7, dst, base, offset, true);
 }
 
 void mov_reg_mem32(int dst, int base, int offset) {
 
-  // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register
+  // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register, zero-extended
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
+  // Operations writing to the lower 32 bits of a register zero-extend the
+  // result, so there's no movzx instruction for 32-bit operands.
   mov_memory(0x8b, dst, base, offset, 4);
+}
+
+void mov_reg_mem8_sign_ext(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register, sign-extended
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+
+  mov_memory_extend(0xbe, dst, base, offset, true);
+}
+
+void mov_reg_mem16_sign_ext(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register, sign-extended
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+
+  mov_memory_extend(0xbf, dst, base, offset, true);
+}
+
+void mov_reg_mem32_sign_ext(int dst, int base, int offset) {
+
+  // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register, sign-extended
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+
+  mov_memory_extend(0x63, dst, base, offset, false);
 }
 
 void mov_reg_mem64(int dst, int base, int offset) {
