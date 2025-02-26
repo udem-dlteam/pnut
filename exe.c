@@ -1228,7 +1228,7 @@ int codegen_lvalue(ast node) {
           fatal_error("codegen_lvalue: identifier not found");
           break;
       }
-      lvalue_width = type_width(heap[binding+4], true, true);
+      lvalue_width = type_width(heap[binding+4], true, false);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
@@ -1268,7 +1268,7 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, false); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: . operator on non-struct type");
       }
@@ -1285,13 +1285,13 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, false); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
     } else if (op == CAST) {
       codegen_lvalue(child1);
-      lvalue_width = type_width(child0, true, true);
+      lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       fatal_error("codegen_lvalue: unknown lvalue with 2 children");
