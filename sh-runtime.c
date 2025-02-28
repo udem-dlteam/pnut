@@ -87,18 +87,18 @@ DEFINE_RUNTIME_FUN(local_vars)
   putstr("__SP=0\n");
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
   putstr("let() { # $1: variable name, $2: value (optional)\n");
-  putstr("  : $((__SP += 1)) $((__$__SP=$1)) # Push\n");
-  putstr("  : $(($1=${2-0}))                 # Init\n");
+  putstr("  : $((__$((__SP += 1))=$1)) # Push\n");
+  putstr("  : $(($1=${2-0}))           # Init\n");
   putstr("}\n");
 #else
-  putstr("let() { : $((__SP += 1)) $((__$__SP=$1)); }\n");
+  putstr("let() { : $((__$((__SP += 1))=$1)); }\n");
 #endif
   putstr("endlet() { # $1: return variable\n");
   putstr("           # $2...: function local variables\n");
   putstr("  __ret=$1 # Don't overwrite return value\n");
   putstr("  : $((__tmp = $__ret))\n");
   putstr("  while [ $# -ge 2 ]; do\n");
-  putstr("    : $(($2 = __$__SP)) $((__SP -= 1)); # Pop\n");
+  putstr("    : $(($2 = __$(((__SP -= 1) + 1)))) # Pop\n");
   putstr("    shift;\n");
   putstr("  done\n");
   putstr("  : $(($__ret=__tmp))   # Restore return value\n");
