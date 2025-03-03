@@ -711,14 +711,14 @@ void pop_if_macro_mask() {
 
 // Includes the preprocessed C code along with the generated shell code
 #ifdef SH_INCLUDE_C_CODE
-#define DECLARATION_BUF_LEN 20000
+#define C_CODE_BUF_LEN 20000
 
-char declaration_char_buf[DECLARATION_BUF_LEN];
-int declaration_char_buf_ix = 0;
-// Point to the last character of the last token.
+char code_char_buf[C_CODE_BUF_LEN];
+int code_char_buf_ix = 0;
+// Point to the **last** character of the **last** token.
 // This is used to skip the current token when printing the code of a
 // declaration since it belongs to the next declaration.
-int last_tok_char_buf_ix = 0;
+int last_tok_code_buf_ix = 0;
 
 void output_declaration_c_code(bool no_header) {
 
@@ -731,19 +731,19 @@ void output_declaration_c_code(bool no_header) {
   putchar(' ');
 
   // Skip leading newlines if any.
-  while (declaration_char_buf[i] == '\n') i += 1;
+  while (code_char_buf[i] == '\n') i += 1;
 
-  for (; i < last_tok_char_buf_ix; i += 1) {
+  for (; i < last_tok_code_buf_ix; i += 1) {
 
-    if (declaration_char_buf[i] == '\n') {
+    if (code_char_buf[i] == '\n') {
       // Condense the C code by removing extra newlines
-      if (declaration_char_buf[i - 1] != declaration_char_buf[i]) {
+      if (code_char_buf[i - 1] != code_char_buf[i]) {
         putchar('\n');
         putchar('#');
         putchar(' ');
       }
     } else {
-      putchar(declaration_char_buf[i]);
+      putchar(code_char_buf[i]);
     }
   }
 
@@ -754,11 +754,11 @@ void output_declaration_c_code(bool no_header) {
   }
 
   // Copy the last token characters to the beginning of the buffer
-  for (i = 0; i < declaration_char_buf_ix - last_tok_char_buf_ix; i += 1) {
-    declaration_char_buf[i] = declaration_char_buf[last_tok_char_buf_ix + i];
+  for (i = 0; i < code_char_buf_ix - last_tok_code_buf_ix; i += 1) {
+    code_char_buf[i] = code_char_buf[last_tok_code_buf_ix + i];
   }
 
-  declaration_char_buf_ix = i;
+  code_char_buf_ix = i;
 }
 #endif
 
@@ -830,8 +830,8 @@ void get_ch() {
 #endif
 #ifdef SH_INCLUDE_C_CODE
   // Save C code chars so they can be displayed with the shell code
-  declaration_char_buf[declaration_char_buf_ix] = ch;
-  declaration_char_buf_ix += 1;
+  code_char_buf[code_char_buf_ix] = ch;
+  code_char_buf_ix += 1;
 #endif
 #ifdef DEBUG_EXPAND_INCLUDES
   // Because ch is always 1 character ahead of the token, we print the character
@@ -1423,7 +1423,7 @@ void handle_shell_include();
 void handle_preprocessor_directive() {
   int temp;
 #ifdef SH_INCLUDE_C_CODE
-  int prev_char_buf_ix = declaration_char_buf_ix;
+  int prev_char_buf_ix = code_char_buf_ix; // Index of the # token in the code buffer
 #endif
   get_tok_macro(); // Get the # token
   get_tok_macro(); // Get the directive
@@ -1518,7 +1518,6 @@ void handle_preprocessor_directive() {
   if (tok != '\n' && tok != EOF) {
     putstr("tok="); putint(tok); putchar('\n');
     putstr("directive="); putint(tok); putchar('\n');
-    putstr("string="); putstr(STRING_BUF(val)); putchar('\n');
     if (tok == IDENTIFIER || tok == MACRO) {
       putstr("string = ");
       putstr(STRING_BUF(val));
@@ -1532,7 +1531,10 @@ void handle_preprocessor_directive() {
   // get_tok before returning.
 
 #ifdef SH_INCLUDE_C_CODE
-  declaration_char_buf_ix = prev_char_buf_ix - 1; // - 1 to undo the #
+  code_char_buf_ix = prev_char_buf_ix - 1;
+  // Copy the current char and a newline, because they were consumed by the last get_tok call
+  code_char_buf[code_char_buf_ix++] = '\n';
+  code_char_buf[code_char_buf_ix++] = ch;
 #endif
 }
 
@@ -1993,11 +1995,11 @@ void paste_tokens(int left_tok, int left_val) {
 void get_tok() {
 
 #ifdef SH_INCLUDE_C_CODE
-  int prev_char_buf_ix = declaration_char_buf_ix;
+  int prev_char_buf_ix = code_char_buf_ix;
   // Save the cursor in a local variable so we can restore it when the token is
-  // masked off. Not using the last_tok_char_buf_ix global because get_tok can
+  // masked off. Not using the last_tok_code_buf_ix global because get_tok can
   // be called recursively by handle_preprocessor_directive.
-  int prev_last_tok_char_buf_ix = declaration_char_buf_ix;
+  int prev_last_tok_char_buf_ix = code_char_buf_ix;
 #endif
 
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
@@ -2008,7 +2010,7 @@ void get_tok() {
   // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
   do {
 #ifdef SH_INCLUDE_C_CODE
-    declaration_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
+    code_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
 #endif
 
     while (1) {
@@ -2433,7 +2435,7 @@ void get_tok() {
   } while (!if_macro_mask);
 
 #ifdef SH_INCLUDE_C_CODE
-  last_tok_char_buf_ix = prev_last_tok_char_buf_ix - 1;
+  last_tok_code_buf_ix = prev_last_tok_char_buf_ix - 1;
 #endif
 
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
