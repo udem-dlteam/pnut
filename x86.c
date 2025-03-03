@@ -823,7 +823,7 @@ void os_exit() {
 void os_read() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
-  mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # count
+  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
   mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
   syscall();               // syscall
 }
@@ -831,7 +831,7 @@ void os_read() {
 void os_write() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
-  mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # count
+  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
   mov_reg_imm(AX, SYS_WRITE);      // mov  rax, SYS_WRITE
   syscall();               // syscall
 }
@@ -839,7 +839,7 @@ void os_write() {
 void os_open() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # filename
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # flags
-  mov_reg_imm(DX, reg_Z);  // mov  rdx, reg_Z  # mode
+  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # mode
   mov_reg_imm(AX, SYS_OPEN);      // mov  rax, SYS_OPEN
   syscall();               // syscall
 }

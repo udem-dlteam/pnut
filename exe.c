@@ -1635,7 +1635,7 @@ void codegen_begin() {
   cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
 
   open_lbl = alloc_label("open");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, function_type3(int_type, string_type, int_type, int_type));
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
 
   close_lbl = alloc_label("close");
   cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
@@ -2405,6 +2405,15 @@ void codegen_end() {
   ret();
 
   // open function
+  // Regarding the mode parameter, it is required if the flag allows the
+  // creation of a new file. Otherwise, it may be omitted and is ignored by the
+  // OS.
+  // The manual says:
+  // > If neither O_CREAT nor O_TMPFILE is specified in flags, then mode is
+  // > ignored (and can thus be specified as 0, or simply omitted).  The mode
+  // > argument must be supplied if O_CREAT or O_TMPFILE is specified in flags;
+  // > if it is not supplied, some arbitrary bytes from the stack will be
+  // > applied as the file mode.
   def_label(open_lbl);
   mov_reg_mem(reg_X, reg_SP, word_size);
   mov_reg_mem(reg_Y, reg_SP, 2*word_size);
