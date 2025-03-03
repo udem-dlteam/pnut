@@ -1532,6 +1532,9 @@ void handle_preprocessor_directive() {
 
 #ifdef SH_INCLUDE_C_CODE
   code_char_buf_ix = prev_char_buf_ix - 1;
+  // Copy the current char and a newline, because they were consumed by the last get_tok call
+  code_char_buf[code_char_buf_ix++] = '\n';
+  code_char_buf[code_char_buf_ix++] = ch;
 #endif
 }
 
