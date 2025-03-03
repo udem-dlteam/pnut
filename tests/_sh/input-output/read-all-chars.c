@@ -3,7 +3,7 @@
 // This test is not essential for the bootstrap, but since we'd like to use pnut
 // in other contexts, we want to make sure it can handle all characters.
 // For bash 2.05a, the character 1 is not read properly. Assuming all version 2.0* of bash are affected.
-// expect_failure_for: bash-2.0*
+// expect_failure_for: bash-2.0.*
 // Yash's IO is a little bit weird and it's not a very popular shell, disabling the test for now.
 // expect_failure_for: yash
 
