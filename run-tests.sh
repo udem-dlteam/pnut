@@ -151,7 +151,7 @@ test_expect_failure_for_shells() {
 # Pnut has a bug that causes it to miscompile when a certain feature is used.
 # // expect_failure
 test_expect_failure() {
-  if grep -q "// expect_failure" "$1"; then
+  if grep -q "// expect_failure$" "$1"; then
     return 0
   else
     return 1
