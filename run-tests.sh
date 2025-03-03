@@ -229,11 +229,11 @@ run_test() { # file_to_test: $1
   filename=$(basename "$file" .c)     # Get the filename without extension
   dir=$(dirname "$file")              # Get the directory of the test file
   golden_file="$dir/$filename.golden" # Path of the expected output
-
-  failed_pnut_comp=0                  # Flag to indicate if compilation failed
-
   expect_failed_comp=0                # Flag to indicate if compilation is expected to fail
+  expect_failed_test=0                # Flag to indicate if execution is expected to fail, or not match the golden file
+
   if test_expect_comp_failure "$file"; then expect_failed_comp=1; fi
+  if test_failure_is_expected "$file"; then expect_failed_test=1; fi
 
   # Print file name before generating golden file so we know it's getting processed
   printf "$file: "
@@ -285,12 +285,18 @@ run_test() { # file_to_test: $1
 
     chmod +x "$dir/$filename.$ext"
     execute_test "$dir/$filename.$ext" "$(test_timeout $file)" "$(test_args $file)" > "$dir/$filename.output" 2> "$dir/$filename.err"
-    if [ $? -eq 0 ]; then # If the executable ran successfully
+    execute_test_exit_code=$?
+    if [ "$execute_test_exit_code" -eq 0 ]; then # If the executable ran successfully as expected
       diff_out=$(diff "$dir/$filename.output" "$golden_file")
       if [ $? -eq 0 ]; then # If the output matches the golden file
-        echo "✅ Test passed"
-        return 0
-      elif test_failure_is_expected "$file"; then
+        if [ "$expect_failed_test" -eq 1 ]; then
+          echo "❌ Test passed but expected to fail"
+          return 1
+        else
+          echo "✅ Test passed"
+          return 0
+        fi
+      elif [ "$expect_failed_test" -eq 1 ]; then
         echo "⚠️  Test disabled ($reason)"
         return 0
       else
@@ -299,10 +305,10 @@ run_test() { # file_to_test: $1
         echo "$diff_out"
         return 1
       fi
-    elif test_failure_is_expected "$file"; then
+    elif test_failure_is_expected "$file"; then # Test exited with an error as expected
       echo "⚠️  Test disabled ($reason)"
       return 0
-    else
+    else                                        # Test exited with an unexpected error
       echo "❌ Failed to run: $(cat "$dir/$filename.err")"
       return 1
     fi
@@ -313,7 +319,7 @@ run_test() { # file_to_test: $1
       echo "❌ Compilation succeeded when it should have failed"
       return 1
     else
-      diff_out=$(tail -n 1 "$dir/$filename.$ext" | diff - "$dir/$filename.golden")
+      diff_out=$(tail -n 1 "$dir/$filename.$ext" | diff - "$golden_file")
       if [ $? -eq 0 ]; then # If the error message matches the golden file
         echo "✅ Test passed (compilation failed as expected)"
         return 0
