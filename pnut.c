@@ -2791,12 +2791,13 @@ ast parse_type_specifier() {
         if (tok == LONG_KW) {
           get_tok();
           if (tok == INT_KW) get_tok(); // Just "long long" is equivalent to "long long int"
-          // FIXME: For now, "long long int" is the same as "long int" which is ok
-          // if the code generators assign at least 64 bits to long int
+          return new_ast0(LONG_KW, 0);
         } else if (tok == INT_KW) {
-          get_tok(); // Just "long" is equivalent to "long int"
+          get_tok(); // Just "long" is equivalent to "long int", which we treat as "int"
+          return new_ast0(INT_KW, 0);
+        } else {
+          return new_ast0(INT_KW, 0);
         }
-        return new_ast0(LONG_KW, 0);
       }
 
     default:
