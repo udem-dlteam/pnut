@@ -350,6 +350,10 @@ int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
 }
 
+int align_to(int mul, int n) {
+  return (n + mul - 1) / mul * mul;
+}
+
 void grow_stack(int words) {
   add_reg_imm(reg_SP, -words * WORD_SIZE);
 }
@@ -634,6 +638,16 @@ int type_width(ast type, bool array_value, bool word_align) {
       return WORD_SIZE;
     case CHAR_KW:
       return word_align ? WORD_SIZE : 1;
+    case SHORT_KW:
+      return word_align ? WORD_SIZE : 2;
+    case INT_KW:
+      return word_align ? WORD_SIZE : 4;
+    case LONG_KW:
+#if WORD_SIZE == 8
+      return 8;
+#else
+      fatal_error("type_width: long type not supported");
+#endif
     case STRUCT_KW:
     case UNION_KW:
       return struct_union_size(type);
@@ -692,10 +706,14 @@ int struct_union_size(ast type) {
   while (members != 0) {
     member_type = get_child_(DECL, car_(DECL, members), 1);
     members = tail(members);
-    member_size = type_width(member_type, true, true);
-    sum_size += member_size;                            // Struct size is the sum of its members
-    if (member_size > max_size) max_size = member_size; // Union size is the max of its members
+    member_size = type_width(member_type, true, false);
+    if (member_size != 0) sum_size = align_to(member_size, sum_size); // Align the member to the word size
+    sum_size += member_size;                                          // Struct size is the sum of its members
+    if (member_size > max_size) max_size = member_size;               // Union size is the max of its members
   }
+
+  sum_size = word_size_align(sum_size); // Make sure the struct size is
+  max_size = word_size_align(max_size); // Make sure the struct size is
 
   // Don't need to round the size of a union to the word size since type_width already did
   return get_op(type) == STRUCT_KW ? sum_size : max_size;
@@ -705,7 +723,7 @@ int struct_union_size(ast type) {
 int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast members = get_child(canonicalize_type(struct_type), 2);
   int offset = 0;
-  int sub_offset;
+  int member_size, sub_offset;
   ast decl, ident;
 
   while (members != 0) {
@@ -722,7 +740,9 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // For unions, fields are always at offset 0. We must still iterate
       // because the field may be in an anonymous struct, in which case the
       // final offset is not 0.
-      offset += word_size_align(type_width(get_child_(DECL, decl, 1), true, true));
+      member_size = type_width(get_child_(DECL, decl, 1), true, false);
+      if (member_size != 0) offset = align_to(member_size, offset);
+      offset += member_size;
     }
     members = tail(members);
   }
@@ -1582,6 +1602,15 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == CAST) {
       codegen_rvalue(child1);
+      // If the cast is to a value narrower than the width of the value, we need
+      // to truncate the value. This is done by writing the value to the stack
+      // and then reading it back, sign extending it if necessary.
+      child0 = get_child_(DECL, child0, 1); // child 1 of cast is the type
+      if (type_width(child0, false, false) < type_width(value_type(child1), false, false)) {
+        load_mem_location(reg_X, reg_SP, 0, type_width(child0, false, false), is_signed_numeric_type(child0));
+        grow_stack(-1);
+        push_reg(reg_X);
+      }
       grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
@@ -1767,7 +1796,7 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
 }
 
 // Initialize a variable with an initializer
-void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset, bool in_array) {
+void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset) {
   ast members;
   ast inner_type;
   int arr_len;
@@ -1794,7 +1823,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           inner_type_width = type_width(get_child_('[', type, 0), true, false);
 
           while (init != 0 && arr_len != 0) {
-            codegen_initializer(local, car(init), inner_type, base_reg, offset, true);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset);
             offset += inner_type_width;
             init = tail(init);
             arr_len -= 1; // decrement the number of elements left to initialize to make sure we don't overflow
@@ -1814,17 +1843,17 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           members = get_child_(STRUCT_KW, type, 2);
           while (init != 0 && members != 0) {
             inner_type = get_child_(DECL, car_(DECL, members), 1);
-            codegen_initializer(local, car(init), inner_type, base_reg, offset, false);
-            offset += type_width(inner_type, true, true);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset);
+            offset += type_width(inner_type, true, false);
             init = tail(init);
             members = tail(members);
           }
 
-          //  Initialize rest of the members to 0
+          // Initialize rest of the members to 0
           while (local && members != 0) {
             inner_type = get_child_(DECL, car_(DECL, members), 1);
-            initialize_memory(0, base_reg, offset, type_width(inner_type, true, true));
-            offset += type_width(inner_type, true, true);
+            initialize_memory(0, base_reg, offset, type_width(inner_type, true, false));
+            offset += type_width(inner_type, true, false);
             members = tail(members);
           }
           break;
@@ -1836,7 +1865,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           } else if (members == 0) {
             fatal_error("codegen_initializer: union has no members");
           }
-          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset, false);
+          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset);
           break;
 
         default:
@@ -1847,7 +1876,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           codegen_rvalue(car(init));
           pop_reg(reg_X);
           grow_fs(-1);
-          write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
+          write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
           break;
       }
 
@@ -1864,7 +1893,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         codegen_rvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
-        write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
+        write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
       } else {
         fatal_error("codegen_initializer: cannot initialize array with scalar value");
       }
@@ -1930,7 +1959,7 @@ void codegen_glo_var_decl(ast node) {
     if (init != 0) {
       def_label(init_next_lbl);
       init_next_lbl = alloc_label("init_next");
-      codegen_initializer(false, init, type, reg_glo, heap[binding + 3], false); // heap[binding + 3] = offset
+      codegen_initializer(false, init, type, reg_glo, heap[binding + 3]); // heap[binding + 3] = offset
       jump(init_next_lbl);
     }
   }
@@ -1957,7 +1986,7 @@ void codegen_local_var_decl(ast node) {
 
   if (init != 0) {
     // offset (cgc_fs - heap[cgc_locals + 3]) should be 0 since we just allocated the space
-    codegen_initializer(true, init, type, reg_SP, 0, false);
+    codegen_initializer(true, init, type, reg_SP, 0);
   }
 }
 
@@ -1976,7 +2005,7 @@ void codegen_static_local_var_decl(ast node) {
     jump(skip_init_lbl);
     def_label(init_next_lbl);
     init_next_lbl = alloc_label("init_next");
-    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3], false); // heap[cgc_locals + 3] = offset
+    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
     jump(init_next_lbl);
     def_label(skip_init_lbl);
   }
