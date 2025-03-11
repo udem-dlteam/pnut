@@ -52,7 +52,6 @@ void no_default_break_switch() {
         break;
       default:
         putchar('D');
-        // break;
     }
     a++;
   }
@@ -69,6 +68,72 @@ void no_default_switch() {
       case 2:
         putchar('B');
         break;
+      case 3:
+        putchar('C');
+        break;
+    }
+    a++;
+  }
+}
+
+void default_first_switch() {
+  int a = 0;
+
+  while (a < 5) {
+    switch (a) {
+      default:
+      case 1:
+        putchar('A');
+        break;
+      case 2:
+        putchar('B');
+        break;
+      case 3:
+        putchar('C');
+        break;
+    }
+    a++;
+  }
+}
+
+void default_middle_switch() {
+  int a = 0;
+
+  while (a < 5) {
+    switch (a) {
+      case 1:
+        putchar('A');
+        break;
+      case 2:
+        putchar('B');
+      default:
+        putchar('-');
+        putchar('D');
+        putchar('-');
+        break;
+      case 3:
+        putchar('C');
+        break;
+    }
+    a++;
+  }
+}
+
+void default_middle_switch2() {
+  int a = 0;
+
+  while (a < 5) {
+    switch (a) {
+      case 1:
+        putchar('A');
+        break;
+      case 2:
+        putchar('B');
+      default:
+        putchar('-');
+        putchar('D');
+        putchar('-');
+        // No break here
       case 3:
         putchar('C');
         break;
@@ -232,6 +297,9 @@ int main() {
   basic_switch();             putchar('\n');
   no_default_break_switch();  putchar('\n');
   no_default_switch();        putchar('\n');
+  default_first_switch();     putchar('\n');
+  default_middle_switch();    putchar('\n');
+  default_middle_switch2();   putchar('\n');
   goto_switch(1);             putchar('\n');
   goto_switch(3);             putchar('\n');
   gotos_switch();             putchar('\n');

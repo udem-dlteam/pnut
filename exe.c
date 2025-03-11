@@ -2065,12 +2065,37 @@ void codegen_statement(ast node) {
     jump(lbl2);                                        // Jump to first case
     codegen_statement(get_child_(SWITCH_KW, node, 1)); // switch body
 
-    // false jump location of last case
-    // Reload because the label is updated when a new case is added
-    lbl2 = heap[binding + 4];
-    if (heap[lbl2 + 1] >= 0) {
-      def_label(lbl2); // No case statement => jump to end of switch
-    }
+    // The switch can fall through in 2 distinct ways:
+    //  1. The conditional block had no break statement
+    //  2. No cases (excluding the default) matched
+    //
+    // In both cases, the switch operand needs to be removed from the stack.
+    // But in the second case, we first need to jump to the default label if it
+    // exists.
+    //
+    // The code is laid out as follows:
+    //  [eval switch opnd]
+    //  [cases]
+    //  ...
+    //   <- Control is here
+    //  [jump to adjust stack]
+    //  [jump to default if it exists]
+    //  [adjust stack]
+    //  [end of switch]
+
+    // In case #1 control ends up here
+    lbl3 = alloc_label(0);
+    jump(lbl3);
+
+    // In case #2 control ends up here
+    lbl2 = heap[binding + 4]; // Reload because the label is overwritten by CASE statements
+    def_label(lbl2);
+    // If the default statement is present, we jump to it. Otherwise, we'll fall
+    // through to the end of the switch and remove the switch operand from the
+    // stack.
+    if (heap[binding + 5]) jump(heap[binding + 5]);
+
+    def_label(lbl3);
 
     // If we fell through the switch, we need to remove the switch operand.
     // This is done before lbl1 because the stack is adjusted before the break statement.
@@ -2086,8 +2111,15 @@ void codegen_statement(ast node) {
 
     binding = cgc_lookup_enclosing_switch(cgc_locals);
 
+    // Logic is as follows:
+    //  if falling through:
+    //    jump to statements
+    //  else if top_of_stack == case_value:
+    //   jump to statements
+    // else:
+    //   jump to next case
     if (binding != 0) {
-      lbl1 = alloc_label(0);                   // skip case when falling through
+      lbl1 = alloc_label(0);                  // skip case when falling through
       jump(lbl1);
       def_label(heap[binding + 4]);           // false jump location of previous case
       heap[binding + 4] = alloc_label(0);     // create false jump location for current case
@@ -2107,9 +2139,10 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_switch(cgc_locals);
 
     if (binding != 0) {
-      def_label(heap[binding + 4]);           // false jump location of previous case
-      heap[binding + 4] = alloc_label(0);     // create label for next case (even if default catches all cases)
-      codegen_statement(get_child_(DEFAULT_KW, node, 0));  // default statement
+      if (heap[binding + 5]) fatal_error("default already defined in switch");
+      heap[binding + 5] = alloc_label(0);                 // create label for default
+      def_label(heap[binding + 5]);                       // default label
+      codegen_statement(get_child_(DEFAULT_KW, node, 0)); // default statement
     } else {
       fatal_error("default outside of switch");
     }
