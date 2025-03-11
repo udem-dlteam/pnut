@@ -162,6 +162,7 @@ enum {
   FOR_KW,
   GOTO_KW,
   IF_KW,
+  INLINE_KW,
   INT_KW,
   LONG_KW,
   REGISTER_KW,
@@ -1604,6 +1605,7 @@ void init_ident_table() {
   init_ident(FOR_KW,      "for");
   init_ident(GOTO_KW,     "goto");
   init_ident(IF_KW,       "if");
+  init_ident(INLINE_KW,   "inline");
   init_ident(INT_KW,      "int");
   init_ident(LONG_KW,     "long");
   init_ident(REGISTER_KW, "register");
@@ -2583,6 +2585,7 @@ int is_type_starter(int tok) {
       || tok == TYPE                                                                // User defined types
       || tok == CONST_KW                                                            // Type attributes
       || tok == ENUM_KW || tok == STRUCT_KW || tok == UNION_KW                      // Enum, struct, union
+      || tok == INLINE_KW
       // Typedef is not a valid type starter in all contexts
       // || tok == TYPEDEF_KW                                                          // Typedef
       ;
@@ -2820,6 +2823,10 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
         specifier_storage_class = tok;
         get_tok();
+        break;
+
+      case INLINE_KW:
+        get_tok(); // Ignore inline
         break;
 
       case CONST_KW:
