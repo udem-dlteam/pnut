@@ -630,7 +630,9 @@ int type_width(ast type, bool array_value, bool word_align) {
       // sizeof, in struct definitions, etc.) while in other contexts we care
       // about the pointer (i.e. when passing an array to a function, etc.)
       if (array_value) {
-        return word_size_align(get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false));
+        array_value = get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false);
+        if (word_align) array_value = word_size_align(array_value);
+        return array_value;
       } else {
         return WORD_SIZE; // Array is a pointer to the first element
       }
@@ -692,12 +694,29 @@ ast canonicalize_type(ast type) {
   return res;
 }
 
-// Size of a struct or union type, rounded up to the word size
+// Size of the largest member of a struct or union, used for alignment
+int struct_union_size_largest_member = 0;
+
+int type_largest_member(ast type) {
+  switch (get_op(type)) {
+    case STRUCT_KW:
+    case UNION_KW:
+      struct_union_size_largest_member = 0;
+      struct_union_size(type); // Compute struct_union_size_largest_member global
+      return struct_union_size_largest_member;
+    case '[':
+      return type_largest_member(get_child_('[', type, 0));
+    default:
+      return type_width(type, true, false);
+  }
+}
+
+// Size of a struct or union type
 int struct_union_size(ast type) {
   ast members;
   ast member_type;
   int member_size;
-  int sum_size = 0, max_size = 0;
+  int sum_size = 0, max_size = 0, largest_member_size = 0;
 
   type = canonicalize_type(type);
   members = get_child(type, 2);
@@ -709,12 +728,15 @@ int struct_union_size(ast type) {
     if (member_size != 0) sum_size = align_to(member_size, sum_size); // Align the member to the word size
     sum_size += member_size;                                          // Struct size is the sum of its members
     if (member_size > max_size) max_size = member_size;               // Union size is the max of its members
+    member_size = type_largest_member(member_type);
+    if (largest_member_size < member_size) largest_member_size = member_size;
   }
 
-  sum_size = word_size_align(sum_size); // Make sure the struct size is
-  max_size = word_size_align(max_size); // Make sure the struct size is
+  sum_size = align_to(largest_member_size, sum_size); // The final struct size is a multiple of its widest member
+  max_size = align_to(largest_member_size, max_size); // The final union size is a multiple of its widest member
 
-  // Don't need to round the size of a union to the word size since type_width already did
+  // Set the struct_union_size_largest_member global to "return" it
+  struct_union_size_largest_member = largest_member_size;
   return get_op(type) == STRUCT_KW ? sum_size : max_size;
 }
 
@@ -2360,6 +2382,13 @@ void codegen_glo_fun_decl(ast node) {
   }
 
   def_label(heap[binding+4]);
+
+  // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
+  //   rt_debug(fp_filepath);
+  //   rt_debug(":");
+  //   rt_debug(STRING_BUF(name_probe));
+  //   rt_debug("\n");
+  // }
 
   cgc_fs = -1; // space for return address
   cgc_locals = 0;
