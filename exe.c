@@ -652,8 +652,7 @@ int type_width(ast type, bool array_value, bool word_align) {
     case UNION_KW:
       return struct_union_size(type);
     case VOID_KW:
-      fatal_error("type_width: void type");
-      return 0;
+      return 1; // Default to 1 byte for void so pointer arithmetic and void casts work
     default:
       return WORD_SIZE;
   }
