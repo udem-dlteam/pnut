@@ -672,7 +672,7 @@ ast struct_member_go(ast struct_type, ast member_ident) {
     ident = get_child_opt_(DECL, IDENTIFIER, decl, 0);
     if (ident == 0) { // Anonymous struct member, search that struct
       ident = struct_member_go(get_child_(DECL, decl, 1), member_ident);
-      if (ident != 0) return ident; // Found member in the anonymous struct
+      if (ident != -1) return ident; // Found member in the anonymous struct
     } else if (get_val_(IDENTIFIER, member_ident) == get_val_(IDENTIFIER, ident)) {
       return decl;
     }

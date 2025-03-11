@@ -79,6 +79,15 @@ struct NonPowerOf2Struct {
   int val3;
 };
 
+// Linked symbol table
+typedef struct Sym {
+  int tag; // symbol tag
+  struct {
+    int *val; // value
+  };
+  struct Sym *next; // next symbol
+} Sym;
+
 void f(enum Direction dir, Direction dir2) {
   putstr("Direction: "); putint(dir); putstr(" "); putint(dir2); putchar('\n');
 }
@@ -389,4 +398,9 @@ void main() {
   test_nested_structs();
   test_passing_as_value();
   test_casts();
+
+  // Regression test for accessing fields inside anonymous struct/unions
+  Sym *s = (Sym*) malloc(sizeof(Sym));
+  s->tag = 123;
+  s->next = s; // Self-referencing struct
 }
