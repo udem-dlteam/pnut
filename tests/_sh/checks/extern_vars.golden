@@ -1,0 +1,1 @@
+tests/_sh/checks/extern_vars.c:3:0  Extern storage class specifier not supported

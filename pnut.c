@@ -2575,17 +2575,21 @@ ast make_variadic_func(ast func_type) {
 }
 
 // Type and declaration parser
-int is_type_starter(int tok) {
-  return tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW       // Numeric types
-      || tok == VOID_KW
-      || tok == FLOAT_KW || tok == DOUBLE_KW                                        // Floating point types
-      || tok == SIGNED_KW || tok == UNSIGNED_KW                                     // Signedness
-      || tok == TYPE                                                                // User defined types
-      || tok == CONST_KW                                                            // Type attributes
-      || tok == ENUM_KW || tok == STRUCT_KW || tok == UNION_KW                      // Enum, struct, union
-      // Typedef is not a valid type starter in all contexts
-      // || tok == TYPEDEF_KW                                                          // Typedef
-      ;
+bool is_type_starter(int tok) {
+  switch (tok) {
+    case INT_KW: case CHAR_KW: case SHORT_KW: case LONG_KW: // Numeric types
+    case VOID_KW: case FLOAT_KW: case DOUBLE_KW:            // Void and floating point types
+    case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
+    case TYPE:                                              // User defined types
+    case CONST_KW: case VOLATILE_KW:                        // Type attributes
+    case ENUM_KW: case STRUCT_KW: case UNION_KW:            // Enum, struct, union
+    // Storage class specifiers are not always valid type starters in all
+    // contexts, but we allow them here
+    case TYPEDEF_KW: case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
+      return true;
+    default:
+      return false;
+  }
 }
 
 ast parse_enum() {
@@ -3208,7 +3212,7 @@ ast parse_declaration(bool local) {
     }
 
     declarators = parse_declarators(false, type_specifier, declarator);
-    result = new_ast1(DECLS, declarators);
+    result = new_ast2(DECLS, declarators, glo_specifier_storage_class); // child#1 is the storage class specifier
   }
 
   expect_tok(';');
