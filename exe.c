@@ -1889,7 +1889,7 @@ void codegen_glo_var_decl(ast node) {
     infer_array_length(type, init);
 
     if (binding == 0) {
-      cgc_add_global(name_probe, type_width(type, true, true), type);
+      cgc_add_global(name_probe, type_width(type, true, true), type, false);
       binding = cgc_globals;
     }
 
@@ -1902,19 +1902,21 @@ void codegen_glo_var_decl(ast node) {
   }
 }
 
+int compute_local_var_decl_size(ast type, ast init) {
+  infer_array_length(type, init);
+
+  if (is_aggregate_type(type)) { // Array/struct/union declaration
+    return type_width(type, true, true) / word_size;  // size in bytes (word aligned)
+  } else {
+    return 1;
+  }
+}
+
 void codegen_local_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
-  int size;
-
-  infer_array_length(type, init);
-
-  if (is_aggregate_type(type)) { // Array/struct/union declaration
-    size = type_width(type, true, true) / word_size;  // size in bytes (word aligned)
-  } else {
-    size = 1;
-  }
+  int size = compute_local_var_decl_size(type, init);
 
   cgc_add_local_var(get_val_(IDENTIFIER, name), size, type);
   grow_stack(size); // Make room for the local variable
@@ -1925,20 +1927,60 @@ void codegen_local_var_decl(ast node) {
   }
 }
 
+void codegen_static_local_var_decl(ast node) {
+  ast name = get_child__(DECL, IDENTIFIER, node, 0);
+  ast type = get_child_(DECL, node, 1);
+  ast init = get_child_(DECL, node, 2);
+  int size = compute_local_var_decl_size(type, init);
+  int skip_init_lbl;
+
+  cgc_add_global(get_val_(IDENTIFIER, name), size, type, true);
+
+  if (init != 0) {
+    // Skip over the initialization code that will run during program initialization
+    skip_init_lbl = alloc_label("skip_init");
+    jump(skip_init_lbl);
+    def_label(init_next_lbl);
+    init_next_lbl = alloc_label("init_next");
+    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3], false); // heap[cgc_locals + 3] = offset
+    jump(init_next_lbl);
+    def_label(skip_init_lbl);
+  }
+}
+
+void codegen_local_var_decls(ast node) {
+  bool is_static = false;
+
+  switch (get_child_(DECLS, node, 1)) {
+    // AUTO_KW and REGISTER_KW can simply be ignored.
+    case STATIC_KW:
+      is_static = true;
+      break;
+    case EXTERN_KW:
+      fatal_error("Extern class specifier not supported");
+      break;
+  }
+
+  node = get_child__(DECLS, LIST, node, 0);
+  while (node != 0) { // Multiple variable declarations
+    if (is_static) {
+      codegen_static_local_var_decl(car_(DECL, node));
+    } else {
+      codegen_local_var_decl(car_(DECL, node));
+    }
+    node = tail(node);
+  }
+}
+
 void codegen_body(ast node) {
   int save_fs = cgc_fs;
   int save_locals = cgc_locals;
   ast stmt;
-  ast declarations;
 
   while (node != 0) {
     stmt = get_child_('{', node, 0);
     if (get_op(stmt) == DECLS) { // Variable declaration
-      declarations = get_child__(DECLS, LIST, stmt, 0);
-      while (declarations != 0) { // Multiple variable declarations
-        codegen_local_var_decl(car_(DECL, declarations));
-        declarations = tail(declarations);
-      }
+      codegen_local_var_decls(stmt);
     } else {
       codegen_statement(stmt);
     }
@@ -2288,6 +2330,11 @@ void codegen_glo_decl(ast node) {
   int op = get_op(node);
 
   if (op == DECLS) {
+    // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
+    // storage class for global variables since pnut-sh only supports 1
+    // translation unit.
+    if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
+
     decls = get_child__(DECLS, LIST, node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations
       codegen_glo_var_decl(car_(DECL, decls));
