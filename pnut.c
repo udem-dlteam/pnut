@@ -3212,7 +3212,7 @@ ast parse_declaration(bool local) {
     }
 
     declarators = parse_declarators(false, type_specifier, declarator);
-    result = new_ast1(DECLS, declarators);
+    result = new_ast2(DECLS, declarators, glo_specifier_storage_class); // child#1 is the storage class specifier
   }
 
   expect_tok(';');
