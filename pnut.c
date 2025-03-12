@@ -2766,7 +2766,7 @@ ast parse_type_specifier() {
       get_tok();
       type_specifier = parse_type_specifier();
       // Just "unsigned" is equivalent to "unsigned int"
-      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
+      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
       // Set the unsigned flag
       else set_val(type_specifier, get_val(type_specifier) | MK_TYPE_SPECIFIER(UNSIGNED_KW));
       return type_specifier;
@@ -3915,7 +3915,7 @@ int main(int argc, char **argv) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
         case 'D':
-          init_ident(MACRO, argv[i] + 2);
+          init_builtin_int_macro(init_ident(MACRO, argv[i] + 2), 1);
           break;
 
         case 'U':

@@ -2,11 +2,6 @@
 
 #include <stdio.h>
 
-#ifdef PNUT_CC
-// pnut does not support unsigned and we want gcc to use unsigned chars
-#define unsigned
-#endif
-
 struct S1 {
   int a;
   int b;
@@ -110,6 +105,8 @@ static const unsigned char tok_two_chars[] = {
     0
 };
 
+char str[13] = "Hello, world!";
+
 int arr[4] = {1, 2, 3, 4};
 int arr_partial[4] = {1, 0xcc}; // Rest should be 0
 int arr_inferred[] = {1, 2, 3, 4};
@@ -130,6 +127,7 @@ struct S2 struct2_partial2 = { { { 231321, 4531321 } },  };  // Outer struct is 
 
 void test_global_initializers() {
   print_chars(tok_two_chars, 64); putchar('\n');
+  print_chars(str, 12); putchar('\n');
 
   print_ints(arr, 4); putchar('\n');
   print_ints(arr_partial, 4); putchar('\n');

@@ -1502,11 +1502,7 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_X);
       push_reg(reg_X);
       xor_reg_reg(reg_Y, reg_Y);
-      if (op == AMP_AMP) {
-        jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
-      } else {
-        jump_cond_reg_reg(NE, lbl1, reg_X, reg_Y);
-      }
+      jump_cond_reg_reg(op == AMP_AMP ? EQ : NE, lbl1, reg_X, reg_Y);
       pop_reg(reg_X); grow_fs(-1);
       codegen_rvalue(child1);
       grow_fs(-1);
@@ -1701,6 +1697,10 @@ void handle_enum_struct_union_type_decl(ast type) {
     codegen_struct_or_union(type, BINDING_TYPE_STRUCT);
   } else if (get_op(type) == UNION_KW) {
     codegen_struct_or_union(type, BINDING_TYPE_UNION);
+  } else if (get_op(type) == '*') {
+    handle_enum_struct_union_type_decl(get_child_('*', type, 1));
+  } else if (get_op(type) == '[') {
+    handle_enum_struct_union_type_decl(get_child_('[', type, 0));
   }
 
   // If not an enum, struct, or union, do nothing
@@ -1709,13 +1709,13 @@ void handle_enum_struct_union_type_decl(ast type) {
 void codegen_initializer_string(int string_probe, ast type, int base_reg, int offset) {
   char *string_start = STRING_BUF(string_probe);
   int i = 0;
-  int str_len = heap[string_probe + 4];
+  int str_len = STRING_LEN(string_probe);
   int arr_len;
 
   // Only acceptable types are char[] or char*
   if (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == CHAR_KW) {
     arr_len = get_child_('[', type, 1);
-    if (str_len >= arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
+    if (str_len > arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
 
     // Place the bytes of the string in the memory location allocated for the array
     for (; i < arr_len; i += 1) {
