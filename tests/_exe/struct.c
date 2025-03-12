@@ -88,6 +88,10 @@ typedef struct Sym {
   struct Sym *next; // next symbol
 } Sym;
 
+struct VarAndTypeDecl {
+  int a;
+} *var_and_type_decl;
+
 void f(enum Direction dir, Direction dir2) {
   putstr("Direction: "); putint(dir); putstr(" "); putint(dir2); putchar('\n');
 }
@@ -403,4 +407,7 @@ void main() {
   Sym *s = (Sym*) malloc(sizeof(Sym));
   s->tag = 123;
   s->next = s; // Self-referencing struct
+
+  // Regression test for making sure the combined type and variable declaration add the type to the enviromnent
+  struct VarAndTypeDecl varAndTypeDecl;
 }
