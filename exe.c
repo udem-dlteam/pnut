@@ -649,6 +649,7 @@ int type_width(ast type, bool array_value, bool word_align) {
       return 8;
 #else
       fatal_error("type_width: long type not supported");
+      return -1;
 #endif
     case STRUCT_KW:
     case UNION_KW:
