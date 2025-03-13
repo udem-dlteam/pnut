@@ -162,6 +162,7 @@ enum {
   FOR_KW,
   GOTO_KW,
   IF_KW,
+  INLINE_KW,
   INT_KW,
   LONG_KW,
   REGISTER_KW,
@@ -1604,6 +1605,7 @@ void init_ident_table() {
   init_ident(FOR_KW,      "for");
   init_ident(GOTO_KW,     "goto");
   init_ident(IF_KW,       "if");
+  init_ident(INLINE_KW,   "inline");
   init_ident(INT_KW,      "int");
   init_ident(LONG_KW,     "long");
   init_ident(REGISTER_KW, "register");
@@ -2586,6 +2588,7 @@ bool is_type_starter(int tok) {
     // Storage class specifiers are not always valid type starters in all
     // contexts, but we allow them here
     case TYPEDEF_KW: case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
+    case INLINE_KW:
       return true;
     default:
       return false;
@@ -2824,6 +2827,10 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
         specifier_storage_class = tok;
         get_tok();
+        break;
+
+      case INLINE_KW:
+        get_tok(); // Ignore inline
         break;
 
       case CONST_KW:
