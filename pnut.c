@@ -7,8 +7,14 @@
 #include <stdint.h> // for intptr_t
 
 #ifdef PNUT_CC
-// On pnut, intptr_t is not defined
-#define intptr_t int
+// When bootstrapping pnut, intptr_t is not defined.
+// On 64 bit platforms, intptr_t is a long long int.
+// On 32 bit (including shells) platforms, intptr_t is an int.
+#if defined(PNUT_EXE_64)
+typedef long long int intptr_t;
+#else
+typedef int intptr_t;
+#endif
 #endif
 
 #define ast int
