@@ -19,7 +19,8 @@ void free(void *ptr) {
 }
 
 void *realloc(void *ptr, size_t size) {
-  int i, new_ptr;
+  int i;
+  void *new_ptr;
   size_t old_size;
   if (size == 0) {
     free(ptr);
