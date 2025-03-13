@@ -118,3 +118,45 @@ int atoi(const char *str) {
 char *getenv(const char *name) {
   return 0; /*TODO*/
 }
+
+char* qsort_buf1;
+char* qsort_buf2;
+char* qsort_buf3;
+int qsort_buf_len = -1;
+
+void *memcpy(void *dest, const void *src, size_t n);
+
+int compare(int (*compar)(void *, void *)) {
+  return compar(qsort_buf1, qsort_buf2);
+}
+
+void swap(void *base, size_t size, int i, int j) {
+  memcpy(qsort_buf3, base + i*size, size);    // temp = base[i]
+  memcpy(base + i*size, base + j*size, size); // base[i] = base[j]
+  memcpy(base + j*size, qsort_buf3, size);    // base[j] = temp
+}
+
+void qsort(void *base, size_t nmemb, size_t size, int (*compar)(void *, void *)) {
+  if (qsort_buf_len < size) {
+    qsort_buf1 = realloc(qsort_buf1, size);
+    qsort_buf2 = realloc(qsort_buf2, size);
+    qsort_buf3 = realloc(qsort_buf3, size);
+    qsort_buf_len = size;
+  }
+
+  int has_swapped = 1;
+  int i;
+  // Simple bubble sort
+  while (has_swapped) {
+    has_swapped = 0;
+
+    for (i = 0; i < nmemb - 1; i++) {
+      memcpy(qsort_buf1, base + i*size, size);
+      memcpy(qsort_buf2, base + (i+1)*size, size);
+      if (compare(compar) > 0) {
+        swap(base, size, i, i+1);
+        has_swapped = 1;
+      }
+    }
+  }
+}
