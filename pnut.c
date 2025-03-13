@@ -8,7 +8,15 @@
 
 #ifdef PNUT_CC
 // On pnut, intptr_t is not defined
-#define intptr_t int
+#ifdef PNUT_EXE_32
+typedef int intptr_t;
+#elif PNUT_EXE_64
+typedef long long int intptr_t;
+#elif PNUT_SH
+typedef int intptr_t;
+#else
+#error "Unknown pnut target"
+#endif
 #endif
 
 #define ast int
