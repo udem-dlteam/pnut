@@ -7,8 +7,14 @@
 #include <stdint.h> // for intptr_t
 
 #ifdef PNUT_CC
-// On pnut, intptr_t is not defined
-#define intptr_t int
+// When bootstrapping pnut, intptr_t is not defined.
+// On 64 bit platforms, intptr_t is a long long int.
+// On 32 bit (including shells) platforms, intptr_t is an int.
+#if defined(PNUT_EXE_64)
+typedef long long int intptr_t;
+#else
+typedef int intptr_t;
+#endif
 #endif
 
 #define ast int
@@ -2791,12 +2797,13 @@ ast parse_type_specifier() {
         if (tok == LONG_KW) {
           get_tok();
           if (tok == INT_KW) get_tok(); // Just "long long" is equivalent to "long long int"
-          // FIXME: For now, "long long int" is the same as "long int" which is ok
-          // if the code generators assign at least 64 bits to long int
+          return new_ast0(LONG_KW, 0);
         } else if (tok == INT_KW) {
-          get_tok(); // Just "long" is equivalent to "long int"
+          get_tok(); // Just "long" is equivalent to "long int", which we treat as "int"
+          return new_ast0(INT_KW, 0);
+        } else {
+          return new_ast0(INT_KW, 0);
         }
-        return new_ast0(LONG_KW, 0);
       }
 
     default:
