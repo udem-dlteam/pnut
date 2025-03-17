@@ -623,6 +623,7 @@ bool is_signed_numeric_type(ast type) {
 // size of the pointer is returned.
 // If word_align is true, the size is rounded up to the word size.
 int type_width(ast type, bool array_value, bool word_align) {
+  int width = 1;
   // Basic type kw
   switch (get_op(type)) {
     case '[':
@@ -630,35 +631,33 @@ int type_width(ast type, bool array_value, bool word_align) {
       // sizeof, in struct definitions, etc.) while in other contexts we care
       // about the pointer (i.e. when passing an array to a function, etc.)
       if (array_value) {
-        array_value = get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false);
-        if (word_align) array_value = word_size_align(array_value);
-        return array_value;
+        width = get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false);
       } else {
-        return WORD_SIZE; // Array is a pointer to the first element
+        width = WORD_SIZE; // Array is a pointer to the first element
       }
-    case '*':
-      return WORD_SIZE;
-    case CHAR_KW:
-      return word_align ? WORD_SIZE : 1;
-    case SHORT_KW:
-      return word_align ? WORD_SIZE : 2;
-    case INT_KW:
-      return word_align ? WORD_SIZE : 4;
+      break;
+    case '*':      width = WORD_SIZE; break;
+    case VOID_KW:  width = 1;         break; // Default to 1 byte for void so pointer arithmetic and void casts work
+    case CHAR_KW:  width = 1;         break;
+    case SHORT_KW: width = 2;         break;
+    case INT_KW:   width = 4;         break;
     case LONG_KW:
 #if WORD_SIZE == 8
-      return 8;
+      width = 8;
+      break;
 #else
       fatal_error("type_width: long type not supported");
       return -1;
 #endif
     case STRUCT_KW:
     case UNION_KW:
-      return struct_union_size(type);
-    case VOID_KW:
-      return 1; // Default to 1 byte for void so pointer arithmetic and void casts work
-    default:
-      return WORD_SIZE;
+      width = struct_union_size(type);
+      break;
+    default:       width = WORD_SIZE; break;
   }
+
+  if (word_align) width = word_size_align(width);
+  return width;
 }
 
 // Width of an object pointed to by a reference type.
