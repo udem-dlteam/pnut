@@ -48,7 +48,7 @@ const int R15 = 15;
 // to another const variable produces an error. This is a workaround.
 const int reg_X = 0; // AX: temporary register
 const int reg_Y = 1; // CX: temporary register
-const int reg_Z = 5; // BP: temporary register
+const int reg_Z = 2; // DX: temporary register
 const int reg_SP = 4; // SP: stack pointer
 const int reg_glo = 3; // BX: global variables table
 
