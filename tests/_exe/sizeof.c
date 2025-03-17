@@ -1,5 +1,19 @@
 #include <stdio.h>
 
+#ifdef PNUT_CC
+// When bootstrapping pnut, intptr_t is not defined.
+// On 64 bit platforms, intptr_t is a long long int.
+// On 32 bit (including shells) platforms, intptr_t is an int.
+#if defined(PNUT_EXE_64)
+#define PTR_MUL 8
+#else
+#define PTR_MUL 4
+#endif
+#else
+#define PTR_MUL 4
+#endif
+
+
 void putint(int n) {
   if (n < 0) {
     putchar('-');
@@ -115,8 +129,9 @@ int main() {
   putint(sizeof a);           putchar('\n'); // sizeof expr
   putint(sizeof(b));          putchar('\n'); // sizeof (expr)
   putint(sizeof b);           putchar('\n'); // sizeof expr
-  putint(sizeof((void *) a)); putchar('\n'); // sizeof (cast_expr)
+  putint(sizeof((void *) a) / PTR_MUL); putchar('\n'); // sizeof (cast_expr)
 
+  // Testing struct/union size and alignment
   putint(sizeof(struct S0)); putchar('\n');
   putint(sizeof(struct S1)); putchar('\n');
   putint(sizeof(struct S2)); putchar('\n');
