@@ -230,7 +230,8 @@ void mov_reg_reg(const int dst, const int src) {
   // MOV dst_reg, src_reg  ;; dst_reg = src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  op_reg_reg(0x89, dst, src, WORD_SIZE);
+  // No need to move if src and dst are the same
+  if (dst != src) op_reg_reg(0x89, dst, src, WORD_SIZE);
 }
 
 void mov_reg_imm(const int dst, const int imm) {
