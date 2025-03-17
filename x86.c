@@ -287,6 +287,13 @@ void mov_mem8_reg(int base, int offset, int src) {
   // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
+#ifdef SAFE_MODE
+  // The ModR/M byte cannot encode lower registers that are not AL, CL, DL, or BL
+  if (src != AX && src != CX && src != DX && src != BX) {
+    fatal_error("mov_mem8_reg: src must one of AX, CX, DX, BX");
+  }
+#endif
+
   mov_memory(0x88, src, base, offset, 1);
 }
 
@@ -449,6 +456,10 @@ void div_reg_reg(int dst, int src) {
   // is emulated with a sequence of instructions that will clobber the
   // registers AX and DX.
 
+#ifdef SAFE_MODE
+  if (src == AX || src == DX) fatal_error("div_reg_reg: src cannot be AX");
+#endif
+
   mov_reg_reg(AX, dst);
   mov_reg_imm(DX, 0); // Clear DX
   div_reg(src);
@@ -482,6 +493,10 @@ void s_l_reg_reg(int dst, int src) {
   // This is not an actual instruction on x86. The operation
   // is emulated with a sequence of instructions that clobbers the
   // register CX, and does not work if dst = CX.
+
+#ifdef SAFE_MODE
+  if (dst == CX) fatal_error("s_l_reg_reg: dst cannot be CX");
+#endif
 
   mov_reg_reg(CX, src);
   s_l_reg_cl(dst);
