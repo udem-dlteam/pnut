@@ -205,7 +205,15 @@ void xor_reg_reg(const int dst, const int src) {
   // XOR dst_reg, src_reg ;; dst_reg = dst_reg ^ src_reg
   // See: https://web.archive.org/web/20240323052259/https://www.felixcloutier.com/x86/xor
 
+#if WORD_SIZE == 8
+  if (src == dst) {
+    op_reg_reg(0x31, dst, src, 4); // Use 32-bit opcode for XOR dst_reg, dst_reg because it's shorter
+  } else {
+    op_reg_reg(0x31, dst, src, WORD_SIZE);
+  }
+#else
   op_reg_reg(0x31, dst, src, WORD_SIZE);
+#endif
 }
 
 void cmp_reg_reg(const int dst, const int src) {
