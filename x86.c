@@ -238,15 +238,19 @@ void mov_reg_imm(const int dst, const int imm) {
   // MOV dst_reg, imm  ;; Move 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  rex_prefix(0, dst);
-  emit_i8(0xb8 + (dst & 7));
+  if (imm == 0) {
+    xor_reg_reg(dst, dst); // Shorter than mov, but clobbers flags
+  } else {
 #if WORD_SIZE == 4
-  emit_i32_le(imm);
+    emit_i8(0xb8 + (dst & 7));
+    emit_i32_le(imm);
 #elif WORD_SIZE == 8
-  emit_i64_le(imm);
+    op_reg_slash_digit(0xc7, 0, dst);
+    emit_i32_le(imm);
 #else
-  #error "mov_reg_imm: unknown word size"
+    #error "mov_reg_imm: unknown word size"
 #endif
+  }
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -255,16 +259,20 @@ void mov_reg_large_imm(const int dst, const int large_imm) {
   // MOV dst_reg, large_imm  ;; Move 32 bit or 64 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  rex_prefix(0, dst);
-  emit_i8(0xb8 + (dst & 7));
+  if (large_imm <= 0) {
+    mov_reg_imm(dst, -large_imm);
+  } else {
+    rex_prefix(0, dst);
+    emit_i8(0xb8 + (dst & 7));
 
 #if WORD_SIZE == 4
-  emit_i32_le_large_imm(large_imm);
+    emit_i32_le_large_imm(large_imm);
 #elif WORD_SIZE == 8
-  emit_i64_le_large_imm(large_imm);
+    emit_i64_le_large_imm(large_imm);
 #else
-  #error "mov_reg_large_imm: unknown word size"
+    #error "mov_reg_large_imm: unknown word size"
 #endif
+  }
 }
 #endif
 
@@ -273,10 +281,35 @@ void add_reg_imm(const int dst, const int imm) {
   // ADD dst_reg, imm  ;; Add 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
 
-  rex_prefix(0, dst);
-  emit_i8(0x81);
-  mod_rm(0, dst);
-  emit_i32_le(imm);
+  if (imm == 0) {
+    return; // Nothing to do
+  } else if (imm < 0) {
+    sub_reg_imm(dst, -imm);
+  } else if (imm <= 127) { // imm not negative and below 128
+    op_reg_slash_digit(0x83, 0, dst);
+    emit_i8(imm);
+  } else {
+    op_reg_slash_digit(0x81, 0, dst);
+    emit_i32_le(imm);
+  }
+}
+
+void sub_reg_imm(int dst, int imm) {
+
+  // SUB dst_reg, imm  ;; Subtract 32 bit immediate value from register
+  // See: https://web.archive.org/web/20250120021210/https://www.felixcloutier.com/x86/sub
+
+  if (imm == 0) {
+    return; // Nothing to do
+  } else if (imm < 0) {
+    add_reg_imm(dst, -imm);
+  } else if (imm <= 127) { // imm not negative and below 128
+    op_reg_slash_digit(0x83, 5, dst);
+    emit_i8(imm);
+  } else {
+    op_reg_slash_digit(0x81, 5, dst);
+    emit_i32_le(imm);
+  }
 }
 
 void add_reg_lbl(const int dst, const int lbl) {
