@@ -66,32 +66,64 @@ void rex_prefix(int reg1, int reg2) {
 #define rex_prefix(reg1, reg2) ((void)0)
 #endif
 
+// ModR/M byte
+//
+// It is used to encode the operand(s) to an instruction.
+// The format is the following:
+// Bit    7   6   5   4   3   2   1   0
+//        -----   ---------   ---------
+// Usage   Mod       Reg         R/M
+//
+// Operations that use 1 operand generally use the R/M field to specify it.
+// In that case, the Reg field may be repurposed as an "opcode extension" to
+// allow multiple instructions to share the same opcode. This is generally
+// indicated as /digit in the opcode table.
+//
+// The mod field encodes the addressing mode for the register/memory ("r/m") operand.
+// When the mod field is 11, the r/m field is used to specify a register operand.
+// Otherwise, 00, 01 and 10 specify different addressing modes:
+//  00: no displacement     [reg]
+//  01: 8-bit signed displacement  [reg + disp8]
+//  10: 32-bit signed displacement [reg + disp32]
+//
+// When mod specifies an addressing mode, the ModR/M byte may be followed by
+// a SIB byte (Scale Index Base) and/or a displacement.
+//
+// The SIB byte encodes addressing modes of the form [base + index*scale + disp].
+// The format is the following:
+// Bit    7   6   5   4   3   2   1   0
+//        -----   ---------   ---------
+// Usage  Scale     Index        Base
+//
+// Where scale is 1, 2, 4, or 8 (00, 01, 10, 11), index and base are register,
+// potentially extended with REX prefix.
+//
+// Note that an index of ESP is forbidden, as it is used to encode no base
+// register, i.e. an ESP-relative address ([ESP+disp0/8/32]).
+// Also, if (MOD, BASE)=(00, 101), specifies no base register and a 32-bit
+// displacement, analogous to the (MOD, R/M)=(00, 101) case. This is because in
+// 64-bit mode, (MOD, R/M)=(00, 101) is used to encode RIP-relative addressing.
+//
+// See https://web.archive.org/web/20250207155122/https://en.wikipedia.org/wiki/ModR/M
 void mod_rm(const int reg1, const int reg2) {
-  // ModR/M byte
-  //
-  // It is used to encode the operand(s) to an instruction.
-  // The format is the following:
-  // Bit    7   6   5   4   3   2   1   0
-  //        -----   ---------   ---------
-  // Usage   Mod       Reg         R/M
-  //
-  // Operations that use 1 operand generally use the R/M field to specify it.
-  // In that case, the Reg field may be repurposed as an "opcode extension" to
-  // allow multiple instructions to share the same opcode. This is generally
-  // indicated as /digit in the opcode table.
-  //
-  // The mod field encodes the addressing mode for the register/memory ("r/m") operand.
-  // When the mod field is 11, the r/m field is used to specify a register operand.
-  // Otherwise, 00, 01 and 10 specify different addressing modes.
-  //
-  // When mod specifies an addressing mode, the ModR/M byte may be followed by
-  // a SIB byte (Scale Index Base) and/or a displacement.
-  //
-  // See https://web.archive.org/web/20250207155122/https://en.wikipedia.org/wiki/ModR/M
-  //
-  // For our purposes, we only use the case where both operands are registers,
-  // and so we always emit 0xc0 (mod = 11) with the reg1 and reg2 fields.
+  // Both operands are registers, so mod = 11 (0xc0) and no displacement.
   emit_i8(0xc0 + ((reg1 & 7) << 3) + (reg2 & 7));
+}
+
+void mod_rm_reg_mem(int reg, int base, int offset) {
+  bool is_8_bit_offset = -128 <= offset && offset <= 127;
+
+  // One of the operand is an address, so mod is either 01 (0x40) or 10 (0x80).
+  emit_i8((is_8_bit_offset ? 0x40 : 0x80) + (reg & 7) * 8 + (base & 7));
+
+  // SIB byte. See 32/64-bit addressing mode
+  if (base == SP || base == R12) emit_i8(0x24);
+
+  if (is_8_bit_offset) {
+    emit_i8(offset);
+  } else {
+    emit_i32_le(offset);
+  }
 }
 
 // ModR/M byte with /digit opcode extension => The reg1 field is repurposed as an opcode extension.
@@ -260,9 +292,7 @@ void mov_memory(const int op, const int reg, const int base, const int offset, c
   if (reg_width == 2) emit_i8(0x66);
   if (reg_width == 8) rex_prefix(reg, base);
   emit_i8(op);
-  emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
-  if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
-  emit_i32_le(offset);
+  mod_rm_reg_mem(reg, base, offset);
 }
 
 void mov_memory_extend(const int op, const int reg, const int base, const int offset, const bool include_0f) {
@@ -277,9 +307,7 @@ void mov_memory_extend(const int op, const int reg, const int base, const int of
   rex_prefix(reg, base);
   if (include_0f) emit_i8(0x0f); // Most sign/zero extend instructions have a 0x0f prefix
   emit_i8(op);
-  emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
-  if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
-  emit_i32_le(offset);
+  mod_rm_reg_mem(reg, base, offset);
 }
 
 void mov_mem8_reg(const int base, const int offset, const int src) {
