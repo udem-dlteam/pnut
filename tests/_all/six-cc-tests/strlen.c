@@ -26,10 +26,9 @@ int string_sum(char * s) {
   return sum;
 }
 
-int * iota_array(int start, int max) {
+int *iota_array(int start, int max) {
   int i = 0;
-  int * arr;
-  arr = malloc(max - start);
+  int *arr = malloc(max - start);
   while (i + start < max) {
     arr[i] = i + start;
     i = i + 1;
@@ -38,26 +37,22 @@ int * iota_array(int start, int max) {
 }
 
 int array_sum(int * arr, int len) {
-    int sum;
-    int i;
-    sum = 0;
-    i = 0;
-    while (i < len) {
-      sum += arr[i];
-      i = i + 1;
-    }
-    return sum;
+  int sum;
+  int i;
+  sum = 0;
+  i = 0;
+  while (i < len) {
+    sum += arr[i];
+    i = i + 1;
+  }
+  return sum;
 }
 
 int main() {
-  int n1;
-  int n2;
-  int n3;
-  int arr;
-  arr = iota_array(0, 50);
-  n1 = string_len("12345");
-  n2 = string_sum("Hello, world!");
-  n3 = array_sum(arr, 50);
+  int *arr = iota_array(0, 50);
+  int n1 = string_len("12345");
+  int n2 = string_sum("Hello, world!");
+  int n3 = array_sum(arr, 50);
   putstring("n1 = ");
   putchar(n1 + 48);
   putchar('\n');

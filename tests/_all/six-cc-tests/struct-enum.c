@@ -1,30 +1,34 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h> // for intptr_t
 
-void putstring(const char *s) {
+#ifdef PNUT_CC
+// When bootstrapping pnut, intptr_t is not defined.
+// On 64 bit platforms, intptr_t is a long long int.
+// On 32 bit (including shells) platforms, intptr_t is an int.
+#if defined(PNUT_EXE_64)
+typedef long long int intptr_t;
+#else
+typedef int intptr_t;
+#endif
+#endif
+
+void putstr(const char *s) {
   while (*s) {
     putchar(*s);
     s++;
   }
 }
 
-void putnumber(int n) {
-  char * buffer = malloc(10 * sizeof(char));
-  int i = 0;
-  if (n == 0) {
-    putchar('0');
-    return;
-  }
+void putint(int n) {
   if (n < 0) {
     putchar('-');
     n = -n;
   }
-
-  while (n > 0) {
-    buffer[i++] = (n % 10) + '0';
-    n /= 10;
+  if (n >= 10) {
+    putint(n / 10);
   }
-  while (i > 0) {
-    putchar(buffer[--i]);
-  }
+  putchar('0' + n % 10);
 }
 
 enum LinkedList {
@@ -33,34 +37,20 @@ enum LinkedList {
   LL_SIZE
 };
 
-int* iota_linked_list(int max) {
-  int *head, *last, *node;
+intptr_t *iota_linked_list(int max) {
+  intptr_t *head, *last, *node;
   int i = 1;
-  int *temp;
 
-  head = malloc(LL_SIZE * sizeof(int));
-  if (head == 0) {
-    return -1; // Memory allocation failed
-  }
-
+  head = (intptr_t *) malloc(LL_SIZE * sizeof(intptr_t));
   head[VAL] = 0;
   head[NEXT] = 0;
   last = head;
 
   while (i < max) {
-    node = malloc(LL_SIZE * sizeof(int));
-    if (node == 0) {
-
-      while (head != 0) {
-        *temp = (int*)head[NEXT];
-        free(head);
-        head = temp;
-      }
-      return -1;
-    }
+    node = (intptr_t *) malloc(LL_SIZE * sizeof(intptr_t));
     node[VAL] = i;
     node[NEXT] = 0;
-    last[NEXT] = (int)node;
+    last[NEXT] = (intptr_t) node;
     last = node;
     i = i + 1;
   }
@@ -68,36 +58,21 @@ int* iota_linked_list(int max) {
   return head;
 }
 
-int linked_list_sum(int *head) {
+int linked_list_sum(intptr_t *head) {
   int sum = 0;
   while (head != 0) {
     sum += head[VAL];
-    head = (int*)head[NEXT];
+    head = (intptr_t *) head[NEXT];
   }
   return sum;
 }
 
 int main() {
-  int *ll;
-  int sum;
-  int *temp;
-
-  ll = iota_linked_list(1000);
-  if (ll == -1) {
-    putstring("Memory allocation failed\n");
-    return 1;
-  }
-
-  sum = linked_list_sum(ll);
-  putstring("Sum: ");
-  putnumber(sum);
+  intptr_t *ll = iota_linked_list(1000);
+  int sum = linked_list_sum(ll);
+  putstr("Sum: ");
+  putint(sum);
   putchar('\n');
 
-  // Free the linked list
-  while (ll != 0) {
-    temp = (int*)ll[NEXT];
-    free(ll);
-    ll = temp;
-  }
   return 0;
 }

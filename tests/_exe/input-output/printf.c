@@ -6,8 +6,11 @@
 
 typedef char *va_list;
 
-#define va_start(ap,last) ap = ((char *)&(last)) + ((sizeof last+3)&~3)
-#define va_arg(ap,type) (ap += (sizeof(type)+3)&~3, *(type *)(ap - ((sizeof(type)+3)&~3)))
+#define va_ptr_size      (sizeof(void *))
+#define va_word_align(x) (((x)+va_ptr_size-1)&~(va_ptr_size-1))
+
+#define va_start(ap,last) ap = ((char *)&(last)) + va_word_align(sizeof(last))
+#define va_arg(ap,type) (ap += va_word_align(sizeof(type)), *(type *)(ap - va_word_align(sizeof(type))))
 #define va_end(ap)
 
 #else
