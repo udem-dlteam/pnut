@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# Usage: decode-machine-code.sh <binary-file>
+# Usage: decode-machine-code.sh <binary-file> --pnut
 
 set -e
 
@@ -9,13 +9,25 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
+file="$1" shift
+pnut_exe=0
+for_diff=0 # Remove addresses and raw instructions so diff can work
+
+while [ $# -gt 0 ]; do
+  case $1 in
+    --pnut-exe) pnut_exe="1";     shift 1 ;;
+    --for-diff) for_diff="1";     shift 1 ;;
+    *) echo "Unknown option: $1"; exit 1;;
+  esac
+done
+
 start_address_i386_elf="84"
 start_address_x86_64_elf="120"
 
 i386_arch="i386"
 x86_64_arch="i386:x86-64"
 
-elf_type=$(readelf -h "$1" | grep "Class:" | awk '{print $2}')
+elf_type=$(readelf -h "$file" | grep "Class:" | awk '{print $2}')
 if [ "$elf_type" = "ELF32" ]; then
     start_address="$start_address_i386_elf"
     architecture="$i386_arch"
@@ -28,7 +40,15 @@ else
 fi
 
 # Options useful when comparing 2 objdump outputs
-# opts="--no-show-raw-insn --no-addresses"
+if [ $for_diff -eq 1 ]; then
+    objdump_opts="--no-show-raw-insn --no-addresses"
+else
+    objdump_opts=""
+fi
 
-echo "$1: $elf_type"
-objdump -b binary -M intel --start-address="$start_address" -m "$architecture" -D "$1"
+echo "$file: $elf_type"
+if [ $pnut_exe -eq 1 ]; then
+    objdump $objdump_opts -b binary -M intel --start-address="$start_address" -m "$architecture" -D "$file"
+else
+    objdump $objdump_opts -b binary -M intel -m "$architecture" -D "$file"
+fi
