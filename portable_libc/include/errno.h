@@ -10,9 +10,8 @@
 
 #ifndef _CRT_ERRNO_DEFINED
 #define _CRT_ERRNO_DEFINED
-int* _errno(void);
-#define errno (*_errno())
-
+int* _errno;
+#define errno _errno
   int _set_errno(int _Value);
   int _get_errno(int *_Value);
 #endif
