@@ -2401,6 +2401,9 @@ void add_params(ast params) {
     ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
     type = get_child_(DECL, decl, 1);
 
+    // Array to pointer decay
+    if (get_op(type) == '[') { type = pointer_type(dereference_type(type), false); }
+
     if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
     cgc_add_local_param(ident, type_width(type, false, true) / WORD_SIZE, type);
