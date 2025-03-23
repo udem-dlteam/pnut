@@ -1897,8 +1897,8 @@ void stringify() {
   }
   arg = get_macro_arg(val);
   tok = STRING;
-  // Support the case where the argument is a single identifier token
-  if (car(car(arg)) == IDENTIFIER && cdr(arg) == 0) {
+  // Support the case where the argument is a single identifier/macro/keyword token
+  if ((car(car(arg)) == IDENTIFIER || car(car(arg)) == MACRO || (AUTO_KW <= car(car(arg)) && car(car(arg)) <= WHILE_KW)) && cdr(arg) == 0) {
     val = cdr(car(arg)); // Use the identifier probe
   } else {
     val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
