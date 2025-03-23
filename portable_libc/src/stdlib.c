@@ -40,18 +40,103 @@ void *realloc(void *ptr, size_t size) {
   return ptr;
 }
 
-#ifndef PNUT_CC
+#ifdef PNUT_CC
+
+void putstr(const char *str) {
+  while (*str) {
+    putchar(*str);
+    str++;
+  }
+}
 
 double strtod(const char *str, char **endptr) {
-  return 0.0; /*TODO*/
+  // Support the literals that are used in TCC:
+  // 0.0, 1.0, 4294967296.0
+  if (str[0] == '0' && str[1] == '.' && str[2] == '0' && str[3] == 0) {
+    if (endptr) *endptr = (char*)str + 3;
+    return 0x0;;
+  } else if (str[0] == '1' && str[1] == '.' && str[2] == '0' && str[3] == 0) {
+    if (endptr) *endptr = (char*)str + 3;
+    return 0x3ff0000000000000;
+  } else if (str[0] == '4' && str[1] == '2' && str[2] == '9' && str[3] == '4' && str[4] == '9' && str[5] == '6' && str[6] == '7' && str[7] == '2' && str[8] == '9' && str[9] == '6' && str[10] == '.' && str[11] == '0' && str[12] == 0) {
+    if (endptr) *endptr = (char*)str + 12;
+    return 0x41d0000000000000;
+  } else {
+    putstr("Unknown strtod: ");
+    putstr(str);
+    exit(1);
+    return 0; /*TODO*/
+  }
 }
 
 float strtof(const char *str, char **endptr) {
-  return 0.0; /*TODO*/
+  putstr("Unknown strtof: ");
+  putstr(str);
+  exit(1);
 }
 
 long double strtold(const char *str, char **endptr) {
-  return 0.0; /*TODO*/
+  putstr("Unknown strtold: ");
+  putstr(str);
+  exit(1);
+}
+
+unsigned long long strtoull(const char *nptr, char **endptr, int base) {
+  if (base == 0) { // base = 0 => determine base with prefix
+    // 0x   => base 16
+    // 0    => base 8
+    // else => base 10
+    if (nptr[0] == '0') {
+      if (nptr[1] == 'x') {
+        base = 16;
+        nptr += 2;
+      } else {
+        base = 8;
+      }
+    } else {
+      base = 10;
+    }
+  }
+
+  unsigned long long n = 0;
+  switch (base) {
+    case 8:
+      while (*nptr >= '0' && *nptr <= '7') {
+        n = n*8 + *nptr - '0';
+        nptr++;
+      }
+      break;
+    case 10:
+      while (*nptr >= '0' && *nptr <= '9') {
+        n = n*10 + *nptr - '0';
+        nptr++;
+      }
+      break;
+    case 16:
+      while (1) {
+        if (*nptr >= '0' && *nptr <= '9') {
+          n = n*16 + *nptr - '0';
+        } else if (*nptr >= 'A' && *nptr <= 'F') {
+          n = n*16 + *nptr - 'A' + 10;
+        } else if (*nptr >= 'a' && *nptr <= 'f') {
+          n = n*16 + *nptr - 'a' + 10;
+        } else {
+          break;
+        }
+        nptr++;
+      }
+      break;
+    default:
+      putstr("Unknown strtoull base");
+      exit(1);
+      return -1;
+  }
+
+  if (endptr) {
+    *endptr = (char*)nptr;
+  }
+
+  return n;
 }
 
 #endif

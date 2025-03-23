@@ -3,7 +3,8 @@
 #ifndef PNUT_CC
 
 double ldexp(double x, int exp) {
-  return 0.0; /*TODO*/
+  putstr("Unknown ldexp: ");
+  exit(1);
 }
 
 #endif
