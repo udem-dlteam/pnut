@@ -18,7 +18,8 @@ int strcmp(const char *l, const char *r);
 char *strerror(int errnum);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strpbrk(const char *dest, const char *breakset);
-char *strstr (char *__haystack, char *__needle);
+char *strstr(char *__haystack, char *__needle);
+void *memmem(void const *haystack, int haystack_len, void const *needle, int needle_len);
 
 #include "../src/string.c"
 
