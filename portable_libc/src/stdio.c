@@ -30,8 +30,6 @@ int fopen_flags(const char *mode) {
   int res = 0;
   while (*mode == 'b') ++mode; // Ignore binary mode
 
-  printf("fopen_flags: mode=%s\n", mode);
-
   if (*mode == 'r') {
     res = O_RDONLY;
   } else if (*mode == 'w') {
@@ -61,7 +59,7 @@ FILE *fdopen(int fd, const char *mode) {
 }
 
 FILE *fopen(const char *pathname, const char *mode) {
-  int fd = open(pathname, fopen_flags(mode), 0);
+  int fd = open(pathname, fopen_flags(mode), 0666); // 0666 is the default mode
   if (fd == -1) {
     return 0;
   } else {
