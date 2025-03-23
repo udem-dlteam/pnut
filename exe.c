@@ -715,7 +715,7 @@ int type_largest_member(ast type) {
 int struct_union_size(ast type) {
   ast members;
   ast member_type;
-  int member_size;
+  int member_size, largest_submember_size;
   int sum_size = 0, max_size = 0, largest_member_size = 0;
 
   type = canonicalize_type(type);
@@ -725,11 +725,11 @@ int struct_union_size(ast type) {
     member_type = get_child_(DECL, car_(DECL, members), 1);
     members = tail(members);
     member_size = type_width(member_type, true, false);
-    if (member_size != 0) sum_size = align_to(member_size, sum_size); // Align the member to the word size
+    largest_submember_size = type_largest_member(member_type);
+    if (member_size != 0) sum_size = align_to(largest_submember_size, sum_size); // Align the member to the word size
     sum_size += member_size;                                          // Struct size is the sum of its members
     if (member_size > max_size) max_size = member_size;               // Union size is the max of its members
-    member_size = type_largest_member(member_type);
-    if (largest_member_size < member_size) largest_member_size = member_size;
+    if (largest_member_size < largest_submember_size) largest_member_size = largest_submember_size;
   }
 
   sum_size = align_to(largest_member_size, sum_size); // The final struct size is a multiple of its widest member
@@ -762,7 +762,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // because the field may be in an anonymous struct, in which case the
       // final offset is not 0.
       member_size = type_width(get_child_(DECL, decl, 1), true, false);
-      if (member_size != 0) offset = align_to(member_size, offset);
+      if (member_size != 0) offset = align_to(type_largest_member(get_child_(DECL, decl, 1)), offset);
       offset += member_size;
     }
     members = tail(members);
