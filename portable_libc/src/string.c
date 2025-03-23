@@ -122,3 +122,19 @@ int strcmp(const char *l, const char *r) {
 
   return (*l & 255) - (*r & 255);
 }
+
+void *memmem(const void* haystack, size_t hl, const void* needle, size_t nl) {
+  int i;
+  if (nl>hl) return 0;
+  for (i=hl-nl+1; i; --i) {
+    if (!memcmp(haystack,needle,nl))
+      return (char*)haystack;
+    ++haystack;
+  }
+  return 0;
+}
+
+char *strstr(char const *haystack, char const *needle)
+{
+  return memmem(haystack, strlen(haystack), needle, strlen(needle));
+}
