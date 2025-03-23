@@ -14,7 +14,9 @@ int open(const char *pathname, int flags, mode_t mode);
 int close(int fd);
 
 off_t lseek(int fd, off_t offset, int whence);
+int unlink(const char *pathname);
 
 char *getcwd(char *buf, size_t size);
+int execvp(const char *__file, char **__argv);
 
 #endif
