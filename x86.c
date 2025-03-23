@@ -821,6 +821,24 @@ void os_close() {
   pop_reg(BX);            // restore address of global variables table
 }
 
+void os_seek() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
+  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # offset
+  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # whence
+  mov_reg_imm(AX, 19);    // mov eax, 19     # 19 = SYS_LSEEK
+  int_i8(0x80);           // int  0x80       # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
+void os_unlink() {
+  push_reg(BX);           // save address of global variables table
+  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # filename
+  mov_reg_imm(AX, 10);    // mov eax, 10     # 10 = SYS_UNLINK
+  int_i8(0x80);           // int  0x80       # system call
+  pop_reg(BX);            // restore address of global variables table
+}
+
 #endif
 
 // Both x86_64_linux and x86_64_mac use the System V ABI, the difference is in the system calls.
@@ -952,6 +970,20 @@ void os_open() {
 void os_close() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
   mov_reg_imm(AX, SYS_CLOSE);      // mov  rax, SYS_CLOSE
+  syscall_();              // syscall
+}
+
+void os_seek() {
+  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
+  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # offset
+  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # whence
+  mov_reg_imm(AX, 8);      // mov  rax, 8      # SYS_LSEEK
+  syscall_();              // syscall
+}
+
+void os_unlink() {
+  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # filename
+  mov_reg_imm(AX, 87);     // mov  rax, 87     # SYS_UNLINK
   syscall_();              // syscall
 }
 
