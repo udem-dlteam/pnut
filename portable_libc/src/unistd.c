@@ -8,15 +8,12 @@ ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, void *buf, size_t count);
 int open(const char *pathname, int flags, mode_t mode);
 int close(int fd);
+off_t lseek(int fd, off_t offset, int whence);
+int unlink(const char *pathname);
 
 */
 
 #ifdef PNUT_CC
-
-off_t lseek(int fd, off_t offset, int whence) {
-  /*TODO*/
-  return 0;
-}
 
 char *getcwd(char *buf, size_t size) {
   /*
@@ -30,10 +27,6 @@ char *getcwd(char *buf, size_t size) {
   return _getcwd (buf, size);
   */
   return 0; /*TODO*/
-}
-
-void unlink(const char *pathname) {
-  // printf("unlink: %s\n", pathname);
 }
 
 #endif

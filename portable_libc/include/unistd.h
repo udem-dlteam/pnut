@@ -18,10 +18,10 @@ int close(int fd);
 #define SEEK_SET 0
 
 off_t lseek(int fd, off_t offset, int whence);
+int unlink(const char *pathname);
 
 char *getcwd(char *buf, size_t size);
 
-int unlink(const char *pathname);
 int execvp(const char *__file, char **__argv);
 
 #include "../src/unistd.c"

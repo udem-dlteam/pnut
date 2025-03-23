@@ -323,6 +323,8 @@ void os_read();
 void os_write();
 void os_open();
 void os_close();
+void os_seek();
+void os_unlink();
 
 void setup_proc_args(int global_vars_size);
 
@@ -346,6 +348,8 @@ int read_lbl;
 int write_lbl;
 int open_lbl;
 int close_lbl;
+int seek_lbl;
+int unlink_lbl;
 
 int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
@@ -1776,6 +1780,12 @@ void codegen_begin() {
   close_lbl = alloc_label("close");
   cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
 
+  seek_lbl = alloc_label("lseek");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), seek_lbl, function_type3(int_type, int_type, int_type, int_type));
+
+  unlink_lbl = alloc_label("unlink");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
+
 #ifndef NO_BUILTIN_LIBC
   printf_lbl = alloc_label("printf");
   cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
@@ -2662,6 +2672,20 @@ void codegen_end() {
   def_label(close_lbl);
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_close();
+  ret();
+
+  // seek function
+  def_label(seek_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // fd
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // offset
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // whence
+  os_seek();
+  ret();
+
+  // unlink function
+  def_label(unlink_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // filename
+  os_unlink();
   ret();
 
   // printf function stub
