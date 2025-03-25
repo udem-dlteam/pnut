@@ -1728,16 +1728,21 @@ void init_pnut_macros() {
   init_builtin_int_macro("PNUT_EXE_32", 1);
   init_builtin_int_macro("PNUT_I386", 1);
   init_builtin_int_macro("PNUT_I386_LINUX", 1);
+  init_builtin_int_macro("__linux__", 1);
+  init_builtin_int_macro("__i386__", 1);
 #elif defined (target_x86_64_linux)
   init_builtin_int_macro("PNUT_EXE", 1);
   init_builtin_int_macro("PNUT_EXE_64", 1);
   init_builtin_int_macro("PNUT_X86_64", 1);
   init_builtin_int_macro("PNUT_X86_64_LINUX", 1);
+  init_builtin_int_macro("__linux__", 1);
+  init_builtin_int_macro("__x86_64__", 1);
 #elif defined (target_x86_64_mac)
   init_builtin_int_macro("PNUT_EXE", 1);
   init_builtin_int_macro("PNUT_EXE_64", 1);
   init_builtin_int_macro("PNUT_X86_64", 1);
   init_builtin_int_macro("PNUT_X86_64_MAC", 1);
+  init_builtin_int_macro("__x86_64__", 1);
 #endif
 
 }
