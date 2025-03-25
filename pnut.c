@@ -1683,16 +1683,21 @@ void init_pnut_macros() {
   init_ident(MACRO, "PNUT_EXE_32");
   init_ident(MACRO, "PNUT_I386");
   init_ident(MACRO, "PNUT_I386_LINUX");
+  init_ident(MACRO, "__linux__");
+  init_ident(MACRO, "__i386__");
 #elif defined (target_x86_64_linux)
   init_ident(MACRO, "PNUT_EXE");
   init_ident(MACRO, "PNUT_EXE_64");
   init_ident(MACRO, "PNUT_X86_64");
   init_ident(MACRO, "PNUT_X86_64_LINUX");
+  init_ident(MACRO, "__linux__");
+  init_ident(MACRO, "__x86_64__");
 #elif defined (target_x86_64_mac)
   init_ident(MACRO, "PNUT_EXE");
   init_ident(MACRO, "PNUT_EXE_64");
   init_ident(MACRO, "PNUT_X86_64");
   init_ident(MACRO, "PNUT_X86_64_MAC");
+  init_ident(MACRO, "__x86_64__");
 #endif
 
   FILE__ID      = init_ident(MACRO, "__FILE__");
