@@ -674,7 +674,6 @@ bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
 bool if_macro_stack_ix = 0;
 bool if_macro_mask = true;      // Indicates if the current if/elif block is being executed
 bool if_macro_executed = false; // If any of the previous if/elif conditions were true
-int  if_macro_nest_level = 0;      // Current number of unmatched #if/#ifdef/#ifndef directives that were masked out
 
 // get_tok parameters:
 // Whether to expand macros or not.
@@ -695,6 +694,10 @@ int macro_ident = 0;    // The identifier of the macro being expanded (if any)
 int macro_args_count;   // Number of arguments for the current macro being expanded
 bool paste_last_token = false; // Whether the last token was a ## or not
 
+bool prev_macro_mask() {
+  return if_macro_stack_ix == 0 || if_macro_stack[if_macro_stack_ix - 2];
+}
+
 void push_if_macro_mask(bool new_mask) {
   if (if_macro_stack_ix >= IFDEF_DEPTH_MAX) {
     fatal_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
@@ -703,6 +706,10 @@ void push_if_macro_mask(bool new_mask) {
   if_macro_stack[if_macro_stack_ix] = if_macro_mask;
   if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
   if_macro_stack_ix += 2;
+
+  // If the current block is masked off, then the new mask is the logical AND of the current mask and the new mask
+  new_mask = if_macro_mask & new_mask;
+
   // Then set the new mask value and reset the executed flag
   if_macro_mask = if_macro_executed = new_mask;
 }
@@ -1438,41 +1445,29 @@ void handle_preprocessor_directive() {
   if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
     temp = val;
     get_tok_macro(); // Get the macro name
-    if (if_macro_mask) {
       push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
     get_tok_macro(); // Skip the macro name
   } else if (tok == IF_KW) {
     temp = evaluate_if_condition();
-    if (if_macro_mask) {
       push_if_macro_mask(temp);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
   } else if (tok == IDENTIFIER && val == ELIF_ID) {
     temp = evaluate_if_condition();
-    if (if_macro_executed) {
-      // The condition is true, but its ignored if one of the conditions before was also true
-      if_macro_mask = false;
-    } else {
+    if (prev_macro_mask() && !if_macro_executed) {
       if_macro_executed |= temp;
       if_macro_mask = temp;
+    } else {
+      if_macro_mask = false;
     }
   } else if (tok == ELSE_KW) {
-    if (if_macro_mask || if_macro_nest_level == 0) {
+    if (prev_macro_mask()) { // If the parent block mask is true
       if_macro_mask = !if_macro_executed;
+      if_macro_executed = true;
+    } else {
+      if_macro_mask = false;
     }
     get_tok_macro(); // Skip the else keyword
   } else if (tok == IDENTIFIER && val == ENDIF_ID) {
-    if (if_macro_mask || if_macro_nest_level == 0) {
       pop_if_macro_mask();
-    } else {
-      if_macro_nest_level -= 1;
-    }
     get_tok_macro(); // Skip the else keyword
   } else if (if_macro_mask) {
     if (tok == IDENTIFIER && val == INCLUDE_ID) {
