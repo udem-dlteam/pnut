@@ -123,6 +123,17 @@ int strcmp(const char *l, const char *r) {
   return (*l & 255) - (*r & 255);
 }
 
+int strncmp(const char *s1, const char *s2, size_t n) {
+
+  while (n && *s1 && *s1 == *s2) {
+    ++s1;
+    ++s2;
+    --n;
+  }
+
+  return n ? (*s1 & 255) - (*s2 & 255) : 0;
+}
+
 void *memmem(const void* haystack, size_t hl, const void* needle, size_t nl) {
   int i;
   if (nl>hl) return 0;
