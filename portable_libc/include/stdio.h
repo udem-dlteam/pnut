@@ -4,7 +4,13 @@
 #include "sys/types.h"
 #include "stdarg.h"
 
+#ifndef EOF
 #define EOF (-1)
+#endif
+
+#ifndef NULL
+#define NULL 0
+#endif
 
 #ifdef USE_STRUCT
 
