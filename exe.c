@@ -2525,10 +2525,6 @@ void rt_malloc() {
   mov_reg_reg(reg_X, reg_Y);              // Return the old bump pointer
 }
 
-void rt_free() {
-  return; // Free are NO-OP
-}
-
 void codegen_end() {
   def_label(setup_lbl);
 
@@ -2652,7 +2648,7 @@ void codegen_end() {
   // free function
   def_label(free_lbl);
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_free();
+  // Free is NO-OP
   ret();
 
   // printf function stub
