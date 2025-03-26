@@ -2558,6 +2558,7 @@ void rt_free() {
 }
 
 void codegen_end() {
+  int fopen_success_lbl = alloc_label("fopen_success");
 
   def_label(setup_lbl);
 
@@ -2609,7 +2610,15 @@ void codegen_end() {
   // fopen function
   def_label(fopen_lbl);
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_fopen();
+  mov_reg_imm(reg_Y, 0); // mode
+  mov_reg_imm(reg_Z, 0); // flag
+  os_open();
+  // If open fails, it returns -1, but we need to return NULL
+  // debug_interrupt();
+  mov_reg_imm(reg_Y, 0);
+  jump_cond_reg_reg(GE, fopen_success_lbl, reg_X, reg_Y);
+  mov_reg_imm(reg_X, 0); // NULL
+  def_label(fopen_success_lbl);
   ret();
 
   // fclose function
