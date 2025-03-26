@@ -644,14 +644,6 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
-void syscall() {
-
-  // SYSCALL ;; Fast System Call
-  // See: https://web.archive.org/web/20240620153804/https://www.felixcloutier.com/x86/syscall
-
-  emit_2_i8(0x0F, 0x05);
-}
-
 void setup_proc_args(int global_vars_size) {
   // See page 54 of Intel386 System V ABI document:
   // https://web.archive.org/web/20240107061436/https://www.sco.com/developers/devspecs/abi386-4.pdf
@@ -702,6 +694,24 @@ void mov_reg_lbl(int reg, int lbl) {
 // For 32 bit linux.
 #ifdef target_i386_linux
 
+// Regular system calls for 32 bit linux.
+// The system call number is passed in the rax register.
+// Other arguments are passed in ebx, ecx and edx.
+// The return value is in rax.
+// If the parameter registers are ebx, ecx or edx, the function assume they may
+// be clobberred in the order of the mov instructions.
+// i.e. syscall_3(SYS_READ, ..., ebx, ...) is not valid because ebx is clobberred by the first mov instructions.
+// For syscalls that use less than 3 parameters, the extra register params are set to -1.
+void syscall_3(int syscall_code, int bx_reg, int cx_reg, int dx_reg) {
+  push_reg(BX);                  // save address of global variables table
+  if (bx_reg >= 0) mov_reg_reg(BX, bx_reg);
+  if (cx_reg >= 0) mov_reg_reg(CX, cx_reg);
+  if (dx_reg >= 0) mov_reg_reg(DX, dx_reg);
+  mov_reg_imm(AX, syscall_code); // AX = syscall_code
+  int_i8(0x80);                  // syscall
+  pop_reg(BX);                   // restore address of global variables table
+}
+
 void os_allocate_memory(int size) {
   push_reg(BX);           // save address of global variables table
   mov_reg_imm(AX, 192);   // mov  eax, 192 == SYS_MMAP2
@@ -716,67 +726,31 @@ void os_allocate_memory(int size) {
 }
 
 void os_exit() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov  ebx, reg_X  # exit status
-  mov_reg_imm(AX, 1);     // mov  eax, 1      # 1 = SYS_EXIT
-  int_i8(0x80);           // int  0x80        # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(1, reg_X, -1, -1); // SYS_EXIT = 1
 }
 
 void os_read() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # count
-  mov_reg_imm(AX, 3);     // mov eax, 3      # 3 = SYS_READ
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(3, reg_X, reg_Y, reg_Z); // SYS_READ = 3
 }
 
 void os_write() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # count
-  mov_reg_imm(AX, 4);     // mov eax, 4      # 4 = SYS_READ
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(4, reg_X, reg_Y, reg_Z); // SYS_WRITE = 4
 }
 
 void os_open() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # filename
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # flags
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # mode
-  mov_reg_imm(AX, 5);     // mov eax, 5      # 5 = SYS_OPEN
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(5, reg_X, reg_Y, reg_Z); // SYS_OPEN = 5
 }
 
 void os_close() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov  ebx, reg_X  # file descriptor
-  mov_reg_imm(AX, 6);     // mov  eax, 6      # 6 = SYS_CLOSE
-  int_i8(0x80);           // int  0x80        # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(6, reg_X, -1, -1); // SYS_CLOSE = 6
 }
 
 void os_seek() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # offset
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # whence
-  mov_reg_imm(AX, 19);    // mov eax, 19     # 19 = SYS_LSEEK
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(19, reg_X, reg_Y, reg_Z); // SYS_LSEEK = 19
 }
 
 void os_unlink() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # filename
-  mov_reg_imm(AX, 10);    // mov eax, 10     # 10 = SYS_UNLINK
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(10, reg_X, -1, -1); // SYS_UNLINK = 10
 }
 
 #endif
@@ -788,85 +762,96 @@ void os_unlink() {
   #define SYS_WRITE 1
   #define SYS_OPEN 2
   #define SYS_CLOSE 3
+  #define SYS_LSEEK 8
+  #define SYS_UNLINK 87
   #define SYS_MMAP_MAP_TYPE 0x22
   #define SYS_MMAP 9
   #define SYS_EXIT 60
 #endif
 
 #ifdef target_x86_64_mac
+  // Refer to following page for macOS system call numbers:
+  // https://web.archive.org/web/20211102014723/http://www.opensource.apple.com/source/xnu/xnu-1504.3.12/bsd/kern/syscalls.master
+  // Because it's a 64 bit system, 0x2000000 is added to the system call number.
   #define SYSTEM_V_ABI
   #define SYS_READ 0x2000003
   #define SYS_WRITE 0x2000004
   #define SYS_OPEN 0x2000005
   #define SYS_CLOSE 0x2000006
+  #define SYS_LSEEK 0x20000c7
+  #define SYS_UNLINK 0x200000a
   #define SYS_MMAP_MAP_TYPE 0x1020
   #define SYS_MMAP 0x20000C5
   #define SYS_EXIT 0x2000001
 #endif
 
-
 // For 64 bit System V ABI.
 #ifdef SYSTEM_V_ABI
 
+void syscall() {
+
+  // SYSCALL ;; Fast System Call
+  // See: https://web.archive.org/web/20240620153804/https://www.felixcloutier.com/x86/syscall
+
+  emit_2_i8(0x0F, 0x05);
+}
+
+// Regular system calls for 64 bit linux and macOS.
+// The system call number is passed in the rax register.
+// Other arguments are passed in rdi, rsi and rdx.
+// The return value is in rax.
+// The di_reg, si_reg, dx_reg parameters
+// If the parameter registers are rdi, rsi or rdx, the function assume they may
+// be clobberred in the order of the mov instructions.
+// i.e. syscall_3(SYS_READ, ..., rdi, ...) is not valid because rdi is clobberred by the first mov instructions.
+// For syscalls that use less than 3 parameters, the extra register params are set to -1.
+void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
+  if (di_reg >= 0) mov_reg_reg(DI, di_reg);
+  if (si_reg >= 0) mov_reg_reg(SI, si_reg);
+  if (dx_reg >= 0) mov_reg_reg(DX, dx_reg);
+  mov_reg_imm(AX, syscall_code); // AX = syscall_code
+  syscall();                     // syscall
+}
+
 void os_allocate_memory(int size) {
-  mov_reg_imm(DI, 0);     // mov rdi, 0 | NULL
-  mov_reg_imm(SI, size);  // mov rsi, size | size
-  mov_reg_imm(DX, 0x3);   // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
+  mov_reg_imm(DI, 0);                  // mov rdi, 0 | NULL
+  mov_reg_imm(SI, size);               // mov rsi, size | size
+  mov_reg_imm(DX, 0x3);                // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
   mov_reg_imm(R10, SYS_MMAP_MAP_TYPE); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
-  mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
-  mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
-  mov_reg_imm(AX, SYS_MMAP);     // mov rax, SYS_MMAP
-  syscall();              // syscall
+  mov_reg_imm(R8, -1);                 // mov r8, -1 (file descriptor)
+  mov_reg_imm(R9, 0);                  // mov r9, 0 (offset)
+  mov_reg_imm(AX, SYS_MMAP);           // mov rax, SYS_MMAP
+  syscall();                           // syscall
 }
 
 void os_exit() {
-  mov_reg_reg(DI, reg_X); // mov edi, reg_X  # exit status
-  mov_reg_imm(AX, SYS_EXIT);    // mov eax, SYS_EXIT
-  syscall();              // syscall
+  syscall_3(SYS_EXIT, reg_X, -1, -1);
 }
 
 void os_read() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
-  syscall();               // syscall
+  syscall_3(SYS_READ, reg_X, reg_Y, reg_Z);
 }
 
 void os_write() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, SYS_WRITE);      // mov  rax, SYS_WRITE
-  syscall();               // syscall
+  syscall_3(SYS_WRITE, reg_X, reg_Y, reg_Z);
 }
 
 void os_open() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # filename
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # flags
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # mode
-  mov_reg_imm(AX, SYS_OPEN);      // mov  rax, SYS_OPEN
-  syscall();               // syscall
+  syscall_3(SYS_OPEN, reg_X, reg_Y, reg_Z);
+  // MacOS (BSD) signals errors by setting the carry flag, while Linux uses a negative return value.
+  // For now, we'll assume macOS and Linux have the same behavior and return a negative value in rax.
 }
 
 void os_close() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_imm(AX, SYS_CLOSE);      // mov  rax, SYS_CLOSE
-  syscall();               // syscall
+  syscall_3(SYS_CLOSE, reg_X, -1, -1);
 }
 
 void os_seek() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # offset
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # whence
-  mov_reg_imm(AX, 8);      // mov  rax, 8      # SYS_LSEEK
-  syscall();               // syscall
+  syscall_3(SYS_LSEEK, reg_X, reg_Y, reg_Z);
 }
 
 void os_unlink() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # filename
-  mov_reg_imm(AX, 87);     // mov  rax, 87     # SYS_UNLINK
-  syscall();               // syscall
+  syscall_3(SYS_UNLINK, reg_X, -1, -1);
 }
 
 #endif
