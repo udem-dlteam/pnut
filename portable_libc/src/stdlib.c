@@ -167,22 +167,25 @@ long int strtol(const char *str, char **endptr, int base) {
         base = 8;
       }
     }
+  } else if (base == 0) {
+    base = 10; // default base
   }
 
   while (1) {
     d = *probe;
     if (d >= '0' && d <= '9') {
-      d = d-'0';
+      d = d - '0';
     } else if (d >= 'A' && d <= 'Z') {
-      d = d-'A'+10;
+      d = d - 'A' + 10;
     } else if (d >= 'a' && d <= 'z') {
-      d = d-'a'+10;
+      d = d - 'a' + 10;
     } else {
       d = 99;
     }
     if (d >= base) break;
-    n = n*base - d;
+    n = n * base - d;
     nb_digits++;
+    probe++;
   }
 
   if (endptr) {
