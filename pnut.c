@@ -1678,6 +1678,10 @@ void init_builtin_int_macro(int macro_id, int value) {
   heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
 }
 
+void init_builtin_empty_macro(int macro_id) {
+  heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
+}
+
 void init_pnut_macros() {
   init_ident(MACRO, "PNUT_CC");
 
@@ -3917,9 +3921,53 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
+void handle_macro_D(char *opt) {
+  char *start = opt;
+  while (*opt != 0 && *opt != '=') opt += 1; // Find = sign if any
+
+  char *macro_buf = malloc(opt - start + 1);
+  memcpy(macro_buf, start, opt - start);
+  macro_buf[opt - start] = '\0';
+
+  if (*opt == '=') {
+    opt += 1;
+    if (*opt == '"') { // Start of string literal
+      opt += 1;
+      start = opt;
+      while (*opt != 0 && *opt != '"') opt += 1;
+      if (*opt == 0) fatal_error("Unterminated string literal");
+      char *buf2 = malloc(opt - start + 1);
+      memcpy(buf2, start, opt - start);
+      buf2[opt - start] = '\0';
+      init_builtin_string_macro(init_ident(MACRO, macro_buf), buf2);
+      free(buf2);
+    } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
+      int acc = 0;
+      while ('0' <= *opt && *opt <= '9') {
+        acc *= 10;
+        acc += *opt - '0';
+        opt += 1;
+      }
+      if (*opt != 0) fatal_error("Invalid macro definition value");
+      init_builtin_int_macro(init_ident(MACRO, macro_buf), acc);
+    } else if (*opt == '\0') { // No value given, empty macro
+      init_builtin_empty_macro(init_ident(MACRO, macro_buf));
+    } else {
+      fatal_error("Invalid macro definition value");
+    }
+  } else {
+    // Default to 1 when no value is given
+    init_builtin_int_macro(init_ident(MACRO, macro_buf), 1);
+  }
+
+  free(macro_buf);
+
+}
+
 int main(int argc, char **argv) {
   int i;
   ast decl;
+  char *opt;
 
 #ifdef HANDLE_SIGNALS
   signal(SIGINT, signal_callback_handler);
@@ -3933,18 +3981,33 @@ int main(int argc, char **argv) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
         case 'D':
-          init_builtin_int_macro(init_ident(MACRO, argv[i] + 2), 1);
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            handle_macro_D(argv[i]);
+          } else {
+            handle_macro_D(argv[i] + 2); // skip '-D'
+          }
           break;
 
         case 'U':
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            init_ident(IDENTIFIER, argv[i]);
+          } else {
+            init_ident(IDENTIFIER, argv[i] + 2); // skip '-U'
+          }
           init_ident(IDENTIFIER, argv[i] + 2);
           break;
 
         case 'I':
-          if (include_search_path != 0) {
-            fatal_error("only one include path allowed");
+          if (include_search_path != 0) fatal_error("only one include path allowed");
+
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            include_search_path = argv[i];
+          } else {
+            include_search_path = argv[i] + 2; // skip '-I'
           }
-          include_search_path = argv[i] + 2;
           break;
 
         default:
