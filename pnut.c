@@ -1138,9 +1138,6 @@ int CLOSE_ID;
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
-int DATE__ID;
-int TIME__ID;
-int TIMESTAMP__ID;
 
 // When we parse a macro, we generally want the tokens as they are, without expanding them.
 void get_tok_macro() {
@@ -1664,57 +1661,58 @@ void init_ident_table() {
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 }
 
-void init_builtin_string_macro(int macro_id, char* value) {
+int init_builtin_string_macro(char *macro_str, char* value) {
+  int macro_id = init_ident(MACRO, macro_str);
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
   heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
+  return macro_id;
 }
 
-void init_builtin_int_macro(int macro_id, int value) {
+int init_builtin_int_macro(char *macro_str, int value) {
+  int macro_id = init_ident(MACRO, macro_str);
   heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
+  return macro_id;
 }
 
-void init_builtin_empty_macro(int macro_id) {
+int init_builtin_empty_macro(char *macro_str) {
+  int macro_id = init_ident(MACRO, macro_str);
   heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
+  return macro_id;
 }
 
 void init_pnut_macros() {
-  init_ident(MACRO, "PNUT_CC");
+  init_builtin_int_macro("PNUT_CC", 1);
+
+  init_builtin_string_macro("__DATE__", "Jan  1 1970");
+  init_builtin_string_macro("__TIME__", "00:00:00");
+  init_builtin_string_macro("__TIMESTAMP__", "Jan  1 1970 00:00:00");
+  FILE__ID = init_builtin_string_macro("__FILE__", "<unknown>");
+  LINE__ID = init_builtin_int_macro("__LINE__", 0);
 
 #if defined(sh)
-  init_ident(MACRO, "PNUT_SH");
+  init_builtin_int_macro("PNUT_SH", 1);
 #elif defined(target_i386_linux)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_32");
-  init_ident(MACRO, "PNUT_I386");
-  init_ident(MACRO, "PNUT_I386_LINUX");
-  init_ident(MACRO, "__linux__");
-  init_ident(MACRO, "__i386__");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_32", 1);
+  init_builtin_int_macro("PNUT_I386", 1);
+  init_builtin_int_macro("PNUT_I386_LINUX", 1);
+  init_builtin_int_macro("__linux__", 1);
+  init_builtin_int_macro("__i386__", 1);
 #elif defined (target_x86_64_linux)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_64");
-  init_ident(MACRO, "PNUT_X86_64");
-  init_ident(MACRO, "PNUT_X86_64_LINUX");
-  init_ident(MACRO, "__linux__");
-  init_ident(MACRO, "__x86_64__");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_64", 1);
+  init_builtin_int_macro("PNUT_X86_64", 1);
+  init_builtin_int_macro("PNUT_X86_64_LINUX", 1);
+  init_builtin_int_macro("__linux__", 1);
+  init_builtin_int_macro("__x86_64__", 1);
 #elif defined (target_x86_64_mac)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_64");
-  init_ident(MACRO, "PNUT_X86_64");
-  init_ident(MACRO, "PNUT_X86_64_MAC");
-  init_ident(MACRO, "__x86_64__");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_64", 1);
+  init_builtin_int_macro("PNUT_X86_64", 1);
+  init_builtin_int_macro("PNUT_X86_64_MAC", 1);
+  init_builtin_int_macro("__x86_64__", 1);
 #endif
 
-  FILE__ID      = init_ident(MACRO, "__FILE__");
-  LINE__ID      = init_ident(MACRO, "__LINE__");
-  DATE__ID      = init_ident(MACRO, "__DATE__");
-  TIME__ID      = init_ident(MACRO, "__TIME__");
-  TIMESTAMP__ID = init_ident(MACRO, "__TIMESTAMP__");
-
-  init_builtin_string_macro(FILE__ID, "<unknown>");
-  init_builtin_int_macro   (LINE__ID, 0);
-  init_builtin_string_macro(DATE__ID, "Jan  1 1970");
-  init_builtin_string_macro(TIME__ID, "00:00:00");
-  init_builtin_string_macro(TIMESTAMP__ID, "Jan  1 1970 00:00:00");
 }
 
 // A macro argument is represented using a list of tokens.
@@ -3949,7 +3947,7 @@ void handle_macro_D(char *opt) {
       char *buf2 = malloc(opt - start + 1);
       memcpy(buf2, start, opt - start);
       buf2[opt - start] = '\0';
-      init_builtin_string_macro(init_ident(MACRO, macro_buf), buf2);
+      init_builtin_string_macro(macro_buf, buf2);
       free(buf2);
     } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
       int acc = 0;
@@ -3959,15 +3957,15 @@ void handle_macro_D(char *opt) {
         opt += 1;
       }
       if (*opt != 0) fatal_error("Invalid macro definition value");
-      init_builtin_int_macro(init_ident(MACRO, macro_buf), acc);
+      init_builtin_int_macro(macro_buf, acc);
     } else if (*opt == '\0') { // No value given, empty macro
-      init_builtin_empty_macro(init_ident(MACRO, macro_buf));
+      init_builtin_empty_macro(macro_buf);
     } else {
       fatal_error("Invalid macro definition value");
     }
   } else {
     // Default to 1 when no value is given
-    init_builtin_int_macro(init_ident(MACRO, macro_buf), 1);
+    init_builtin_int_macro(macro_buf, 1);
   }
 
   free(macro_buf);
