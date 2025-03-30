@@ -466,7 +466,8 @@ enum {
   jump(init_next_lbl);
 
 #if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
-int labels[100000];
+#define LABELS_ARR_SIZE 100000
+int labels[LABELS_ARR_SIZE];
 int labels_ix = 0;
 
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
@@ -507,7 +508,7 @@ void assert_all_labels_defined() {
 }
 
 void add_label(int lbl) {
-  if (labels_ix >= sizeof(labels) / sizeof(labels[0])) fatal_error("labels array is full");
+  if (labels_ix >= LABELS_ARR_SIZE) fatal_error("labels array is full");
 
   labels[labels_ix++] = lbl;
 }
