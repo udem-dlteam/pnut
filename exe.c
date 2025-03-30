@@ -146,13 +146,6 @@ void call(int lbl);
 void call_reg(int reg);
 void ret();
 
-void dup(int reg) {
-  pop_reg(reg);
-  push_reg(reg);
-  push_reg(reg);
-  grow_fs(1);
-}
-
 void load_mem_location(int dst, int base, int offset, int width, bool is_signed) {
   if (is_signed) {
     switch (width) {
@@ -2257,9 +2250,9 @@ void codegen_statement(ast node) {
       jump(lbl1);
       def_label(heap[binding + 4]);           // false jump location of previous case
       heap[binding + 4] = alloc_label(0);     // create false jump location for current case
-      dup(reg_X);                             // duplicate switch operand for the comparison
       codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
-      pop_reg(reg_Y); pop_reg(reg_X); grow_fs(-2);
+      pop_reg(reg_Y); grow_fs(-1);
+      mov_reg_mem(reg_X, reg_SP, 0);          // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       jump(heap[binding + 4]);                // condition is false => jump to next case
       def_label(lbl1);                        // start of case conditional block
