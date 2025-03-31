@@ -6,6 +6,13 @@ PNUT_ARCH=i386_linux
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir -p "$TEMP_DIR"; fi
 
+printf_timing() {
+  msg=$1
+  cmd=$2
+  real_time=`env time -p sh -c "$cmd" 2>&1 | grep '^real ' | sed 's/.* //'`
+  printf "%ss %s\n" $real_time "$msg"
+}
+
 : ${PNUT_OPTIONS:=} # Default to empty options
 
 PNUT_EXE_OPTIONS="$PNUT_OPTIONS -DBOOTSTRAP_LONG -Dtarget_$PNUT_ARCH -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS"
@@ -41,17 +48,44 @@ if [ $fast -eq 1 ]; then
   PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"
 fi
 
-if [ -n "$shell" ]; then
+make_with_shell() { # $1 = shell
 
   # Test with the specified shell
-  echo "Rooting bootstrap on $shell"
+  echo "Making pnut-exe from pnut-sh.sh and $1"
+
   # Let's assume we have a premade pnut-sh.sh script
   # In a normal bootstrap, we'd have a precompiled pnut-sh.sh script.
   # Here, let's create it using gcc
-  gcc -o $TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c
-  ./$TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh
-  $shell $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh
-  $shell $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c -o $TEMP_DIR/pnut-exe
+  printf_timing "1. Making pnut-sh.sh" \
+                "gcc -o $TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c && ./$TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh"
+
+  printf "### Here you'd audit the pnut-sh.sh script to make sure it is correct ### \n"
+
+  printf_timing "2. pnut-sh.sh compiling pnut.c -> pnut-exe.sh" \
+                "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh"
+
+  printf_timing "3. pnut-exe.sh compiling pnut.c -> pnut-exe" \
+                "$1 $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c -o $TEMP_DIR/pnut-exe"
+
+  sha256sum $TEMP_DIR/pnut-exe
+
+}
+
+if [ -n "$shell" ]; then
+
+  if [ "$shell" = "all" ]; then
+    # Test with all shells
+    for shell in ksh bash dash yash zsh; do
+      if command -v $shell > /dev/null 2>&1; then
+        make_with_shell $shell
+      else
+        echo "Shell $shell not found, skipping..."
+      fi
+    done
+  else
+    # Test with the specified shell
+    make_with_shell $shell
+  fi
 
 else
 
@@ -59,10 +93,12 @@ else
   # We know that these 2 methods reach the same executable, so no need to use
   # the slow method when developing.
 
+  echo "Making pnut-exe from gcc (gcc -> pnut-exe-by-gcc -> pnut-exe-by-pnut-exe)"
+
   gcc pnut.c $PNUT_EXE_OPTIONS -o $TEMP_DIR/pnut-exe-for-pnut-exe
   ./$TEMP_DIR/pnut-exe-for-pnut-exe $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c -o $TEMP_DIR/pnut-exe
+  sha256sum $TEMP_DIR/pnut-exe
 
 fi
 
 chmod +x $TEMP_DIR/pnut-exe
-sha256sum $TEMP_DIR/pnut-exe
