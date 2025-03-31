@@ -788,7 +788,8 @@ void os_unlink() {
 // For 64 bit System V ABI.
 #ifdef SYSTEM_V_ABI
 
-void syscall() {
+// syscall conflicts with a function defined in unistd.h so we use syscall_ instead.
+void syscall_() {
 
   // SYSCALL ;; Fast System Call
   // See: https://web.archive.org/web/20240620153804/https://www.felixcloutier.com/x86/syscall
@@ -810,7 +811,7 @@ void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
   if (si_reg >= 0) mov_reg_reg(SI, si_reg);
   if (dx_reg >= 0) mov_reg_reg(DX, dx_reg);
   mov_reg_imm(AX, syscall_code); // AX = syscall_code
-  syscall();                     // syscall
+  syscall_();                     // syscall
 }
 
 void os_allocate_memory(int size) {
@@ -821,7 +822,7 @@ void os_allocate_memory(int size) {
   mov_reg_imm(R8, -1);                 // mov r8, -1 (file descriptor)
   mov_reg_imm(R9, 0);                  // mov r9, 0 (offset)
   mov_reg_imm(AX, SYS_MMAP);           // mov rax, SYS_MMAP
-  syscall();                           // syscall
+  syscall_();                           // syscall
 }
 
 void os_exit() {
