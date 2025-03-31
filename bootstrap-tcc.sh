@@ -65,7 +65,7 @@ if [ $use_gcc -eq 0 ]; then
     gcc -o $TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c
     ./$TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh
     $shell $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh
-    $shell $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
+    $shell $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c -o $TEMP_DIR/pnut-exe
 
   else
 
@@ -74,7 +74,7 @@ if [ $use_gcc -eq 0 ]; then
     # the slow method when developing.
 
     gcc pnut.c $PNUT_EXE_OPTIONS -o $TEMP_DIR/pnut-exe-for-pnut-exe 2> /dev/null
-    ./$TEMP_DIR/pnut-exe-for-pnut-exe $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
+    ./$TEMP_DIR/pnut-exe-for-pnut-exe $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c -o $TEMP_DIR/pnut-exe
 
   fi
 
@@ -101,7 +101,7 @@ if [ $use_gcc -eq 0 ]; then
     -D ONE_SOURCE=1                                         \
     -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"            \
     $TCC_DIR/tcc.c                                         \
-    > $TEMP_DIR/tcc-pnut
+    -o $TEMP_DIR/tcc-pnut
 
   chmod +x $TEMP_DIR/tcc-pnut
 

@@ -5,6 +5,8 @@
 #include <strings.h>
 #include <string.h>
 #include <stdint.h> // for intptr_t
+#include <fcntl.h> // for open
+#include <unistd.h> // for write
 
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
@@ -14,6 +16,18 @@
 typedef long long int intptr_t;
 #else
 typedef int intptr_t;
+#endif
+
+#ifdef PNUT_SH
+// on pnut-sh, the file can only be opened in 3 modes: read, write and append
+// if it doesn't exist, it will be created.
+#define O_WRONLY 01
+#define O_CREAT  00
+#define O_TRUNC  00
+#else
+#define O_WRONLY 01
+#define O_CREAT  0100
+#define O_TRUNC  01000
 #endif
 #endif
 
@@ -148,6 +162,7 @@ struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
 char* fp_filepath = 0; // The path of the current file being read
 char* include_search_path = 0; // Search path for include files
+int output_fd = 1; // Output file descriptor (1 = stdout)
 
 // Tokens and AST nodes
 enum {
@@ -3988,6 +4003,16 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
+        case 'o':
+          // Output file name
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          } else {
+            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          }
+          break;
+
         case 'D':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             i += 1;

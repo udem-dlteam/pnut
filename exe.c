@@ -57,8 +57,10 @@ void emit_i64_le_large_imm(int imm_obj) {
 }
 #endif
 
+char write_buf[1];
 void write_i8(int n) {
-  putchar(n & 0xff);
+  write_buf[0] = (n & 0xff);
+  write(output_fd, write_buf, 1);
 }
 
 void write_2_i8(int a, int b) {
