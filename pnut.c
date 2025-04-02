@@ -1448,10 +1448,10 @@ void handle_preprocessor_directive() {
       push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
     get_tok_macro(); // Skip the macro name
   } else if (tok == IF_KW) {
-    temp = evaluate_if_condition();
-      push_if_macro_mask(temp);
+    temp = evaluate_if_condition() != 0;
+    push_if_macro_mask(temp);
   } else if (tok == IDENTIFIER && val == ELIF_ID) {
-    temp = evaluate_if_condition();
+    temp = evaluate_if_condition() != 0;
     if (prev_macro_mask() && !if_macro_executed) {
       if_macro_executed |= temp;
       if_macro_mask = temp;
