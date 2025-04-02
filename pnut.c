@@ -1925,11 +1925,11 @@ void stringify() {
 // Concatenates two non-negative integers into a single integer
 // Note that this function only supports small integers, represented as positive integers.
 int paste_integers(int left_val, int right_val) {
+  int result = left_val;
+  int right_digits = right_val;
 #ifdef SUPPORT_64_BIT_LITERALS
   if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
 #endif
-  int result = left_val;
-  int right_digits = right_val;
   while (right_digits > 0) {
     result *= 10;
     right_digits /= 10;
@@ -3937,9 +3937,12 @@ ast parse_compound_statement() {
 #ifndef sh
 void handle_macro_D(char *opt) {
   char *start = opt;
+  char *macro_buf;
+  char *buf2;
+  int acc;
   while (*opt != 0 && *opt != '=') opt += 1; // Find = sign if any
 
-  char *macro_buf = malloc(opt - start + 1);
+  macro_buf = malloc(opt - start + 1);
   memcpy(macro_buf, start, opt - start);
   macro_buf[opt - start] = '\0';
 
@@ -3950,13 +3953,13 @@ void handle_macro_D(char *opt) {
       start = opt;
       while (*opt != 0 && *opt != '"') opt += 1;
       if (*opt == 0) fatal_error("Unterminated string literal");
-      char *buf2 = malloc(opt - start + 1);
+      buf2 = malloc(opt - start + 1);
       memcpy(buf2, start, opt - start);
       buf2[opt - start] = '\0';
       init_builtin_string_macro(macro_buf, buf2);
       free(buf2);
     } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
-      int acc = 0;
+      acc = 0;
       while ('0' <= *opt && *opt <= '9') {
         acc *= 10;
         acc += *opt - '0';
