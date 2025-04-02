@@ -4012,7 +4012,12 @@ int main(int argc, char **argv) {
             handle_macro_D(argv[i] + 2); // skip '-D'
           }
           break;
-
+#else
+          case 'D':
+            // pnut-sh only needs -D<macro> and no other options
+            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+            break;
+#endif
         case 'U':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             i += 1;
@@ -4021,12 +4026,6 @@ int main(int argc, char **argv) {
             init_ident(IDENTIFIER, argv[i] + 2); // skip '-U'
           }
           break;
-#else
-        case 'D':
-          // pnut-sh only needs -D<macro> and no other options
-          init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
-          break;
-#endif
 
         case 'I':
           if (include_search_path != 0) fatal_error("only one include path allowed");
