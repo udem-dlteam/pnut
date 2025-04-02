@@ -42,6 +42,9 @@ extern FILE *stderr;
 
 #endif
 
+int getchar(void);
+int putchar(int);
+
 int fgetc(FILE *stream);
 FILE *fopen(const char *pathname, const char *mode);
 FILE *fdopen(int fd, const char *mode);

@@ -29,8 +29,4 @@ char *getcwd(char *buf, size_t size) {
   return 0; /*TODO*/
 }
 
-void unlink(const char *pathname) {
-  // printf("unlink: %s\n", pathname);
-}
-
 #endif
