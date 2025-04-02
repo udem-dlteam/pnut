@@ -3981,7 +3981,6 @@ void handle_macro_D(char *opt) {
 int main(int argc, char **argv) {
   int i;
   ast decl;
-  char *opt;
 
 #ifdef HANDLE_SIGNALS
   signal(SIGINT, signal_callback_handler);
