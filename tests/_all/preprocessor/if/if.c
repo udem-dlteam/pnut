@@ -127,5 +127,20 @@ int main() {
   putdigit(0);
 #endif
 
+// Make sure #elif doesn't revert the masked out state if the whole block is masked out
+#if 0
+#if 0
+  putdigit(0);
+#elif 1
+  putdigit(0);
+#elif 1
+  putdigit(0);
+#else
+  putdigit(0);
+#endif
+#else
+  putdigit(8);
+#endif
+
   return 0;
 }
