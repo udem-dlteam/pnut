@@ -4020,7 +4020,6 @@ int main(int argc, char **argv) {
           } else {
             init_ident(IDENTIFIER, argv[i] + 2); // skip '-U'
           }
-          init_ident(IDENTIFIER, argv[i] + 2);
           break;
 #else
         case 'D':
