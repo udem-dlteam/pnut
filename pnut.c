@@ -3934,6 +3934,7 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
+#ifndef sh
 void handle_macro_D(char *opt) {
   char *start = opt;
   while (*opt != 0 && *opt != '=') opt += 1; // Find = sign if any
@@ -3974,8 +3975,8 @@ void handle_macro_D(char *opt) {
   }
 
   free(macro_buf);
-
 }
+#endif
 
 int main(int argc, char **argv) {
   int i;
@@ -3993,6 +3994,7 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
+#ifndef sh
         case 'o':
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
@@ -4032,6 +4034,12 @@ int main(int argc, char **argv) {
             include_search_path = argv[i] + 2; // skip '-I'
           }
           break;
+#else
+        case 'D':
+          // pnut-sh only needs -D<macro> and no other options
+          init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+          break;
+#endif
 
         default:
           putstr("Option "); putstr(argv[i]); putchar('\n');
