@@ -636,7 +636,8 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
-void syscall() {
+// syscall conflicts with a function defined in unistd.h so we use syscall_ instead.
+void syscall_() {
 
   // SYSCALL ;; Fast System Call
   // See: https://web.archive.org/web/20240620153804/https://www.felixcloutier.com/x86/syscall
@@ -857,7 +858,7 @@ void os_getchar() {
   mov_reg_imm(DX, 1);    // mov  rdx, 1   # rdx = 1 = number of bytes to read
   mov_reg_reg(SI, SP);   // mov  rsi, rsp # to the stack
   mov_reg_imm(AX, SYS_READ);    // mov  rax, SYS_READ
-  syscall();             // syscall
+  syscall_();            // syscall
   xor_reg_reg(DX, DX);   // rdx = 0
   cmp_reg_reg(AX, DX);   // cmp  eax, ebx
   pop_reg(AX);           // pop  eax
@@ -872,7 +873,7 @@ void os_putchar() {
   mov_reg_imm(DI, 1);    // mov edi, 1    # 1 = STDOUT
   mov_reg_imm(DX, 1);    // mov edx, 1    # 1 = byte count
   mov_reg_reg(SI, SP);   // mov esi, esp  # buffer is on the stack
-  syscall();             // syscall
+  syscall_();            // syscall
   pop_reg(AX);           // pop rax
 }
 
@@ -881,13 +882,13 @@ void os_fopen() {
   mov_reg_imm(SI, 0);     // mov rsi, 0 | flags
   mov_reg_imm(DX, 0);     // mov rdx, 0 | mode
   mov_reg_imm(AX, SYS_OPEN);     // mov rax, SYS_OPEN
-  syscall();              // syscall
+  syscall_();             // syscall
 }
 
 void os_fclose() {
   mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
   mov_reg_imm(AX, SYS_CLOSE);     // mov rax, SYS_CLOSE
-  syscall();              // syscall
+  syscall_();             // syscall
 }
 
 void os_fgetc() {
@@ -898,7 +899,7 @@ void os_fgetc() {
   mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
   mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
   mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
-  syscall();               // syscall
+  syscall_();              // syscall
   xor_reg_reg(DX, DX);     // rdx = 0
   cmp_reg_reg(AX, DX);     // cmp  eax, rdx
   pop_reg(AX);             // pop  eax
@@ -915,13 +916,13 @@ void os_allocate_memory(int size) {
   mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
   mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
   mov_reg_imm(AX, SYS_MMAP);     // mov rax, SYS_MMAP
-  syscall();              // syscall
+  syscall_();             // syscall
 }
 
 void os_exit() {
   mov_reg_reg(DI, reg_X); // mov edi, reg_X  # exit status
   mov_reg_imm(AX, SYS_EXIT);    // mov eax, SYS_EXIT
-  syscall();              // syscall
+  syscall_();             // syscall
 }
 
 void os_read() {
@@ -929,7 +930,7 @@ void os_read() {
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
   mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
   mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
-  syscall();               // syscall
+  syscall_();              // syscall
 }
 
 void os_write() {
@@ -937,7 +938,7 @@ void os_write() {
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
   mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
   mov_reg_imm(AX, SYS_WRITE);      // mov  rax, SYS_WRITE
-  syscall();               // syscall
+  syscall_();              // syscall
 }
 
 void os_open() {
@@ -945,13 +946,13 @@ void os_open() {
   mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # flags
   mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # mode
   mov_reg_imm(AX, SYS_OPEN);      // mov  rax, SYS_OPEN
-  syscall();               // syscall
+  syscall_();              // syscall
 }
 
 void os_close() {
   mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
   mov_reg_imm(AX, SYS_CLOSE);      // mov  rax, SYS_CLOSE
-  syscall();               // syscall
+  syscall_();              // syscall
 }
 
 #endif

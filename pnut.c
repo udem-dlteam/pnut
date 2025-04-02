@@ -5,6 +5,8 @@
 #include <strings.h>
 #include <string.h>
 #include <stdint.h> // for intptr_t
+#include <fcntl.h> // for open
+#include <unistd.h> // for write
 
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
@@ -14,6 +16,18 @@
 typedef long long int intptr_t;
 #else
 typedef int intptr_t;
+#endif
+
+#ifdef PNUT_SH
+// on pnut-sh, the file can only be opened in 3 modes: read, write and append
+// if it doesn't exist, it will be created.
+#define O_WRONLY 01
+#define O_CREAT  00
+#define O_TRUNC  00
+#else
+#define O_WRONLY 01
+#define O_CREAT  0100
+#define O_TRUNC  01000
 #endif
 #endif
 
@@ -148,6 +162,7 @@ struct IncludeStack *include_stack, *include_stack2;
 FILE *fp = 0; // Current file pointer that's being read
 char* fp_filepath = 0; // The path of the current file being read
 char* include_search_path = 0; // Search path for include files
+int output_fd = 1; // Output file descriptor (1 = stdout)
 
 // Tokens and AST nodes
 enum {
@@ -1138,9 +1153,6 @@ int CLOSE_ID;
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
-int DATE__ID;
-int TIME__ID;
-int TIMESTAMP__ID;
 
 // When we parse a macro, we generally want the tokens as they are, without expanding them.
 void get_tok_macro() {
@@ -1664,48 +1676,53 @@ void init_ident_table() {
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 }
 
-void init_builtin_string_macro(int macro_id, char* value) {
+int init_builtin_string_macro(char *macro_str, char* value) {
+  int macro_id = init_ident(MACRO, macro_str);
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
   heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
+  return macro_id;
 }
 
-void init_builtin_int_macro(int macro_id, int value) {
+int init_builtin_int_macro(char *macro_str, int value) {
+  int macro_id = init_ident(MACRO, macro_str);
   heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
+  return macro_id;
+}
+
+int init_builtin_empty_macro(char *macro_str) {
+  int macro_id = init_ident(MACRO, macro_str);
+  heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
+  return macro_id;
 }
 
 void init_pnut_macros() {
-  init_ident(MACRO, "PNUT_CC");
+  init_builtin_int_macro("PNUT_CC", 1);
+
+  init_builtin_string_macro("__DATE__", "Jan  1 1970");
+  init_builtin_string_macro("__TIME__", "00:00:00");
+  init_builtin_string_macro("__TIMESTAMP__", "Jan  1 1970 00:00:00");
+  FILE__ID = init_builtin_string_macro("__FILE__", "<unknown>");
+  LINE__ID = init_builtin_int_macro("__LINE__", 0);
 
 #if defined(sh)
-  init_ident(MACRO, "PNUT_SH");
+  init_builtin_int_macro("PNUT_SH", 1);
 #elif defined(target_i386_linux)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_32");
-  init_ident(MACRO, "PNUT_I386");
-  init_ident(MACRO, "PNUT_I386_LINUX");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_32", 1);
+  init_builtin_int_macro("PNUT_I386", 1);
+  init_builtin_int_macro("PNUT_I386_LINUX", 1);
 #elif defined (target_x86_64_linux)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_64");
-  init_ident(MACRO, "PNUT_X86_64");
-  init_ident(MACRO, "PNUT_X86_64_LINUX");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_64", 1);
+  init_builtin_int_macro("PNUT_X86_64", 1);
+  init_builtin_int_macro("PNUT_X86_64_LINUX", 1);
 #elif defined (target_x86_64_mac)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_64");
-  init_ident(MACRO, "PNUT_X86_64");
-  init_ident(MACRO, "PNUT_X86_64_MAC");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_64", 1);
+  init_builtin_int_macro("PNUT_X86_64", 1);
+  init_builtin_int_macro("PNUT_X86_64_MAC", 1);
 #endif
 
-  FILE__ID      = init_ident(MACRO, "__FILE__");
-  LINE__ID      = init_ident(MACRO, "__LINE__");
-  DATE__ID      = init_ident(MACRO, "__DATE__");
-  TIME__ID      = init_ident(MACRO, "__TIME__");
-  TIMESTAMP__ID = init_ident(MACRO, "__TIMESTAMP__");
-
-  init_builtin_string_macro(FILE__ID, "<unknown>");
-  init_builtin_int_macro   (LINE__ID, 0);
-  init_builtin_string_macro(DATE__ID, "Jan  1 1970");
-  init_builtin_string_macro(TIME__ID, "00:00:00");
-  init_builtin_string_macro(TIMESTAMP__ID, "Jan  1 1970 00:00:00");
 }
 
 // A macro argument is represented using a list of tokens.
@@ -1903,11 +1920,11 @@ void stringify() {
 // Concatenates two non-negative integers into a single integer
 // Note that this function only supports small integers, represented as positive integers.
 int paste_integers(int left_val, int right_val) {
+  int result = left_val;
+  int right_digits = right_val;
 #ifdef SUPPORT_64_BIT_LITERALS
   if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
 #endif
-  int result = left_val;
-  int right_digits = right_val;
   while (right_digits > 0) {
     result *= 10;
     right_digits /= 10;
@@ -3912,6 +3929,53 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
+#ifndef sh
+void handle_macro_D(char *opt) {
+  char *start = opt;
+  char *macro_buf;
+  char *buf2;
+  int acc;
+  while (*opt != 0 && *opt != '=') opt += 1; // Find = sign if any
+
+  macro_buf = malloc(opt - start + 1);
+  memcpy(macro_buf, start, opt - start);
+  macro_buf[opt - start] = '\0';
+
+  if (*opt == '=') {
+    opt += 1;
+    if (*opt == '"') { // Start of string literal
+      opt += 1;
+      start = opt;
+      while (*opt != 0 && *opt != '"') opt += 1;
+      if (*opt == 0) fatal_error("Unterminated string literal");
+      buf2 = malloc(opt - start + 1);
+      memcpy(buf2, start, opt - start);
+      buf2[opt - start] = '\0';
+      init_builtin_string_macro(macro_buf, buf2);
+      free(buf2);
+    } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
+      acc = 0;
+      while ('0' <= *opt && *opt <= '9') {
+        acc *= 10;
+        acc += *opt - '0';
+        opt += 1;
+      }
+      if (*opt != 0) fatal_error("Invalid macro definition value");
+      init_builtin_int_macro(macro_buf, acc);
+    } else if (*opt == '\0') { // No value given, empty macro
+      init_builtin_empty_macro(macro_buf);
+    } else {
+      fatal_error("Invalid macro definition value");
+    }
+  } else {
+    // Default to 1 when no value is given
+    init_builtin_int_macro(macro_buf, 1);
+  }
+
+  free(macro_buf);
+}
+#endif
+
 int main(int argc, char **argv) {
   int i;
   ast decl;
@@ -3927,19 +3991,49 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
-        case 'D':
-          init_builtin_int_macro(init_ident(MACRO, argv[i] + 2), 1);
+#ifndef sh
+        case 'o':
+          // Output file name
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          } else {
+            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          }
           break;
 
+        case 'D':
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            handle_macro_D(argv[i]);
+          } else {
+            handle_macro_D(argv[i] + 2); // skip '-D'
+          }
+          break;
+#else
+          case 'D':
+            // pnut-sh only needs -D<macro> and no other options
+            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+            break;
+#endif
         case 'U':
-          init_ident(IDENTIFIER, argv[i] + 2);
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            init_ident(IDENTIFIER, argv[i]);
+          } else {
+            init_ident(IDENTIFIER, argv[i] + 2); // skip '-U'
+          }
           break;
 
         case 'I':
-          if (include_search_path != 0) {
-            fatal_error("only one include path allowed");
+          if (include_search_path != 0) fatal_error("only one include path allowed");
+
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            include_search_path = argv[i];
+          } else {
+            include_search_path = argv[i] + 2; // skip '-I'
           }
-          include_search_path = argv[i] + 2;
           break;
 
         default:
