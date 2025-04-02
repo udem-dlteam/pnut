@@ -1,4 +1,5 @@
 #include "../include/stdlib.h"
+#include "../include/stdio.h" // For putchar
 
 #define HEAP_SIZE 1000000000
 
