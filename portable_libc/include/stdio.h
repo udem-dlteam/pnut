@@ -43,6 +43,11 @@ size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 int fputs(const char *s, FILE *stream);
 int puts(const char *s);
 
+size_t fread(void *buffer, size_t size, size_t count, FILE *stream);
+int fseek( FILE* stream, long offset, int origin );
+long ftell( FILE* stream );
+int remove(const char *_Filename);
+
 int vfprintf(FILE *stream, const char *format, va_list ap);
 int fprintf(FILE *stream, const char *format VAR_ARGS);
 int printf(const char *format VAR_ARGS);

@@ -636,15 +636,6 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
-// syscall conflicts with a function defined in unistd.h so we use syscall_ instead.
-void syscall_() {
-
-  // SYSCALL ;; Fast System Call
-  // See: https://web.archive.org/web/20240620153804/https://www.felixcloutier.com/x86/syscall
-
-  emit_2_i8(0x0F, 0x05);
-}
-
 void setup_proc_args(int global_vars_size) {
   // See page 54 of Intel386 System V ABI document:
   // https://web.archive.org/web/20240107061436/https://www.sco.com/developers/devspecs/abi386-4.pdf
@@ -695,71 +686,22 @@ void mov_reg_lbl(int reg, int lbl) {
 // For 32 bit linux.
 #ifdef target_i386_linux
 
-void os_getchar() {
-  int lbl = alloc_label("get_char_eof");
-  push_reg(BX);           // save address of global variables table
-  mov_reg_imm(AX, 0);     // mov  eax, 0
-  push_reg(AX);           // push eax      # buffer to read byte
-  mov_reg_imm(BX, 0);     // mov  ebx, 0   # ebx = 0 = STDIN
-  mov_reg_imm(DX, 1);     // mov  edx, 1   # edx = 1 = number of bytes to read
-  mov_reg_reg(CX, SP);    // mov  ecx, esp # to the stack
-  mov_reg_imm(AX, 3);     // mov  eax, 3   # SYS_READ
-  int_i8(0x80);           // int  0x80     # system call
-  xor_reg_reg(DX, DX);    // edx = 0
-  cmp_reg_reg(AX, DX);    // cmp  eax, edx
-  pop_reg(AX);            // pop  eax
-  jump_cond(NE, lbl);     // jne  lbl      # if byte was read don't return EOF
-  mov_reg_imm(AX, -1);    // mov  eax, -1  # -1 on EOF
-  def_label(lbl);         // end label
-  pop_reg(BX);            // restore address of global variables table
-}
-
-void os_putchar() {
-  push_reg(BX);           // save address of global variables table
-  push_reg(AX);           // push eax      # buffer to write byte
-  mov_reg_imm(BX, 1);     // mov  ebx, 1   # ebx = 1 = STDOUT
-  mov_reg_imm(DX, 1);     // mov  edx, 1   # edx = 1 = number of bytes to write
-  mov_reg_reg(CX, SP);    // mov  ecx, esp # from the stack
-  mov_reg_imm(AX, 4);     // mov  eax, 4   # SYS_WRITE
-  int_i8(0x80);           // int  0x80     # system call
-  pop_reg(AX);            // pop  eax
-  pop_reg(BX);            // restore address of global variables table
-}
-
-void os_fopen() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, AX);    // mov ebx, eax | file name
-  mov_reg_imm(AX, 5);     // mov eax, 5 == SYS_OPEN
-  mov_reg_imm(CX, 0);     // mov ecx, 0 | flags
-  mov_reg_imm(DX, 0);     // mov edx, 0 | mode
-  int_i8(0x80);           // int  0x80     # system call
-  pop_reg(BX);            // restore address of global variables table
-}
-
-void os_fclose() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov  ebx, file descriptor
-  mov_reg_imm(AX, 6);     // mov  eax, 6 == SYS_CLOSE
-  int_i8(0x80);           // int  0x80     # system call
-  pop_reg(BX);            // restore address of global variables table
-}
-
-void os_fgetc() {
-  int lbl = alloc_label("fgetc_eof"); // label for EOF
-  push_reg(BX);             // save address of global variables table
-  mov_reg_reg(BX, reg_X);   // mov  ebx, file descriptor
-  mov_reg_imm(AX, 3);       // mov  eax, 3 == SYS_READ
-  push_reg(AX);             // push eax      # buffer to read byte
-  mov_reg_imm(DX, 1);       // mov  edx, 1   # edx = 1 = number of bytes to read
-  mov_reg_reg(CX, SP);      // mov  ecx, esp # to the stack
-  int_i8(0x80);             // int  0x80     # system call
-  xor_reg_reg(BX, BX);      // xor  ebx, ebx
-  cmp_reg_reg(AX, BX);      // cmp  eax, ebx
-  pop_reg(AX);              // pop  eax
-  jump_cond(NE, lbl);       // jne  lbl      # if byte was read don't return EOF
-  mov_reg_imm(AX, -1);      // mov  eax, -1  # -1 on EOF
-  def_label(lbl);           // end label
-  pop_reg(BX);              // restore address of global variables table
+// Regular system calls for 32 bit linux.
+// The system call number is passed in the rax register.
+// Other arguments are passed in ebx, ecx and edx.
+// The return value is in rax.
+// If the parameter registers are ebx, ecx or edx, the function assume they may
+// be clobberred in the order of the mov instructions.
+// i.e. syscall_3(SYS_READ, ..., ebx, ...) is not valid because ebx is clobberred by the first mov instructions.
+// For syscalls that use less than 3 parameters, the extra register params are set to -1.
+void syscall_3(int syscall_code, int bx_reg, int cx_reg, int dx_reg) {
+  push_reg(BX);                  // save address of global variables table
+  if (bx_reg >= 0) mov_reg_reg(BX, bx_reg);
+  if (cx_reg >= 0) mov_reg_reg(CX, cx_reg);
+  if (dx_reg >= 0) mov_reg_reg(DX, dx_reg);
+  mov_reg_imm(AX, syscall_code); // AX = syscall_code
+  int_i8(0x80);                  // syscall
+  pop_reg(BX);                   // restore address of global variables table
 }
 
 void os_allocate_memory(int size) {
@@ -776,49 +718,31 @@ void os_allocate_memory(int size) {
 }
 
 void os_exit() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov  ebx, reg_X  # exit status
-  mov_reg_imm(AX, 1);     // mov  eax, 1      # 1 = SYS_EXIT
-  int_i8(0x80);           // int  0x80        # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(1, reg_X, -1, -1); // SYS_EXIT = 1
 }
 
 void os_read() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # count
-  mov_reg_imm(AX, 3);     // mov eax, 3      # 3 = SYS_READ
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(3, reg_X, reg_Y, reg_Z); // SYS_READ = 3
 }
 
 void os_write() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # file descriptor
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # count
-  mov_reg_imm(AX, 4);     // mov eax, 4      # 4 = SYS_READ
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(4, reg_X, reg_Y, reg_Z); // SYS_WRITE = 4
 }
 
 void os_open() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov ebx, reg_X  # filename
-  mov_reg_reg(CX, reg_Y); // mov ecx, reg_Y  # flags
-  mov_reg_reg(DX, reg_Z); // mov edx, reg_Z  # mode
-  mov_reg_imm(AX, 5);     // mov eax, 5      # 5 = SYS_OPEN
-  int_i8(0x80);           // int  0x80       # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(5, reg_X, reg_Y, reg_Z); // SYS_OPEN = 5
 }
 
 void os_close() {
-  push_reg(BX);           // save address of global variables table
-  mov_reg_reg(BX, reg_X); // mov  ebx, reg_X  # file descriptor
-  mov_reg_imm(AX, 6);     // mov  eax, 6      # 6 = SYS_CLOSE
-  int_i8(0x80);           // int  0x80        # system call
-  pop_reg(BX);            // restore address of global variables table
+  syscall_3(6, reg_X, -1, -1); // SYS_CLOSE = 6
+}
+
+void os_seek() {
+  syscall_3(19, reg_X, reg_Y, reg_Z); // SYS_LSEEK = 19
+}
+
+void os_unlink() {
+  syscall_3(10, reg_X, -1, -1); // SYS_UNLINK = 10
 }
 
 #endif
@@ -830,129 +754,96 @@ void os_close() {
   #define SYS_WRITE 1
   #define SYS_OPEN 2
   #define SYS_CLOSE 3
+  #define SYS_LSEEK 8
+  #define SYS_UNLINK 87
   #define SYS_MMAP_MAP_TYPE 0x22
   #define SYS_MMAP 9
   #define SYS_EXIT 60
 #endif
 
 #ifdef target_x86_64_mac
+  // Refer to following page for macOS system call numbers:
+  // https://web.archive.org/web/20211102014723/http://www.opensource.apple.com/source/xnu/xnu-1504.3.12/bsd/kern/syscalls.master
+  // Because it's a 64 bit system, 0x2000000 is added to the system call number.
   #define SYSTEM_V_ABI
   #define SYS_READ 0x2000003
   #define SYS_WRITE 0x2000004
   #define SYS_OPEN 0x2000005
   #define SYS_CLOSE 0x2000006
+  #define SYS_LSEEK 0x20000c7
+  #define SYS_UNLINK 0x200000a
   #define SYS_MMAP_MAP_TYPE 0x1020
   #define SYS_MMAP 0x20000C5
   #define SYS_EXIT 0x2000001
 #endif
 
-
 // For 64 bit System V ABI.
 #ifdef SYSTEM_V_ABI
 
-void os_getchar() {
-  int lbl = alloc_label("get_char_eof");
-  mov_reg_imm(AX, 0);    // mov  eax, 0
-  push_reg(AX);          // push eax      # buffer to read byte
-  mov_reg_imm(DI, 0);    // mov  edi, 0   # edi = 0 = STDIN
-  mov_reg_imm(DX, 1);    // mov  rdx, 1   # rdx = 1 = number of bytes to read
-  mov_reg_reg(SI, SP);   // mov  rsi, rsp # to the stack
-  mov_reg_imm(AX, SYS_READ);    // mov  rax, SYS_READ
-  syscall_();            // syscall
-  xor_reg_reg(DX, DX);   // rdx = 0
-  cmp_reg_reg(AX, DX);   // cmp  eax, ebx
-  pop_reg(AX);           // pop  eax
-  jump_cond(NE, lbl);    // jne  lbl      # if byte was read don't return EOF
-  mov_reg_imm(AX, -1);   // mov  eax, -1  # -1 on EOF
-  def_label(lbl);        // end label
+void syscall_() {
+
+  // SYSCALL ;; Fast System Call
+  // See: https://web.archive.org/web/20240620153804/https://www.felixcloutier.com/x86/syscall
+
+  emit_2_i8(0x0F, 0x05);
 }
 
-void os_putchar() {
-  push_reg(AX);          // push rax      # buffer to write byte
-  mov_reg_imm(AX, SYS_WRITE);    // mov rax, SYS_WRITE
-  mov_reg_imm(DI, 1);    // mov edi, 1    # 1 = STDOUT
-  mov_reg_imm(DX, 1);    // mov edx, 1    # 1 = byte count
-  mov_reg_reg(SI, SP);   // mov esi, esp  # buffer is on the stack
-  syscall_();            // syscall
-  pop_reg(AX);           // pop rax
-}
-
-void os_fopen() {
-  mov_reg_reg(DI, AX);    // mov rdi, rax | file name
-  mov_reg_imm(SI, 0);     // mov rsi, 0 | flags
-  mov_reg_imm(DX, 0);     // mov rdx, 0 | mode
-  mov_reg_imm(AX, SYS_OPEN);     // mov rax, SYS_OPEN
-  syscall_();             // syscall
-}
-
-void os_fclose() {
-  mov_reg_reg(DI, reg_X); // mov  rdi, reg_X  # file descriptor
-  mov_reg_imm(AX, SYS_CLOSE);     // mov rax, SYS_CLOSE
-  syscall_();             // syscall
-}
-
-void os_fgetc() {
-  int lbl = alloc_label("fgetc_eof"); // label for EOF
-  mov_reg_reg(DI, reg_X);  // mov  edi, file descriptor
-  mov_reg_imm(AX, 0);      // mov  eax, 0
-  push_reg(AX);            // push eax      # buffer to read byte
-  mov_reg_imm(DX, 1);      // mov  rdx, 1   # rdx = 1 = number of bytes to read
-  mov_reg_reg(SI, SP);     // mov  rsi, rsp # to the stack
-  mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
-  syscall_();              // syscall
-  xor_reg_reg(DX, DX);     // rdx = 0
-  cmp_reg_reg(AX, DX);     // cmp  eax, rdx
-  pop_reg(AX);             // pop  eax
-  jump_cond(NE, lbl);      // jne  lbl      # if byte was read don't return EOF
-  mov_reg_imm(AX, -1);     // mov  eax, -1  # -1 on EOF
-  def_label(lbl);          // end label
+// Regular system calls for 64 bit linux and macOS.
+// The system call number is passed in the rax register.
+// Other arguments are passed in rdi, rsi and rdx.
+// The return value is in rax.
+// The di_reg, si_reg, dx_reg parameters
+// If the parameter registers are rdi, rsi or rdx, the function assume they may
+// be clobberred in the order of the mov instructions.
+// i.e. syscall_3(SYS_READ, ..., rdi, ...) is not valid because rdi is clobberred by the first mov instructions.
+// For syscalls that use less than 3 parameters, the extra register params are set to -1.
+void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
+  if (di_reg >= 0) mov_reg_reg(DI, di_reg);
+  if (si_reg >= 0) mov_reg_reg(SI, si_reg);
+  if (dx_reg >= 0) mov_reg_reg(DX, dx_reg);
+  mov_reg_imm(AX, syscall_code); // AX = syscall_code
+  syscall_();                    // syscall
 }
 
 void os_allocate_memory(int size) {
-  mov_reg_imm(DI, 0);     // mov rdi, 0 | NULL
-  mov_reg_imm(SI, size);  // mov rsi, size | size
-  mov_reg_imm(DX, 0x3);   // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
+  mov_reg_imm(DI, 0);                  // mov rdi, 0 | NULL
+  mov_reg_imm(SI, size);               // mov rsi, size | size
+  mov_reg_imm(DX, 0x3);                // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)
   mov_reg_imm(R10, SYS_MMAP_MAP_TYPE); // mov r10, 0x21 | MAP_ANONYMOUS (0x20) | MAP_PRIVATE (0x2)
-  mov_reg_imm(R8, -1);    // mov r8, -1 (file descriptor)
-  mov_reg_imm(R9, 0);     // mov r9, 0 (offset)
-  mov_reg_imm(AX, SYS_MMAP);     // mov rax, SYS_MMAP
-  syscall_();             // syscall
+  mov_reg_imm(R8, -1);                 // mov r8, -1 (file descriptor)
+  mov_reg_imm(R9, 0);                  // mov r9, 0 (offset)
+  mov_reg_imm(AX, SYS_MMAP);           // mov rax, SYS_MMAP
+  syscall_();                          // syscall
 }
 
 void os_exit() {
-  mov_reg_reg(DI, reg_X); // mov edi, reg_X  # exit status
-  mov_reg_imm(AX, SYS_EXIT);    // mov eax, SYS_EXIT
-  syscall_();             // syscall
+  syscall_3(SYS_EXIT, reg_X, -1, -1);
 }
 
 void os_read() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, SYS_READ);      // mov  rax, SYS_READ
-  syscall_();              // syscall
+  syscall_3(SYS_READ, reg_X, reg_Y, reg_Z);
 }
 
 void os_write() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # buffer
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # count
-  mov_reg_imm(AX, SYS_WRITE);      // mov  rax, SYS_WRITE
-  syscall_();              // syscall
+  syscall_3(SYS_WRITE, reg_X, reg_Y, reg_Z);
 }
 
 void os_open() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # filename
-  mov_reg_reg(SI, reg_Y);  // mov  rsi, reg_Y  # flags
-  mov_reg_reg(DX, reg_Z);  // mov  rdx, reg_Z  # mode
-  mov_reg_imm(AX, SYS_OPEN);      // mov  rax, SYS_OPEN
-  syscall_();              // syscall
+  syscall_3(SYS_OPEN, reg_X, reg_Y, reg_Z);
+  // MacOS (BSD) signals errors by setting the carry flag, while Linux uses a negative return value.
+  // For now, we'll assume macOS and Linux have the same behavior and return a negative value in rax.
 }
 
 void os_close() {
-  mov_reg_reg(DI, reg_X);  // mov  rdi, reg_X  # file descriptor
-  mov_reg_imm(AX, SYS_CLOSE);      // mov  rax, SYS_CLOSE
-  syscall_();              // syscall
+  syscall_3(SYS_CLOSE, reg_X, -1, -1);
+}
+
+void os_seek() {
+  syscall_3(SYS_LSEEK, reg_X, reg_Y, reg_Z);
+}
+
+void os_unlink() {
+  syscall_3(SYS_UNLINK, reg_X, -1, -1);
 }
 
 #endif

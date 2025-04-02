@@ -305,18 +305,18 @@ const int GT_U; // x > y  (unsigned)
 
 void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 
-void os_getchar();
-void os_putchar();
 void os_exit();
-void os_fopen();
-void os_fclose();
-void os_fgetc();
 void os_allocate_memory(int size);
-
 void os_read();
 void os_write();
 void os_open();
 void os_close();
+void os_seek();
+void os_unlink();
+
+void rt_putchar();
+void rt_debug(char* msg);
+void rt_crash(char* msg);
 
 void setup_proc_args(int global_vars_size);
 
@@ -340,6 +340,8 @@ int read_lbl;
 int write_lbl;
 int open_lbl;
 int close_lbl;
+int seek_lbl;
+int unlink_lbl;
 
 int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
@@ -1686,11 +1688,30 @@ void codegen_begin() {
   exit_lbl = alloc_label("exit");
   cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
 
-  getchar_lbl = alloc_label("getchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
+  read_lbl = alloc_label("read");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
 
+  write_lbl = alloc_label("write");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
+
+  open_lbl = alloc_label("open");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
+
+  close_lbl = alloc_label("close");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
+
+  seek_lbl = alloc_label("lseek");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), seek_lbl, function_type3(int_type, int_type, int_type, int_type));
+
+  unlink_lbl = alloc_label("unlink");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
+
+#ifndef NO_BUILTIN_LIBC
   putchar_lbl = alloc_label("putchar");
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
+
+  getchar_lbl = alloc_label("getchar");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
 
   fopen_lbl = alloc_label("fopen");
   cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
@@ -1707,20 +1728,9 @@ void codegen_begin() {
   free_lbl = alloc_label("free");
   cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
 
-  read_lbl = alloc_label("read");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  write_lbl = alloc_label("write");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  open_lbl = alloc_label("open");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
-
-  close_lbl = alloc_label("close");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
-
   printf_lbl = alloc_label("printf");
   cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
+#endif
 
   jump(setup_lbl);
 }
@@ -2444,19 +2454,60 @@ void codegen_glo_decl(ast node) {
   }
 }
 
+void rt_putchar() {
+  push_reg(reg_X);            // Allocate buffer on stack containing the character
+  mov_reg_imm(reg_X, 1);      // reg_X = file descriptor (stdout)
+  mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer size
+  mov_reg_imm(reg_Z, 1);      // reg_Z = buffer address
+  os_write();
+  pop_reg(reg_X);             // Deallocate buffer
+}
+
 void rt_debug(char* msg) {
   while (*msg != 0) {
     mov_reg_imm(reg_X, *msg);
-    os_putchar();
+    rt_putchar();
     msg += 1;
   }
   mov_reg_imm(reg_X, '\n');
-  os_putchar();
+  rt_putchar();
 }
 
 void rt_crash(char* msg) {
   rt_debug(msg);
   os_exit();
+}
+
+#ifndef NO_BUILTIN_LIBC
+
+void rt_fgetc(int fd_reg) {
+  int success_lbl = alloc_label("rt_fgetc_success");
+  push_reg(reg_X);            // Allocate buffer on stack, initialized with some random value
+  mov_reg_reg(reg_X, fd_reg); // reg_X = file descriptor (stdin)
+  mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer size
+  mov_reg_imm(reg_Z, 1);      // reg_Z = buffer address
+  os_read();                  // reg_X = number of bytes read, buffer[0] = character
+
+  pop_reg(reg_Z);             // Get character from buffer and deallocate buffer
+  mov_reg_imm(reg_Y, 0);      // If read returned 0, then we're at EOF (-1)
+  jump_cond_reg_reg(NE, success_lbl, reg_X, reg_Y);
+  mov_reg_imm(reg_Z, -1);     // mov  eax, -1  # -1 on EOF
+  def_label(success_lbl);     // end label
+  mov_reg_reg(reg_X, reg_Z);  // return value
+}
+
+void rt_fopen() {
+  int fopen_success_lbl = alloc_label("fopen_success");
+
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_imm(reg_Y, 0); // mode
+  mov_reg_imm(reg_Z, 0); // flag
+  os_open();
+  // If open fails, it returns -1, but we need to return NULL
+  mov_reg_imm(reg_Y, 0);
+  jump_cond_reg_reg(GE, fopen_success_lbl, reg_X, reg_Y);
+  mov_reg_imm(reg_X, 0); // NULL
+  def_label(fopen_success_lbl);
 }
 
 void rt_malloc() {
@@ -2478,15 +2529,9 @@ void rt_malloc() {
   mov_reg_reg(reg_X, reg_Y);              // Return the old bump pointer
 }
 
-void rt_free() {
-  // Free are NO-OP for now
-  // This function cannot be empty or it will be considered a forward reference
-  return;
-  fatal_error("rt_free: free is no-op");
-}
+#endif
 
 void codegen_end() {
-
   def_label(setup_lbl);
 
   // Allocate some space for the global variables.
@@ -2521,47 +2566,6 @@ void codegen_end() {
   def_label(exit_lbl);
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_exit();
-
-  // getchar function
-  def_label(getchar_lbl);
-  os_getchar();
-  ret();
-
-  // putchar function
-  def_label(putchar_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_putchar();
-  ret();
-
-  // fopen function
-  def_label(fopen_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_fopen();
-  ret();
-
-  // fclose function
-  def_label(fclose_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_fclose();
-  ret();
-
-  // fgetc function
-  def_label(fgetc_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_fgetc();
-  ret();
-
-  // malloc function
-  def_label(malloc_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_malloc();
-  ret();
-
-  // free function
-  def_label(free_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_free();
-  ret();
 
   // read function
   def_label(read_lbl);
@@ -2598,14 +2602,69 @@ void codegen_end() {
 
   // close function
   def_label(close_lbl);
+#ifndef NO_BUILTIN_LIBC
+  // fclose is just like close because FILE * is just the file descriptor in the builtin libc
+  def_label(fclose_lbl);
+#endif
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_close();
+  ret();
+
+  // seek function
+  def_label(seek_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // fd
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // offset
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // whence
+  os_seek();
+  ret();
+
+  // unlink function
+  def_label(unlink_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // filename
+  os_unlink();
+  ret();
+
+#ifndef NO_BUILTIN_LIBC
+  // putchar function
+  def_label(putchar_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_putchar();
+  ret();
+
+  // getchar function
+  def_label(getchar_lbl);
+  mov_reg_imm(reg_X, 0); // stdin
+  rt_fgetc(reg_X);
+  ret();
+
+  // fopen function
+  def_label(fopen_lbl);
+  rt_fopen();
+  ret();
+
+  // fgetc function
+  def_label(fgetc_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_fgetc(reg_X);
+  ret();
+
+  // malloc function
+  def_label(malloc_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_malloc();
+  ret();
+
+  // free function
+  def_label(free_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  // Free is NO-OP
   ret();
 
   // printf function stub
   def_label(printf_lbl);
   rt_crash("printf is not supported yet.");
   ret();
+#endif
 
   assert_all_labels_defined();
 
