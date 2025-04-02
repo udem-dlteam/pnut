@@ -4,7 +4,15 @@
 
 #ifdef PNUT_CC
 // On pnut, intptr_t is not defined
-#define intptr_t int
+#if defined(PNUT_EXE_32)
+typedef int intptr_t;
+#elif defined(PNUT_EXE_64)
+typedef long long int intptr_t;
+#elif defined(PNUT_SH)
+typedef int intptr_t;
+#else
+#error "Unknown pnut target"
+#endif
 #endif
 
 void putint(int n) {

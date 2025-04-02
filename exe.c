@@ -1,6 +1,4 @@
 // common part of machine code generators
-const int word_size;
-
 void generate_exe();
 
 // 1MB heap
@@ -98,10 +96,26 @@ void mov_reg_imm(int dst, int imm);             // Move 32 bit immediate to regi
 void mov_reg_large_imm(int dst, int large_imm); // Move large immediate to register
 #endif
 void mov_reg_reg(int dst, int src);
-void mov_mem_reg(int base, int offset, int src);
 void mov_mem8_reg(int base, int offset, int src);
-void mov_reg_mem(int dst, int base, int offset);
+void mov_mem16_reg(int base, int offset, int src);
+void mov_mem32_reg(int base, int offset, int src);
+void mov_mem64_reg(int base, int offset, int src);
+void mov_mem8_reg(int base, int offset, int src);
 void mov_reg_mem8(int dst, int base, int offset);
+void mov_reg_mem16(int dst, int base, int offset);
+void mov_reg_mem32(int dst, int base, int offset);
+void mov_reg_mem8_sign_ext(int dst, int base, int offset);
+void mov_reg_mem16_sign_ext(int dst, int base, int offset);
+void mov_reg_mem32_sign_ext(int dst, int base, int offset);
+void mov_reg_mem64(int dst, int base, int offset);
+
+#if WORD_SIZE == 4
+#define mov_mem_reg(base, offset, src) mov_mem32_reg(base, offset, src)
+#define mov_reg_mem(dst, base, offset) mov_reg_mem32(dst, base, offset)
+#elif WORD_SIZE == 8
+#define mov_mem_reg(base, offset, src) mov_mem64_reg(base, offset, src)
+#define mov_reg_mem(dst, base, offset) mov_reg_mem64(dst, base, offset)
+#endif
 
 void add_reg_imm(int dst, int imm);
 void add_reg_lbl(int dst, int lbl);
@@ -137,37 +151,57 @@ void dup(int reg) {
   grow_fs(1);
 }
 
-void load_mem_location(int dst, int base, int offset, int width) {
-  if (width == 1) {
-    mov_reg_mem8(dst, base, offset);
-  } else if (width == word_size) {
-    mov_reg_mem(dst, base, offset);
+void load_mem_location(int dst, int base, int offset, int width, bool is_signed) {
+  if (is_signed) {
+    switch (width) {
+      case 1: mov_reg_mem8_sign_ext(dst, base, offset);  break;
+      case 2: mov_reg_mem16_sign_ext(dst, base, offset); break;
+#if WORD_SIZE == 4
+      case 4: mov_reg_mem32(dst, base, offset); break;
+#elif WORD_SIZE == 8
+      case 4: mov_reg_mem32_sign_ext(dst, base, offset); break; // This instruction is only available in 64-bit mode
+      case 8: mov_reg_mem64(dst, base, offset);          break; // no sign extension needed
+#endif
+      default: fatal_error("load_mem_location: unknown width");
+    }
   } else {
-    fatal_error("load_mem_location: unknown width");
+    switch (width) {
+      case 1: mov_reg_mem8(dst, base, offset);  break;
+      case 2: mov_reg_mem16(dst, base, offset); break;
+      case 4: mov_reg_mem32(dst, base, offset); break;
+#if WORD_SIZE == 8
+      case 8: mov_reg_mem64(dst, base, offset); break;
+#endif
+      default: fatal_error("load_mem_location: unknown width");
+    }
   }
 }
 
 // Write a value from a register to a memory location
 void write_mem_location(int base, int offset, int src, int width) {
-  if (width == 1) {
-    mov_mem8_reg(base, offset, src);
-  } else if (width == word_size) {
-    mov_mem_reg(base, offset, src);
-  } else {
-    fatal_error("write_mem_location: unknown width");
+  if (width > WORD_SIZE) {
+    fatal_error("write_mem_location: width > WORD_SIZE");
+  }
+
+  switch (width) {
+    case 1: mov_mem8_reg(base, offset, src); break;
+    case 2: mov_mem16_reg(base, offset, src); break;
+    case 4: mov_mem32_reg(base, offset, src); break;
+    case 8: mov_mem64_reg(base, offset, src); break;
+    default: fatal_error("write_mem_location: unknown width");
   }
 }
 
 void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int width) {
   int i;
   // move the words
-  for (i = 0; i < width / word_size; i += 1) {
-    mov_reg_mem(reg_Z, src_base, src_offset + i * word_size);
-    mov_mem_reg(dst_base, dst_offset + i * word_size, reg_Z);
+  for (i = 0; i < width / WORD_SIZE; i += 1) {
+    mov_reg_mem(reg_Z, src_base, src_offset + i * WORD_SIZE);
+    mov_mem_reg(dst_base, dst_offset + i * WORD_SIZE, reg_Z);
   }
 
   // then move the remaining bytes
-  for (i = width - width % word_size; i < width; i += 1) {
+  for (i = width - width % WORD_SIZE; i < width; i += 1) {
     mov_reg_mem8(reg_Z, src_base, src_offset + i);
     mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
   }
@@ -177,10 +211,10 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
 void initialize_memory(int val, int base, int offset, int width) {
   int i;
   mov_reg_imm(reg_Z, val);
-  for (i = 0; i < width / word_size; i += 1) {
-    mov_mem_reg(base, offset + i * word_size, reg_Z);
+  for (i = 0; i < width / WORD_SIZE; i += 1) {
+    mov_mem_reg(base, offset + i * WORD_SIZE, reg_Z);
   }
-  for (i = width - width % word_size; i < width; i += 1) {
+  for (i = width - width % WORD_SIZE; i < width; i += 1) {
     mov_mem8_reg(base, offset + i, reg_Z);
   }
 }
@@ -312,19 +346,23 @@ int write_lbl;
 int open_lbl;
 int close_lbl;
 
-int round_up_to_word_size(int n) {
-  return (n + word_size - 1) / word_size * word_size;
+int word_size_align(int n) {
+  return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
+}
+
+int align_to(int mul, int n) {
+  return (n + mul - 1) / mul * mul;
 }
 
 void grow_stack(int words) {
-  add_reg_imm(reg_SP, -words * word_size);
+  add_reg_imm(reg_SP, -words * WORD_SIZE);
 }
 
 // Like grow_stack, but takes bytes instead of words.
-// To maintain alignment, the stack is grown by a multiple of word_size (rounded
+// To maintain alignment, the stack is grown by a multiple of WORD_SIZE (rounded
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -round_up_to_word_size(bytes));
+  add_reg_imm(reg_SP, -word_size_align(bytes));
 }
 
 // Label definition
@@ -497,6 +535,26 @@ void def_goto_label(int lbl) {
   }
 }
 
+ast int_type;
+ast uint_type;
+ast char_type;
+ast string_type;
+ast void_type;
+ast void_star_type;
+
+ast dereference_type(ast type) {
+  switch (get_op(type)) {
+    case '[': // Array type
+      return get_child_('[', type, 0);
+    case '*': // Pointer type
+      return get_child_('*', type, 1);
+    default:
+      putstr("type="); putint(get_op(type)); putchar('\n');
+      fatal_error("dereference_type: non pointer is being dereferenced with *");
+      return -1;
+  }
+}
+
 // Type, structure and union handling
 int struct_union_size(ast struct_type);
 
@@ -539,9 +597,24 @@ bool is_numeric_type(ast type) {
     case DOUBLE_KW:
     case SHORT_KW:
     case LONG_KW:
+    case ENUM_KW: // Enums are considered numeric types
       return true;
-    default:
+    default: // Struct/union/pointer/array
       return false;
+  }
+}
+
+bool is_signed_numeric_type(ast type) {
+  switch (get_op(type)) {
+    case CHAR_KW:
+    case INT_KW:
+    case FLOAT_KW:
+    case DOUBLE_KW:
+    case SHORT_KW:
+    case LONG_KW:
+      return !TEST_TYPE_SPECIFIER(get_val(type), UNSIGNED_KW);
+    default:
+      return true; // Not a numeric type => it's a struct/union/pointer/array and we consider it signed
   }
 }
 
@@ -550,6 +623,7 @@ bool is_numeric_type(ast type) {
 // size of the pointer is returned.
 // If word_align is true, the size is rounded up to the word size.
 int type_width(ast type, bool array_value, bool word_align) {
+  int width = 1;
   // Basic type kw
   switch (get_op(type)) {
     case '[':
@@ -557,23 +631,38 @@ int type_width(ast type, bool array_value, bool word_align) {
       // sizeof, in struct definitions, etc.) while in other contexts we care
       // about the pointer (i.e. when passing an array to a function, etc.)
       if (array_value) {
-        return round_up_to_word_size(get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false));
+        width = get_child_('[', type, 1) * type_width(get_child_('[', type, 0), true, false);
       } else {
-        return word_size; // Array is a pointer to the first element
+        width = WORD_SIZE; // Array is a pointer to the first element
       }
-    case '*':
-      return word_size;
-    case CHAR_KW:
-      return word_align ? word_size : 1;
+      break;
+    case '*':      width = WORD_SIZE; break;
+    case VOID_KW:  width = 1;         break; // Default to 1 byte for void so pointer arithmetic and void casts work
+    case CHAR_KW:  width = 1;         break;
+    case SHORT_KW: width = 2;         break;
+    case INT_KW:   width = 4;         break;
+    case LONG_KW:
+#if WORD_SIZE == 8
+      width = 8;
+      break;
+#else
+      fatal_error("type_width: long type not supported");
+      return -1;
+#endif
     case STRUCT_KW:
     case UNION_KW:
-      return struct_union_size(type);
-    case VOID_KW:
-      fatal_error("type_width: void type");
-      return 0;
-    default:
-      return word_size;
+      width = struct_union_size(type);
+      break;
+    default:       width = WORD_SIZE; break;
   }
+
+  if (word_align) width = word_size_align(width);
+  return width;
+}
+
+// Width of an object pointed to by a reference type.
+ast ref_type_width(ast type) {
+  return type_width(dereference_type(type), false, false);
 }
 
 // Structs, enums and unions types come in 2 variants:
@@ -605,12 +694,29 @@ ast canonicalize_type(ast type) {
   return res;
 }
 
-// Size of a struct or union type, rounded up to the word size
+// Size of the largest member of a struct or union, used for alignment
+int struct_union_size_largest_member = 0;
+
+int type_largest_member(ast type) {
+  switch (get_op(type)) {
+    case STRUCT_KW:
+    case UNION_KW:
+      struct_union_size_largest_member = 0;
+      struct_union_size(type); // Compute struct_union_size_largest_member global
+      return struct_union_size_largest_member;
+    case '[':
+      return type_largest_member(get_child_('[', type, 0));
+    default:
+      return type_width(type, true, false);
+  }
+}
+
+// Size of a struct or union type
 int struct_union_size(ast type) {
   ast members;
   ast member_type;
-  int member_size;
-  int sum_size = 0, max_size = 0;
+  int member_size, largest_submember_size;
+  int sum_size = 0, max_size = 0, largest_member_size = 0;
 
   type = canonicalize_type(type);
   members = get_child(type, 2);
@@ -618,12 +724,19 @@ int struct_union_size(ast type) {
   while (members != 0) {
     member_type = get_child_(DECL, car_(DECL, members), 1);
     members = tail(members);
-    member_size = type_width(member_type, true, true);
-    sum_size += member_size;                            // Struct size is the sum of its members
-    if (member_size > max_size) max_size = member_size; // Union size is the max of its members
+    member_size = type_width(member_type, true, false);
+    largest_submember_size = type_largest_member(member_type);
+    if (member_size != 0) sum_size = align_to(largest_submember_size, sum_size); // Align the member to the word size
+    sum_size += member_size;                                          // Struct size is the sum of its members
+    if (member_size > max_size) max_size = member_size;               // Union size is the max of its members
+    if (largest_member_size < largest_submember_size) largest_member_size = largest_submember_size;
   }
 
-  // Don't need to round the size of a union to the word size since type_width already did
+  sum_size = align_to(largest_member_size, sum_size); // The final struct size is a multiple of its widest member
+  max_size = align_to(largest_member_size, max_size); // The final union size is a multiple of its widest member
+
+  // Set the struct_union_size_largest_member global to "return" it
+  struct_union_size_largest_member = largest_member_size;
   return get_op(type) == STRUCT_KW ? sum_size : max_size;
 }
 
@@ -631,7 +744,7 @@ int struct_union_size(ast type) {
 int struct_member_offset_go(ast struct_type, ast member_ident) {
   ast members = get_child(canonicalize_type(struct_type), 2);
   int offset = 0;
-  int sub_offset;
+  int member_size, sub_offset;
   ast decl, ident;
 
   while (members != 0) {
@@ -648,7 +761,9 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // For unions, fields are always at offset 0. We must still iterate
       // because the field may be in an anonymous struct, in which case the
       // final offset is not 0.
-      offset += round_up_to_word_size(type_width(get_child_(DECL, decl, 1), true, true));
+      member_size = type_width(get_child_(DECL, decl, 1), true, false);
+      if (member_size != 0) offset = align_to(type_largest_member(get_child_(DECL, decl, 1)), offset);
+      offset += member_size;
     }
     members = tail(members);
   }
@@ -686,38 +801,6 @@ ast struct_member(ast struct_type, ast member_ident) {
   ast member = struct_member_go(struct_type, member_ident);
   if (member == -1) fatal_error("struct_member: member not found");
   return member;
-}
-
-// Width of an object pointed to by a reference type.
-int ref_type_width(ast type) {
-  switch (get_op(type)) {
-    case '[':
-      return type_width(get_child_('[', type, 0), false, false); // size of inner type
-    case '*':
-      return type_width(get_child_('*', type, 1), false, false); // size of inner type;
-    default:
-      return word_size;
-  }
-}
-
-ast int_type;
-ast uint_type;
-ast char_type;
-ast string_type;
-ast void_type;
-ast void_star_type;
-
-ast dereference_type(ast type) {
-  switch (get_op(type)) {
-    case '[': // Array type
-      return get_child_('[', type, 0);
-    case '*': // Pointer type
-      return get_child_('*', type, 1);
-    default:
-      putstr("type="); putint(get_op(type)); putchar('\n');
-      fatal_error("dereference_type: non pointer is being dereferenced with *");
-      return -1;
-  }
 }
 
 int resolve_identifier(int ident_probe) {
@@ -917,26 +1000,18 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   ast right_type = value_type(rhs);
   bool left_is_numeric = is_numeric_type(left_type);
   bool right_is_numeric = is_numeric_type(right_type);
-  bool left_is_unsigned = false;
-  bool right_is_unsigned = false;
   int width;
-
-  if (left_is_numeric)  left_is_unsigned  = TEST_TYPE_SPECIFIER(get_val(left_type), UNSIGNED_KW);
-  if (right_is_numeric) right_is_unsigned = TEST_TYPE_SPECIFIER(get_val(right_type), UNSIGNED_KW);
-
-  // Consider enums as numeric types. We update *_is_numeric after
-  // computing *_is_unsigned because we don't want to use TEST_TYPE_SPECIFIER on
-  // ENUM nodes
-  if (get_op(left_type) == ENUM_KW)  left_is_numeric = true;
-  if (get_op(right_type) == ENUM_KW) right_is_numeric = true;
+  // If any of the operands is unsigned, the result is unsigned
+  bool is_signed = false;
+  if (is_signed_numeric_type(left_type) && is_signed_numeric_type(right_type)) is_signed = true;
 
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
 
-  if      (op == '<')     cond = left_is_unsigned || right_is_unsigned ? LT_U : LT;
-  else if (op == '>')     cond = left_is_unsigned || right_is_unsigned ? GT_U : GT;
-  else if (op == LT_EQ)   cond = left_is_unsigned || right_is_unsigned ? LE_U : LE;
-  else if (op == GT_EQ)   cond = left_is_unsigned || right_is_unsigned ? GE_U : GE;
+  if      (op == '<')     cond = is_signed ? LT : LT_U;
+  else if (op == '>')     cond = is_signed ? GT : GT_U;
+  else if (op == LT_EQ)   cond = is_signed ? LE : LE_U;
+  else if (op == GT_EQ)   cond = is_signed ? GE : GE_U;
   else if (op == EQ_EQ)   cond = EQ;
   else if (op == EXCL_EQ) cond = NE;
 
@@ -983,23 +1058,23 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   }
   else if (op == '*' || op == STAR_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to *");
-    if (left_is_unsigned || right_is_unsigned) mul_reg_reg(reg_X, reg_Y);
-    else imul_reg_reg(reg_X, reg_Y);
+    if (is_signed) imul_reg_reg(reg_X, reg_Y);
+    else mul_reg_reg(reg_X, reg_Y);
   }
   else if (op == '/' || op == SLASH_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to /");
-    if (left_is_unsigned || right_is_unsigned) div_reg_reg(reg_X, reg_Y);
-    else idiv_reg_reg(reg_X, reg_Y);
+    if (is_signed) idiv_reg_reg(reg_X, reg_Y);
+    else div_reg_reg(reg_X, reg_Y);
   }
   else if (op == '%' || op == PERCENT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to %");
-    if (left_is_unsigned || right_is_unsigned) rem_reg_reg(reg_X, reg_Y);
-    else irem_reg_reg(reg_X, reg_Y);
+    if (is_signed) irem_reg_reg(reg_X, reg_Y);
+    else rem_reg_reg(reg_X, reg_Y);
   }
   else if (op == RSHIFT || op == RSHIFT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to >>");
-    if (left_is_unsigned || right_is_unsigned) shr_reg_reg(reg_X, reg_Y);
-    else sar_reg_reg(reg_X, reg_Y);
+    if (is_signed) sar_reg_reg(reg_X, reg_Y);
+    else shr_reg_reg(reg_X, reg_Y);
   }
   else if (op == LSHIFT || op == LSHIFT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to <<");
@@ -1023,16 +1098,18 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
       mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
       width = ref_type_width(left_type);
+      is_signed = is_signed_numeric_type(dereference_type(left_type));
     } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
       mul_for_pointer_arith(reg_X, ref_type_width(right_type));
       width = ref_type_width(right_type);
+      is_signed = is_signed_numeric_type(dereference_type(right_type));
     } else {
       fatal_error("codegen_binop: invalid array access operands");
       return;
     }
 
     add_reg_reg(reg_X, reg_Y);
-    load_mem_location(reg_X, reg_X, 0, width);
+    load_mem_location(reg_X, reg_X, 0, width, is_signed);
   } else {
     putstr("op="); putint(op); putchar('\n');
     fatal_error("codegen_binop: unknown op");
@@ -1053,14 +1130,14 @@ int codegen_param(ast param) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
-    grow_stack_bytes(round_up_to_word_size(left_width));
-    grow_fs(round_up_to_word_size(left_width) / word_size);
+    grow_stack_bytes(word_size_align(left_width));
+    grow_fs(word_size_align(left_width) / WORD_SIZE);
     copy_obj(reg_SP, 0, reg_X, 0, left_width);
   } else {
     codegen_rvalue(param);
   }
 
-  return type_width(type, false, true) / word_size;
+  return type_width(type, false, true) / WORD_SIZE;
 }
 
 #ifdef SAFE_MODE
@@ -1175,7 +1252,7 @@ int codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           push_reg(reg_X);
           break;
@@ -1192,7 +1269,7 @@ int codegen_lvalue(ast node) {
           fatal_error("codegen_lvalue: identifier not found");
           break;
       }
-      lvalue_width = type_width(heap[binding+4], true, true);
+      lvalue_width = type_width(heap[binding+4], true, false);
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
@@ -1232,7 +1309,7 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, false); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: . operator on non-struct type");
       }
@@ -1249,13 +1326,13 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, true); // child 1 of member is the type
+        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, false); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
     } else if (op == CAST) {
       codegen_lvalue(child1);
-      lvalue_width = type_width(child0, true, true);
+      lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       fatal_error("codegen_lvalue: unknown lvalue with 2 children");
@@ -1322,22 +1399,22 @@ void codegen_rvalue(ast node) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // structs/unions are allocated on the stack, so no need to dereference
           // For arrays, we need to dereference the pointer since they are passed as pointers
           if (get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            mov_reg_mem(reg_X, reg_X, 0);
+            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
           break;
 
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * word_size);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // local arrays/structs/unions are allocated on the stack, so no need to dereference
           if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            mov_reg_mem(reg_X, reg_X, 0);
+            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
           break;
@@ -1346,7 +1423,7 @@ void codegen_rvalue(ast node) {
           add_reg_reg(reg_X, reg_glo);
           // global arrays/structs/unions are also allocated on the stack, so no need to dereference
           if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            mov_reg_mem(reg_X, reg_X, 0);
+            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
           break;
@@ -1384,7 +1461,7 @@ void codegen_rvalue(ast node) {
       if (is_function_type(type1)) {
       } else if (is_pointer_type(type1)) {
         pop_reg(reg_X);
-        load_mem_location(reg_X, reg_X, 0, ref_type_width(value_type(child0)));
+        load_mem_location(reg_X, reg_X, 0, ref_type_width(type1), is_signed_numeric_type(dereference_type(type1)));
         push_reg(reg_X);
       } else {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
@@ -1413,10 +1490,10 @@ void codegen_rvalue(ast node) {
       codegen_rvalue(child0);
       codegen_binop(EQ_EQ, new_ast0(INTEGER, 0), child0);
       grow_fs(-2);
-    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST){
-      codegen_lvalue(child0);
+    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST) {
+      left_width = codegen_lvalue(child0);
       pop_reg(reg_Y);
-      mov_reg_mem(reg_X, reg_Y, 0);
+      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X); // saves the original value of lvalue
       push_reg(reg_Y);
       push_reg(reg_X); // saves the value of lvalue to be modified
@@ -1426,22 +1503,20 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_X); // result
       pop_reg(reg_Y); // address
       grow_fs(-1);
-      mov_mem_reg(reg_Y, 0, reg_X); // Store the result in the address
+      write_mem_location(reg_Y, 0, reg_X, left_width); // Store the result in the address
     } else if (op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
-      codegen_lvalue(child0);
+      left_width = codegen_lvalue(child0);
       pop_reg(reg_Y);
       push_reg(reg_Y);
-      mov_reg_mem(reg_X, reg_Y, 0);
+      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X);
-      grow_fs(1);
       mov_reg_imm(reg_X, 1); // equivalent to calling codegen rvalue with INTEGER 1 (subtraction or addition handled in codegen_binop)
       push_reg(reg_X);
-      grow_fs(1);
       codegen_binop(op, child0, new_ast0(INTEGER, 0)); // Pops two values off the stack and pushes the result
       pop_reg(reg_X); // result
       pop_reg(reg_Y); // address
-      grow_fs(-3);
-      mov_mem_reg(reg_Y, 0, reg_X); //store the result in the address
+      grow_fs(-1);
+      write_mem_location(reg_Y, 0, reg_X, left_width); // store the result in the address
       push_reg(reg_X);
     } else if (op == '&') {
       codegen_lvalue(child0);
@@ -1486,7 +1561,7 @@ void codegen_rvalue(ast node) {
       left_width = codegen_lvalue(child0);
       pop_reg(reg_Y);
       push_reg(reg_Y);
-      load_mem_location(reg_X, reg_Y, 0, left_width);
+      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(child1);
@@ -1521,7 +1596,7 @@ void codegen_rvalue(ast node) {
           add_reg_imm(reg_Y, struct_member_offset(type1, child1));
         }
         if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false));
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
         }
         push_reg(reg_Y);
       } else {
@@ -1540,7 +1615,7 @@ void codegen_rvalue(ast node) {
           add_reg_imm(reg_Y, struct_member_offset(type1, child1));
         }
         if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, word_size);
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
         }
         push_reg(reg_Y);
       } else {
@@ -1548,6 +1623,15 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == CAST) {
       codegen_rvalue(child1);
+      // If the cast is to a value narrower than the width of the value, we need
+      // to truncate the value. This is done by writing the value to the stack
+      // and then reading it back, sign extending it if necessary.
+      child0 = get_child_(DECL, child0, 1); // child 1 of cast is the type
+      if (type_width(child0, false, false) < type_width(value_type(child1), false, false)) {
+        load_mem_location(reg_X, reg_SP, 0, type_width(child0, false, false), is_signed_numeric_type(child0));
+        grow_stack(-1);
+        push_reg(reg_X);
+      }
       grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
@@ -1591,8 +1675,8 @@ void codegen_begin() {
 
   // Make room for heap start and malloc bump pointer.
   // reg_glo[0]: heap start
-  // reg_glo[word_size]: malloc bump pointer
-  cgc_global_alloc += 2 * word_size;
+  // reg_glo[WORD_SIZE]: malloc bump pointer
+  cgc_global_alloc += 2 * WORD_SIZE;
 
   int_type = new_ast0(INT_KW, 0);
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
@@ -1726,14 +1810,14 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
     // Create the string and assign global variable to the pointer
     codegen_string(string_probe);
     pop_reg(reg_X);
-    write_mem_location(base_reg, offset, reg_X, word_size);
+    mov_mem_reg(base_reg, offset, reg_X);
   } else {
     fatal_error("codegen_initializer: string initializer must be assigned to a char[] or char*");
   }
 }
 
 // Initialize a variable with an initializer
-void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset, bool in_array) {
+void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset) {
   ast members;
   ast inner_type;
   int arr_len;
@@ -1760,7 +1844,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           inner_type_width = type_width(get_child_('[', type, 0), true, false);
 
           while (init != 0 && arr_len != 0) {
-            codegen_initializer(local, car(init), inner_type, base_reg, offset, true);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset);
             offset += inner_type_width;
             init = tail(init);
             arr_len -= 1; // decrement the number of elements left to initialize to make sure we don't overflow
@@ -1780,17 +1864,17 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           members = get_child_(STRUCT_KW, type, 2);
           while (init != 0 && members != 0) {
             inner_type = get_child_(DECL, car_(DECL, members), 1);
-            codegen_initializer(local, car(init), inner_type, base_reg, offset, false);
-            offset += type_width(inner_type, true, true);
+            codegen_initializer(local, car(init), inner_type, base_reg, offset);
+            offset += type_width(inner_type, true, false);
             init = tail(init);
             members = tail(members);
           }
 
-          //  Initialize rest of the members to 0
+          // Initialize rest of the members to 0
           while (local && members != 0) {
             inner_type = get_child_(DECL, car_(DECL, members), 1);
-            initialize_memory(0, base_reg, offset, type_width(inner_type, true, true));
-            offset += type_width(inner_type, true, true);
+            initialize_memory(0, base_reg, offset, type_width(inner_type, true, false));
+            offset += type_width(inner_type, true, false);
             members = tail(members);
           }
           break;
@@ -1802,7 +1886,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           } else if (members == 0) {
             fatal_error("codegen_initializer: union has no members");
           }
-          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset, false);
+          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset);
           break;
 
         default:
@@ -1813,7 +1897,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           codegen_rvalue(car(init));
           pop_reg(reg_X);
           grow_fs(-1);
-          write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
+          write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
           break;
       }
 
@@ -1830,7 +1914,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         codegen_rvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
-        write_mem_location(base_reg, offset, reg_X, type_width(type, true, !in_array));
+        write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
       } else {
         fatal_error("codegen_initializer: cannot initialize array with scalar value");
       }
@@ -1896,7 +1980,7 @@ void codegen_glo_var_decl(ast node) {
     if (init != 0) {
       def_label(init_next_lbl);
       init_next_lbl = alloc_label("init_next");
-      codegen_initializer(false, init, type, reg_glo, heap[binding + 3], false); // heap[binding + 3] = offset
+      codegen_initializer(false, init, type, reg_glo, heap[binding + 3]); // heap[binding + 3] = offset
       jump(init_next_lbl);
     }
   }
@@ -1906,7 +1990,7 @@ int compute_local_var_decl_size(ast type, ast init) {
   infer_array_length(type, init);
 
   if (is_aggregate_type(type)) { // Array/struct/union declaration
-    return type_width(type, true, true) / word_size;  // size in bytes (word aligned)
+    return type_width(type, true, true) / WORD_SIZE;  // size in bytes (word aligned)
   } else {
     return 1;
   }
@@ -1923,7 +2007,7 @@ void codegen_local_var_decl(ast node) {
 
   if (init != 0) {
     // offset (cgc_fs - heap[cgc_locals + 3]) should be 0 since we just allocated the space
-    codegen_initializer(true, init, type, reg_SP, 0, false);
+    codegen_initializer(true, init, type, reg_SP, 0);
   }
 }
 
@@ -1942,7 +2026,7 @@ void codegen_static_local_var_decl(ast node) {
     jump(skip_init_lbl);
     def_label(init_next_lbl);
     init_next_lbl = alloc_label("init_next");
-    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3], false); // heap[cgc_locals + 3] = offset
+    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
     jump(init_next_lbl);
     def_label(skip_init_lbl);
   }
@@ -2265,7 +2349,7 @@ void add_params(ast params) {
 
     if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
 
-    cgc_add_local_param(ident, type_width(type, false, true) / word_size, type);
+    cgc_add_local_param(ident, type_width(type, false, true) / WORD_SIZE, type);
     params = tail(params);
   }
 }
@@ -2298,6 +2382,13 @@ void codegen_glo_fun_decl(ast node) {
   }
 
   def_label(heap[binding+4]);
+
+  // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
+  //   rt_debug(fp_filepath);
+  //   rt_debug(":");
+  //   rt_debug(STRING_BUF(name_probe));
+  //   rt_debug("\n");
+  // }
 
   cgc_fs = -1; // space for return address
   cgc_locals = 0;
@@ -2371,7 +2462,7 @@ void rt_crash(char* msg) {
 void rt_malloc() {
   int end_lbl = alloc_label("rt_malloc_success");
 
-  mov_reg_mem(reg_Y, reg_glo, word_size); // Bump pointer
+  mov_reg_mem(reg_Y, reg_glo, WORD_SIZE); // Bump pointer
   add_reg_reg(reg_X, reg_Y);              // New bump pointer
   mov_reg_mem(reg_Y, reg_glo, 0);         // Heap start
   add_reg_imm(reg_Y, RT_HEAP_SIZE);       // End of heap
@@ -2382,8 +2473,8 @@ void rt_malloc() {
   rt_crash("Heap overflow");
 
   def_label(end_lbl);
-  mov_reg_mem(reg_Y, reg_glo, word_size); // Old bump pointer
-  mov_mem_reg(reg_glo, word_size, reg_X); // Adjust the bump pointer
+  mov_reg_mem(reg_Y, reg_glo, WORD_SIZE); // Old bump pointer
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // Adjust the bump pointer
   mov_reg_reg(reg_X, reg_Y);              // Return the old bump pointer
 }
 
@@ -2415,7 +2506,7 @@ void codegen_end() {
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
-  mov_mem_reg(reg_glo, word_size, reg_X); // init bump pointer
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // init bump pointer
 
   jump(init_start_lbl);
 
@@ -2428,7 +2519,7 @@ void codegen_end() {
 
   // exit function
   def_label(exit_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_exit();
 
   // getchar function
@@ -2438,53 +2529,53 @@ void codegen_end() {
 
   // putchar function
   def_label(putchar_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_putchar();
   ret();
 
   // fopen function
   def_label(fopen_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_fopen();
   ret();
 
   // fclose function
   def_label(fclose_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_fclose();
   ret();
 
   // fgetc function
   def_label(fgetc_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_fgetc();
   ret();
 
   // malloc function
   def_label(malloc_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   rt_malloc();
   ret();
 
   // free function
   def_label(free_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   rt_free();
   ret();
 
   // read function
   def_label(read_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
-  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
-  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_read();
   ret();
 
   // write function
   def_label(write_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
-  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
-  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_write();
   ret();
 
@@ -2499,15 +2590,15 @@ void codegen_end() {
   // > if it is not supplied, some arbitrary bytes from the stack will be
   // > applied as the file mode.
   def_label(open_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
-  mov_reg_mem(reg_Y, reg_SP, 2*word_size);
-  mov_reg_mem(reg_Z, reg_SP, 3*word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_open();
   ret();
 
   // close function
   def_label(close_lbl);
-  mov_reg_mem(reg_X, reg_SP, word_size);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
   os_close();
   ret();
 

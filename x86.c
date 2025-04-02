@@ -1,22 +1,29 @@
+#ifdef target_i386_linux
+  #define WORD_SIZE 4
+#endif
+
+#ifdef target_x86_64_linux
+  #define WORD_SIZE 8
+#endif
+
+#ifdef target_x86_64_mac
+  #define WORD_SIZE 8
+#endif
+
 // x86 codegen
 #include "exe.c"
 
 #ifdef target_i386_linux
   #include "elf.c"
-  const int word_size = 4; // generating for i386 Linux
 #endif
 
 #ifdef target_x86_64_linux
   #include "elf.c"
-  const int word_size = 8; // generating for x86-64 Linux
 #endif
 
 #ifdef target_x86_64_mac
   #include "mach-o.c"
-  const int word_size = 8; // generating for x86-64 Linux
 #endif
-
-
 
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
 
@@ -41,21 +48,23 @@ const int R15 = 15;
 // to another const variable produces an error. This is a workaround.
 const int reg_X = 0; // AX: temporary register
 const int reg_Y = 1; // CX: temporary register
-const int reg_Z = 5; // BP: temporary register
+const int reg_Z = 2; // DX: temporary register
 const int reg_SP = 4; // SP: stack pointer
 const int reg_glo = 3; // BX: global variables table
 
+#if WORD_SIZE == 8
 void rex_prefix(int reg1, int reg2) {
-  if (word_size == 8) {
-    // REX prefix encodes:
-    //  0x40: fixed value
-    //  0x08: REX.W: a 64-bit operand size is used.
-    //  0x04: REX.R: 1-bit extension for first register encoded for mod_rm
-    //  0x02: REX.X: 1-bit extension for SIB index encoded for mod_rm (Not used)
-    //  0x01: REX.B: 1-bit extension for second register encoded for mod_rm
-    emit_i8(0x48 + 0x04 * (reg1 >= R8) + 0x01 * (reg2 >= R8));
-  }
+  // REX prefix encodes:
+  //  0x40: fixed value
+  //  0x08: REX.W: a 64-bit operand size is used.
+  //  0x04: REX.R: 1-bit extension for first register encoded for mod_rm
+  //  0x02: REX.X: 1-bit extension for SIB index encoded for mod_rm (Not used)
+  //  0x01: REX.B: 1-bit extension for second register encoded for mod_rm
+  emit_i8(0x48 + 0x04 * (reg1 >= R8) + 0x01 * (reg2 >= R8));
 }
+#else
+#define rex_prefix(reg1, reg2) ((void)0)
+#endif
 
 void mod_rm(int reg1, int reg2) {
   // ModR/M byte
@@ -89,8 +98,11 @@ void mod_rm(int reg1, int reg2) {
 #define mod_rm_slash_digit(digit, reg1) mod_rm(digit, reg1)
 
 // For instructions with 2 register operands
-void op_reg_reg(int opcode, int dst, int src) {
-  rex_prefix(src, dst);
+void op_reg_reg(int opcode, int dst, int src, int reg_width) {
+  // 16-bit operand size override prefix
+  // See section on Legacy Prefixes: https://web.archive.org/web/20250210181519/https://wiki.osdev.org/X86-64_Instruction_Encoding#ModR/M
+  if (reg_width == 2) emit_i8(0x66);
+  if (reg_width == 8) rex_prefix(src, dst);
   emit_i8(opcode);
   mod_rm(src, dst);
 }
@@ -119,7 +131,7 @@ void test_reg_reg(int dst, int src) {
   // TEST dst_reg, src_reg ;; set Z condition flag based on result of dst_reg&src_reg
   // See: https://web.archive.org/web/20231004142335/https://www.felixcloutier.com/x86/test
 
-  op_reg_reg(0x85, dst, src);
+  op_reg_reg(0x85, dst, src, WORD_SIZE);
 }
 
 #endif
@@ -129,7 +141,7 @@ void add_reg_reg(int dst, int src) {
   // ADD dst_reg, src_reg ;; dst_reg = dst_reg + src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
 
-  op_reg_reg(0x01, dst, src);
+  op_reg_reg(0x01, dst, src, WORD_SIZE);
 }
 
 void or_reg_reg (int dst, int src) {
@@ -137,7 +149,7 @@ void or_reg_reg (int dst, int src) {
   // OR dst_reg, src_reg ;; dst_reg = dst_reg | src_reg
   // See: https://web.archive.org/web/20231002205127/https://www.felixcloutier.com/x86/or
 
-  op_reg_reg(0x09, dst, src);
+  op_reg_reg(0x09, dst, src, WORD_SIZE);
 }
 
 void and_reg_reg(int dst, int src) {
@@ -145,7 +157,7 @@ void and_reg_reg(int dst, int src) {
   // AND dst_reg, src_reg ;; dst_reg = dst_reg & src_reg
   // See: https://web.archive.org/web/20240228122102/https://www.felixcloutier.com/x86/and
 
-  op_reg_reg(0x21, dst, src);
+  op_reg_reg(0x21, dst, src, WORD_SIZE);
 }
 
 void sub_reg_reg(int dst, int src) {
@@ -153,7 +165,7 @@ void sub_reg_reg(int dst, int src) {
   // SUB dst_reg, src_reg ;; dst_reg = dst_reg - src_reg
   // See: https://web.archive.org/web/20240118202232/https://www.felixcloutier.com/x86/sub
 
-  op_reg_reg(0x29, dst, src);
+  op_reg_reg(0x29, dst, src, WORD_SIZE);
 }
 
 void xor_reg_reg(int dst, int src) {
@@ -161,15 +173,16 @@ void xor_reg_reg(int dst, int src) {
   // XOR dst_reg, src_reg ;; dst_reg = dst_reg ^ src_reg
   // See: https://web.archive.org/web/20240323052259/https://www.felixcloutier.com/x86/xor
 
-  op_reg_reg(0x31, dst, src);
+  op_reg_reg(0x31, dst, src, WORD_SIZE);
 }
 
 void cmp_reg_reg(int dst, int src) {
 
   // CMP dst_reg, src_reg  ;; Set condition flags according to dst_reg-src_reg
   // See: https://web.archive.org/web/20240407051947/https://www.felixcloutier.com/x86/cmp
+  // Note: For byte comparison, opcode is 0x38, for word/dword/qword comparison, opcode is 0x39
 
-  op_reg_reg(0x39, dst, src);
+  op_reg_reg(0x39, dst, src, WORD_SIZE);
 }
 
 void mov_reg_reg(int dst, int src) {
@@ -177,7 +190,7 @@ void mov_reg_reg(int dst, int src) {
   // MOV dst_reg, src_reg  ;; dst_reg = src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  op_reg_reg(0x89, dst, src);
+  op_reg_reg(0x89, dst, src, WORD_SIZE);
 }
 
 void mov_reg_imm(int dst, int imm) {
@@ -187,13 +200,13 @@ void mov_reg_imm(int dst, int imm) {
 
   rex_prefix(0, dst);
   emit_i8(0xb8 + (dst & 7));
-  if (word_size == 4) {
-    emit_i32_le(imm);
-  } else if (word_size == 8) {
-    emit_i64_le(imm);
-  } else {
-    fatal_error("mov_reg_imm: unknown word size");
-  }
+#if WORD_SIZE == 4
+  emit_i32_le(imm);
+#elif WORD_SIZE == 8
+  emit_i64_le(imm);
+#else
+  #error "mov_reg_imm: unknown word size"
+#endif
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -205,13 +218,13 @@ void mov_reg_large_imm(int dst, int large_imm) {
   rex_prefix(0, dst);
   emit_i8(0xb8 + (dst & 7));
 
-  if (word_size == 4) {
-    emit_i32_le_large_imm(large_imm);
-  } else if (word_size == 8) {
-    emit_i64_le_large_imm(large_imm);
-  } else {
-    fatal_error("mov_reg_large_imm: unknown word size");
-  }
+#if WORD_SIZE == 4
+  emit_i32_le_large_imm(large_imm);
+#elif WORD_SIZE == 8
+  emit_i64_le_large_imm(large_imm);
+#else
+  #error "mov_reg_large_imm: unknown word size"
+#endif
 }
 #endif
 
@@ -237,24 +250,36 @@ void add_reg_lbl(int dst, int lbl) {
   use_label(lbl); // 32 bit placeholder for distance
 }
 
-void mov_memory(int op, int reg, int base, int offset) {
+void mov_memory(int op, int reg, int base, int offset, int reg_width) {
 
   // Move word between register and memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  rex_prefix(reg, base);
+  // 16-bit operand size override prefix
+  // See section on Legacy Prefixes: https://web.archive.org/web/20250210181519/https://wiki.osdev.org/X86-64_Instruction_Encoding#ModR/M
+  if (reg_width == 2) emit_i8(0x66);
+  if (reg_width == 8) rex_prefix(reg, base);
   emit_i8(op);
   emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
   if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
   emit_i32_le(offset);
 }
 
-void mov_mem_reg(int base, int offset, int src) {
+void mov_memory_extend(int op, int reg, int base, int offset, bool include_0f) {
 
-  // MOV [base_reg + offset], src_reg  ;; Move word from register to memory
-  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+  // Move word between register and memory with sign extension
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+  // And  https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
 
-  mov_memory(0x89, src, base, offset);
+  // From webpage:
+  //  > The use of MOVSXD without REX.W in 64-bit mode is discouraged. Regular
+  //  > MOV should be used instead of using MOVSXD without REX.W.
+  rex_prefix(reg, base);
+  if (include_0f) emit_i8(0x0f); // Most sign/zero extend instructions have a 0x0f prefix
+  emit_i8(op);
+  emit_i8(0x80 + (reg & 7) * 8 + (base & 7));
+  if (base == SP || base == R12) emit_i8(0x24); // SIB byte. See 32/64-bit addressing mode
+  emit_i32_le(offset);
 }
 
 void mov_mem8_reg(int base, int offset, int src) {
@@ -262,25 +287,96 @@ void mov_mem8_reg(int base, int offset, int src) {
   // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  mov_memory(0x88, src, base, offset);
+#ifdef SAFE_MODE
+  // The ModR/M byte cannot encode lower registers that are not AL, CL, DL, or BL
+  if (src != AX && src != CX && src != DX && src != BX) {
+    fatal_error("mov_mem8_reg: src must one of AX, CX, DX, BX");
+  }
+#endif
+
+  mov_memory(0x88, src, base, offset, 1);
 }
 
-void mov_reg_mem(int dst, int base, int offset) {
+void mov_mem16_reg(int base, int offset, int src) {
 
-  // MOV dst_reg, [base_reg + offset]  ;; Move word from memory to register
+  // MOVB [base_reg + offset], src_reg  ;; Move word (2 bytes) from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  mov_memory(0x8b, dst, base, offset);
+  mov_memory(0x89, src, base, offset, 2);
+}
+
+void mov_mem32_reg(int base, int offset, int src) {
+
+  // MOVB [base_reg + offset], src_reg  ;; Move dword (4 bytes) from register to memory
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x89, src, base, offset, 4);
+}
+
+void mov_mem64_reg(int base, int offset, int src) {
+
+  // MOVB [base_reg + offset], src_reg  ;; Move qword (8 bytes) from register to memory
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x89, src, base, offset, 8);
 }
 
 void mov_reg_mem8(int dst, int base, int offset) {
 
-  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register, zero-extended
+  // See: https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
+
+  mov_memory_extend(0xb6, dst, base, offset, true);
+}
+
+void mov_reg_mem16(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register, zero-extended
+  // See: https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
+
+  mov_memory_extend(0xb7, dst, base, offset, true);
+}
+
+void mov_reg_mem32(int dst, int base, int offset) {
+
+  // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register, zero-extended
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
 
-  mov_memory(0x8a, dst, base, offset);
-  mov_reg_imm(DI, 0xff); // mask off the upper bits
-  and_reg_reg(dst, DI);
+  // Operations writing to the lower 32 bits of a register zero-extend the
+  // result, so there's no movzx instruction for 32-bit operands.
+  mov_memory(0x8b, dst, base, offset, 4);
+}
+
+void mov_reg_mem8_sign_ext(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register, sign-extended
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+
+  mov_memory_extend(0xbe, dst, base, offset, true);
+}
+
+void mov_reg_mem16_sign_ext(int dst, int base, int offset) {
+
+  // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register, sign-extended
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+
+  mov_memory_extend(0xbf, dst, base, offset, true);
+}
+
+void mov_reg_mem32_sign_ext(int dst, int base, int offset) {
+
+  // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register, sign-extended
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+
+  mov_memory_extend(0x63, dst, base, offset, false);
+}
+
+void mov_reg_mem64(int dst, int base, int offset) {
+
+  // MOV dst_reg, [base_reg + offset]  ;; Move qword (8 bytes) from memory to register
+  // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
+
+  mov_memory(0x8b, dst, base, offset, 8);
 }
 
 void imul_reg_reg(int dst, int src) {
@@ -360,6 +456,10 @@ void div_reg_reg(int dst, int src) {
   // is emulated with a sequence of instructions that will clobber the
   // registers AX and DX.
 
+#ifdef SAFE_MODE
+  if (src == AX || src == DX) fatal_error("div_reg_reg: src cannot be AX");
+#endif
+
   mov_reg_reg(AX, dst);
   mov_reg_imm(DX, 0); // Clear DX
   div_reg(src);
@@ -393,6 +493,10 @@ void s_l_reg_reg(int dst, int src) {
   // This is not an actual instruction on x86. The operation
   // is emulated with a sequence of instructions that clobbers the
   // register CX, and does not work if dst = CX.
+
+#ifdef SAFE_MODE
+  if (dst == CX) fatal_error("s_l_reg_reg: dst cannot be CX");
+#endif
 
   mov_reg_reg(CX, src);
   s_l_reg_cl(dst);
@@ -565,10 +669,10 @@ void setup_proc_args(int global_vars_size) {
   // Note(13/02/2025): Global variables are now allocated in a separate memory region so global_vars_size is 0.
 
   mov_reg_reg(reg_X, SP);
-  add_reg_imm(reg_X, global_vars_size + word_size); // compute address of argv
+  add_reg_imm(reg_X, global_vars_size + WORD_SIZE); // compute address of argv
   push_reg(reg_X); // push argv address
 
-  mov_reg_mem(reg_Y, reg_X, -word_size); // load argc
+  mov_reg_mem(reg_Y, reg_X, -WORD_SIZE); // load argc
   push_reg(reg_Y); // push argc
 }
 
@@ -584,7 +688,7 @@ void mov_reg_lbl(int reg, int lbl) {
                            // <--- The stack now has the address of the next instruction
   pop_reg(reg);            // pop reg_X (1 byte)
   add_reg_lbl(reg, lbl);   // load address of label to reg_X (6 or 7 bytes if 32 or 64 bit)
-  add_reg_imm(reg, word_size == 8 ? 8 : 7); // adjust for the pop and add instructions
+  add_reg_imm(reg, WORD_SIZE == 8 ? 8 : 7); // adjust for the pop and add instructions
 }
 
 // For 32 bit linux.
