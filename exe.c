@@ -1986,13 +1986,14 @@ void codegen_glo_var_decl(ast node) {
   }
 }
 
+// Compute the size of a local variable declaration in bytes
 int compute_local_var_decl_size(ast type, ast init) {
   infer_array_length(type, init);
 
   if (is_aggregate_type(type)) { // Array/struct/union declaration
-    return type_width(type, true, true) / WORD_SIZE;  // size in bytes (word aligned)
+    return type_width(type, true, true);  // size in bytes (word aligned)
   } else {
-    return 1;
+    return WORD_SIZE;
   }
 }
 
@@ -2000,7 +2001,8 @@ void codegen_local_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
-  int size = compute_local_var_decl_size(type, init);
+  // For local variables, the smallest unit of memory is a word, so the size is in words
+  int size = compute_local_var_decl_size(type, init) / WORD_SIZE;
 
   cgc_add_local_var(get_val_(IDENTIFIER, name), size, type);
   grow_stack(size); // Make room for the local variable
