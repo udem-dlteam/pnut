@@ -127,7 +127,7 @@ int main() {
   putdigit(0);
 #endif
 
-// Make sure #elif don't revert the masked out state if the whole block is masked out
+// Make sure #elif doesn't revert the masked out state if the whole block is masked out
 #if 0
 #if 0
   putdigit(0);
