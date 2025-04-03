@@ -316,6 +316,7 @@ void os_seek();
 void os_unlink();
 void os_mkdir();
 void os_chmod();
+void os_access();
 
 void rt_putchar();
 void rt_debug(char* msg);
@@ -347,6 +348,7 @@ int seek_lbl;
 int unlink_lbl;
 int mkdir_lbl;
 int chmod_lbl;
+int access_lbl;
 
 int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
@@ -1794,6 +1796,9 @@ void codegen_begin() {
   chmod_lbl = alloc_label("chmod");
   cgc_add_global_fun(init_ident(IDENTIFIER, "chmod"), chmod_lbl, function_type2(int_type, string_type, int_type));
 
+  access_lbl = alloc_label("access");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "access"), access_lbl, function_type2(int_type, string_type, int_type));
+
 #ifndef NO_BUILTIN_LIBC
   putchar_lbl = alloc_label("putchar");
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
@@ -2726,6 +2731,13 @@ void codegen_end() {
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // pathname
   mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // mode
   os_chmod();
+  ret();
+
+  // stat function
+  def_label(access_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // pathname
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // mode
+  os_access();
   ret();
 
 #ifndef NO_BUILTIN_LIBC

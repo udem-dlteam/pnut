@@ -761,6 +761,10 @@ void os_chmod() {
   syscall_3(15, reg_X, reg_Y, -1); // SYS_CHMOD = 15
 }
 
+void os_access() {
+  syscall_3(21, reg_X, reg_Y, -1); // SYS_ACCESS = 21
+}
+
 #endif
 
 // Both x86_64_linux and x86_64_mac use the System V ABI, the difference is in the system calls.
@@ -774,6 +778,8 @@ void os_chmod() {
   #define SYS_UNLINK 87
   #define SYS_MKDIR 83
   #define SYS_CHMOD 90
+  #define SYS_ACCESS 21
+  #define SYS_STAT 4
   #define SYS_MMAP_MAP_TYPE 0x22
   #define SYS_MMAP 9
   #define SYS_EXIT 60
@@ -792,6 +798,7 @@ void os_chmod() {
   #define SYS_UNLINK 0x200000a
   #define SYS_MKDIR 0x2000088
   #define SYS_CHMOD 0x200000f
+  #define SYS_ACCESS 0x2000021
   #define SYS_MMAP_MAP_TYPE 0x1020
   #define SYS_MMAP 0x20000C5
   #define SYS_EXIT 0x2000001
@@ -872,6 +879,10 @@ void os_mkdir() {
 
 void os_chmod() {
   syscall_3(SYS_CHMOD, reg_X, reg_Y, -1);
+}
+
+void os_access() {
+  syscall_3(SYS_ACCESS, reg_X, reg_Y, -1);
 }
 
 #endif
