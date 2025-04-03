@@ -1,5 +1,5 @@
 #include "../include/stdlib.h"
-#include "../include/stdio.h" // For putchar
+#include "../include/stdio.h"
 
 #define HEAP_SIZE 1000000000
 
@@ -7,6 +7,8 @@ char _heap[HEAP_SIZE];
 int _heap_alloc = 0;
 
 void *malloc(size_t size) {
+  if (size <= 0) return 0; // no-op
+
   size += sizeof(size_t); // size + size_t (for size)
   char *result = _heap + _heap_alloc;
   _heap_alloc += size;
