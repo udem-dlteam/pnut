@@ -416,6 +416,7 @@ void os_seek();
 void os_unlink();
 void os_mkdir();
 void os_chmod();
+void os_access();
 
 void rt_putchar();
 void rt_debug(char* msg);
@@ -2793,6 +2794,11 @@ void codegen_builtin() {
   // chmod function
   declare_builtin("chmod", false, int_type, list2(string_type, int_type));
   os_chmod();
+  ret();
+
+  // stat function
+  declare_builtin("access", false, int_type, list2(string_type, int_type));
+  os_access();
   ret();
 
 #ifndef NO_BUILTIN_LIBC
