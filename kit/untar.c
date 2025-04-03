@@ -34,7 +34,7 @@
 #include <string.h>
 
 /* This is for mkdir(); this may need to be changed for some platforms. */
-#include <sys/stat.h>  /* For mkdir() */
+#include <sys/stat.h>
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <windows.h>
