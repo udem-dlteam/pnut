@@ -314,6 +314,8 @@ void os_open();
 void os_close();
 void os_seek();
 void os_unlink();
+void os_mkdir();
+void os_chmod();
 
 void rt_putchar();
 void rt_debug(char* msg);
@@ -343,6 +345,8 @@ int open_lbl;
 int close_lbl;
 int seek_lbl;
 int unlink_lbl;
+int mkdir_lbl;
+int chmod_lbl;
 
 int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
@@ -1784,6 +1788,12 @@ void codegen_begin() {
   unlink_lbl = alloc_label("unlink");
   cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
 
+  mkdir_lbl = alloc_label("mkdir");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "mkdir"), mkdir_lbl, function_type2(int_type, string_type, int_type));
+
+  chmod_lbl = alloc_label("chmod");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "chmod"), chmod_lbl, function_type2(int_type, string_type, int_type));
+
 #ifndef NO_BUILTIN_LIBC
   putchar_lbl = alloc_label("putchar");
   cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
@@ -2703,6 +2713,19 @@ void codegen_end() {
   def_label(unlink_lbl);
   mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // filename
   os_unlink();
+  ret();
+
+  // mkdir function
+  def_label(mkdir_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // pathname
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // mode
+  os_mkdir();
+
+  // chmod function
+  def_label(chmod_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // pathname
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // mode
+  os_chmod();
   ret();
 
 #ifndef NO_BUILTIN_LIBC
