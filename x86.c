@@ -753,6 +753,14 @@ void os_unlink() {
   syscall_3(10, reg_X, -1, -1); // SYS_UNLINK = 10
 }
 
+void os_mkdir() {
+  syscall_3(39, reg_X, reg_Y, -1); // SYS_MKDIR = 39
+}
+
+void os_chmod() {
+  syscall_3(15, reg_X, reg_Y, -1); // SYS_CHMOD = 15
+}
+
 #endif
 
 // Both x86_64_linux and x86_64_mac use the System V ABI, the difference is in the system calls.
@@ -764,6 +772,8 @@ void os_unlink() {
   #define SYS_CLOSE 3
   #define SYS_LSEEK 8
   #define SYS_UNLINK 87
+  #define SYS_MKDIR 83
+  #define SYS_CHMOD 90
   #define SYS_MMAP_MAP_TYPE 0x22
   #define SYS_MMAP 9
   #define SYS_EXIT 60
@@ -780,6 +790,8 @@ void os_unlink() {
   #define SYS_CLOSE 0x2000006
   #define SYS_LSEEK 0x20000c7
   #define SYS_UNLINK 0x200000a
+  #define SYS_MKDIR 0x2000088
+  #define SYS_CHMOD 0x200000f
   #define SYS_MMAP_MAP_TYPE 0x1020
   #define SYS_MMAP 0x20000C5
   #define SYS_EXIT 0x2000001
@@ -852,6 +864,14 @@ void os_seek() {
 
 void os_unlink() {
   syscall_3(SYS_UNLINK, reg_X, -1, -1);
+}
+
+void os_mkdir() {
+  syscall_3(SYS_MKDIR, reg_X, reg_Y, -1);
+}
+
+void os_chmod() {
+  syscall_3(SYS_CHMOD, reg_X, reg_Y, -1);
 }
 
 #endif

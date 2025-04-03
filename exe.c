@@ -414,6 +414,8 @@ void os_open();
 void os_close();
 void os_seek();
 void os_unlink();
+void os_mkdir();
+void os_chmod();
 
 void rt_putchar();
 void rt_debug(char* msg);
@@ -2783,6 +2785,15 @@ void codegen_builtin() {
   os_unlink();
   ret();
   init_forward_jump_table(cgc_globals);
+
+  // mkdir function
+  declare_builtin("mkdir", false, int_type, list2(string_type, int_type));
+  os_mkdir();
+
+  // chmod function
+  declare_builtin("chmod", false, int_type, list2(string_type, int_type));
+  os_chmod();
+  ret();
 
 #ifndef NO_BUILTIN_LIBC
   // putchar function
