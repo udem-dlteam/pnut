@@ -10,3 +10,8 @@ tests/**/*.output
 build/*
 artifact/*
 artifact.zip
+kit/build/*
+kit/chmod
+kit/mkdir
+kit/untar
+kit/ungz
