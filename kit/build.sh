@@ -28,6 +28,7 @@ compile_with_pnut() {
   ./kit/chmod 755 kit/$1
 }
 
+compile_with_pnut simple-patch
 compile_with_pnut mkdir
 compile_with_pnut untar
 compile_with_pnut ungz
