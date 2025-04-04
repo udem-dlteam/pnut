@@ -15,3 +15,4 @@ kit/chmod
 kit/mkdir
 kit/untar
 kit/ungz
+kit/simple-patch
