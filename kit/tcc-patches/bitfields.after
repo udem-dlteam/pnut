@@ -1,0 +1,19 @@
+/* symbol attributes */
+struct SymAttr {
+    unsigned short
+    aligned     , /* alignment as log2+1 (0 == unspecified) */
+    packed      ,
+    weak        ,
+    visibility  ,
+    dllexport   ,
+    dllimport   ,
+    unused      ;
+};
+
+/* function attributes or temporary attributes for parsing */
+struct FuncAttr {
+    unsigned
+    func_call   , /* calling convention (0..5), see below */
+    func_type   , /* FUNC_OLD/NEW/ELLIPSIS */
+    func_args   ; /* PE __stdcall args */
+};
