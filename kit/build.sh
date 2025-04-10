@@ -1,5 +1,7 @@
 #! /bin/sh
 
+set -e -u
+
 # if pnut-exe; [ $? -eq 127 ]; then
 #   echo "pnut-exe is not installed"
 #   exit 1
@@ -38,7 +40,7 @@ compile_with_pnut ungz
 # Change to build directory to avoid polluting the root directory even more
 cd kit/build # shell built-in
 
-./../ungz --file ../../../live-bootstrap/distfiles/124cfae4bfafec24dfea65117d0a407078beb459.tar.gz \
-          --output 124cfae4bfafec24dfea65117d0a407078beb459.tar
+./../ungz --file ../tcc-0.9.27.tar.gz \
+          --output tcc-0.9.27.tar
 
-./../untar 124cfae4bfafec24dfea65117d0a407078beb459.tar
+./../untar tcc-0.9.27.tar
