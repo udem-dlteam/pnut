@@ -270,7 +270,7 @@ int vfprintf(FILE *stream, const char *format, va_list ap) {
   return result;
 }
 
-int fprintf(FILE *stream, const char *format VAR_ARGS) {
+int fprintf(FILE *stream, const char *format, ...) {
 
   va_list ap;
   int result;
@@ -282,7 +282,7 @@ int fprintf(FILE *stream, const char *format VAR_ARGS) {
   return result;
 }
 
-int printf(const char *format VAR_ARGS) {
+int printf(const char *format, ...) {
 
   va_list ap;
   int result;
@@ -308,7 +308,7 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap) {
   return result;
 }
 
-int snprintf(char *str, size_t size, const char *format VAR_ARGS) {
+int snprintf(char *str, size_t size, const char *format, ...) {
 
   va_list ap;
   int result;
@@ -320,7 +320,7 @@ int snprintf(char *str, size_t size, const char *format VAR_ARGS) {
   return result;
 }
 
-int sprintf(char *str, const char *format VAR_ARGS) {
+int sprintf(char *str, const char *format, ...) {
 
   va_list ap;
   int result;
