@@ -61,14 +61,14 @@ long ftell( FILE* stream );
 int remove(const char *_Filename);
 
 int vfprintf(FILE *stream, const char *format, va_list ap);
-int fprintf(FILE *stream, const char *format VAR_ARGS);
-int printf(const char *format VAR_ARGS);
+int fprintf(FILE *stream, const char *format, ...);
+int printf(const char *format, ...);
 int fflush(FILE *stream);
-int sscanf(const char *_Src, const char *_Format, ...);
+int sscanf(const char *str, const char *format, ...);
 
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
-int snprintf(char *str, size_t size, const char *format VAR_ARGS);
-int sprintf(char *str, const char *format VAR_ARGS);
+int snprintf(char *str, size_t size, const char *format, ...);
+int sprintf(char *str, const char *format, ...);
 
 #include "../src/stdio.c"
 
