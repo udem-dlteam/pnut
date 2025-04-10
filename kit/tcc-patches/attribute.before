@@ -1,0 +1,7 @@
+#ifdef _MSC_VER
+# define NORETURN __declspec(noreturn)
+# define ALIGNED(x) __declspec(align(x))
+#else
+# define NORETURN __attribute__((noreturn))
+# define ALIGNED(x) __attribute__((aligned(x)))
+#endif
