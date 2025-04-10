@@ -1,8 +1,6 @@
 #ifndef _STDARG_H
 #define _STDARG_H
 
-#define VAR_ARGS , ...
-
 typedef char *va_list;
 
 #define va_ptr_size      (sizeof(void *))
