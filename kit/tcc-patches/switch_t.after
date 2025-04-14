@@ -1,0 +1,10 @@
+struct case_t {
+  int64_t v1, v2;
+  int sym;
+}
+#if HAVE_LONG_LONG
+ST_DATA struct switch_t {
+    case_t **p; int n; /* list of case ranges */
+    int def_sym; /* default symbol */
+} *cur_switch; /* current switch */
+#endif

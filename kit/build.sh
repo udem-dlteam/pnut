@@ -84,7 +84,15 @@ libtcc.c:open-mode-arg-2
 libtcc.c:scanf_TCC_VERSION
 tcc.h:undefine_TCC_IS_NATIVE
 x86_64-gen.c:VLA
+tccpp.c:tccpp-parse-integer
 "
+# elf.h:elf-typedefs
+# elf.h:elf-auxv_t
+# tcc.h:read-write64
+# tcc.h:CValue
+# tcc.h:ExprValue
+# tccgen.c:switch_t
+# tccasm.c:asm_expr_cmp
 
 for patch in $patches; do
   file=${patch%%:*}
