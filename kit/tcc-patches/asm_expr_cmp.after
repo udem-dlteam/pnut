@@ -1,0 +1,12 @@
+	case TOK_LT:
+	    pe->v = (int32_t)pe->v < (int32_t)e2.v;
+	    break;
+	case TOK_GE:
+	    pe->v = (int32_t)pe->v >= (int32_t)e2.v;
+	    break;
+	case TOK_LE:
+	    pe->v = (int32_t)pe->v <= (int32_t)e2.v;
+	    break;
+	case TOK_GT:
+	    pe->v = (int32_t)pe->v > (int32_t)e2.v;
+	    break;
