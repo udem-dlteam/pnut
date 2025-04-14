@@ -2,6 +2,16 @@
 
 set -e -u
 
+# Parse the arguments
+fast=0 # Use fast mode
+
+while [ $# -gt 0 ]; do
+  case $1 in
+    --fast) fast=1;               shift 1;;
+    *) echo "Unknown option: $1"; exit 1;;
+  esac
+done
+
 if [ -d kit/build ]; then
   rm -rf kit/build
 fi
@@ -42,10 +52,18 @@ compile_with_pnut ungz
 # Change to build directory to avoid polluting the root directory even more
 cd kit/build # shell built-in
 
-./../ungz --file ../tcc-0.9.27.tar.gz \
-          --output tcc-0.9.27.tar
+if [ $fast -eq 0 ]; then
+  ./../ungz --file ../tcc-0.9.27.tar.gz \
+            --output tcc-0.9.27.tar
 
-./../untar tcc-0.9.27.tar
+  ./../untar tcc-0.9.27.tar
+else
+  tar xf ../tcc-0.9.27.tar.gz
+  if [ $? -ne 0 ]; then
+    printf "Failed to extract tcc-0.9.27.tar.gz\n"
+    exit 1
+  fi
+fi
 
 cd tcc-0.9.27
 
