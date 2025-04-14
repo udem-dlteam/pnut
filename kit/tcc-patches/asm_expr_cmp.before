@@ -1,0 +1,12 @@
+	case TOK_LT:
+	    pe->v = (int64_t)pe->v < (int64_t)e2.v;
+	    break;
+	case TOK_GE:
+	    pe->v = (int64_t)pe->v >= (int64_t)e2.v;
+	    break;
+	case TOK_LE:
+	    pe->v = (int64_t)pe->v <= (int64_t)e2.v;
+	    break;
+	case TOK_GT:
+	    pe->v = (int64_t)pe->v > (int64_t)e2.v;
+	    break;
