@@ -1,15 +1,7 @@
-#ifndef _SYS_TIME_H
-#define _SYS_TIME_H
+#ifndef _TIME_H
+#define _TIME_H
 
-struct timeval {
-  int tv_sec;
-  int tv_usec;
-};
-
-struct timezone {
-  int tz_minuteswest;
-  int tz_dsttime;
-};
+#include <sys/time.h>
 
 struct tm {
   int tm_sec;
@@ -23,12 +15,7 @@ struct tm {
   int tm_isdst;
 };
 
-int gettimeofday(struct timeval *tv, struct timezone *tz);
-
-typedef long __time32_t;
-typedef __time32_t time_t;
-
-time_t time (time_t * tloc);
+time_t time(time_t *tloc);
 struct tm *localtime (time_t const *timep);
 
 #endif
