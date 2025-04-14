@@ -1,10 +1,9 @@
 #ifndef _MATH_H
 #define _MATH_H
 
-// #ifndef PNUT_CC
-
 double ldexp(double x, int exp);
-
-// #endif
+// double ceil(double x);
+// double fabs (double number);
+// double floor (double number);
 
 #endif

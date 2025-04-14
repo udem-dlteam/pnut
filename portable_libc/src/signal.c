@@ -1,6 +1,6 @@
-#include "include/signal.h"
+#include "../include/signal.h"
 
-#ifdef TODO
+#ifdef ADD_LIBC_STUB
 
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
   return 0; /*TODO*/
