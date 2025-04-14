@@ -1,9 +1,8 @@
-#include "include/math.h"
+#include "../include/math.h"
 
-#ifndef PNUT_CC
+#ifdef ADD_LIBC_STUB
 
 double ldexp(double x, int exp) {
-  putstr("Unknown ldexp: ");
   exit(1);
 }
 

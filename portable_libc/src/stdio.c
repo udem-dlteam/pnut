@@ -282,6 +282,10 @@ int fprintf(FILE *stream, const char *format, ...) {
   return result;
 }
 
+int vprintf(const char *format, va_list ap) {
+  return vfprintf(stdout, format, ap);
+}
+
 int printf(const char *format, ...) {
 
   va_list ap;
@@ -331,3 +335,70 @@ int sprintf(char *str, const char *format, ...) {
 
   return result;
 }
+
+// int vscanf(const char *format, va_list ap) {
+//   return vfscanf(stdin, format, ap);
+// }
+
+// int vsscanf(const char *str, const char *format, va_list ap) {
+
+// }
+
+// int sscanf(char const *str, char const *template, ...)
+// {
+//   va_list ap;
+//   va_start (ap, template);
+//   int r = vsscanf(str, template, ap);
+//   va_end (ap);
+//   return r;
+// }
+
+// int vfscanf(FILE *stream, const char *format, va_list ap) {
+//   int result = 0; // number of items read
+//   char c;
+
+//   // TCC only uses "%d.%d.%d" so we support basic format options: %c, %s, %d
+//   while ((c = *format++)) {
+//     if (c == '%' && (c = *format++) != '%') {
+//       if (c == 'c') {
+//         *((char *) va_arg(ap, char*)) = fgetc(stream);
+//         result += 1;
+//       } else if (c == 'd') {
+//         // int *d = va_arg(ap, int*);
+//         int val = 0;
+//         int neg = 0;
+//         c = fgetc(stream);
+//         if (c == '+' || c == '-') {
+//           neg = c == '-';
+//         }
+//         while (isdigit(c = fgetc(stream))) {
+//           val = val * 10 + (c - '0');
+//         }
+//         *q = 0;
+//         q = buf;
+//         *(int *) va_arg(ap, int*) = neg ? -val : val;
+//         result += 1;
+
+//       } else if (c == 's') {
+//         char *s = va_arg(ap, char*);
+//         char *p = s;
+//         while ((c = fgetc(stream)) != EOF && !isspace(c)) {
+//           *p++ = c;
+//         }
+//         ungetc(c, stream);
+//         *p = 0;
+//         result += 1;
+//       } else {
+//         fputc('?', stream);
+//         fputc('?', stream);
+//         fputc('?', stream);
+//         result += 3;
+//       }
+//     } else if (c <= ' ') {
+//       // Ignore whitespace
+//     } else {
+//       fputc(c, stream);
+//       result += 1;
+//     }
+//   }
+// }
