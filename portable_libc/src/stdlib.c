@@ -3,6 +3,15 @@
 
 #define HEAP_SIZE 1000000000
 
+// TCC defines malloc, free and realloc as macros in libtcc.c which conflicts
+// with our definitions here. This wouldn't be a problem if the libc was
+// compiled in a separate compilation unit, but pnut only works with one
+// compilation unit.
+// The solution is to process the libc code first, and then the TCC code.
+#if defined(malloc) || defined(free) || defined(realloc)
+#error "malloc, free and realloc are already defined"
+#endif
+
 char _heap[HEAP_SIZE];
 int _heap_alloc = 0;
 

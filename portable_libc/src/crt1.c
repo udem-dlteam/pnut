@@ -1,4 +1,4 @@
-#include "include/crt1.h"
+#include "../include/crt1.h"
 
 int main(int argc, char **argv); /* defined in user program */
 
@@ -64,6 +64,16 @@ int close(int fd) {
     "mov   $5, %%eax\n"  /* 6 = SYS_CLOSE */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
     : "=a" (result) : "b" (fd)
+  );
+  return result;
+}
+
+int lseek(int fd, int offset, int whence) {
+  int result;
+  __asm__ (
+    "mov   $8, %%eax\n"  /* 8 = SYS_LSEEK */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : "=a" (result) : "b" (fd), "c" (offset), "d" (whence)
   );
   return result;
 }

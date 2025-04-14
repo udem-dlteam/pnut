@@ -83,24 +83,25 @@ if [ $use_gcc -eq 0 ]; then
 
   # We can now compile TCC with pnut-exe, obtained from gcc or pnut-sh.sh.
 
-  ./$TEMP_DIR/pnut-exe                                      \
-    -I portable_libc/include/                               \
-    -D BOOTSTRAP=1                                          \
-    -D HAVE_LONG_LONG=0                     \
-    -D TCC_TARGET_${TCC_TARGET_ARCH}=1                      \
-    -D CONFIG_SYSROOT=\"/\"                                 \
-    -D CONFIG_TCC_CRTPREFIX=\"$TEMP_DIR/boot0-lib\"         \
-    -D CONFIG_TCC_ELFINTERP=\"/mes/loader\"                 \
-    -D CONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\"      \
-    -D TCC_LIBGCC=\"$TEMP_DIR/boot0-lib/libc.a\"            \
-    -D CONFIG_TCC_LIBTCC1_MES=0                             \
-    -D CONFIG_TCCBOOT=1                                     \
-    -D CONFIG_TCC_STATIC=1                                  \
-    -D CONFIG_USE_LIBGCC=1                                  \
-    -D TCC_VERSION=\"0.9.26\"                               \
-    -D ONE_SOURCE=1                                         \
-    -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"            \
-    $TCC_DIR/tcc.c                                         \
+  ./$TEMP_DIR/pnut-exe                                    \
+    -I portable_libc/include/                             \
+    -D BOOTSTRAP=1                                        \
+    -D HAVE_LONG_LONG=0                                   \
+    -D TCC_TARGET_${TCC_TARGET_ARCH}=1                    \
+    -D CONFIG_SYSROOT=\"/\"                               \
+    -D CONFIG_TCC_CRTPREFIX=\"$TEMP_DIR/boot0-lib\"       \
+    -D CONFIG_TCC_ELFINTERP=\"/mes/loader\"               \
+    -D CONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\"    \
+    -D TCC_LIBGCC=\"$TEMP_DIR/boot0-lib/libc.a\"          \
+    -D CONFIG_TCC_LIBTCC1_MES=0                           \
+    -D CONFIG_TCCBOOT=1                                   \
+    -D CONFIG_TCC_STATIC=1                                \
+    -D CONFIG_USE_LIBGCC=1                                \
+    -D TCC_VERSION=\"0.9.26\"                             \
+    -D ONE_SOURCE=1                                       \
+    -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"          \
+    $TCC_DIR/tcc.c                                        \
+    portable_libc/libc.c                                  \
     > $TEMP_DIR/tcc-pnut
 
   chmod +x $TEMP_DIR/tcc-pnut
@@ -110,23 +111,24 @@ else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc.
   gcc \
-    -DBOOTSTRAP=1                                          \
-    -DHAVE_LONG_LONG=0                     \
-    -DTCC_TARGET_${TCC_TARGET_ARCH}=1                      \
-    -DCONFIG_SYSROOT=\"/\"                                 \
-    -DCONFIG_TCC_CRTPREFIX=\"$TEMP_DIR/boot0-lib\"         \
-    -DCONFIG_TCC_ELFINTERP=\"/mes/loader\"                 \
-    -DCONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\"      \
-    -DTCC_LIBGCC=\"$TEMP_DIR/boot0-lib/libc.a\"            \
-    -DCONFIG_TCC_LIBTCC1_MES=0                             \
-    -DCONFIG_TCCBOOT=1                                     \
-    -DCONFIG_TCC_STATIC=1                                  \
-    -DCONFIG_USE_LIBGCC=1                                  \
-    -DTCC_VERSION=\"0.9.26\"                               \
-    -DONE_SOURCE=1                                         \
-    -DCONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"            \
-    $TCC_DIR/tcc.c                                         \
-    -o $TEMP_DIR/tcc-pnut                                  \
+    -DBOOTSTRAP=1                                         \
+    -DHAVE_LONG_LONG=0                                    \
+    -DTCC_TARGET_${TCC_TARGET_ARCH}=1                     \
+    -DCONFIG_SYSROOT=\"/\"                                \
+    -DCONFIG_TCC_CRTPREFIX=\"$TEMP_DIR/boot0-lib\"        \
+    -DCONFIG_TCC_ELFINTERP=\"/mes/loader\"                \
+    -DCONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\"     \
+    -DTCC_LIBGCC=\"$TEMP_DIR/boot0-lib/libc.a\"           \
+    -DCONFIG_TCC_LIBTCC1_MES=0                            \
+    -DCONFIG_TCCBOOT=1                                    \
+    -DCONFIG_TCC_STATIC=1                                 \
+    -DCONFIG_USE_LIBGCC=1                                 \
+    -DTCC_VERSION=\"0.9.26\"                              \
+    -DONE_SOURCE=1                                        \
+    -DCONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"           \
+    $TCC_DIR/tcc.c                                        \
+    portable_libc/libc.c                                  \
+    -o $TEMP_DIR/tcc-pnut                                 \
     2> /dev/null
 
 fi
