@@ -22,6 +22,4 @@ void qsort(void *base, size_t nmemb, size_t size, int (*compar)(void *, void *))
 
 char *realpath(const char * path, char * resolved_path);
 
-#include "../src/stdlib.c"
-
 #endif

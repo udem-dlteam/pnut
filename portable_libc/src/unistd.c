@@ -15,26 +15,3 @@ int chmod(const char *pathname, mode_t mode);
 int access(const char *pathname, int amode);
 
 */
-
-#ifdef PNUT_CC
-
-#define	R_OK	4		/* Test for read permission.  */
-#define	W_OK	2		/* Test for write permission.  */
-#define	X_OK	1		/* Test for execute permission.  */
-#define	F_OK	0		/* Test for existence.  */
-
-char *getcwd(char *buf, size_t size) {
-  /*
-  if (buf == 0)
-    buf = __getcwd_buf;
-  if (buf == 0)
-    {
-      __getcwd_buf = malloc (PATH_MAX);
-      buf = __getcwd_buf;
-    }
-  return _getcwd (buf, size);
-  */
-  return 0; /*TODO*/
-}
-
-#endif

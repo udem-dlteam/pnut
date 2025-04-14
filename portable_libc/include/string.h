@@ -21,6 +21,4 @@ char *strpbrk(const char *dest, const char *breakset);
 char *strstr(char *__haystack, char *__needle);
 void *memmem(void const *haystack, int haystack_len, void const *needle, int needle_len);
 
-#include "../src/string.c"
-
 #endif
