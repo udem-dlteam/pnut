@@ -3250,7 +3250,7 @@ ast parse_parenthesized_expression(bool first_par_already_consumed) {
   ast result;
 
   if (!first_par_already_consumed) {
-  expect_tok('(');
+    expect_tok('(');
   }
 
   result = parse_comma_expression();
@@ -3316,7 +3316,7 @@ ast parse_postfix_expression(ast result) {
   ast child;
 
   if (result == 0) {
-  result = parse_primary_expression();
+    result = parse_primary_expression();
   }
 
   while (1) {
@@ -3421,13 +3421,10 @@ ast parse_unary_expression() {
       get_tok();
       // May be a type or an expression
       if (is_type_starter(tok)) {
-      result = parse_declarator(true, parse_declaration_specifiers(false));
-      expect_tok(')');
+        result = parse_declarator(true, parse_declaration_specifiers(false));
+        expect_tok(')');
       } else {
-        // We need to put the current token and '(' back on the token stream.
-        // Otherwise, sizeof (cast_expression) fails to parse.
-        undo_token('(', 0);
-        result = parse_unary_expression();
+        result = parse_unary_expression_with_parens_prefix();
       }
     } else {
       result = parse_unary_expression();
@@ -3484,12 +3481,11 @@ ast parse_cast_expression() {
       result = new_ast2(CAST, type, parse_cast_expression());
       return result;
     } else {
-      // We need to put the current token and '(' back on the token stream.
-      undo_token('(', 0);
+      return parse_unary_expression_with_parens_prefix();
     }
+  } else {
+    return parse_unary_expression();
   }
-
-  return parse_unary_expression();
 }
 
 ast parse_multiplicative_expression() {
