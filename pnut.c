@@ -3245,11 +3245,13 @@ ast parse_declaration(bool local) {
   return result;
 }
 
-ast parse_parenthesized_expression() {
+ast parse_parenthesized_expression(bool first_par_already_consumed) {
 
   ast result;
 
+  if (!first_par_already_consumed) {
   expect_tok('(');
+  }
 
   result = parse_comma_expression();
 
@@ -3301,7 +3303,7 @@ ast parse_primary_expression() {
 
   } else if (tok == '(') {
 
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
 
   } else {
     parse_error("identifier, literal, or '(' expected", tok);
@@ -3310,12 +3312,12 @@ ast parse_primary_expression() {
   return result;
 }
 
-ast parse_postfix_expression() {
-
-  ast result;
+ast parse_postfix_expression(ast result) {
   ast child;
 
+  if (result == 0) {
   result = parse_primary_expression();
+  }
 
   while (1) {
     if (tok == '[') {
@@ -3371,6 +3373,22 @@ ast parse_postfix_expression() {
 
   return result;
 }
+
+// When parsing parenthesized types (in casts and sizeof), a '(' token is
+// consumed and then the next token is checked to see if it begins a type or if
+// we're really just parsing a parenthesized expression. When it's a
+// parenthesized expression, we need to backtrack and try parsing a unary
+// expression. That used to be done by putting the '(' token back on the token
+// stream and calling parse_unary_expression.
+//
+// Having to push back tokens on the stream consumes memory and means our parser
+// isn't truely one-pass. To avoid having to push back the '(' token, we can
+// instead call the parse_parenthesized_expression function directly, followed
+// by the parse_unary_expression function. These 2 function calls correspond to
+// the functions that would be called if we had pushed back the '(' token and
+// called parse_unary_expression.
+#define parse_unary_expression_with_parens_prefix() \
+  parse_postfix_expression(parse_parenthesized_expression(true));
 
 ast parse_unary_expression() {
 
@@ -3433,7 +3451,7 @@ ast parse_unary_expression() {
     }
 
   } else {
-    result = parse_postfix_expression();
+    result = parse_postfix_expression(0);
   }
 
   return result;
@@ -3741,7 +3759,7 @@ ast parse_statement() {
   if (tok == IF_KW) {
 
     get_tok();
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
     child1 = parse_statement();
 
     if (tok == ELSE_KW) {
@@ -3756,7 +3774,7 @@ ast parse_statement() {
   } else if (tok == SWITCH_KW) {
 
     get_tok();
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
     child1 = parse_statement();
 
     result = new_ast2(SWITCH_KW, result, child1);
@@ -3781,7 +3799,7 @@ ast parse_statement() {
   } else if (tok == WHILE_KW) {
 
     get_tok();
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
     child1 = parse_statement();
 
     result = new_ast2(WHILE_KW, result, child1);
@@ -3791,7 +3809,7 @@ ast parse_statement() {
     get_tok();
     result = parse_statement();
     expect_tok(WHILE_KW);
-    child1 = parse_parenthesized_expression();
+    child1 = parse_parenthesized_expression(false);
     expect_tok(';');
 
     result = new_ast2(DO_KW, result, child1);
