@@ -3,7 +3,6 @@
 #include "sh-runtime.c"
 
 void handle_shell_include() {
-  FILE* shell_include_fp;
   int c;
   if (tok == STRING) {
     // Include pack_string and unpack_string functions
@@ -11,12 +10,12 @@ void handle_shell_include() {
     runtime_use_put_pstr = true;
     runtime_use_unpack_string = true;
     // Include the file as-is without any preprocessing
-    shell_include_fp = fopen_source_file(STRING_BUF(val), include_stack->dirname);
-    while ((c = fgetc(shell_include_fp)) != EOF) {
+    include_file(STRING_BUF(val), fp_dirname);
+    while ((c = fgetc(fp)) != EOF) {
       putchar(c);
     }
     putchar('\n');
-    fclose(shell_include_fp);
+    restore_include_context();
     get_tok_macro(); // Skip the string
   } else {
     putstr("tok="); putint(tok); putchar('\n');
