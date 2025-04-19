@@ -1838,6 +1838,12 @@ void begin_macro_expansion(int ident, int tokens, int args) {
   macro_args    = args;
 }
 
+// The macro_is_already_expanding function is buggy and has false positives in
+// the repl example. Disable it until we rework macro argument expansion as
+// described in https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html.
+#ifdef ALLOW_RECURSIVE_MACROS
+#define macro_is_already_expanding(ident) false
+#else
 // Search the macro stack to see if the macro is already expanding.
 bool macro_is_already_expanding(int ident) {
   int i = macro_stack_ix;
@@ -1851,6 +1857,7 @@ bool macro_is_already_expanding(int ident) {
   }
   return false;
 }
+#endif
 
 // Undoes the effect of get_tok by replacing the current token with the previous
 // token and saving the current token to be returned by the next call to get_tok.
