@@ -351,7 +351,6 @@ int characters_useds[16];       // Characters used in string literals. Bitfield,
 bool any_character_used = false; // If any character is used
 ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a function
 bool main_defined = false;      // If the main function is defined
-bool main_returns = false;      // If the main function returns a value
 bool top_level_stmt = true;     // If the current statement is at the top level
 
 // Internal identifier node types. These
@@ -2211,10 +2210,8 @@ void comp_glo_fun_decl(ast node) {
   // If the function is main
   if (name_probe == MAIN_ID) {
     main_defined = true;
-    // If main has parameters. If so, we'll prepare the argc/argv values in the prologue.
+    // If main has parameters, we'll prepare the argc/argv values in the epilogue.
     if (params != 0) runtime_use_make_argv = true;
-    // Check if main returns an exit code.
-    if (get_op(get_child_('(', fun_type, 0)) != VOID_KW) main_returns = true; // TODO: test this
   }
 
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
@@ -2516,8 +2513,6 @@ void prologue() {
 void epilogue() {
   int c;
 
-  text main_args = 0;
-
   if (any_character_used) {
     putstr("# Character constants\n");
     for(c = 0; c < 256; c += 1) {
@@ -2533,19 +2528,14 @@ void epilogue() {
   produce_runtime();
 
   if (main_defined) {
+    putstr("__code=0; # Exit code\n");
     if (runtime_use_make_argv) {
-      putstr("# Setup argc, argv\n");
-      putstr("__argc_for_main=$(($# + 1))\n");
-      putstr("make_argv $__argc_for_main \"$0\" \"$@\"; __argv_for_main=$__argv\n");
-      main_args = wrap_str_lit(" $__argc_for_main $__argv_for_main");
-    }
-
-    if (main_returns) {
-      putstr("__code=0; # Success exit code\n");
-      print_text(string_concat3(wrap_str_lit("_main __code"), main_args, wrap_str_lit("; exit $__code\n")));
+      putstr("make_argv $(($# + 1)) \"$0\" \"$@\" # Setup argc/argv\n");
+      putstr("_main __code $(($# + 1)) $__argv\n");
     } else {
-      print_text(string_concat3(wrap_str_lit("_main __"), main_args, wrap_char('\n')));
+      putstr("_main __code");
     }
+    putstr("\nexit $__code\n");
   }
 }
 

@@ -84,7 +84,8 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
-# Setup argc, argv
-__argc_for_main=$(($# + 1))
-make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv
-_main __ $__argc_for_main $__argv_for_main
+__code=0; # Exit code
+make_argv $(($# + 1)) "$0" "$@" # Setup argc/argv
+_main __code $(($# + 1)) $__argv
+
+exit $__code
