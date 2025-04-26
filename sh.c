@@ -364,6 +364,9 @@ enum IDENTIFIER_TYPE {
 #define IDENTIFIER_INTERNAL_PREALLOC_SIZE 10
 int preallocated_fresh_idents[IDENTIFIER_INTERNAL_PREALLOC_SIZE]; // 1 to 10
 
+#define IDENTIFIER_DOLLAR_PREALLOC_SIZE 10 // 1 to 10
+int preallocated_dollar_idents[IDENTIFIER_DOLLAR_PREALLOC_SIZE]; // 1 to 10
+
 void init_comp_context() {
   int i = 0;
   // Initialize characters_useds table
@@ -376,6 +379,13 @@ void init_comp_context() {
   i = 0;
   while (i < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
     preallocated_fresh_idents[i] = new_ast0(IDENTIFIER_INTERNAL, i);
+    i += 1;
+  }
+
+  // Initialize preallocated_dollar_idents
+  i = 0;
+  while (i < IDENTIFIER_DOLLAR_PREALLOC_SIZE) {
+    preallocated_dollar_idents[i] = new_ast0(IDENTIFIER_DOLLAR, i);
     i += 1;
   }
 }
@@ -542,6 +552,14 @@ text function_name(int ident_tok) {
   return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
 }
 
+ast new_dollar_ident(int ix) {
+  if (ix < IDENTIFIER_DOLLAR_PREALLOC_SIZE) {
+    return preallocated_dollar_idents[ix];
+  } else {
+    return new_ast0(IDENTIFIER_DOLLAR, ix);
+  }
+}
+
 ast new_fresh_ident(int ix) {
   if (ix < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
     return preallocated_fresh_idents[ix];
@@ -700,14 +718,14 @@ text restore_local_vars(int params_count) {
     // TODO: Constant param optimization
     // if (variable_is_constant_param(local_var)) continue;
     ident = new_ast0(IDENTIFIER, binding_ident(env));
-    res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
+    res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
     local_var_pos += 1;
     env = binding_next(env);
   }
 
   while (counter > 0) {
     ident = new_fresh_ident(fun_gensym_ix - counter + 1);
-    res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
+    res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
     local_var_pos += 1;
     counter -= 1;
   }
@@ -732,7 +750,7 @@ text let_params(int params) {
   while (params != 0) {
     // TODO: Constant param optimization
     ident = get_child__(DECL, IDENTIFIER, car_(DECL, params), 0);
-    res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str_lit("; "));
+    res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_dollar_ident(params_ix), false)), wrap_str_lit("; "));
     params = tail(params);
     params_ix += 1;
   }
@@ -2061,7 +2079,7 @@ bool comp_return(ast return_value) {
   // First we assign the return value...
   if (return_value != 0) {
     if (get_op(return_value) == '(') { // Check if function call
-      comp_fun_call(return_value, new_ast0(IDENTIFIER_DOLLAR, 1));
+      comp_fun_call(return_value, new_dollar_ident(1));
     } else {
       append_glo_decl(string_concat3(
         wrap_str_lit(": $(($1 = "),
@@ -2270,7 +2288,7 @@ void comp_glo_fun_decl(ast node) {
     var = car_(DECL, params);
     // TODO: Constant param optimization
     // Constant parameters don't need to be initialized
-    comp_assignment(get_child_(DECL, var, 0), new_ast0(IDENTIFIER_DOLLAR, params_ix));
+    comp_assignment(get_child_(DECL, var, 0), new_dollar_ident(params_ix));
     params = tail(params);
     params_ix += 1;
   }
