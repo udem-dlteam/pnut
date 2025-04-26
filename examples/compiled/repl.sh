@@ -1143,5 +1143,6 @@ _close() { # $2: fd
 # Local variables
 __=0
 
-__code=0; # Success exit code
-_main __code; exit $__code
+__code=0; # Exit code
+_main __code
+exit $__code
