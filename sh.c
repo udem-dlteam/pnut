@@ -353,12 +353,11 @@ ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a
 bool main_defined = false;      // If the main function is defined
 bool top_level_stmt = true;     // If the current statement is at the top level
 
-// Internal identifier node types. These
+// Internal identifier node types used by the compiler
 enum IDENTIFIER_TYPE {
-  IDENTIFIER_INTERNAL = 600,
-  IDENTIFIER_STRING,
-  IDENTIFIER_DOLLAR,
-  IDENTIFIER_EMPTY
+  IDENTIFIER_INTERNAL = 600,  // Temporary variable
+  IDENTIFIER_STRING,          // String literal variable
+  IDENTIFIER_DOLLAR           // $ variable
 };
 
 void init_comp_context() {
@@ -488,8 +487,6 @@ text format_special_var(ast ident, ast prefixed_with_dollar) {
         return string_concat3(wrap_str_lit("${"), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)), wrap_char('}'));
       }
     }
-  } else if (op == IDENTIFIER_EMPTY) {
-    return wrap_str_lit("__");
   } else {
     printf("op=%d %c", op, op);
     fatal_error("format_special_var: unknown identifier type");
@@ -1477,7 +1474,7 @@ text comp_lvalue(ast node) {
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_EMPTY || op == IDENTIFIER_DOLLAR) {
+  if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR) {
     return env_var(node);
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child_('[', node, 0), RVALUE_CTX_ARITH_EXPANSION);
@@ -1731,7 +1728,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   text res;
 
 #ifdef SH_AVOID_PRINTF_USE
-  if (get_op(assign_to) == IDENTIFIER_EMPTY) {
+  if (assign_to == 0) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && (param = list_singleton(params)) != 0
         && get_op(param) == STRING)) { // puts("..."), putstr("..."), printf("...")
@@ -1768,10 +1765,13 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
 
+  if (assign_to) res = comp_lvalue(assign_to);
+  else res = wrap_str_lit("__");
+
   return string_concat3(
     function_name(get_val_(IDENTIFIER, name)),
     wrap_char(' '),
-    concatenate_strings_with(comp_lvalue(assign_to), fun_call_params(params), wrap_char(' '))
+    concatenate_strings_with(res, fun_call_params(params), wrap_char(' '))
   );
 }
 
@@ -2158,7 +2158,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == RETURN_KW) {
     return comp_return(get_child_(RETURN_KW, node, 0));
   } else if (op == '(') { // six.call
-    comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); // Reuse IDENTIFIER_EMPTY ast?
+    comp_fun_call(node, 0);
     return false;
   } else if (op == '{') { // six.compound
     return comp_body(node, stmt_ctx);
