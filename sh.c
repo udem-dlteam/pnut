@@ -360,11 +360,22 @@ enum IDENTIFIER_TYPE {
   IDENTIFIER_DOLLAR           // $ variable
 };
 
+// Pre-allocated internal identifier nodes to reduce memory usage.
+#define IDENTIFIER_INTERNAL_PREALLOC_SIZE 10
+int preallocated_fresh_idents[IDENTIFIER_INTERNAL_PREALLOC_SIZE]; // 1 to 10
+
 void init_comp_context() {
   int i = 0;
   // Initialize characters_useds table
   while (i < 16) {
     characters_useds[i] = 0;
+    i += 1;
+  }
+
+  // Initialize preallocated_fresh_idents
+  i = 0;
+  while (i < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
+    preallocated_fresh_idents[i] = new_ast0(IDENTIFIER_INTERNAL, i);
     i += 1;
   }
 }
@@ -470,7 +481,7 @@ void print_glo_decls() {
 text format_special_var(ast ident, ast prefixed_with_dollar) {
   int op = get_op(ident);
   if (op == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str_lit("__t"), get_val_(IDENTIFIER_INTERNAL, ident));
+    return string_concat(wrap_str_lit("__t"), wrap_int(get_val_(IDENTIFIER_INTERNAL, ident)));
   } else if (op == IDENTIFIER_STRING) {
     return string_concat(wrap_str_lit("__str_"), get_val_(IDENTIFIER_STRING, ident));
   } else if (op == IDENTIFIER_DOLLAR) {
@@ -531,6 +542,14 @@ text function_name(int ident_tok) {
   return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
 }
 
+ast new_fresh_ident(int ix) {
+  if (ix < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
+    return preallocated_fresh_idents[ix];
+  } else {
+    return new_ast0(IDENTIFIER_INTERNAL, ix);
+  }
+}
+
 ast fresh_ident() {
   gensym_ix += 1;
   if (gensym_ix > fun_gensym_ix) {
@@ -539,7 +558,8 @@ ast fresh_ident() {
   if (gensym_ix > max_gensym_ix) {
     max_gensym_ix = gensym_ix;
   }
-  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
+
+  return new_fresh_ident(gensym_ix);
 }
 
 ast fresh_string_ident(int string_probe) {
@@ -640,7 +660,7 @@ text save_local_vars() {
   }
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    ident = new_fresh_ident(fun_gensym_ix - counter + 1);
     res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
     counter -= 1;
   }
@@ -686,7 +706,7 @@ text restore_local_vars(int params_count) {
   }
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
+    ident = new_fresh_ident(fun_gensym_ix - counter + 1);
     res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
     local_var_pos += 1;
     counter -= 1;
@@ -730,7 +750,7 @@ text save_local_vars() {
   int counter = fun_gensym_ix;
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    ident = new_fresh_ident(counter);
     res = concatenate_strings_with(string_concat(wrap_str_lit("let "), format_special_var(ident, true)), res, wrap_str_lit("; "));
     counter -= 1;
   }
@@ -765,7 +785,7 @@ text restore_local_vars(int params_count) {
   int counter = fun_gensym_ix;
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
     counter -= 1;
   }
@@ -2547,7 +2567,7 @@ void initialize_function_variables() {
   int counter = fun_gensym_ix;
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str_lit(" = "));
     counter -= 1;
   }
