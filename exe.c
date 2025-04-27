@@ -2279,6 +2279,15 @@ void add_params(ast params) {
   }
 }
 
+// Initialize the function entry in the forward jump table
+void init_forward_jump_table(int binding) {
+  def_label(init_next_lbl);
+  mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
+  mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
+  init_next_lbl = alloc_label("init_next");
+  jump(init_next_lbl);
+}
+
 void codegen_glo_fun_decl(ast node) {
   ast decl = get_child__(FUN_DECL, DECL, node, 0);
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
@@ -2326,6 +2335,9 @@ void codegen_glo_fun_decl(ast node) {
   cgc_fs = 0;
 
   ret();
+
+  // Register the function in the forward jump table during initialization
+  init_forward_jump_table(binding);
 
   cgc_locals_fun = save_locals_fun;
 }
@@ -2473,20 +2485,24 @@ int declare_builtin(char* name, bool variadic, ast return_type, ast params) {
 }
 
 void codegen_builtin() {
+  int binding;
 
   // exit function
   exit_lbl = declare_builtin("exit", false, void_type, list1(int_type));
   os_exit();
+  init_forward_jump_table(cgc_globals);
 
   // read function
   declare_builtin("read", false, int_type, list3(int_type, void_star_type, int_type));
   os_read();
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // write function
   declare_builtin("write", false, int_type, list3(int_type, void_star_type, int_type));
   os_write();
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // open function
   // Regarding the mode parameter, it is required if the flag allows the
@@ -2502,66 +2518,74 @@ void codegen_builtin() {
   mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
   os_open();
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // close function
   declare_builtin("close", false, int_type, list1(int_type));
+  binding = cgc_globals; // Save the binding for the forward jump table
 #ifndef NO_BUILTIN_LIBC
   // fclose is just like close because FILE * is just the file descriptor in the builtin libc
   declare_builtin("fclose", false, int_type, list1(int_type));
 #endif
   os_close();
   ret();
+  init_forward_jump_table(cgc_globals);
+  init_forward_jump_table(binding);
 
   // seek function
   declare_builtin("lseek", false, int_type, list3(int_type, int_type, int_type));
   os_seek();
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // unlink function
   declare_builtin("unlink", false, int_type, list1(string_type));
   os_unlink();
   ret();
+  init_forward_jump_table(cgc_globals);
 
 #ifndef NO_BUILTIN_LIBC
   // putchar function
   declare_builtin("putchar", false, void_type, list1(char_type));
   rt_putchar();
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // getchar function
   declare_builtin("getchar", false, char_type, 0);
   mov_reg_imm(reg_X, 0); // stdin
   rt_fgetc(reg_X);
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // fopen function
   declare_builtin("fopen", false, int_type, list2(string_type, string_type));
   rt_fopen();
   ret();
-
-  // fgetc function
-  declare_builtin("fclose", false, int_type, list1(int_type));
-  rt_fgetc(reg_X);
-  ret();
+  init_forward_jump_table(cgc_globals);
 
   // fgetc function
   declare_builtin("fgetc", false, int_type, list1(int_type));
   rt_fgetc(reg_X);
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // malloc function
   declare_builtin("malloc", false, void_star_type, list1(int_type));
   rt_malloc();
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // free function (no-op)
   declare_builtin("free", false, void_type, list1(void_star_type));
   ret();
+  init_forward_jump_table(cgc_globals);
 
   // printf function stub
   declare_builtin("printf", true, int_type, list1(string_type));
   rt_crash("printf is not supported yet.");
   ret();
+  init_forward_jump_table(cgc_globals);
 #endif
 }
 
@@ -2585,11 +2609,14 @@ void codegen_begin() {
 
   jump(setup_lbl);
 
-  main_lbl = alloc_label("main");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
-
   codegen_builtin();
 
+  def_label(init_next_lbl);
+  init_next_lbl = alloc_label("init_next");
+
+  main_lbl = alloc_label("main");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
+  init_forward_jump_table(cgc_globals);
 }
 
 void codegen_end() {
