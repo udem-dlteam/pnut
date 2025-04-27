@@ -326,7 +326,7 @@ void setup_proc_args(int global_vars_size);
 int setup_lbl;
 int init_start_lbl;
 int init_next_lbl;
-int main_lbl;
+int main_lbl = 0;
 int exit_lbl;
 
 int word_size_align(int n) {
@@ -2292,6 +2292,11 @@ void add_params(ast params) {
 // Initialize the function entry in the forward jump table
 void init_forward_jump_table(int binding) {
   def_label(init_next_lbl);
+#ifdef SAFE_MODE
+  if (!is_label_defined(fun_binding_lbl(binding))) {
+    fatal_error("init_forward_jump_table: function not found");
+  }
+#endif
   mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
   mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
   init_next_lbl = alloc_label("init_next");
@@ -2312,12 +2317,6 @@ void codegen_glo_fun_decl(ast node) {
     fatal_error("Returning arrays or structs from function not supported");
   }
 
-  // If the function is main
-  if (name_probe == MAIN_ID) {
-    // Check if main returns an exit code.
-    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
-  }
-
   binding = cgc_lookup_fun(name_probe, cgc_globals);
 
   if (binding == 0) {
@@ -2325,7 +2324,14 @@ void codegen_glo_fun_decl(ast node) {
     binding = cgc_globals;
   }
 
-  def_label(heap[binding+4]);
+  // If the function is main
+  if (name_probe == MAIN_ID) {
+    main_lbl = fun_binding_lbl(binding);
+    // Check if main returns an exit code.
+    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
+  }
+
+  def_label(fun_binding_lbl(binding));
 
   // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
   //   rt_debug(fp_filepath);
@@ -2620,13 +2626,6 @@ void codegen_begin() {
   jump(setup_lbl);
 
   codegen_builtin();
-
-  def_label(init_next_lbl);
-  init_next_lbl = alloc_label("init_next");
-
-  main_lbl = alloc_label("main");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
-  init_forward_jump_table(cgc_globals);
 }
 
 void codegen_end() {
@@ -2655,6 +2654,9 @@ void codegen_end() {
 
   def_label(init_next_lbl);
   setup_proc_args(0);
+#ifdef SAFE_MODE
+  if (!main_lbl) fatal_error("main function not found");
+#endif
   call(main_lbl);
   if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main
