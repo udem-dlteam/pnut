@@ -414,6 +414,10 @@ int alloc_goto_label() {
   return lbl;
 }
 
+bool is_label_defined(int lbl) {
+  return heap[lbl + 1] < 0;
+}
+
 void use_label(int lbl) {
 
   int addr = heap[lbl + 1];
@@ -1185,9 +1189,14 @@ void codegen_call(ast node) {
   nb_params = codegen_params(params);
 #endif
 
+  // Generate a fast path for direct calls for which the address is known (i.e. the function was defined earlier)
   if (binding != 0) {
-    // Generate a fast path for direct calls
-    call(heap[binding+4]);
+    if (is_label_defined(binding)) {
+      call(heap[binding+4]);
+    } else {
+      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+      call_reg(reg_X);
+    }
   } else {
     // Otherwise we go through the function pointer
     codegen_rvalue(fun);
@@ -2654,4 +2663,8 @@ void codegen_end() {
   assert_all_labels_defined();
 
   generate_exe();
+
+#ifdef PRINT_MEMORY_STATS
+  printf("\n# string_pool_alloc=%d heap_alloc=%d code_alloc=%d\n", string_pool_alloc, heap_alloc, code_alloc);
+#endif
 }
