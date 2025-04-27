@@ -141,28 +141,123 @@ typedef int FILE;
 
 #endif
 
+// State for the reader
+//  - fp: current file pointer
+//  - fp_filepath: path of the current file being read, used for error messages.
+//  - fp_dirname: directory of the current file, used to resolve relative paths.
+//  - include_search_path: search path for system include files.
+//  - output_fd: the output file descriptor (1 = stdout), used by pnut-exe
+//  - line_number: line number of the current file, used for error messages.
+//  - column_number: column number of the current file, used for error messages.
+//  - last_tok_line_number: line number of the last token read, used for error messages.
+//  - last_tok_column_number: column number of the last token read, used for error messages.
+//  - include_stack: the stack to save the state of the reader when including a file.
+
+FILE *fp = 0; // Current file pointer that's being read
+char* fp_filepath = 0; // The path of the current file being read
+char *fp_dirname = 0; // The directory of the current file being read
+char* include_search_path = 0; // Search path for include files
+int output_fd = 1; // Output file descriptor (1 = stdout)
+
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
 int line_number = 1;
 int column_number = 0;
 int last_tok_line_number = 1;
 int last_tok_column_number = 0;
+#define INCLUDE_ENTRY_SIZE 5
+#else
+#define INCLUDE_ENTRY_SIZE 3
 #endif
 
-struct IncludeStack {
-  FILE* fp;
-  struct IncludeStack *next;
-  char *dirname;  // The base path of the file, used to resolve relative paths
-  char *filepath; // The path of the file, used to print error messages
+#define INCLUDE_STACK_DEPTH 10
+
+intptr_t include_stack[INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE];
+int include_stack_top = 0; // Point to top of the stack, i.e. the next free entry
+
+void putstr(char *str) {
+  while (*str) {
+    putchar(*str);
+    str += 1;
+  }
+}
+
+void putint_aux(int n) {
+  if (n <= -10) putint_aux(n / 10);
+  putchar('0' - (n % 10));
+}
+
+void putint(int n) {
+  if (n < 0) {
+    putchar('-');
+    putint_aux(n);
+  } else {
+    putint_aux(-n);
+  }
+}
+
+void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  int line_number;
-  int column_number;
+  if (fp_filepath != 0) {
+    putstr(fp_filepath); putchar(':');
+    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+    putstr("  "); putstr(msg); putchar('\n');
+  } else {
+    putstr(msg); putchar('\n');
+  }
+#else
+  putstr(msg); putchar('\n');
 #endif
-};
-struct IncludeStack *include_stack, *include_stack2;
-FILE *fp = 0; // Current file pointer that's being read
-char* fp_filepath = 0; // The path of the current file being read
-char* include_search_path = 0; // Search path for include files
-int output_fd = 1; // Output file descriptor (1 = stdout)
+  exit(1);
+}
+
+void syntax_error(char *msg) {
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  if (fp_filepath != 0) {
+    putstr(fp_filepath); putchar(':');
+    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+    putstr("  syntax error: "); putstr(msg); putchar('\n');
+  }
+#else
+  putstr("syntax error: "); putstr(msg); putchar('\n');
+#endif
+  exit(1);
+}
+
+// Before including a file, we save the state of the reader to the include stack.
+// This allows us to restore the previous file pointer and file name when we finish including the file.
+void save_include_context() {
+  if (include_stack_top >= INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE) fatal_error("Include stack overflow");
+
+  if (fp != 0) {
+    include_stack[include_stack_top]     = (intptr_t)fp;
+    include_stack[include_stack_top + 1] = (intptr_t)fp_filepath;
+    include_stack[include_stack_top + 2] = (intptr_t)fp_dirname;
+
+  #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+    // Save the line and column number of the current file
+    include_stack[include_stack_top + 3] = line_number;
+    include_stack[include_stack_top + 4] = column_number;
+  #endif
+    include_stack_top += INCLUDE_ENTRY_SIZE;
+  }
+}
+
+void restore_include_context() {
+  if (include_stack_top == 0) fatal_error("Include stack is empty");
+
+  fclose(fp);
+  free(fp_dirname);
+  // We skip freeing the filepath because it may belong to the string pool
+
+  include_stack_top -= INCLUDE_ENTRY_SIZE;
+  fp          = (FILE *) include_stack[include_stack_top];
+  fp_filepath = (char*)  include_stack[include_stack_top + 1];
+  fp_dirname  = (char*)  include_stack[include_stack_top + 2];
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  line_number   = include_stack[include_stack_top + 3];
+  column_number = include_stack[include_stack_top + 4];
+#endif
+}
 
 // Tokens and AST nodes
 enum {
@@ -257,53 +352,6 @@ enum {
 
   LIST = 600, // List object
 };
-
-void putstr(char *str) {
-  while (*str) {
-    putchar(*str);
-    str += 1;
-  }
-}
-
-void putint_aux(int n) {
-  if (n <= -10) putint_aux(n / 10);
-  putchar('0' - (n % 10));
-}
-
-void putint(int n) {
-  if (n < 0) {
-    putchar('-');
-    putint_aux(n);
-  } else {
-    putint_aux(-n);
-  }
-}
-
-void fatal_error(char *msg) {
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (include_stack != 0) {
-    putstr(include_stack->filepath); putchar(':');
-    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-    putstr("  "); putstr(msg); putchar('\n');
-  } else {
-    putstr(msg); putchar('\n');
-  }
-#else
-  putstr(msg); putchar('\n');
-#endif
-  exit(1);
-}
-
-void syntax_error(char *msg) {
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  putstr(include_stack->filepath); putchar(':');
-  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-  putstr("  syntax error: "); putstr(msg); putchar('\n');
-#else
-  putstr("syntax error: "); putstr(msg); putchar('\n');
-#endif
-  exit(1);
-}
 
 // tokenizer
 
@@ -831,19 +879,8 @@ void get_ch() {
 
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
-    if (include_stack->next != 0) {
-      fclose(include_stack->fp);
-      include_stack2 = include_stack;
-      include_stack = include_stack->next;
-      fp = include_stack->fp;
-      fp_filepath = include_stack->filepath;
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-      line_number = include_stack->line_number;
-      column_number = include_stack->column_number;
-#endif
-      // Not freeing include_stack2->filepath because it may not be dynamically allocated
-      free(include_stack2->dirname);
-      free(include_stack2);
+    if (include_stack_top != 0) {
+      restore_include_context();
       // EOF is treated as a newline so that files without a newline at the end are still parsed correctly
       // On the next get_ch call, the first character of the next file will be read
       ch = '\n';
@@ -927,8 +964,8 @@ char *file_parent_directory(char *path) {
   return path;
 }
 
-FILE *fopen_source_file(char *file_name, char *relative_to) {
-  FILE *fp;
+void include_file(char *file_name, char *relative_to) {
+  save_include_context();
   fp_filepath = file_name;
   if (relative_to) {
     fp_filepath = str_concat(relative_to, fp_filepath);
@@ -938,28 +975,12 @@ FILE *fopen_source_file(char *file_name, char *relative_to) {
     putstr(fp_filepath); putchar('\n');
     fatal_error("Could not open file");
   }
-  return fp;
-}
 
-void include_file(char *file_name, char *relative_to) {
-  fp = fopen_source_file(file_name, relative_to);
-  include_stack2 = malloc(sizeof(struct IncludeStack));
-  include_stack2->next = include_stack;
-  include_stack2->fp = fp;
-  include_stack2->dirname = file_parent_directory(fp_filepath);
-  include_stack2->filepath = fp_filepath;
+  fp_dirname = file_parent_directory(fp_filepath);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  include_stack2->line_number = 1;
-  include_stack2->column_number = 0;
-  // Save the current file position so we can return to it after the included file is done
-  if (include_stack != 0) {
-    include_stack->line_number = line_number;
-    include_stack->column_number = column_number;
-  }
   line_number = 1;
-  column_number = 1;
+  column_number = 0;
 #endif
-  include_stack = include_stack2;
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -1419,7 +1440,7 @@ int evaluate_if_condition() {
 
 void handle_include() {
   if (tok == STRING) {
-    include_file(STRING_BUF(val), include_stack->dirname);
+    include_file(STRING_BUF(val), fp_dirname);
 #ifdef DEBUG_EXPAND_INCLUDES
     // When running pnut in "expand includes" mode, we want to annotate the
     // #include directives that were expanded with a comment so we can remove
@@ -1457,7 +1478,7 @@ void handle_preprocessor_directive() {
   if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
     temp = val;
     get_tok_macro(); // Get the macro name
-      push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
+    push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
     get_tok_macro(); // Skip the macro name
   } else if (tok == IF_KW) {
     temp = evaluate_if_condition() != 0;
@@ -1479,7 +1500,7 @@ void handle_preprocessor_directive() {
     }
     get_tok_macro(); // Skip the else keyword
   } else if (tok == IDENTIFIER && val == ENDIF_ID) {
-      pop_if_macro_mask();
+    pop_if_macro_mask();
     get_tok_macro(); // Skip the else keyword
   } else if (if_macro_mask) {
     if (tok == IDENTIFIER && val == INCLUDE_ID) {
@@ -2492,7 +2513,7 @@ void parse_error_internal(char * msg, int token, char * file, int line) {
   //Error header
   putstr(ANSI_RED"Error occurred while parsing ");
   putstr(ANSI_GREEN"\"");
-  putstr(include_stack->filepath);
+  putstr(fp_filepath);
   putstr("\""ANSI_RESET"\n");
 
   //Error message
@@ -2507,7 +2528,7 @@ void parse_error_internal(char * msg, int token, char * file, int line) {
 
   //Error location
   putstr("  Location: "ANSI_GREEN);
-  putstr(include_stack->filepath);
+  putstr(fp_filepath);
   putchar(':');
   putint(last_tok_line_number);
   putchar(':');
