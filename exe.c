@@ -1664,77 +1664,6 @@ void codegen_rvalue(ast node) {
   grow_fs(1);
 }
 
-void codegen_begin() {
-
-  setup_lbl = alloc_label("setup");
-  init_start_lbl = alloc_label("init_start");
-  init_next_lbl = init_start_lbl;
-
-  // Make room for heap start and malloc bump pointer.
-  // reg_glo[0]: heap start
-  // reg_glo[WORD_SIZE]: malloc bump pointer
-  cgc_global_alloc += 2 * WORD_SIZE;
-
-  int_type = new_ast0(INT_KW, 0);
-  uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
-  char_type = new_ast0(CHAR_KW, 0);
-  string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
-  void_type = new_ast0(VOID_KW, 0);
-  void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
-
-  main_lbl = alloc_label("main");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
-
-  exit_lbl = alloc_label("exit");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
-
-  read_lbl = alloc_label("read");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  write_lbl = alloc_label("write");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  open_lbl = alloc_label("open");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
-
-  close_lbl = alloc_label("close");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
-
-  seek_lbl = alloc_label("lseek");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), seek_lbl, function_type3(int_type, int_type, int_type, int_type));
-
-  unlink_lbl = alloc_label("unlink");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
-
-#ifndef NO_BUILTIN_LIBC
-  putchar_lbl = alloc_label("putchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
-
-  getchar_lbl = alloc_label("getchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
-
-  fopen_lbl = alloc_label("fopen");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
-
-  fclose_lbl = alloc_label("fclose");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, function_type1(int_type, int_type));
-
-  fgetc_lbl = alloc_label("fgetc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, function_type1(int_type, int_type));
-
-  malloc_lbl = alloc_label("malloc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, function_type1(void_star_type, int_type));
-
-  free_lbl = alloc_label("free");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
-
-  printf_lbl = alloc_label("printf");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
-#endif
-
-  jump(setup_lbl);
-}
-
 void handle_enum_struct_union_type_decl(ast type);
 
 void codegen_enum(ast node) {
@@ -2530,6 +2459,77 @@ void rt_malloc() {
 }
 
 #endif
+
+void codegen_begin() {
+
+  setup_lbl = alloc_label("setup");
+  init_start_lbl = alloc_label("init_start");
+  init_next_lbl = init_start_lbl;
+
+  // Make room for heap start and malloc bump pointer.
+  // reg_glo[0]: heap start
+  // reg_glo[WORD_SIZE]: malloc bump pointer
+  cgc_global_alloc += 2 * WORD_SIZE;
+
+  int_type = new_ast0(INT_KW, 0);
+  uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+  char_type = new_ast0(CHAR_KW, 0);
+  string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
+  void_type = new_ast0(VOID_KW, 0);
+  void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
+
+  main_lbl = alloc_label("main");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
+
+  exit_lbl = alloc_label("exit");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
+
+  read_lbl = alloc_label("read");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
+
+  write_lbl = alloc_label("write");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
+
+  open_lbl = alloc_label("open");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
+
+  close_lbl = alloc_label("close");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
+
+  seek_lbl = alloc_label("lseek");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), seek_lbl, function_type3(int_type, int_type, int_type, int_type));
+
+  unlink_lbl = alloc_label("unlink");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
+
+#ifndef NO_BUILTIN_LIBC
+  putchar_lbl = alloc_label("putchar");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
+
+  getchar_lbl = alloc_label("getchar");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
+
+  fopen_lbl = alloc_label("fopen");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
+
+  fclose_lbl = alloc_label("fclose");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, function_type1(int_type, int_type));
+
+  fgetc_lbl = alloc_label("fgetc");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, function_type1(int_type, int_type));
+
+  malloc_lbl = alloc_label("malloc");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, function_type1(void_star_type, int_type));
+
+  free_lbl = alloc_label("free");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
+
+  printf_lbl = alloc_label("printf");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
+#endif
+
+  jump(setup_lbl);
+}
 
 void codegen_end() {
   def_label(setup_lbl);
