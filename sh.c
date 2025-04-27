@@ -353,19 +353,39 @@ ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a
 bool main_defined = false;      // If the main function is defined
 bool top_level_stmt = true;     // If the current statement is at the top level
 
-// Internal identifier node types. These
+// Internal identifier node types used by the compiler
 enum IDENTIFIER_TYPE {
-  IDENTIFIER_INTERNAL = 600,
-  IDENTIFIER_STRING,
-  IDENTIFIER_DOLLAR,
-  IDENTIFIER_EMPTY
+  IDENTIFIER_INTERNAL = 600,  // Temporary variable
+  IDENTIFIER_STRING,          // String literal variable
+  IDENTIFIER_DOLLAR           // $ variable
 };
+
+// Pre-allocated internal identifier nodes to reduce memory usage.
+#define IDENTIFIER_INTERNAL_PREALLOC_SIZE 10
+int preallocated_fresh_idents[IDENTIFIER_INTERNAL_PREALLOC_SIZE]; // 1 to 10
+
+#define IDENTIFIER_DOLLAR_PREALLOC_SIZE 10 // 1 to 10
+int preallocated_dollar_idents[IDENTIFIER_DOLLAR_PREALLOC_SIZE]; // 1 to 10
 
 void init_comp_context() {
   int i = 0;
   // Initialize characters_useds table
   while (i < 16) {
     characters_useds[i] = 0;
+    i += 1;
+  }
+
+  // Initialize preallocated_fresh_idents
+  i = 0;
+  while (i < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
+    preallocated_fresh_idents[i] = new_ast0(IDENTIFIER_INTERNAL, i);
+    i += 1;
+  }
+
+  // Initialize preallocated_dollar_idents
+  i = 0;
+  while (i < IDENTIFIER_DOLLAR_PREALLOC_SIZE) {
+    preallocated_dollar_idents[i] = new_ast0(IDENTIFIER_DOLLAR, i);
     i += 1;
   }
 }
@@ -465,35 +485,61 @@ void print_glo_decls() {
 // Environment tracking
 #include "env.c"
 
+#define INTERNAL_VAR_FORMAT(x) string_concat(wrap_str_lit("__t"), wrap_int(x))
+#define STRING_VAR_FORMAT(x)   string_concat(wrap_str_lit("__str_"), wrap_int(x))
+
 // Similar to env_var, but doesn't use the local environment and assumes that the
 // identifier is internal or global. This is faster than env_var when we know that
 // the variable is not local.
 text format_special_var(ast ident, ast prefixed_with_dollar) {
-  int op = get_op(ident);
-  if (op == IDENTIFIER_INTERNAL) {
-    return string_concat(wrap_str_lit("__t"), get_val_(IDENTIFIER_INTERNAL, ident));
-  } else if (op == IDENTIFIER_STRING) {
-    return string_concat(wrap_str_lit("__str_"), get_val_(IDENTIFIER_STRING, ident));
-  } else if (op == IDENTIFIER_DOLLAR) {
-    if (prefixed_with_dollar) {
-      if (get_val_(IDENTIFIER_DOLLAR, ident) <= 9) {
-        return wrap_int(get_val_(IDENTIFIER_DOLLAR, ident));
+  int i;
+  switch (get_op(ident)) {
+    case IDENTIFIER_INTERNAL:
+      return INTERNAL_VAR_FORMAT(get_val_(IDENTIFIER_INTERNAL, ident));
+    case IDENTIFIER_STRING:
+      return STRING_VAR_FORMAT(get_val_(IDENTIFIER_STRING, ident));
+    case IDENTIFIER_DOLLAR:
+      i = get_val_(IDENTIFIER_DOLLAR, ident);
+      if (prefixed_with_dollar) {
+          if (i <= 9) {
+            return wrap_int(i);
+        } else {
+            return string_concat3(wrap_char('{'), wrap_int(i), wrap_char('}'));
+        }
       } else {
-        return string_concat3(wrap_char('{'), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)), wrap_char('}'));
+          if (i <= 9) {
+            return string_concat(wrap_char('$'), wrap_int(i));
+        } else {
+            return string_concat3(wrap_str_lit("${"), wrap_int(i), wrap_char('}'));
+        }
       }
-    } else {
-      if (get_val_(IDENTIFIER_DOLLAR, ident) <= 9) {
-        return string_concat(wrap_char('$'), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)));
-      } else {
-        return string_concat3(wrap_str_lit("${"), wrap_int(get_val_(IDENTIFIER_DOLLAR, ident)), wrap_char('}'));
-      }
-    }
-  } else if (op == IDENTIFIER_EMPTY) {
-    return wrap_str_lit("__");
+    default:
+      fatal_error("format_special_var: unknown identifier type");
+      return 0;
+  }
+}
+
+text global_var(int ident_probe) {
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_probe));
+}
+
+text local_var(int ident_probe) {
+  if (ident_probe == ARGV_ID) {
+    return wrap_str_lit("argv_");
   } else {
-    printf("op=%d %c", op, op);
-    fatal_error("format_special_var: unknown identifier type");
-    return 0;
+    return wrap_str_pool(ident_probe);
+  }
+}
+
+text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
+  if (get_op(ident) == IDENTIFIER) {
+    if (cgc_lookup_var(get_val_(IDENTIFIER, ident), cgc_locals)) {
+      return local_var(get_val_(IDENTIFIER, ident));
+    } else {
+      return global_var(get_val_(IDENTIFIER, ident));
+    }
+  } else {
+    return format_special_var(ident, prefixed_with_dollar);
   }
 }
 
@@ -505,33 +551,24 @@ text struct_sizeof_var(ast struct_name_ident) {
   return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(get_val_(IDENTIFIER, struct_name_ident)));
 }
 
-text global_var(ast ident) {
-  return string_concat(wrap_char('_'), wrap_str_pool(ident));
+text function_name(int ident_tok) {
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
 }
 
-text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
-  if (get_op(ident) == IDENTIFIER) {
-    if (cgc_lookup_var(get_val_(IDENTIFIER, ident), cgc_locals)) {
-      // TODO: Constant param optimization
-      if (get_val_(IDENTIFIER, ident) == ARGV_ID) {
-        return wrap_str_lit("argv_");
-      } else {
-        return wrap_str_pool(get_val_(IDENTIFIER, ident));
-      }
-    } else {
-      return global_var(get_val_(IDENTIFIER, ident));
-    }
+ast new_dollar_ident(int ix) {
+  if (ix < IDENTIFIER_DOLLAR_PREALLOC_SIZE) {
+    return preallocated_dollar_idents[ix];
   } else {
-    return format_special_var(ident, prefixed_with_dollar);
+    return new_ast0(IDENTIFIER_DOLLAR, ix);
   }
 }
 
-text env_var(ast ident) {
-  return env_var_with_prefix(ident, false);
-}
-
-text function_name(int ident_tok) {
-  return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
+ast new_fresh_ident(int ix) {
+  if (ix < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
+    return preallocated_fresh_idents[ix];
+  } else {
+    return new_ast0(IDENTIFIER_INTERNAL, ix);
+  }
 }
 
 ast fresh_ident() {
@@ -542,7 +579,8 @@ ast fresh_ident() {
   if (gensym_ix > max_gensym_ix) {
     max_gensym_ix = gensym_ix;
   }
-  return new_ast0(IDENTIFIER_INTERNAL, wrap_int(gensym_ix));
+
+  return new_fresh_ident(gensym_ix);
 }
 
 ast fresh_string_ident(int string_probe) {
@@ -553,7 +591,7 @@ ast fresh_string_ident(int string_probe) {
     string_counter += 1;
     heap[string_probe + 3] = string_counter - 1;
   }
-  return new_ast0(IDENTIFIER_STRING, wrap_int(heap[string_probe + 3]));
+  return new_ast0(IDENTIFIER_STRING, heap[string_probe + 3]);
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
@@ -635,16 +673,13 @@ text save_local_vars() {
   int counter = fun_gensym_ix;
 
   while (env != 0) {
-    // TODO: Constant param optimization
-    // if (variable_is_constant_param(local_var)) continue;
-    ident = new_ast0(IDENTIFIER, binding_ident(env));
-    res = concatenate_strings_with(string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), res, wrap_char(' '));
+    ident = binding_ident(env);
+    res = concatenate_strings_with(string_concat(wrap_char('$'), local_var(ident)), res, wrap_char(' '));
     env = binding_next(env);
   }
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
-    res = concatenate_strings_with(res, string_concat(wrap_char('$'), env_var_with_prefix(ident, true)), wrap_char(' '));
+    res = concatenate_strings_with(res, string_concat(wrap_char('$'), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1)), wrap_char(' '));
     counter -= 1;
   }
 
@@ -672,25 +707,19 @@ text restore_local_vars(int params_count) {
   while (env != 0) {
     env_non_cst_size += 1;
     env = binding_next(env);
-
-    // TODO: Constant param optimization
-    // if(variable_is_constant_param(local_var)) continue;
   }
 
   env = cgc_locals_fun;
 
   while (env != 0) {
-    // TODO: Constant param optimization
-    // if (variable_is_constant_param(local_var)) continue;
-    ident = new_ast0(IDENTIFIER, binding_ident(env));
-    res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
+    ident = binding_ident(env);
+    res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), local_var(ident), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
     local_var_pos += 1;
     env = binding_next(env);
   }
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(fun_gensym_ix - counter + 1));
-    res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), env_var_with_prefix(ident, true), wrap_str_lit(" = $"), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
+    res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
     local_var_pos += 1;
     counter -= 1;
   }
@@ -713,9 +742,8 @@ text let_params(int params) {
   int params_ix = 2;
 
   while (params != 0) {
-    // TODO: Constant param optimization
-    ident = get_child__(DECL, IDENTIFIER, car_(DECL, params), 0);
-    res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), env_var_with_prefix(ident, false), wrap_char(' '), format_special_var(new_ast0(IDENTIFIER_DOLLAR, params_ix), false)), wrap_str_lit("; "));
+    ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, car_(DECL, params), 0));
+    res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), local_var(ident), wrap_char(' '), format_special_var(new_dollar_ident(params_ix), false)), wrap_str_lit("; "));
     params = tail(params);
     params_ix += 1;
   }
@@ -733,7 +761,7 @@ text save_local_vars() {
   int counter = fun_gensym_ix;
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    ident = new_fresh_ident(counter);
     res = concatenate_strings_with(string_concat(wrap_str_lit("let "), format_special_var(ident, true)), res, wrap_str_lit("; "));
     counter -= 1;
   }
@@ -742,13 +770,9 @@ text save_local_vars() {
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
     if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
 #else
-    // TODO: Constant param optimization
-    // Constant function parameters are assigned to $1, $2, ... and don't need to be saved
-    if (true)
-    // if (!variable_is_constant_param(local_var)) {
 #endif
-      ident = new_ast0(IDENTIFIER, binding_ident(env));
-      res = concatenate_strings_with(string_concat(wrap_str_lit("let "), env_var_with_prefix(ident, true)), res, wrap_str_lit("; "));
+      ident = binding_ident(env);
+      res = concatenate_strings_with(string_concat(wrap_str_lit("let "), local_var(ident)), res, wrap_str_lit("; "));
     }
 
     env = binding_next(env);
@@ -768,18 +792,14 @@ text restore_local_vars(int params_count) {
   int counter = fun_gensym_ix;
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
     counter -= 1;
   }
 
   while (env != 0) {
-    // Constant function parameters are assigned to $1, $2, ... and don't need to be saved
-    // TODO: Constant param optimization
-    // if (!variable_is_constant_param(local_var)) {
-      ident = new_ast0(IDENTIFIER, binding_ident(env));
-      res = concatenate_strings_with(res, env_var(ident), wrap_char(' '));
-    // }
+    ident = binding_ident(env);
+    res = concatenate_strings_with(res, local_var(ident), wrap_char(' '));
 
     env = binding_next(env);
   }
@@ -1073,7 +1093,7 @@ void comp_defstr(ast ident, int string_probe, int array_size) {
   }
 
   append_glo_decl(string_concat4( wrap_str_lit("defstr ")
-                                , env_var(ident)
+                                , env_var_with_prefix(ident, false)
                                 , string_concat3( wrap_str_lit(" \"")
                                                 , escape_text(wrap_str_imm(string_start, string_end), false)
                                                 , wrap_char('\"')
@@ -1477,8 +1497,8 @@ text comp_lvalue(ast node) {
   text sub1;
   text sub2;
 
-  if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_EMPTY || op == IDENTIFIER_DOLLAR) {
-    return env_var(node);
+  if (op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR) {
+    return env_var_with_prefix(node, false);
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child_('[', node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = comp_rvalue(get_child_('[', node, 1), RVALUE_CTX_ARITH_EXPANSION);
@@ -1731,7 +1751,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   text res;
 
 #ifdef SH_AVOID_PRINTF_USE
-  if (get_op(assign_to) == IDENTIFIER_EMPTY) {
+  if (assign_to == 0) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && (param = list_singleton(params)) != 0
         && get_op(param) == STRING)) { // puts("..."), putstr("..."), printf("...")
@@ -1768,10 +1788,13 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
 
+  if (assign_to) res = comp_lvalue(assign_to);
+  else res = wrap_str_lit("__");
+
   return string_concat3(
     function_name(get_val_(IDENTIFIER, name)),
     wrap_char(' '),
-    concatenate_strings_with(comp_lvalue(assign_to), fun_call_params(params), wrap_char(' '))
+    concatenate_strings_with(res, fun_call_params(params), wrap_char(' '))
   );
 }
 
@@ -2041,7 +2064,7 @@ bool comp_return(ast return_value) {
   // First we assign the return value...
   if (return_value != 0) {
     if (get_op(return_value) == '(') { // Check if function call
-      comp_fun_call(return_value, new_ast0(IDENTIFIER_DOLLAR, 1));
+      comp_fun_call(return_value, new_dollar_ident(1));
     } else {
       append_glo_decl(string_concat3(
         wrap_str_lit(": $(($1 = "),
@@ -2098,11 +2121,6 @@ void comp_var_decls(ast node) {
     if (get_child_(DECL, var_decl, 2) != 0) { // Initializer
       comp_assignment(get_child__(DECL, IDENTIFIER, var_decl, 0), get_child_(DECL, var_decl, 2));
     }
-#ifdef INITIALIZE_LOCAL_VARS_WITH_ZERO
-    else {
-      comp_assignment(new_ast0(IDENTIFIER, get_child__(DECL, IDENTIFIER, var, 0)), new_ast0(INTEGER, 0));
-    }
-#endif
     node = tail(node); // Next variable
   }
 }
@@ -2158,7 +2176,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == RETURN_KW) {
     return comp_return(get_child_(RETURN_KW, node, 0));
   } else if (op == '(') { // six.call
-    comp_fun_call(node, new_ast0(IDENTIFIER_EMPTY, 0)); // Reuse IDENTIFIER_EMPTY ast?
+    comp_fun_call(node, 0);
     return false;
   } else if (op == '{') { // six.compound
     return comp_body(node, stmt_ctx);
@@ -2248,9 +2266,7 @@ void comp_glo_fun_decl(ast node) {
   params_ix = 2;
   while (params != 0) {
     var = car_(DECL, params);
-    // TODO: Constant param optimization
-    // Constant parameters don't need to be initialized
-    comp_assignment(get_child_(DECL, var, 0), new_ast0(IDENTIFIER_DOLLAR, params_ix));
+    comp_assignment(get_child_(DECL, var, 0), new_dollar_ident(params_ix));
     params = tail(params);
     params_ix += 1;
   }
@@ -2334,7 +2350,7 @@ void comp_glo_var_decl(ast node) {
         concatenate_strings_with(
           string_concat4(
             wrap_str_lit("defarr "),
-            env_var(name),
+            global_var(get_val_(IDENTIFIER, name)),
             wrap_char(' '),
             wrap_int(arr_len)),
           args,
@@ -2347,7 +2363,7 @@ void comp_glo_var_decl(ast node) {
     append_glo_decl(
       string_concat4(
         wrap_str_lit("defglo "),
-        env_var(name),
+        global_var(get_val_(IDENTIFIER, name)),
         wrap_char(' '),
         comp_rvalue(init, VALUE_CTX_BASE)
       )
@@ -2376,7 +2392,7 @@ void comp_enum_cases(ast ident, ast cases) {
 
   while (cases != 0) {
     cas = car_('=', cases);
-    comp_assignment_constant(env_var(get_child__('=', IDENTIFIER, cas, 0)), get_child_('=', cas, 1));
+    comp_assignment_constant(global_var(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0))), get_child_('=', cas, 1));
     cases = tail(cases);
   }
 }
@@ -2547,18 +2563,15 @@ void initialize_function_variables() {
   int counter = fun_gensym_ix;
 
   while (counter > 0) {
-    ident = new_ast0(IDENTIFIER_INTERNAL, wrap_int(counter));
+    ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str_lit(" = "));
     counter -= 1;
   }
 
   while (env != 0) {
-    ident = new_ast0(IDENTIFIER, binding_ident(env));
+    ident = binding_ident(env);
 
-    // TODO: Constant param optimization
-    // if (!variable_is_constant_param(local_var)) {
-      res = concatenate_strings_with(res, env_var(ident), wrap_str_lit(" = "));
-    // }
+    res = concatenate_strings_with(res, local_var(ident), wrap_str_lit(" = "));
     env = binding_next(env);
   }
 
