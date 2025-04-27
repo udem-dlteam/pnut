@@ -355,6 +355,12 @@ enum {
   GOTO_LABEL,
 };
 
+#define START_INIT_BLOCK() \
+  def_label(init_next_lbl); \
+  init_next_lbl = alloc_label("init_next");
+#define END_INIT_BLOCK()   \
+  jump(init_next_lbl);
+
 #ifdef SAFE_MODE
 int labels[100000];
 int labels_ix = 0;
@@ -1908,10 +1914,9 @@ void codegen_glo_var_decl(ast node) {
     }
 
     if (init != 0) {
-      def_label(init_next_lbl);
-      init_next_lbl = alloc_label("init_next");
+      START_INIT_BLOCK();
       codegen_initializer(false, init, type, reg_glo, heap[binding + 3]); // heap[binding + 3] = offset
-      jump(init_next_lbl);
+      END_INIT_BLOCK();
     }
   }
 }
@@ -1956,10 +1961,9 @@ void codegen_static_local_var_decl(ast node) {
     // Skip over the initialization code that will run during program initialization
     skip_init_lbl = alloc_label("skip_init");
     jump(skip_init_lbl);
-    def_label(init_next_lbl);
-    init_next_lbl = alloc_label("init_next");
+    START_INIT_BLOCK();
     codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
-    jump(init_next_lbl);
+    END_INIT_BLOCK();
     def_label(skip_init_lbl);
   }
 }
@@ -2291,7 +2295,7 @@ void add_params(ast params) {
 
 // Initialize the function entry in the forward jump table
 void init_forward_jump_table(int binding) {
-  def_label(init_next_lbl);
+  START_INIT_BLOCK();
 #ifdef SAFE_MODE
   if (!is_label_defined(fun_binding_lbl(binding))) {
     fatal_error("init_forward_jump_table: function not found");
@@ -2299,8 +2303,7 @@ void init_forward_jump_table(int binding) {
 #endif
   mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
   mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
-  init_next_lbl = alloc_label("init_next");
-  jump(init_next_lbl);
+  END_INIT_BLOCK();
 }
 
 void codegen_glo_fun_decl(ast node) {
