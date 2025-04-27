@@ -602,8 +602,11 @@ ast car(int pair)                   { return get_child_(LIST, pair, 0); }
 ast car_(int expected_op, int pair) { return get_child__(LIST, expected_op, pair, 0); }
 ast cdr(int pair)                   { return get_child_(LIST, pair, 1); }
 ast cdr_(int expected_op, int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
-void set_car(int pair, int value)    { return set_child(pair, 0, value); }
-void set_cdr(int pair, int value)    { return set_child(pair, 1, value); }
+void set_car(int pair, int value)   { return set_child(pair, 0, value); }
+void set_cdr(int pair, int value)   { return set_child(pair, 1, value); }
+ast list1(int child0)               { return new_ast2(LIST, child0, 0); }
+ast list2(int child0, int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
+ast list3(int child0, int child1, int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
 #define tail(x) cdr_(LIST, x)
 
 // Returns the only element of a singleton list, if it is a singleton list.
@@ -2603,18 +2606,6 @@ ast pointer_type(ast parent_type, bool is_const) {
 
 ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
-}
-
-ast function_type1(ast parent_type, ast param1) {
-  return new_ast3('(', parent_type, cons(param1, 0), 0);
-}
-
-ast function_type2(ast parent_type, ast param1, ast param2) {
-  return new_ast3('(', parent_type, cons(param1, cons(param2, 0)), 0);
-}
-
-ast function_type3(ast parent_type, ast param1, ast param2, ast param3) {
-  return new_ast3('(', parent_type, cons(param1, cons(param2, cons(param3, 0))), 0);
 }
 
 ast make_variadic_func(ast func_type) {
