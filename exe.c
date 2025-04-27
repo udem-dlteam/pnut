@@ -1245,7 +1245,8 @@ int codegen_lvalue(ast node) {
           push_reg(reg_X);
           break;
         case BINDING_FUN:
-          mov_reg_lbl(reg_X, heap[binding+4]);
+          // Function pointers are stored in the forward jump table
+          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
           push_reg(reg_X);
           break;
         default:
@@ -1420,7 +1421,7 @@ void codegen_rvalue(ast node) {
           break;
 
         case BINDING_FUN:
-          mov_reg_lbl(reg_X, heap[binding+4]);
+          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
           push_reg(reg_X);
           break;
 
