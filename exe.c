@@ -2524,8 +2524,8 @@ void codegen_builtin() {
   // > argument must be supplied if O_CREAT or O_TMPFILE is specified in flags;
   // > if it is not supplied, some arbitrary bytes from the stack will be
   // > applied as the file mode.
-  declare_builtin("open", true, int_type, list3(string_type, int_type, int_type));
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
+  declare_builtin("open", true, int_type, list2(string_type, int_type));
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // mode, if present
   os_open();
   ret();
   init_forward_jump_table(cgc_globals);
