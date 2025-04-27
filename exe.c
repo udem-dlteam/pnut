@@ -322,26 +322,12 @@ void setup_proc_args(int global_vars_size);
 
 #define cgc int
 
+// Labels to initialize global variables
 int setup_lbl;
 int init_start_lbl;
 int init_next_lbl;
 int main_lbl;
 int exit_lbl;
-int getchar_lbl;
-int putchar_lbl;
-int fopen_lbl;
-int fclose_lbl;
-int fgetc_lbl;
-int malloc_lbl;
-int free_lbl;
-int printf_lbl; // Stub
-
-int read_lbl;
-int write_lbl;
-int open_lbl;
-int close_lbl;
-int seek_lbl;
-int unlink_lbl;
 
 int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
@@ -2460,6 +2446,152 @@ void rt_malloc() {
 
 #endif
 
+void codegen_builtin() {
+  int lbl;
+
+  // exit function
+  exit_lbl = alloc_label("exit");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
+  def_label(exit_lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  os_exit();
+
+  // read function
+  lbl = alloc_label("read");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), lbl, function_type3(int_type, int_type, void_star_type, int_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
+  os_read();
+  ret();
+
+  // write function
+  lbl = alloc_label("write");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), lbl, function_type3(int_type, int_type, void_star_type, int_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
+  os_write();
+  ret();
+
+  // open function
+  // Regarding the mode parameter, it is required if the flag allows the
+  // creation of a new file. Otherwise, it may be omitted and is ignored by the
+  // OS.
+  // The manual says:
+  // > If neither O_CREAT nor O_TMPFILE is specified in flags, then mode is
+  // > ignored (and can thus be specified as 0, or simply omitted).  The mode
+  // > argument must be supplied if O_CREAT or O_TMPFILE is specified in flags;
+  // > if it is not supplied, some arbitrary bytes from the stack will be
+  // > applied as the file mode.
+  lbl = alloc_label("open");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
+  os_open();
+  ret();
+
+  // close function
+  lbl = alloc_label("close");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), lbl, function_type1(int_type, int_type));
+  def_label(lbl);
+#ifndef NO_BUILTIN_LIBC
+  // fclose is just like close because FILE * is just the file descriptor in the builtin libc
+  lbl = alloc_label("fclose");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), lbl, function_type1(int_type, int_type));
+  def_label(lbl);
+#endif
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  os_close();
+  ret();
+
+  // seek function
+  lbl = alloc_label("lseek");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), lbl, function_type3(int_type, int_type, int_type, int_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // fd
+  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // offset
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // whence
+  os_seek();
+  ret();
+
+  // unlink function
+  lbl = alloc_label("unlink");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), lbl, function_type1(int_type, string_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // filename
+  os_unlink();
+  ret();
+
+#ifndef NO_BUILTIN_LIBC
+  // putchar function
+  lbl = alloc_label("putchar");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), lbl, function_type1(void_type, char_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_putchar();
+  ret();
+
+  // getchar function
+  lbl = alloc_label("getchar");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), lbl, function_type(char_type, 0));
+  def_label(lbl);
+  mov_reg_imm(reg_X, 0); // stdin
+  rt_fgetc(reg_X);
+  ret();
+
+  // fopen function
+  lbl = alloc_label("fopen");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), lbl, function_type2(int_type, string_type, string_type));
+  def_label(lbl);
+  rt_fopen();
+  ret();
+
+  // fgetc function
+  lbl = alloc_label("fclose");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), lbl, function_type1(int_type, int_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_fgetc(reg_X);
+  ret();
+
+  // fgetc function
+  lbl = alloc_label("fgetc");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), lbl, function_type1(int_type, int_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_fgetc(reg_X);
+  ret();
+
+  // malloc function
+  lbl = alloc_label("malloc");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), lbl, function_type1(void_star_type, int_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  rt_malloc();
+  ret();
+
+  // free function
+  lbl = alloc_label("free");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), lbl, function_type1(void_type, void_star_type));
+  def_label(lbl);
+  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
+  // Free is NO-OP
+  ret();
+
+  // printf function stub
+  lbl = alloc_label("printf");
+  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), lbl, make_variadic_func(function_type1(int_type, string_type)));
+  def_label(lbl);
+  rt_crash("printf is not supported yet.");
+  ret();
+#endif
+}
+
 void codegen_begin() {
 
   setup_lbl = alloc_label("setup");
@@ -2478,57 +2610,13 @@ void codegen_begin() {
   void_type = new_ast0(VOID_KW, 0);
   void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
 
+  jump(setup_lbl);
+
   main_lbl = alloc_label("main");
   cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
 
-  exit_lbl = alloc_label("exit");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
+  codegen_builtin();
 
-  read_lbl = alloc_label("read");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  write_lbl = alloc_label("write");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  open_lbl = alloc_label("open");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
-
-  close_lbl = alloc_label("close");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
-
-  seek_lbl = alloc_label("lseek");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), seek_lbl, function_type3(int_type, int_type, int_type, int_type));
-
-  unlink_lbl = alloc_label("unlink");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
-
-#ifndef NO_BUILTIN_LIBC
-  putchar_lbl = alloc_label("putchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
-
-  getchar_lbl = alloc_label("getchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
-
-  fopen_lbl = alloc_label("fopen");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
-
-  fclose_lbl = alloc_label("fclose");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, function_type1(int_type, int_type));
-
-  fgetc_lbl = alloc_label("fgetc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, function_type1(int_type, int_type));
-
-  malloc_lbl = alloc_label("malloc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, function_type1(void_star_type, int_type));
-
-  free_lbl = alloc_label("free");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
-
-  printf_lbl = alloc_label("printf");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
-#endif
-
-  jump(setup_lbl);
 }
 
 void codegen_end() {
@@ -2560,111 +2648,7 @@ void codegen_end() {
   call(main_lbl);
   if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main
-  push_reg(reg_X); // dummy return address (exit never needs it)
-
-  // exit function
-  def_label(exit_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_exit();
-
-  // read function
-  def_label(read_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
-  os_read();
-  ret();
-
-  // write function
-  def_label(write_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
-  os_write();
-  ret();
-
-  // open function
-  // Regarding the mode parameter, it is required if the flag allows the
-  // creation of a new file. Otherwise, it may be omitted and is ignored by the
-  // OS.
-  // The manual says:
-  // > If neither O_CREAT nor O_TMPFILE is specified in flags, then mode is
-  // > ignored (and can thus be specified as 0, or simply omitted).  The mode
-  // > argument must be supplied if O_CREAT or O_TMPFILE is specified in flags;
-  // > if it is not supplied, some arbitrary bytes from the stack will be
-  // > applied as the file mode.
-  def_label(open_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
-  os_open();
-  ret();
-
-  // close function
-  def_label(close_lbl);
-#ifndef NO_BUILTIN_LIBC
-  // fclose is just like close because FILE * is just the file descriptor in the builtin libc
-  def_label(fclose_lbl);
-#endif
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_close();
-  ret();
-
-  // seek function
-  def_label(seek_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // fd
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // offset
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // whence
-  os_seek();
-  ret();
-
-  // unlink function
-  def_label(unlink_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // filename
-  os_unlink();
-  ret();
-
-#ifndef NO_BUILTIN_LIBC
-  // putchar function
-  def_label(putchar_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_putchar();
-  ret();
-
-  // getchar function
-  def_label(getchar_lbl);
-  mov_reg_imm(reg_X, 0); // stdin
-  rt_fgetc(reg_X);
-  ret();
-
-  // fopen function
-  def_label(fopen_lbl);
-  rt_fopen();
-  ret();
-
-  // fgetc function
-  def_label(fgetc_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_fgetc(reg_X);
-  ret();
-
-  // malloc function
-  def_label(malloc_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_malloc();
-  ret();
-
-  // free function
-  def_label(free_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  // Free is NO-OP
-  ret();
-
-  // printf function stub
-  def_label(printf_lbl);
-  rt_crash("printf is not supported yet.");
-  ret();
-#endif
+  call(exit_lbl);
 
   assert_all_labels_defined();
 
