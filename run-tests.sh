@@ -84,6 +84,12 @@ compile_pnut() { # extra pnut compilation options: $1, expect_failed_compilation
     extra_opts="$extra_opts -DSAFE_MODE"
   fi
 
+  # Disable ONE_PASS_GENERATOR since it interferes with the error message
+  if [ "$expect_failed_compilation" -eq 1 ]; then
+    # Add a flag to force compilation failure
+    extra_opts="$extra_opts -UONE_PASS_GENERATOR"
+  fi
+
   if [ -z "$extra_opts" ]; then
     extra_opts_id="base"
   else
