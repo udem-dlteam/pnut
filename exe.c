@@ -1271,14 +1271,19 @@ void codegen_call(ast node) {
   nb_params = codegen_params(params);
 #endif
 
-  // Generate a fast path for direct calls for which the address is known (i.e. the function was defined earlier)
+  // Generate a fast path for direct calls
   if (binding != 0) {
+#ifdef ONE_PASS_GENERATOR
+    // When compiling in one pass mode, forward jumps must go through the jump table
     if (is_label_defined(binding)) {
-      call(heap[binding+4]);
+      call(fun_binding_lbl(binding));
     } else {
       mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
       call_reg(reg_X);
     }
+#else
+    call(fun_binding_lbl(binding));
+#endif
   } else {
     // Otherwise we go through the function pointer
     codegen_rvalue(fun);
@@ -1337,7 +1342,11 @@ int codegen_lvalue(ast node) {
           break;
         case BINDING_FUN:
           // Function pointers are stored in the forward jump table
+#ifdef ONE_PASS_GENERATOR
           mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#else
+          mov_reg_lbl(reg_X, heap[binding+4]);
+#endif
           push_reg(reg_X);
           break;
         default:
@@ -1512,7 +1521,11 @@ void codegen_rvalue(ast node) {
           break;
 
         case BINDING_FUN:
+#ifdef ONE_PASS_GENERATOR
           mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#else
+          mov_reg_lbl(reg_X, heap[binding+4]);
+#endif
           push_reg(reg_X);
           break;
 
@@ -2369,6 +2382,7 @@ void add_params(ast params) {
   }
 }
 
+#ifdef ONE_PASS_GENERATOR
 // Initialize the function entry in the forward jump table
 void init_forward_jump_table(int binding) {
 #ifdef SAFE_MODE
@@ -2381,15 +2395,18 @@ void init_forward_jump_table(int binding) {
 
   // At this point, all labels should be defined, which means we can safely
   // output the code and overwrite the code buffer.
-#ifdef ONE_PASS_GENERATOR
+
   assert_all_labels_defined(); // In SAFE_MODE, this checks that all labels are defined
   code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
   generate_exe();
   reset_code_buffer();
-#endif
 
   END_INIT_BLOCK();
 }
+#else
+// no-op
+#define init_forward_jump_table(binding)
+#endif
 
 void codegen_glo_fun_decl(ast node) {
   ast decl = get_child__(FUN_DECL, DECL, node, 0);

@@ -201,15 +201,21 @@ void cgc_add_global(int ident, int width, ast type, bool is_static_local) {
 }
 
 void cgc_add_global_fun(int ident, int label, ast type) {
+#ifdef ONE_PASS_GENERATOR
   int binding = alloc_obj(7);
+#else
+  int binding = alloc_obj(6);
+#endif
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_FUN;
   heap[binding+2] = ident;
   heap[binding+3] = 0;
   heap[binding+4] = label;
   heap[binding+5] = type;
+#ifdef ONE_PASS_GENERATOR
   heap[binding+6] = cgc_global_alloc; // For forward jump table
   cgc_global_alloc += WORD_SIZE;
+#endif
   cgc_globals = binding;
 }
 
