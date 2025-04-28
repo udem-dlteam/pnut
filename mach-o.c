@@ -1,6 +1,7 @@
 // Minimal Mach-O header for 32-bit and 64-bit architectures.
 // https://stackoverflow.com/questions/32453849/minimal-mach-o-64-binary/32659692#32659692
 
+// Size: 8 * 4 bytes = 32 bytes
 void write_mach_o_header_64() {
   write_4_i8(0xcf, 0xfa, 0xed, 0xfe); // magic number (MH_MAGIC_64)
   write_4_i8(0x07, 0x00, 0x00, 0x01); // CPU type (CPU_TYPE_X86_64)
@@ -12,7 +13,8 @@ void write_mach_o_header_64() {
   write_4_i8(0x00, 0x00, 0x00, 0x00); // reserved
 }
 
-void write_pagezero(){
+// Size: 18 * 4 bytes = 72 bytes
+void write_pagezero() {
   write_4_i8(0x19, 0x00, 0x00, 0x00); // LC_SEGMENT_64 ; 4 bytes
   write_4_i8(0x48, 0x00, 0x00, 0x00); // command size ; 4 bytes
   write_4_i8(0x5f, 0x5f, 0x50, 0x41); // segment name ; 16 bytes
@@ -33,7 +35,8 @@ void write_pagezero(){
   write_4_i8(0x00, 0x00, 0x00, 0x00); // flags ; 4 bytes
 }
 
-void write_text_section(){
+// Size: 18 * 4 bytes = 72 bytes
+void write_text_section() {
   write_4_i8(0x19, 0x00, 0x00, 0x00); // LC_SEGMENT_64 ; 4 bytes
   write_4_i8(0x48, 0x00, 0x00, 0x00); // command size ; 4 bytes
   write_4_i8(0x5f, 0x5f, 0x54, 0x45); // segment name ; 16 bytes
@@ -43,11 +46,11 @@ void write_text_section(){
 
   write_i32_le(0x00000000); // VM address low
   write_i32_le(0x00000001); // VM address high
-  write_i32_le(code_alloc); // VM size low
+  write_i32_le(code_alloc + 360); // VM size low. 360 is the size of the mach-o header
   write_i32_le(0x00000000); // VM size high. Warning: This assumes that the file size is less than 4GB
   write_i32_le(0x00000000); // file offset low
   write_i32_le(0x00000000); // file offset high
-  write_i32_le(code_alloc); // file size low
+  write_i32_le(code_alloc + 360); // file size low. 360 is the size of the mach-o header
   write_i32_le(0x00000000); // file size high. Warning: This assumes that the file size is less than 4GB
 
   write_4_i8(0x07, 0x00, 0x00, 0x00); // max VM protection ; 4 bytes
@@ -56,7 +59,8 @@ void write_text_section(){
   write_4_i8(0x00, 0x00, 0x00, 0x00); // flags ; 4 bytes
 }
 
-void write_unix_thread(){
+// Size: 46 * 4 bytes = 184 bytes
+void write_unix_thread() {
   write_4_i8(0x05, 0x00, 0x00, 0x00); // LC_UNIXTHREAD
   write_4_i8(0xb8, 0x00, 0x00, 0x00); // command size ; 4 bytes
   write_4_i8(0x04, 0x00, 0x00, 0x00); // flavor ; 4 bytes
@@ -107,7 +111,7 @@ void write_unix_thread(){
 
 void generate_exe() {
   int i = 0;
-  int file_size = 56;
+  int file_size = code_alloc;
 
   write_mach_o_header_64();
   write_pagezero();
@@ -117,7 +121,6 @@ void generate_exe() {
   while (i < code_alloc) {
     write_i8(code[i]);
     i += 1;
-    file_size += 1;
   }
 
   // Fill the rest of the file with zeros (Mach-O files must be at least 4096 bytes)
@@ -125,6 +128,4 @@ void generate_exe() {
     write_i8(0x00);
     file_size += 1;
   }
-
-
 }
