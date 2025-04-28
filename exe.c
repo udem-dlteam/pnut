@@ -2606,7 +2606,9 @@ int declare_builtin(char* name, bool variadic, ast return_type, ast params) {
 }
 
 void codegen_builtin() {
+#ifdef ONE_PASS_GENERATOR
   int binding;
+#endif
 
   // exit function
   exit_lbl = declare_builtin("exit", false, void_type, list1(int_type));
@@ -2643,7 +2645,9 @@ void codegen_builtin() {
 
   // close function
   declare_builtin("close", false, int_type, list1(int_type));
+#ifdef ONE_PASS_GENERATOR
   binding = cgc_globals; // Save the binding for the forward jump table
+#endif
 #ifndef NO_BUILTIN_LIBC
   // fclose is just like close because FILE * is just the file descriptor in the builtin libc
   declare_builtin("fclose", false, int_type, list1(int_type));
