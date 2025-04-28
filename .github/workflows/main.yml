@@ -74,8 +74,8 @@ jobs:
             host: ubuntu-latest
           - target: x86_64_linux
             host: ubuntu-latest
-          # - target: x86_64_mac
-          #   host: macos-latest
+          - target: x86_64_mac
+            host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout code
@@ -147,14 +147,14 @@ jobs:
     strategy:
       matrix:
         shell: ["bash", "dash", "ksh"] # Not all shells to save some time
-        target: ["i386_linux", "x86_64_linux"]
+        target: ["i386_linux", "x86_64_linux", "x86_64_mac"]
         include:
           - target: i386_linux
             host: ubuntu-latest
           - target: x86_64_linux
             host: ubuntu-latest
-          # - target: x86_64_mac
-          #   host: macos-latest
+          - target: x86_64_mac
+            host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout code
@@ -194,8 +194,8 @@ jobs:
             host: ubuntu-latest
           - target: x86_64_linux
             host: ubuntu-latest
-          # - target: x86_64_mac
-          #   host: macos-latest
+          - target: x86_64_mac
+            host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
       - name: Checkout code

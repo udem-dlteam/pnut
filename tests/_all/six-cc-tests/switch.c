@@ -1,3 +1,9 @@
+#include <stdio.h>
+
+#ifdef PNUT_CC
+typedef int FILE;
+#endif
+
 enum Category {
   LOWERCASE = 1,
   UPPERCASE,
@@ -81,7 +87,7 @@ void putstring(char *s) {
 }
 
 int main() {
-  int f;
+  FILE *f;
   char c;
   f = fopen("tests/_all/six-cc-tests/fgetc.c", "r");
   while ((c = fgetc(f)) != -1) {
@@ -93,4 +99,6 @@ int main() {
     putchar(categorize_char(c) + 48);
     putchar('\n');
   }
+
+  return 0;
 }
