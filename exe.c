@@ -2671,6 +2671,28 @@ void codegen_builtin() {
 #endif
 }
 
+void init_memory_spaces(int glo_size) {
+
+  // Allocate some space for the global variables.
+  // The global variables used to be on the stack, but because the stack has a
+  // limited size, it is better to allocate a separate memory region so global
+  // variables are not limited by the stack size.
+  //
+  // We then allocate a separate memory region for the heap. Having a separate
+  // memory space for the heap makes it easier to detect out-of-bound accesses
+  // on global variables.
+  //
+  // Regarding initialization, os_allocate_memory uses mmap with the
+  // MAP_ANONYMOUS flag so the memory should already be zeroed.
+
+  os_allocate_memory(glo_size);           // Returns the globals table start address in reg_X
+  mov_reg_reg(reg_glo, reg_X);            // reg_glo = globals table start
+
+  os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
+  mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // init bump pointer
+}
+
 void codegen_begin() {
 
   setup_lbl = alloc_label("setup");
@@ -2689,34 +2711,28 @@ void codegen_begin() {
   void_type = new_ast0(VOID_KW, 0);
   void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
 
+#ifdef ONE_PASS_GENERATOR
+  // Initialize the global variable table and heap for malloc
+  init_memory_spaces(RT_HEAP_SIZE);
+  // Jump to the initialization code
+  jump(init_start_lbl);
+#else
   jump(setup_lbl);
+#endif
 
   codegen_builtin();
 }
 
 void codegen_end() {
+#ifdef ONE_PASS_GENERATOR
+  if (cgc_global_alloc >= RT_HEAP_SIZE) fatal_error("Not enough space for global variables");
+#else
   def_label(setup_lbl);
-
-  // Allocate some space for the global variables.
-  // The global variables used to be on the stack, but because the stack has a
-  // limited size, it is better to allocate a separate memory region so global
-  // variables are not limited by the stack size.
-  //
-  // We then allocate a separate memory region for the heap. Having a separate
-  // memory space for the heap makes it easier to detect out-of-bound accesses
-  // on global variables.
-  //
-  // Regarding initialization, os_allocate_memory uses mmap with the
-  // MAP_ANONYMOUS flag so the memory should already be zeroed.
-  //
-  os_allocate_memory(cgc_global_alloc);   // Returns the globals table start address in reg_X
-  mov_reg_reg(reg_glo, reg_X);            // reg_glo = globals table start
-
-  os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
-  mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
-  mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // init bump pointer
-
+  // Initialize the global variable table and heap for malloc
+  init_memory_spaces(cgc_global_alloc);
+  // Jump to the initialization code
   jump(init_start_lbl);
+#endif
 
   def_label(init_next_lbl);
   setup_proc_args(0);
