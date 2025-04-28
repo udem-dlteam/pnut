@@ -21,6 +21,7 @@ backend=$1; shift
 bootstrap=0
 safe=0
 fast=0
+one_pass=0
 compile_only=0
 create_golden_file=1 # Create golden files by default
 shell="$SHELL" # Use current shell as the default
@@ -32,6 +33,7 @@ while [ $# -gt 0 ]; do
     --bootstrap)              bootstrap=1;        shift 1;;
     --safe)                   safe=1;             shift 1;;
     --fast)                   fast=1;             shift 1;;
+    --one-pass-generator)     one_pass=1;         shift 1;;
     --compile-only)           compile_only=1;     shift 1;;
     --no-create-golden-file)  create_golden_file=0;     shift 1;;
     *) echo "Unknown option: $1"; exit 1;;
@@ -63,8 +65,13 @@ if [ "$fast" -eq 1 ]; then
   if [ "$backend" != "sh" ]; then
     fail "Fast mode is not supported for the sh backend"
   fi
-  # Enable fast mode which optimizes constant parameters
+  # Enable fast mode which uses a faster implementation for local variables
   PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSH_SAVE_VARS_WITH_SET"
+fi
+
+if [ "$one_pass" -eq 1 ]; then
+  # Enable the one pass mode for pnut-exe's code generator
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DONE_PASS_GENERATOR"
 fi
 
 # Compile pnut, either using gcc or with pnut itself. Set pnut_comp to the compiled pnut executable
