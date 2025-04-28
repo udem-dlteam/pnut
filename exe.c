@@ -511,7 +511,21 @@ void use_label(int lbl) {
     addr = -addr - (code_address_base + code_alloc + 4); // compute relative address
     emit_i32_le(addr);
   } else {
-    // label address is not yet known
+    // label address is not yet known.
+    // In this case, we keep track of the locations that need to be patched when
+    // the label is defined as a list stored in the code buffer. The label
+    // points to the first address to patch, and the address of the next patch
+    // is stored in the code buffer like so:
+    // heap[lbl + 1] = [ patch address #1 ]
+    //
+    // Code buffer:
+    // |-----------------------------------------------
+    // | ...
+    // | patch address #1: [ patch address #2 ]
+    // | ...
+    // | patch address #2: 0 (end of list)
+    // | ...
+    // |-----------------------------------------------
     emit_i32_le(0); // 32 bit placeholder for distance
     code[code_alloc-1] = addr; // chain with previous patch address
     heap[lbl + 1] = code_alloc;
@@ -531,11 +545,9 @@ void def_label(int lbl) {
   } else {
     heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
-      next = code[addr - 1]; // get pointer to next patch address
-      code_alloc = addr;
-      addr = label_addr - addr; // compute relative address
-      code_alloc -= 4;
-      emit_i32_le(addr);
+      next = code[addr - 1]; // get pointer to next patch address before we overwrite it
+      code_alloc = addr - 4; // place code pointer to where use_label was called
+      emit_i32_le(label_addr - addr); // replace placeholder with relative address
       addr = next;
     }
     code_alloc = label_addr;
