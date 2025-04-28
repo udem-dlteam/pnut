@@ -8,6 +8,69 @@ void generate_exe();
 int code[MAX_CODE_SIZE];
 int code_alloc = 0;
 
+/* ONE_PASS_GENERATOR option:
+
+    Makes the code generator one-pass.
+
+    If set, the machine code is written to the output at the end of each
+    function definition. This significantly reduces the required size of the
+    code buffer (240k to 15k when compiling pnut-exe), but introduces extra
+    complexity to the code generation since fixups can only be done for code
+    that is still in the buffer. The difficulties come in 2 variants:
+
+      1. Forward jumps to labels that are not yet defined.
+
+      2. Certain constants must be placed at the beginning of the code, but
+         their value is only known at the end of the program.
+
+    Here are some concrete examples of such problems:
+
+      1. Calls to functions that are defined later in the code cannot be done
+         directly.
+
+      2. The initialization of global variables is interspersed with the rest of
+         the code, with forward jumps from the N^th initialization to the N+1^th
+         initialization. This means that at any time, the init_next_lbl label is
+         undefined.
+
+      3. Allocating space for global variables must be done at the beginning of
+         the program where the size of the globals is not known yet. More
+         generally, transfering control from the beginning of the program to the
+         end in 1 jump is not possible. This makes transfering information from
+         the end of the program to the beginning much more difficult.
+
+      4. The ELF header contains the size of the code, which is not known until
+         the end of the program.
+
+    And how they are solved:
+
+      1. The code generator maintains a jump table with all functions of the
+         program. When the function is declared, the code generator adds an
+         entry to the globals to store the address of the function, which will
+         be initialized with the address of the function during program
+         initialization when the address is known. This makes forward function
+         calls more expensive as they go through the jump table. This motivated
+         moving the definition of the built-in functions to the beginning of the
+         program to speed them up.
+
+      2. To be able to output the code after a function definition, all jumps in
+         the code must be resolved. Fortunately, non-call jumps inside a
+         function are all resolved at the end of the function, this leaves
+         init_next_lbl as the only unresolved label. Because function definition
+         is followed by the initialization of its jump table entry, the
+         init_next_lbl label is temporarily resolved, at which point all labels
+         are resolved and the code can be flushed.
+         See init_forward_jump_table for more details.
+
+      3. The size of the global variables is set assumed to be up under a
+         certain hardcoded limit. If the limit is exceeded, the code generator
+         will emit a fatal error at the end.
+
+      4. On certain platforms, the size of the program in the ELF header doesn't
+         need to be equal to the actual size of the code. As long as the
+         declared size is greater than the actual size, the program will run.
+*/
+
 void emit_i8(int a) {
   if (code_alloc >= MAX_CODE_SIZE) {
     fatal_error("code buffer overflow");
