@@ -179,10 +179,10 @@ jobs:
         run: |
           set -e
           if [ ${{ matrix.shell }} = "ksh" ]; then
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }}
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --no-pnut-sh-bootstrap
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap
           else
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast --no-pnut-sh-bootstrap
           fi
 
   bootstrap-pnut-sh-with-pnut-exe:
@@ -265,15 +265,15 @@ jobs:
 
       - name: Bootstrap pnut-exe with bash 2.05a (sh mode)
         run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --no-pnut-sh-bootstrap --fast"
 
       - name: Bootstrap pnut-exe with bash 2.05a (sh mode) (fast)
         run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --fast"
 
       - name: Bootstrap pnut-exe with bash 2.05a (sh mode) (fast) (one-pass generator)
         run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --one-pass-generator"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --no-pnut-sh-bootstrap --one-pass-generator"
 
   pnut-variants-run:
     strategy:
