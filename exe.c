@@ -6,7 +6,13 @@ void generate_exe();
 
 #define MAX_CODE_SIZE 500000
 int code[MAX_CODE_SIZE];
+// Index of the next free byte in the code buffer
 int code_alloc = 0;
+// Total number of bytes emitted
+// code_alloc + code_address_base = address of the next instruction.
+int code_address_base = 0;
+// Maximum size of the code buffer, used for debugging
+int code_alloc_max = 0;
 
 /* ONE_PASS_GENERATOR option:
 
@@ -70,6 +76,13 @@ int code_alloc = 0;
          need to be equal to the actual size of the code. As long as the
          declared size is greater than the actual size, the program will run.
 */
+
+#ifdef ONE_PASS_GENERATOR
+void reset_code_buffer() {
+  code_address_base += code_alloc;
+  code_alloc = 0;
+}
+#endif
 
 void emit_i8(int a) {
   if (code_alloc >= MAX_CODE_SIZE) {
@@ -495,7 +508,7 @@ void use_label(int lbl) {
 
   if (addr < 0) {
     // label address is currently known
-    addr = -addr - (code_alloc + 4); // compute relative address
+    addr = -addr - (code_address_base + code_alloc + 4); // compute relative address
     emit_i32_le(addr);
   } else {
     // label address is not yet known
@@ -516,9 +529,9 @@ void def_label(int lbl) {
   if (addr < 0) {
     fatal_error("label defined more than once");
   } else {
-    heap[lbl + 1] = -label_addr; // define label's address
+    heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
+      next = code[addr - 1]; // get pointer to next patch address
       code_alloc = addr;
       addr = label_addr - addr; // compute relative address
       code_alloc -= 4;
