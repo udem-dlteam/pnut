@@ -1,6 +1,10 @@
 // Minimal Mach-O header for 32-bit and 64-bit architectures.
 // https://stackoverflow.com/questions/32453849/minimal-mach-o-64-binary/32659692#32659692
 
+#ifdef ONE_PASS_GENERATOR
+#error "Mach-O generation not supported in one-pass mode"
+#endif
+
 // Size: 8 * 4 bytes = 32 bytes
 void write_mach_o_header_64() {
   write_4_i8(0xcf, 0xfa, 0xed, 0xfe); // magic number (MH_MAGIC_64)
