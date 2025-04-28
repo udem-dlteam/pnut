@@ -2371,14 +2371,23 @@ void add_params(ast params) {
 
 // Initialize the function entry in the forward jump table
 void init_forward_jump_table(int binding) {
-  START_INIT_BLOCK();
 #ifdef SAFE_MODE
-  if (!is_label_defined(fun_binding_lbl(binding))) {
-    fatal_error("init_forward_jump_table: function not found");
-  }
+  if (!is_label_defined(fun_binding_lbl(binding))) fatal_error("init_forward_jump_table: function not found");
 #endif
+
+  START_INIT_BLOCK();
   mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
   mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
+
+  // At this point, all labels should be defined, which means we can safely
+  // output the code and overwrite the code buffer.
+#ifdef ONE_PASS_GENERATOR
+  assert_all_labels_defined(); // In SAFE_MODE, this checks that all labels are defined
+  code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
+  generate_exe();
+  reset_code_buffer();
+#endif
+
   END_INIT_BLOCK();
 }
 
@@ -2737,9 +2746,7 @@ void codegen_begin() {
 }
 
 void codegen_end() {
-#ifdef ONE_PASS_GENERATOR
-  if (cgc_global_alloc >= RT_HEAP_SIZE) fatal_error("Not enough space for global variables");
-#else
+#ifndef ONE_PASS_GENERATOR
   def_label(setup_lbl);
   // Initialize the global variable table and heap for malloc
   init_memory_spaces(cgc_global_alloc);
@@ -2759,9 +2766,16 @@ void codegen_end() {
 
   assert_all_labels_defined();
 
+  // Finish writing the code to the file
   generate_exe();
 
+#ifdef ONE_PASS_GENERATOR
+  // Check that the size we assumed for the ELF header and globals are correct.
+  if (cgc_global_alloc >= RT_HEAP_SIZE) fatal_error("Not enough space for global variables");
+  if (code_address_base + code_alloc >= MAX_CODE_SIZE) fatal_error("codegen_end: code size too large, elf file is invalid.");
+#endif
+
 #ifdef PRINT_MEMORY_STATS
-  printf("\n# string_pool_alloc=%d heap_alloc=%d code_alloc=%d\n", string_pool_alloc, heap_alloc, code_alloc);
+  printf("# string_pool_alloc=%d heap_alloc=%d code_alloc=%d code_alloc_max=%d\n", string_pool_alloc, heap_alloc, code_alloc, code_alloc_max);
 #endif
 }
