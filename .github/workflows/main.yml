@@ -95,6 +95,11 @@ jobs:
           set -e
           ./run-tests.sh ${{ matrix.target }}
 
+      - name: Run ${{ matrix.target }} tests on ${{ matrix.host }} with one pass generator
+        run: |
+          set -e
+          ./run-tests.sh ${{ matrix.target }} --one-pass-generator
+
   tests-shell: # Run tests for pnut-sh on all supported shells
     strategy:
       matrix:
@@ -167,13 +172,15 @@ jobs:
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
         run: |
           set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --fast
+          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
+          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --one-pass-generator --stats
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
           if [ ${{ matrix.shell }} = "ksh" ]; then
             ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }}
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator
           else
             ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast
           fi
@@ -224,8 +231,10 @@ jobs:
           set -e
           ./bootstrap-pnut-sh.sh --safe --compile-only
           ./bootstrap-pnut-exe.sh --safe # No compile-only flag for pnut-exe since it's fast enough
+          ./bootstrap-pnut-exe.sh --safe --one-pass-generator --stats # No compile-only flag for pnut-exe since it's fast enough
           ./run-tests.sh sh --safe --compile-only
           ./run-tests.sh i386_linux --safe --compile-only
+          ./run-tests.sh i386_linux --safe --one-pass-generator --compile-only
 
   bootstrap-bash-2_05a:
     runs-on: ubuntu-latest
@@ -254,10 +263,17 @@ jobs:
         run: |
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-sh.sh --shell bash --fast"
 
-      - name: Bootstrap pnut-exe with bash 2.05a
+      - name: Bootstrap pnut-exe with bash 2.05a (sh mode)
         run: |
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --fast"
+
+      - name: Bootstrap pnut-exe with bash 2.05a (sh mode) (fast)
+        run: |
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast"
+
+      - name: Bootstrap pnut-exe with bash 2.05a (sh mode) (fast) (one-pass generator)
+        run: |
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --one-pass-generator"
 
   pnut-variants-run:
     strategy:
