@@ -192,11 +192,11 @@ jobs:
               ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap
             fi
           else
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --no-pnut-sh-bootstrap
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast --no-pnut-sh-bootstrap
             if [ ${{ matrix.host }} != "macos-latest" ]; then
+              ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast --one-pass-generator --no-pnut-sh-bootstrap
               ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap
             fi
+            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --fast --no-pnut-sh-bootstrap
           fi
 
   bootstrap-pnut-sh-with-pnut-exe:
