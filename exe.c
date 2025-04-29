@@ -1447,10 +1447,8 @@ int codegen_lvalue(ast node) {
   return lvalue_width;
 }
 
-void codegen_string(int string_probe) {
+void codegen_string(char *string_start, char *string_end) {
   int lbl = alloc_label(0);
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = string_start + heap[string_probe + 4];
 
   call(lbl);
 
@@ -1547,7 +1545,7 @@ void codegen_rvalue(ast node) {
           break;
       }
     } else if (op == STRING) {
-      codegen_string(get_val_(STRING, node));
+      codegen_string(STRING_BUF(get_val_(STRING, node)), STRING_BUF_END(get_val_(STRING, node)));
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
@@ -1845,7 +1843,7 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
     }
   } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
     // Create the string and assign global variable to the pointer
-    codegen_string(string_probe);
+    codegen_string(STRING_BUF(string_probe), STRING_BUF_END(string_probe));
     pop_reg(reg_X);
     mov_mem_reg(base_reg, offset, reg_X);
   } else {
@@ -2517,20 +2515,18 @@ void codegen_glo_decl(ast node) {
 void rt_putchar() {
   push_reg(reg_X);            // Allocate buffer on stack containing the character
   mov_reg_imm(reg_X, 1);      // reg_X = file descriptor (stdout)
-  mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer size
-  mov_reg_imm(reg_Z, 1);      // reg_Z = buffer address
+  mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer address
+  mov_reg_imm(reg_Z, 1);      // reg_Z = buffer size
   os_write();
   pop_reg(reg_X);             // Deallocate buffer
 }
 
 void rt_debug(char* msg) {
-  while (*msg != 0) {
-    mov_reg_imm(reg_X, *msg);
-    rt_putchar();
-    msg += 1;
-  }
-  mov_reg_imm(reg_X, '\n');
-  rt_putchar();
+  codegen_string(msg, msg + strlen(msg));
+  mov_reg_imm(reg_X, 1);           // reg_X = file descriptor (stdout)
+  pop_reg(reg_Y);                  // reg_Y = buffer address
+  mov_reg_imm(reg_Z, strlen(msg)); // reg_Z = buffer size
+  os_write();                      // Print the string
 }
 
 void rt_crash(char* msg) {
