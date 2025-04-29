@@ -238,11 +238,16 @@ jobs:
         run: |
           set -e
           ./bootstrap-pnut-sh.sh --safe --compile-only
-          ./bootstrap-pnut-exe.sh --safe # No compile-only flag for pnut-exe since it's fast enough
-          ./bootstrap-pnut-exe.sh --safe --one-pass-generator --stats # No compile-only flag for pnut-exe since it's fast enough
+          # No compile-only flag for pnut-exe since it's fast enough
+          ./bootstrap-pnut-exe.sh --backend x86_64_linux --safe
+          ./bootstrap-pnut-exe.sh --backend x86_64_linux --safe --one-pass-generator --stats
+          ./bootstrap-pnut-exe.sh --backend i386_linux   --safe
+          ./bootstrap-pnut-exe.sh --backend i386_linux   --safe --one-pass-generator --stats
           ./run-tests.sh sh --safe --compile-only
-          ./run-tests.sh i386_linux --safe --compile-only
-          ./run-tests.sh i386_linux --safe --one-pass-generator --compile-only
+          ./run-tests.sh x86_64_linux --safe --compile-only
+          ./run-tests.sh x86_64_linux --safe --one-pass-generator --compile-only
+          ./run-tests.sh i386_linux   --safe --compile-only
+          ./run-tests.sh i386_linux   --safe --one-pass-generator --compile-only
 
   bootstrap-bash-2_05a:
     runs-on: ubuntu-latest
