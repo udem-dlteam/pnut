@@ -150,7 +150,7 @@ jobs:
   bootstrap-pnut-exe:
     strategy:
       matrix:
-        shell: ["bash", "dash", "ksh"] # Not all shells to save some time
+        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
         target: ["i386_linux", "x86_64_linux", "x86_64_mac"]
         include:
           - target: i386_linux
