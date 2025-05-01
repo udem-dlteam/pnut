@@ -1832,8 +1832,8 @@ make_argv() {
 # Local variables
 __=0
 
-# Setup argc, argv
-__argc_for_main=$(($# + 1))
-make_argv $__argc_for_main "$0" "$@"; __argv_for_main=$__argv
-__code=0; # Success exit code
-_main __code $__argc_for_main $__argv_for_main; exit $__code
+__code=0; # Exit code
+make_argv $(($# + 1)) "$0" "$@" # Setup argc/argv
+_main __code $(($# + 1)) $__argv
+
+exit $__code

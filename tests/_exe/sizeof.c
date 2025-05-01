@@ -118,6 +118,16 @@ union U10 {
   int  c[1][1][1][1]; // 4 bytes
 }; // 8 bytes because aligned with width of int (4)
 
+struct ArHdr {
+  char ar_name[16];
+  char ar_date[12];
+  char ar_uid[6];
+  char ar_gid[6];
+  char ar_mode[8];
+  char ar_size[10];
+  char ar_fmag[2];
+};
+
 int main() {
   int a[10] = { 0, 1, 2, 3 };
   int b[]   = { 0, 1, 2, 3 }; // Infer size from initializer (4 elements)
@@ -151,6 +161,7 @@ int main() {
   putint(sizeof(union U8)); putchar('\n');
   putint(sizeof(union U9)); putchar('\n');
   putint(sizeof(union U10)); putchar('\n');
+  putint(sizeof(struct ArHdr)); putchar('\n');
 
   return 0;
 }

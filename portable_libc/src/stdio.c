@@ -49,6 +49,22 @@ int fclose(FILE *stream) {
   return 0; /*TODO*/
 }
 
+int fseek(FILE* stream, long offset, int origin) {
+  return lseek(_get_fd(stream), offset, origin);
+}
+
+off_t ftell(FILE * stream) {
+  return lseek (_get_fd(stream), 0, SEEK_CUR);
+}
+
+size_t fread(void *data, size_t size, size_t count, FILE *stream) {
+  return read(_get_fd(stream), data, size * count) / size;
+}
+
+int remove(const char *filename) {
+  return unlink(filename);
+}
+
 char _output_buf[1];
 
 int fputc(int c, FILE *stream) {

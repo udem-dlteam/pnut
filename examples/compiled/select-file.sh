@@ -299,4 +299,6 @@ unpack_string() {
   : $((_$__ptr = 0))
 }
 
-_main __
+__code=0; # Exit code
+_main __code
+exit $__code

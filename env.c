@@ -5,7 +5,7 @@ int cgc_locals = 0;
 int cgc_locals_fun = 0;
 // Global bindings
 int cgc_globals = 0;
-// Bump allocator used to allocate static objects
+// Bump allocator used to allocate static objects (in bytes)
 int cgc_global_alloc = 0;
 
 enum BINDING {
@@ -32,6 +32,8 @@ enum BINDING {
 #define binding_next(binding)  heap[binding]
 #define binding_kind(binding)  heap[binding+1]
 #define binding_ident(binding) heap[binding+2]
+
+#define fun_binding_lbl(binding) heap[binding+4]
 
 int cgc_lookup_binding_ident(int binding_type, int ident, int binding) {
   while (binding != 0) {
@@ -199,13 +201,21 @@ void cgc_add_global(int ident, int width, ast type, bool is_static_local) {
 }
 
 void cgc_add_global_fun(int ident, int label, ast type) {
+#ifdef ONE_PASS_GENERATOR
+  int binding = alloc_obj(7);
+#else
   int binding = alloc_obj(6);
+#endif
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_FUN;
   heap[binding+2] = ident;
   heap[binding+3] = 0;
   heap[binding+4] = label;
   heap[binding+5] = type;
+#ifdef ONE_PASS_GENERATOR
+  heap[binding+6] = cgc_global_alloc; // For forward jump table
+  cgc_global_alloc += WORD_SIZE;
+#endif
   cgc_globals = binding;
 }
 

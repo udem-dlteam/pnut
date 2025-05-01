@@ -5,6 +5,8 @@
 #include <strings.h>
 #include <string.h>
 #include <stdint.h> // for intptr_t
+#include <fcntl.h> // for open
+#include <unistd.h> // for write
 
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
@@ -14,6 +16,18 @@
 typedef long long int intptr_t;
 #else
 typedef int intptr_t;
+#endif
+
+#ifdef PNUT_SH
+// on pnut-sh, the file can only be opened in 3 modes: read, write and append
+// if it doesn't exist, it will be created.
+#define O_WRONLY 01
+#define O_CREAT  00
+#define O_TRUNC  00
+#else
+#define O_WRONLY 01
+#define O_CREAT  0100
+#define O_TRUNC  01000
 #endif
 #endif
 
@@ -127,27 +141,123 @@ typedef int FILE;
 
 #endif
 
+// State for the reader
+//  - fp: current file pointer
+//  - fp_filepath: path of the current file being read, used for error messages.
+//  - fp_dirname: directory of the current file, used to resolve relative paths.
+//  - include_search_path: search path for system include files.
+//  - output_fd: the output file descriptor (1 = stdout), used by pnut-exe
+//  - line_number: line number of the current file, used for error messages.
+//  - column_number: column number of the current file, used for error messages.
+//  - last_tok_line_number: line number of the last token read, used for error messages.
+//  - last_tok_column_number: column number of the last token read, used for error messages.
+//  - include_stack: the stack to save the state of the reader when including a file.
+
+FILE *fp = 0; // Current file pointer that's being read
+char* fp_filepath = 0; // The path of the current file being read
+char *fp_dirname = 0; // The directory of the current file being read
+char* include_search_path = 0; // Search path for include files
+int output_fd = 1; // Output file descriptor (1 = stdout)
+
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
 int line_number = 1;
 int column_number = 0;
 int last_tok_line_number = 1;
 int last_tok_column_number = 0;
+#define INCLUDE_ENTRY_SIZE 5
+#else
+#define INCLUDE_ENTRY_SIZE 3
 #endif
 
-struct IncludeStack {
-  FILE* fp;
-  struct IncludeStack *next;
-  char *dirname;  // The base path of the file, used to resolve relative paths
-  char *filepath; // The path of the file, used to print error messages
+#define INCLUDE_STACK_DEPTH 10
+
+intptr_t include_stack[INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE];
+int include_stack_top = 0; // Point to top of the stack, i.e. the next free entry
+
+void putstr(char *str) {
+  while (*str) {
+    putchar(*str);
+    str += 1;
+  }
+}
+
+void putint_aux(int n) {
+  if (n <= -10) putint_aux(n / 10);
+  putchar('0' - (n % 10));
+}
+
+void putint(int n) {
+  if (n < 0) {
+    putchar('-');
+    putint_aux(n);
+  } else {
+    putint_aux(-n);
+  }
+}
+
+void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  int line_number;
-  int column_number;
+  if (fp_filepath != 0) {
+    putstr(fp_filepath); putchar(':');
+    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+    putstr("  "); putstr(msg); putchar('\n');
+  } else {
+    putstr(msg); putchar('\n');
+  }
+#else
+  putstr(msg); putchar('\n');
 #endif
-};
-struct IncludeStack *include_stack, *include_stack2;
-FILE *fp = 0; // Current file pointer that's being read
-char* fp_filepath = 0; // The path of the current file being read
-char* include_search_path = 0; // Search path for include files
+  exit(1);
+}
+
+void syntax_error(char *msg) {
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  if (fp_filepath != 0) {
+    putstr(fp_filepath); putchar(':');
+    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
+    putstr("  syntax error: "); putstr(msg); putchar('\n');
+  }
+#else
+  putstr("syntax error: "); putstr(msg); putchar('\n');
+#endif
+  exit(1);
+}
+
+// Before including a file, we save the state of the reader to the include stack.
+// This allows us to restore the previous file pointer and file name when we finish including the file.
+void save_include_context() {
+  if (include_stack_top >= INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE) fatal_error("Include stack overflow");
+
+  if (fp != 0) {
+    include_stack[include_stack_top]     = (intptr_t)fp;
+    include_stack[include_stack_top + 1] = (intptr_t)fp_filepath;
+    include_stack[include_stack_top + 2] = (intptr_t)fp_dirname;
+
+  #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+    // Save the line and column number of the current file
+    include_stack[include_stack_top + 3] = line_number;
+    include_stack[include_stack_top + 4] = column_number;
+  #endif
+    include_stack_top += INCLUDE_ENTRY_SIZE;
+  }
+}
+
+void restore_include_context() {
+  if (include_stack_top == 0) fatal_error("Include stack is empty");
+
+  fclose(fp);
+  free(fp_dirname);
+  // We skip freeing the filepath because it may belong to the string pool
+
+  include_stack_top -= INCLUDE_ENTRY_SIZE;
+  fp          = (FILE *) include_stack[include_stack_top];
+  fp_filepath = (char*)  include_stack[include_stack_top + 1];
+  fp_dirname  = (char*)  include_stack[include_stack_top + 2];
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  line_number   = include_stack[include_stack_top + 3];
+  column_number = include_stack[include_stack_top + 4];
+#endif
+}
 
 // Tokens and AST nodes
 enum {
@@ -242,53 +352,6 @@ enum {
 
   LIST = 600, // List object
 };
-
-void putstr(char *str) {
-  while (*str) {
-    putchar(*str);
-    str += 1;
-  }
-}
-
-void putint_aux(int n) {
-  if (n <= -10) putint_aux(n / 10);
-  putchar('0' - (n % 10));
-}
-
-void putint(int n) {
-  if (n < 0) {
-    putchar('-');
-    putint_aux(n);
-  } else {
-    putint_aux(-n);
-  }
-}
-
-void fatal_error(char *msg) {
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (include_stack != 0) {
-    putstr(include_stack->filepath); putchar(':');
-    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-    putstr("  "); putstr(msg); putchar('\n');
-  } else {
-    putstr(msg); putchar('\n');
-  }
-#else
-  putstr(msg); putchar('\n');
-#endif
-  exit(1);
-}
-
-void syntax_error(char *msg) {
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  putstr(include_stack->filepath); putchar(':');
-  putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-  putstr("  syntax error: "); putstr(msg); putchar('\n');
-#else
-  putstr("syntax error: "); putstr(msg); putchar('\n');
-#endif
-  exit(1);
-}
 
 // tokenizer
 
@@ -539,8 +602,11 @@ ast car(int pair)                   { return get_child_(LIST, pair, 0); }
 ast car_(int expected_op, int pair) { return get_child__(LIST, expected_op, pair, 0); }
 ast cdr(int pair)                   { return get_child_(LIST, pair, 1); }
 ast cdr_(int expected_op, int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
-void set_car(int pair, int value)    { return set_child(pair, 0, value); }
-void set_cdr(int pair, int value)    { return set_child(pair, 1, value); }
+void set_car(int pair, int value)   { return set_child(pair, 0, value); }
+void set_cdr(int pair, int value)   { return set_child(pair, 1, value); }
+ast list1(int child0)               { return new_ast2(LIST, child0, 0); }
+ast list2(int child0, int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
+ast list3(int child0, int child1, int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
 #define tail(x) cdr_(LIST, x)
 
 // Returns the only element of a singleton list, if it is a singleton list.
@@ -554,9 +620,9 @@ ast list_singleton(ast list) {
 }
 
 // Simple accessor to get the string from the string pool
-#define STRING_BUF(string_val) (string_pool + heap[string_val+1])
-#define STRING_LEN(string_val) (heap[string_val+4])
-#define STRING_BUF_END(string_val) (STRING_BUF(string_val) + STRING_LEN(string_val))
+#define STRING_BUF(probe) (string_pool + heap[probe+1])
+#define STRING_LEN(probe) (heap[probe+4])
+#define STRING_BUF_END(probe) (STRING_BUF(probe) + STRING_LEN(probe))
 
 void begin_string() {
   string_start = string_pool_alloc;
@@ -674,7 +740,6 @@ bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
 bool if_macro_stack_ix = 0;
 bool if_macro_mask = true;      // Indicates if the current if/elif block is being executed
 bool if_macro_executed = false; // If any of the previous if/elif conditions were true
-int  if_macro_nest_level = 0;      // Current number of unmatched #if/#ifdef/#ifndef directives that were masked out
 
 // get_tok parameters:
 // Whether to expand macros or not.
@@ -695,6 +760,10 @@ int macro_ident = 0;    // The identifier of the macro being expanded (if any)
 int macro_args_count;   // Number of arguments for the current macro being expanded
 bool paste_last_token = false; // Whether the last token was a ## or not
 
+bool prev_macro_mask() {
+  return if_macro_stack_ix == 0 || if_macro_stack[if_macro_stack_ix - 2];
+}
+
 void push_if_macro_mask(bool new_mask) {
   if (if_macro_stack_ix >= IFDEF_DEPTH_MAX) {
     fatal_error("Too many nested #ifdef/#ifndef directives. Maximum supported is 20.");
@@ -703,6 +772,10 @@ void push_if_macro_mask(bool new_mask) {
   if_macro_stack[if_macro_stack_ix] = if_macro_mask;
   if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
   if_macro_stack_ix += 2;
+
+  // If the current block is masked off, then the new mask is the logical AND of the current mask and the new mask
+  new_mask = if_macro_mask & new_mask;
+
   // Then set the new mask value and reset the executed flag
   if_macro_mask = if_macro_executed = new_mask;
 }
@@ -809,19 +882,8 @@ void get_ch() {
 
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
-    if (include_stack->next != 0) {
-      fclose(include_stack->fp);
-      include_stack2 = include_stack;
-      include_stack = include_stack->next;
-      fp = include_stack->fp;
-      fp_filepath = include_stack->filepath;
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-      line_number = include_stack->line_number;
-      column_number = include_stack->column_number;
-#endif
-      // Not freeing include_stack2->filepath because it may not be dynamically allocated
-      free(include_stack2->dirname);
-      free(include_stack2);
+    if (include_stack_top != 0) {
+      restore_include_context();
       // EOF is treated as a newline so that files without a newline at the end are still parsed correctly
       // On the next get_ch call, the first character of the next file will be read
       ch = '\n';
@@ -905,8 +967,8 @@ char *file_parent_directory(char *path) {
   return path;
 }
 
-FILE *fopen_source_file(char *file_name, char *relative_to) {
-  FILE *fp;
+void include_file(char *file_name, char *relative_to) {
+  save_include_context();
   fp_filepath = file_name;
   if (relative_to) {
     fp_filepath = str_concat(relative_to, fp_filepath);
@@ -916,28 +978,12 @@ FILE *fopen_source_file(char *file_name, char *relative_to) {
     putstr(fp_filepath); putchar('\n');
     fatal_error("Could not open file");
   }
-  return fp;
-}
 
-void include_file(char *file_name, char *relative_to) {
-  fp = fopen_source_file(file_name, relative_to);
-  include_stack2 = malloc(sizeof(struct IncludeStack));
-  include_stack2->next = include_stack;
-  include_stack2->fp = fp;
-  include_stack2->dirname = file_parent_directory(fp_filepath);
-  include_stack2->filepath = fp_filepath;
+  fp_dirname = file_parent_directory(fp_filepath);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  include_stack2->line_number = 1;
-  include_stack2->column_number = 0;
-  // Save the current file position so we can return to it after the included file is done
-  if (include_stack != 0) {
-    include_stack->line_number = line_number;
-    include_stack->column_number = column_number;
-  }
   line_number = 1;
-  column_number = 1;
+  column_number = 0;
 #endif
-  include_stack = include_stack2;
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -1131,9 +1177,6 @@ int CLOSE_ID;
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
-int DATE__ID;
-int TIME__ID;
-int TIMESTAMP__ID;
 
 // When we parse a macro, we generally want the tokens as they are, without expanding them.
 void get_tok_macro() {
@@ -1400,7 +1443,7 @@ int evaluate_if_condition() {
 
 void handle_include() {
   if (tok == STRING) {
-    include_file(STRING_BUF(val), include_stack->dirname);
+    include_file(STRING_BUF(val), fp_dirname);
 #ifdef DEBUG_EXPAND_INCLUDES
     // When running pnut in "expand includes" mode, we want to annotate the
     // #include directives that were expanded with a comment so we can remove
@@ -1438,41 +1481,29 @@ void handle_preprocessor_directive() {
   if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
     temp = val;
     get_tok_macro(); // Get the macro name
-    if (if_macro_mask) {
-      push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
+    push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
     get_tok_macro(); // Skip the macro name
   } else if (tok == IF_KW) {
-    temp = evaluate_if_condition();
-    if (if_macro_mask) {
-      push_if_macro_mask(temp);
-    } else {
-      // Keep track of the number of #ifdef so we can skip the corresponding #endif
-      if_macro_nest_level += 1;
-    }
+    temp = evaluate_if_condition() != 0;
+    push_if_macro_mask(temp);
   } else if (tok == IDENTIFIER && val == ELIF_ID) {
-    temp = evaluate_if_condition();
-    if (if_macro_executed) {
-      // The condition is true, but its ignored if one of the conditions before was also true
-      if_macro_mask = false;
-    } else {
+    temp = evaluate_if_condition() != 0;
+    if (prev_macro_mask() && !if_macro_executed) {
       if_macro_executed |= temp;
       if_macro_mask = temp;
+    } else {
+      if_macro_mask = false;
     }
   } else if (tok == ELSE_KW) {
-    if (if_macro_mask || if_macro_nest_level == 0) {
+    if (prev_macro_mask()) { // If the parent block mask is true
       if_macro_mask = !if_macro_executed;
+      if_macro_executed = true;
+    } else {
+      if_macro_mask = false;
     }
     get_tok_macro(); // Skip the else keyword
   } else if (tok == IDENTIFIER && val == ENDIF_ID) {
-    if (if_macro_mask || if_macro_nest_level == 0) {
-      pop_if_macro_mask();
-    } else {
-      if_macro_nest_level -= 1;
-    }
+    pop_if_macro_mask();
     get_tok_macro(); // Skip the else keyword
   } else if (if_macro_mask) {
     if (tok == IDENTIFIER && val == INCLUDE_ID) {
@@ -1669,48 +1700,53 @@ void init_ident_table() {
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 }
 
-void init_builtin_string_macro(int macro_id, char* value) {
+int init_builtin_string_macro(char *macro_str, char* value) {
+  int macro_id = init_ident(MACRO, macro_str);
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
   heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
+  return macro_id;
 }
 
-void init_builtin_int_macro(int macro_id, int value) {
+int init_builtin_int_macro(char *macro_str, int value) {
+  int macro_id = init_ident(MACRO, macro_str);
   heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
+  return macro_id;
+}
+
+int init_builtin_empty_macro(char *macro_str) {
+  int macro_id = init_ident(MACRO, macro_str);
+  heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
+  return macro_id;
 }
 
 void init_pnut_macros() {
-  init_ident(MACRO, "PNUT_CC");
+  init_builtin_int_macro("PNUT_CC", 1);
+
+  init_builtin_string_macro("__DATE__", "Jan  1 1970");
+  init_builtin_string_macro("__TIME__", "00:00:00");
+  init_builtin_string_macro("__TIMESTAMP__", "Jan  1 1970 00:00:00");
+  FILE__ID = init_builtin_string_macro("__FILE__", "<unknown>");
+  LINE__ID = init_builtin_int_macro("__LINE__", 0);
 
 #if defined(sh)
-  init_ident(MACRO, "PNUT_SH");
+  init_builtin_int_macro("PNUT_SH", 1);
 #elif defined(target_i386_linux)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_32");
-  init_ident(MACRO, "PNUT_I386");
-  init_ident(MACRO, "PNUT_I386_LINUX");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_32", 1);
+  init_builtin_int_macro("PNUT_I386", 1);
+  init_builtin_int_macro("PNUT_I386_LINUX", 1);
 #elif defined (target_x86_64_linux)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_64");
-  init_ident(MACRO, "PNUT_X86_64");
-  init_ident(MACRO, "PNUT_X86_64_LINUX");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_64", 1);
+  init_builtin_int_macro("PNUT_X86_64", 1);
+  init_builtin_int_macro("PNUT_X86_64_LINUX", 1);
 #elif defined (target_x86_64_mac)
-  init_ident(MACRO, "PNUT_EXE");
-  init_ident(MACRO, "PNUT_EXE_64");
-  init_ident(MACRO, "PNUT_X86_64");
-  init_ident(MACRO, "PNUT_X86_64_MAC");
+  init_builtin_int_macro("PNUT_EXE", 1);
+  init_builtin_int_macro("PNUT_EXE_64", 1);
+  init_builtin_int_macro("PNUT_X86_64", 1);
+  init_builtin_int_macro("PNUT_X86_64_MAC", 1);
 #endif
 
-  FILE__ID      = init_ident(MACRO, "__FILE__");
-  LINE__ID      = init_ident(MACRO, "__LINE__");
-  DATE__ID      = init_ident(MACRO, "__DATE__");
-  TIME__ID      = init_ident(MACRO, "__TIME__");
-  TIMESTAMP__ID = init_ident(MACRO, "__TIMESTAMP__");
-
-  init_builtin_string_macro(FILE__ID, "<unknown>");
-  init_builtin_int_macro   (LINE__ID, 0);
-  init_builtin_string_macro(DATE__ID, "Jan  1 1970");
-  init_builtin_string_macro(TIME__ID, "00:00:00");
-  init_builtin_string_macro(TIMESTAMP__ID, "Jan  1 1970 00:00:00");
 }
 
 // A macro argument is represented using a list of tokens.
@@ -1826,6 +1862,12 @@ void begin_macro_expansion(int ident, int tokens, int args) {
   macro_args    = args;
 }
 
+// The macro_is_already_expanding function is buggy and has false positives in
+// the repl example. Disable it until we rework macro argument expansion as
+// described in https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html.
+#ifdef ALLOW_RECURSIVE_MACROS
+#define macro_is_already_expanding(ident) false
+#else
 // Search the macro stack to see if the macro is already expanding.
 bool macro_is_already_expanding(int ident) {
   int i = macro_stack_ix;
@@ -1839,6 +1881,7 @@ bool macro_is_already_expanding(int ident) {
   }
   return false;
 }
+#endif
 
 // Undoes the effect of get_tok by replacing the current token with the previous
 // token and saving the current token to be returned by the next call to get_tok.
@@ -1897,8 +1940,8 @@ void stringify() {
   }
   arg = get_macro_arg(val);
   tok = STRING;
-  // Support the case where the argument is a single identifier token
-  if (car(car(arg)) == IDENTIFIER && cdr(arg) == 0) {
+  // Support the case where the argument is a single identifier/macro/keyword token
+  if ((car(car(arg)) == IDENTIFIER || car(car(arg)) == MACRO || (AUTO_KW <= car(car(arg)) && car(car(arg)) <= WHILE_KW)) && cdr(arg) == 0) {
     val = cdr(car(arg)); // Use the identifier probe
   } else {
     val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
@@ -1908,11 +1951,11 @@ void stringify() {
 // Concatenates two non-negative integers into a single integer
 // Note that this function only supports small integers, represented as positive integers.
 int paste_integers(int left_val, int right_val) {
+  int result = left_val;
+  int right_digits = right_val;
 #ifdef SUPPORT_64_BIT_LITERALS
   if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
 #endif
-  int result = left_val;
-  int right_digits = right_val;
   while (right_digits > 0) {
     result *= 10;
     right_digits /= 10;
@@ -2473,7 +2516,7 @@ void parse_error_internal(char * msg, int token, char * file, int line) {
   //Error header
   putstr(ANSI_RED"Error occurred while parsing ");
   putstr(ANSI_GREEN"\"");
-  putstr(include_stack->filepath);
+  putstr(fp_filepath);
   putstr("\""ANSI_RESET"\n");
 
   //Error message
@@ -2488,7 +2531,7 @@ void parse_error_internal(char * msg, int token, char * file, int line) {
 
   //Error location
   putstr("  Location: "ANSI_GREEN);
-  putstr(include_stack->filepath);
+  putstr(fp_filepath);
   putchar(':');
   putint(last_tok_line_number);
   putchar(':');
@@ -2563,18 +2606,6 @@ ast pointer_type(ast parent_type, bool is_const) {
 
 ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
-}
-
-ast function_type1(ast parent_type, ast param1) {
-  return new_ast3('(', parent_type, cons(param1, 0), 0);
-}
-
-ast function_type2(ast parent_type, ast param1, ast param2) {
-  return new_ast3('(', parent_type, cons(param1, cons(param2, 0)), 0);
-}
-
-ast function_type3(ast parent_type, ast param1, ast param2, ast param3) {
-  return new_ast3('(', parent_type, cons(param1, cons(param2, cons(param3, 0))), 0);
 }
 
 ast make_variadic_func(ast func_type) {
@@ -3233,11 +3264,13 @@ ast parse_declaration(bool local) {
   return result;
 }
 
-ast parse_parenthesized_expression() {
+ast parse_parenthesized_expression(bool first_par_already_consumed) {
 
   ast result;
 
-  expect_tok('(');
+  if (!first_par_already_consumed) {
+    expect_tok('(');
+  }
 
   result = parse_comma_expression();
 
@@ -3289,7 +3322,7 @@ ast parse_primary_expression() {
 
   } else if (tok == '(') {
 
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
 
   } else {
     parse_error("identifier, literal, or '(' expected", tok);
@@ -3298,12 +3331,12 @@ ast parse_primary_expression() {
   return result;
 }
 
-ast parse_postfix_expression() {
-
-  ast result;
+ast parse_postfix_expression(ast result) {
   ast child;
 
-  result = parse_primary_expression();
+  if (result == 0) {
+    result = parse_primary_expression();
+  }
 
   while (1) {
     if (tok == '[') {
@@ -3360,6 +3393,22 @@ ast parse_postfix_expression() {
   return result;
 }
 
+// When parsing parenthesized types (in casts and sizeof), a '(' token is
+// consumed and then the next token is checked to see if it begins a type or if
+// we're really just parsing a parenthesized expression. When it's a
+// parenthesized expression, we need to backtrack and try parsing a unary
+// expression. That used to be done by putting the '(' token back on the token
+// stream and calling parse_unary_expression.
+//
+// Having to push back tokens on the stream consumes memory and means our parser
+// isn't truely one-pass. To avoid having to push back the '(' token, we can
+// instead call the parse_parenthesized_expression function directly, followed
+// by the parse_unary_expression function. These 2 function calls correspond to
+// the functions that would be called if we had pushed back the '(' token and
+// called parse_unary_expression.
+#define parse_unary_expression_with_parens_prefix() \
+  parse_postfix_expression(parse_parenthesized_expression(true));
+
 ast parse_unary_expression() {
 
   ast result;
@@ -3391,13 +3440,10 @@ ast parse_unary_expression() {
       get_tok();
       // May be a type or an expression
       if (is_type_starter(tok)) {
-      result = parse_declarator(true, parse_declaration_specifiers(false));
-      expect_tok(')');
+        result = parse_declarator(true, parse_declaration_specifiers(false));
+        expect_tok(')');
       } else {
-        // We need to put the current token and '(' back on the token stream.
-        // Otherwise, sizeof (cast_expression) fails to parse.
-        undo_token('(', 0);
-        result = parse_unary_expression();
+        result = parse_unary_expression_with_parens_prefix();
       }
     } else {
       result = parse_unary_expression();
@@ -3421,7 +3467,7 @@ ast parse_unary_expression() {
     }
 
   } else {
-    result = parse_postfix_expression();
+    result = parse_postfix_expression(0);
   }
 
   return result;
@@ -3454,12 +3500,11 @@ ast parse_cast_expression() {
       result = new_ast2(CAST, type, parse_cast_expression());
       return result;
     } else {
-      // We need to put the current token and '(' back on the token stream.
-      undo_token('(', 0);
+      return parse_unary_expression_with_parens_prefix();
     }
+  } else {
+    return parse_unary_expression();
   }
-
-  return parse_unary_expression();
 }
 
 ast parse_multiplicative_expression() {
@@ -3729,7 +3774,7 @@ ast parse_statement() {
   if (tok == IF_KW) {
 
     get_tok();
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
     child1 = parse_statement();
 
     if (tok == ELSE_KW) {
@@ -3744,7 +3789,7 @@ ast parse_statement() {
   } else if (tok == SWITCH_KW) {
 
     get_tok();
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
     child1 = parse_statement();
 
     result = new_ast2(SWITCH_KW, result, child1);
@@ -3769,7 +3814,7 @@ ast parse_statement() {
   } else if (tok == WHILE_KW) {
 
     get_tok();
-    result = parse_parenthesized_expression();
+    result = parse_parenthesized_expression(false);
     child1 = parse_statement();
 
     result = new_ast2(WHILE_KW, result, child1);
@@ -3779,7 +3824,7 @@ ast parse_statement() {
     get_tok();
     result = parse_statement();
     expect_tok(WHILE_KW);
-    child1 = parse_parenthesized_expression();
+    child1 = parse_parenthesized_expression(false);
     expect_tok(';');
 
     result = new_ast2(DO_KW, result, child1);
@@ -3917,6 +3962,53 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
+#ifndef sh
+void handle_macro_D(char *opt) {
+  char *start = opt;
+  char *macro_buf;
+  char *buf2;
+  int acc;
+  while (*opt != 0 && *opt != '=') opt += 1; // Find = sign if any
+
+  macro_buf = malloc(opt - start + 1);
+  memcpy(macro_buf, start, opt - start);
+  macro_buf[opt - start] = '\0';
+
+  if (*opt == '=') {
+    opt += 1;
+    if (*opt == '"') { // Start of string literal
+      opt += 1;
+      start = opt;
+      while (*opt != 0 && *opt != '"') opt += 1;
+      if (*opt == 0) fatal_error("Unterminated string literal");
+      buf2 = malloc(opt - start + 1);
+      memcpy(buf2, start, opt - start);
+      buf2[opt - start] = '\0';
+      init_builtin_string_macro(macro_buf, buf2);
+      free(buf2);
+    } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
+      acc = 0;
+      while ('0' <= *opt && *opt <= '9') {
+        acc *= 10;
+        acc += *opt - '0';
+        opt += 1;
+      }
+      if (*opt != 0) fatal_error("Invalid macro definition value");
+      init_builtin_int_macro(macro_buf, acc);
+    } else if (*opt == '\0') { // No value given, empty macro
+      init_builtin_empty_macro(macro_buf);
+    } else {
+      fatal_error("Invalid macro definition value");
+    }
+  } else {
+    // Default to 1 when no value is given
+    init_builtin_int_macro(macro_buf, 1);
+  }
+
+  free(macro_buf);
+}
+#endif
+
 int main(int argc, char **argv) {
   int i;
   ast decl;
@@ -3932,19 +4024,49 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
-        case 'D':
-          init_builtin_int_macro(init_ident(MACRO, argv[i] + 2), 1);
+#ifndef sh
+        case 'o':
+          // Output file name
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          } else {
+            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          }
           break;
 
+        case 'D':
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            handle_macro_D(argv[i]);
+          } else {
+            handle_macro_D(argv[i] + 2); // skip '-D'
+          }
+          break;
+#else
+          case 'D':
+            // pnut-sh only needs -D<macro> and no other options
+            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+            break;
+#endif
         case 'U':
-          init_ident(IDENTIFIER, argv[i] + 2);
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            init_ident(IDENTIFIER, argv[i]);
+          } else {
+            init_ident(IDENTIFIER, argv[i] + 2); // skip '-U'
+          }
           break;
 
         case 'I':
-          if (include_search_path != 0) {
-            fatal_error("only one include path allowed");
+          if (include_search_path != 0) fatal_error("only one include path allowed");
+
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            i += 1;
+            include_search_path = argv[i];
+          } else {
+            include_search_path = argv[i] + 2; // skip '-I'
           }
-          include_search_path = argv[i] + 2;
           break;
 
         default:

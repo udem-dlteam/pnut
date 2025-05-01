@@ -1,9 +1,17 @@
+#include <stdio.h>
+
+#ifdef PNUT_CC
+typedef int FILE;
+#endif
+
 int main() {
-  int f;
+  FILE *f;
   char c;
   f = fopen("tests/_all/six-cc-tests/empty.txt", "r");
   while ((c = fgetc(f)) != -1) {
     putchar(c);
   }
   fclose(f);
+
+  return 0;
 }

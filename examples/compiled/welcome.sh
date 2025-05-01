@@ -88,4 +88,6 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
-_main __
+__code=0; # Exit code
+_main __code
+exit $__code

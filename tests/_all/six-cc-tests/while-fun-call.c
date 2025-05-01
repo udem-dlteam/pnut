@@ -1,4 +1,10 @@
-int emit_line(int line, int f) {
+#include <stdio.h>
+
+#ifdef PNUT_CC
+typedef int FILE;
+#endif
+
+int emit_line(int line, FILE *f) {
   char c;
   putchar(line+ 48);
   putchar(':');
@@ -13,13 +19,11 @@ int emit_line(int line, int f) {
 }
 
 int main() {
-  int f1;
-  int f2;
   char c1;
   char c2;
   int i = 0;
-  f1 = fopen("tests/_all/six-cc-tests/fgetc.c", "r");
-  f2 = fopen("tests/_all/six-cc-tests/while-fun-call.c", "r");
+  FILE *f1 = fopen("tests/_all/six-cc-tests/fgetc.c", "r");
+  FILE *f2 = fopen("tests/_all/six-cc-tests/while-fun-call.c", "r");
   while (1) {
     c1 = emit_line(i, f1);
     c2 = emit_line(i, f2);

@@ -7,4 +7,6 @@ _main() {
 }
 
 # Runtime library
-_main __
+__code=0; # Exit code
+_main __code
+exit $__code
