@@ -1,5 +1,14 @@
 // ELF file output
 
+// Some operating systems allow values for p_filesz and p_memsz that are larger
+// than the size of the program. In that case, we can set the size to some big
+// value and output the header at the beginning of the compilation process.
+#ifdef ONE_PASS_GENERATOR
+#define PROGRAM_SIZE MAX_CODE_SIZE
+#else
+#define PROGRAM_SIZE code_alloc
+#endif
+
 // Minimal i386 bit ELF header.
 // https://web.archive.org/web/20240409140025/http://www.muppetlabs.com/~breadbox/software/tiny/teensy.html
 // https://web.archive.org/web/20240414151854/https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
@@ -26,16 +35,15 @@ void write_elf_e_header() {
 }
 
 void write_elf_p_header() {
-  write_i32_le(1);                 // p_type (1=PT_LOAD = a loadable segment)
-  write_i32_le(0);                 // p_offset
-  write_i32_le(0x08048000);        // p_vaddr
-  write_i32_le(0x08048000);        // p_paddr
-  write_i32_le(0x54 + code_alloc); // p_filesz
-  write_i32_le(0x54 + code_alloc); // p_memsz
-  write_i32_le(5);                 // p_flags
-  write_i32_le(0x1000);            // p_align
+  write_i32_le(1);                   // p_type (1=PT_LOAD = a loadable segment)
+  write_i32_le(0);                   // p_offset
+  write_i32_le(0x08048000);          // p_vaddr
+  write_i32_le(0x08048000);          // p_paddr
+  write_i32_le(0x54 + PROGRAM_SIZE); // p_filesz
+  write_i32_le(0x54 + PROGRAM_SIZE); // p_memsz
+  write_i32_le(5);                   // p_flags
+  write_i32_le(0x1000);              // p_align
 }
-
 #endif
 
 
@@ -72,29 +80,35 @@ void write_elf_e_header() {
 }
 
 void write_elf_p_header() {
-  write_i32_le(1);                 // p_type (1=PT_LOAD = a loadable segment) | dd
-  write_i32_le(5);                 // Program header flags. 5 = Not writable. (bits 0, 1, and 2 = executable, writable, readable) | dd
-  write_i32_le(0);                 // p_offset
-  write_i32_le(0);                 // p_offset Cont..
-  write_i32_le(0x40000000);        // p_vaddr The Virtual Address to place the segment at | dq
-  write_i32_le(0x00000000);        // Cont.. | dq cont..
-  write_i32_le(0x40000000);        // p_paddr The "phyiscal address" set to same as virtual address | dq
-  write_i32_le(0x00000000);        // Cont.. | dq cont..
-  write_i32_le(0x78 + code_alloc); // p_filesz File load virtual address : The size of the segment in the file. It ends at the string table | dq (problem code?)
-  write_i32_le(0x0000000);        // Cont.. | dq cont..
-  write_i32_le(0x78 + code_alloc); // p_memsz  String table : The size of the segment in memory | dq (problem code?)
-  write_i32_le(0x00000000);        // Cont.. | dq cont..
-  write_i32_le(0x200000);                  // p_align  | dq
-  write_i32_le(0x00000000);        // Cont.. | dq cont..
+  write_i32_le(1);                   // p_type (1=PT_LOAD = a loadable segment) | dd
+  write_i32_le(5);                   // Program header flags. 5 = Not writable. (bits 0, 1, and 2 = executable, writable, readable) | dd
+  write_i32_le(0);                   // p_offset
+  write_i32_le(0);                   // p_offset Cont..
+  write_i32_le(0x40000000);          // p_vaddr The Virtual Address to place the segment at | dq
+  write_i32_le(0x00000000);          // Cont.. | dq cont..
+  write_i32_le(0x40000000);          // p_paddr The "phyiscal address" set to same as virtual address | dq
+  write_i32_le(0x00000000);          // Cont.. | dq cont..
+  write_i32_le(0x78 + PROGRAM_SIZE); // p_filesz File load virtual address : The size of the segment in the file. It ends at the string table | dq (problem code?)
+  write_i32_le(0x0000000);           // Cont.. | dq cont..
+  write_i32_le(0x78 + PROGRAM_SIZE); // p_memsz  String table : The size of the segment in memory | dq (problem code?)
+  write_i32_le(0x00000000);          // Cont.. | dq cont..
+  write_i32_le(0x200000);            // p_align  | dq
+  write_i32_le(0x00000000);          // Cont.. | dq cont..
 }
 
 #endif
 
+// Write the code to the output file. When called multiple times, it appends the
+// code to the end of the file.
+bool has_header = false;
 void generate_exe() {
   int i = 0;
 
-  write_elf_e_header();
-  write_elf_p_header();
+  if (!has_header) {
+    write_elf_e_header();
+    write_elf_p_header();
+    has_header = true;
+  }
 
   while (i < code_alloc) {
     write_i8(code[i]);

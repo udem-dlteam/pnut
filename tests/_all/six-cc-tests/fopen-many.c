@@ -1,8 +1,14 @@
 // On mksh, this test takes more than 30s. Adjusting the timeout to make it pass.
 // timeout: 120
 
+#include <stdio.h>
+
+#ifdef PNUT_CC
+typedef int FILE;
+#endif
+
 int main() {
-  int f;
+  FILE *f;
   char c;
   int i = 0;
   while (i < 100) {

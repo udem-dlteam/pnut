@@ -61,16 +61,20 @@ bootstrap_with_shell() {
   ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh
 
   # create pnut-exe.sh, the C to machine code compiler as a shell script
-  printf_timing "pnut-sh.sh compiling pnut.c -> pnut-sh-compiled-by-pnut-sh-sh.sh" \
-                "$1 $TEMP_DIR/pnut-sh.sh $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh"
-  if diff $TEMP_DIR/pnut-sh.sh $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh 2>&1 > /dev/null ; then
-    printf "         SUCCESS... %s\n" "pnut-sh.sh == pnut-sh-compiled-by-pnut-sh-sh.sh"
+  if [ $skip_pnut_sh -eq 0 ]; then
+    printf_timing "pnut-sh.sh compiling pnut.c -> pnut-sh-compiled-by-pnut-sh-sh.sh" \
+                  "$1 $TEMP_DIR/pnut-sh.sh $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh"
+    if diff $TEMP_DIR/pnut-sh.sh $TEMP_DIR/pnut-sh-compiled-by-pnut-sh-sh.sh 2>&1 > /dev/null ; then
+      printf "         SUCCESS... %s\n" "pnut-sh.sh == pnut-sh-compiled-by-pnut-sh-sh.sh"
+    else
+      printf "         FAILURE... %s\n" "pnut-sh.sh != pnut-sh-compiled-by-pnut-sh-sh.sh"
+      exit 1
+    fi
+    printf_timing "pnut-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-sh-sh.sh" \
+                  "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh"
   else
-    printf "         FAILURE... %s\n" "pnut-sh.sh != pnut-sh-compiled-by-pnut-sh-sh.sh"
-    exit 1
+    ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh
   fi
-  printf_timing "pnut-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-sh-sh.sh" \
-                "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh"
   printf_timing "pnut-exe-compiled-by-pnut-sh-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
                 "$1 $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh $PNUT_EXE_OPTIONS pnut.c -o $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
 
@@ -127,12 +131,16 @@ bootstrap_with_shell() {
 backend="x86_64_linux"  # Default to x86_64_linux
 shell=                  # Defined if doing the full bootstrap using pnut.sh on Posix shell. "all" to test with all shells (slow).
 safe=0                  # Whether to use safe mode when compiling pnut (adds checks at run time)
+skip_pnut_sh=0          # Whether to skip the pnut.sh bootstrap (if set, we only compile with gcc)
 
 while [ $# -gt 0 ]; do
   case $1 in
     --backend) backend="$2";                            shift 2 ;;
     --shell)   shell="$2";                              shift 2 ;;
     --fast)    PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
+    --one-pass-generator) PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DONE_PASS_GENERATOR"; shift 1 ;;
+    --stats)  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DPRINT_MEMORY_STATS"; shift 1 ;;
+    --no-pnut-sh-bootstrap) skip_pnut_sh=1;           shift 1 ;;
     --safe)    safe=1;                                  shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac

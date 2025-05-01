@@ -6,7 +6,83 @@ void generate_exe();
 
 #define MAX_CODE_SIZE 500000
 int code[MAX_CODE_SIZE];
+// Index of the next free byte in the code buffer
 int code_alloc = 0;
+// Total number of bytes emitted
+// code_alloc + code_address_base = address of the next instruction.
+int code_address_base = 0;
+// Maximum size of the code buffer, used for debugging
+int code_alloc_max = 0;
+
+/* ONE_PASS_GENERATOR option:
+
+    Makes the code generator one-pass.
+
+    If set, the machine code is written to the output at the end of each
+    function definition. This significantly reduces the required size of the
+    code buffer (240k to 15k when compiling pnut-exe), but introduces extra
+    complexity to the code generation since fixups can only be done for code
+    that is still in the buffer. The difficulties come in 2 variants:
+
+      1. Forward jumps to labels that are not yet defined.
+
+      2. Certain constants must be placed at the beginning of the code, but
+         their value is only known at the end of the program.
+
+    Here are some concrete examples of such problems:
+
+      1. Calls to functions that are defined later in the code cannot be done
+         directly.
+
+      2. The initialization of global variables is interspersed with the rest of
+         the code, with forward jumps from the N^th initialization to the N+1^th
+         initialization. This means that at any time, the init_next_lbl label is
+         undefined.
+
+      3. Allocating space for global variables must be done at the beginning of
+         the program where the size of the globals is not known yet. More
+         generally, transfering control from the beginning of the program to the
+         end in 1 jump is not possible. This makes transfering information from
+         the end of the program to the beginning much more difficult.
+
+      4. The ELF header contains the size of the code, which is not known until
+         the end of the program.
+
+    And how they are solved:
+
+      1. The code generator maintains a jump table with all functions of the
+         program. When the function is declared, the code generator adds an
+         entry to the globals to store the address of the function, which will
+         be initialized with the address of the function during program
+         initialization when the address is known. This makes forward function
+         calls more expensive as they go through the jump table. This motivated
+         moving the definition of the built-in functions to the beginning of the
+         program to speed them up.
+
+      2. To be able to output the code after a function definition, all jumps in
+         the code must be resolved. Fortunately, non-call jumps inside a
+         function are all resolved at the end of the function, this leaves
+         init_next_lbl as the only unresolved label. Because function definition
+         is followed by the initialization of its jump table entry, the
+         init_next_lbl label is temporarily resolved, at which point all labels
+         are resolved and the code can be flushed.
+         See init_forward_jump_table for more details.
+
+      3. The size of the global variables is set assumed to be up under a
+         certain hardcoded limit. If the limit is exceeded, the code generator
+         will emit a fatal error at the end.
+
+      4. On certain platforms, the size of the program in the ELF header doesn't
+         need to be equal to the actual size of the code. As long as the
+         declared size is greater than the actual size, the program will run.
+*/
+
+#ifdef ONE_PASS_GENERATOR
+void reset_code_buffer() {
+  code_address_base += code_alloc;
+  code_alloc = 0;
+}
+#endif
 
 void emit_i8(int a) {
   if (code_alloc >= MAX_CODE_SIZE) {
@@ -322,26 +398,12 @@ void setup_proc_args(int global_vars_size);
 
 #define cgc int
 
+// Labels to initialize global variables
 int setup_lbl;
 int init_start_lbl;
 int init_next_lbl;
-int main_lbl;
+int main_lbl = 0;
 int exit_lbl;
-int getchar_lbl;
-int putchar_lbl;
-int fopen_lbl;
-int fclose_lbl;
-int fgetc_lbl;
-int malloc_lbl;
-int free_lbl;
-int printf_lbl; // Stub
-
-int read_lbl;
-int write_lbl;
-int open_lbl;
-int close_lbl;
-int seek_lbl;
-int unlink_lbl;
 
 int word_size_align(int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
@@ -368,6 +430,12 @@ enum {
   GENERIC_LABEL,
   GOTO_LABEL,
 };
+
+#define START_INIT_BLOCK() \
+  def_label(init_next_lbl); \
+  init_next_lbl = alloc_label("init_next");
+#define END_INIT_BLOCK()   \
+  jump(init_next_lbl);
 
 #ifdef SAFE_MODE
 int labels[100000];
@@ -428,6 +496,10 @@ int alloc_goto_label() {
   return lbl;
 }
 
+bool is_label_defined(int lbl) {
+  return heap[lbl + 1] < 0;
+}
+
 void use_label(int lbl) {
 
   int addr = heap[lbl + 1];
@@ -436,10 +508,24 @@ void use_label(int lbl) {
 
   if (addr < 0) {
     // label address is currently known
-    addr = -addr - (code_alloc + 4); // compute relative address
+    addr = -addr - (code_address_base + code_alloc + 4); // compute relative address
     emit_i32_le(addr);
   } else {
-    // label address is not yet known
+    // label address is not yet known.
+    // In this case, we keep track of the locations that need to be patched when
+    // the label is defined as a list stored in the code buffer. The label
+    // points to the first address to patch, and the address of the next patch
+    // is stored in the code buffer like so:
+    // heap[lbl + 1] = [ patch address #1 ]
+    //
+    // Code buffer:
+    // |-----------------------------------------------
+    // | ...
+    // | patch address #1: [ patch address #2 ]
+    // | ...
+    // | patch address #2: 0 (end of list)
+    // | ...
+    // |-----------------------------------------------
     emit_i32_le(0); // 32 bit placeholder for distance
     code[code_alloc-1] = addr; // chain with previous patch address
     heap[lbl + 1] = code_alloc;
@@ -457,13 +543,11 @@ void def_label(int lbl) {
   if (addr < 0) {
     fatal_error("label defined more than once");
   } else {
-    heap[lbl + 1] = -label_addr; // define label's address
+    heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
-      code_alloc = addr;
-      addr = label_addr - addr; // compute relative address
-      code_alloc -= 4;
-      emit_i32_le(addr);
+      next = code[addr - 1]; // get pointer to next patch address before we overwrite it
+      code_alloc = addr - 4; // place code pointer to where use_label was called
+      emit_i32_le(label_addr - addr); // replace placeholder with relative address
       addr = next;
     }
     code_alloc = label_addr;
@@ -1199,9 +1283,19 @@ void codegen_call(ast node) {
   nb_params = codegen_params(params);
 #endif
 
+  // Generate a fast path for direct calls
   if (binding != 0) {
-    // Generate a fast path for direct calls
-    call(heap[binding+4]);
+#ifdef ONE_PASS_GENERATOR
+    // When compiling in one pass mode, forward jumps must go through the jump table
+    if (is_label_defined(binding)) {
+      call(fun_binding_lbl(binding));
+    } else {
+      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+      call_reg(reg_X);
+    }
+#else
+    call(fun_binding_lbl(binding));
+#endif
   } else {
     // Otherwise we go through the function pointer
     codegen_rvalue(fun);
@@ -1259,7 +1353,12 @@ int codegen_lvalue(ast node) {
           push_reg(reg_X);
           break;
         case BINDING_FUN:
+          // Function pointers are stored in the forward jump table
+#ifdef ONE_PASS_GENERATOR
+          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#else
           mov_reg_lbl(reg_X, heap[binding+4]);
+#endif
           push_reg(reg_X);
           break;
         default:
@@ -1348,10 +1447,8 @@ int codegen_lvalue(ast node) {
   return lvalue_width;
 }
 
-void codegen_string(int string_probe) {
+void codegen_string(char *string_start, char *string_end) {
   int lbl = alloc_label(0);
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = string_start + heap[string_probe + 4];
 
   call(lbl);
 
@@ -1434,7 +1531,11 @@ void codegen_rvalue(ast node) {
           break;
 
         case BINDING_FUN:
+#ifdef ONE_PASS_GENERATOR
+          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#else
           mov_reg_lbl(reg_X, heap[binding+4]);
+#endif
           push_reg(reg_X);
           break;
 
@@ -1444,7 +1545,7 @@ void codegen_rvalue(ast node) {
           break;
       }
     } else if (op == STRING) {
-      codegen_string(get_val_(STRING, node));
+      codegen_string(STRING_BUF(get_val_(STRING, node)), STRING_BUF_END(get_val_(STRING, node)));
     } else {
       putstr("op="); putint(op); putchar('\n');
       fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
@@ -1664,77 +1765,6 @@ void codegen_rvalue(ast node) {
   grow_fs(1);
 }
 
-void codegen_begin() {
-
-  setup_lbl = alloc_label("setup");
-  init_start_lbl = alloc_label("init_start");
-  init_next_lbl = init_start_lbl;
-
-  // Make room for heap start and malloc bump pointer.
-  // reg_glo[0]: heap start
-  // reg_glo[WORD_SIZE]: malloc bump pointer
-  cgc_global_alloc += 2 * WORD_SIZE;
-
-  int_type = new_ast0(INT_KW, 0);
-  uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
-  char_type = new_ast0(CHAR_KW, 0);
-  string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
-  void_type = new_ast0(VOID_KW, 0);
-  void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
-
-  main_lbl = alloc_label("main");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "main"), main_lbl, function_type(void_type, 0));
-
-  exit_lbl = alloc_label("exit");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "exit"), exit_lbl, function_type1(void_type, int_type));
-
-  read_lbl = alloc_label("read");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "read"), read_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  write_lbl = alloc_label("write");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "write"), write_lbl, function_type3(int_type, int_type, void_star_type, int_type));
-
-  open_lbl = alloc_label("open");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "open"), open_lbl, make_variadic_func(function_type2(int_type, string_type, int_type)));
-
-  close_lbl = alloc_label("close");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "close"), close_lbl, function_type1(int_type, int_type));
-
-  seek_lbl = alloc_label("lseek");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "lseek"), seek_lbl, function_type3(int_type, int_type, int_type, int_type));
-
-  unlink_lbl = alloc_label("unlink");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "unlink"), unlink_lbl, function_type1(int_type, string_type));
-
-#ifndef NO_BUILTIN_LIBC
-  putchar_lbl = alloc_label("putchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "putchar"), putchar_lbl, function_type1(void_type, char_type));
-
-  getchar_lbl = alloc_label("getchar");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "getchar"), getchar_lbl, function_type(char_type, 0));
-
-  fopen_lbl = alloc_label("fopen");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fopen"), fopen_lbl, function_type2(int_type, string_type, string_type));
-
-  fclose_lbl = alloc_label("fclose");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fclose"), fclose_lbl, function_type1(int_type, int_type));
-
-  fgetc_lbl = alloc_label("fgetc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "fgetc"), fgetc_lbl, function_type1(int_type, int_type));
-
-  malloc_lbl = alloc_label("malloc");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "malloc"), malloc_lbl, function_type1(void_star_type, int_type));
-
-  free_lbl = alloc_label("free");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "free"), free_lbl, function_type1(void_type, void_star_type));
-
-  printf_lbl = alloc_label("printf");
-  cgc_add_global_fun(init_ident(IDENTIFIER, "printf"), printf_lbl, make_variadic_func(function_type1(int_type, string_type)));
-#endif
-
-  jump(setup_lbl);
-}
-
 void handle_enum_struct_union_type_decl(ast type);
 
 void codegen_enum(ast node) {
@@ -1813,7 +1843,7 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
     }
   } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
     // Create the string and assign global variable to the pointer
-    codegen_string(string_probe);
+    codegen_string(STRING_BUF(string_probe), STRING_BUF_END(string_probe));
     pop_reg(reg_X);
     mov_mem_reg(base_reg, offset, reg_X);
   } else {
@@ -1983,10 +2013,9 @@ void codegen_glo_var_decl(ast node) {
     }
 
     if (init != 0) {
-      def_label(init_next_lbl);
-      init_next_lbl = alloc_label("init_next");
+      START_INIT_BLOCK();
       codegen_initializer(false, init, type, reg_glo, heap[binding + 3]); // heap[binding + 3] = offset
-      jump(init_next_lbl);
+      END_INIT_BLOCK();
     }
   }
 }
@@ -2031,10 +2060,9 @@ void codegen_static_local_var_decl(ast node) {
     // Skip over the initialization code that will run during program initialization
     skip_init_lbl = alloc_label("skip_init");
     jump(skip_init_lbl);
-    def_label(init_next_lbl);
-    init_next_lbl = alloc_label("init_next");
+    START_INIT_BLOCK();
     codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
-    jump(init_next_lbl);
+    END_INIT_BLOCK();
     def_label(skip_init_lbl);
   }
 }
@@ -2364,6 +2392,32 @@ void add_params(ast params) {
   }
 }
 
+#ifdef ONE_PASS_GENERATOR
+// Initialize the function entry in the forward jump table
+void init_forward_jump_table(int binding) {
+#ifdef SAFE_MODE
+  if (!is_label_defined(fun_binding_lbl(binding))) fatal_error("init_forward_jump_table: function not found");
+#endif
+
+  START_INIT_BLOCK();
+  mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
+  mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
+
+  // At this point, all labels should be defined, which means we can safely
+  // output the code and overwrite the code buffer.
+
+  assert_all_labels_defined(); // In SAFE_MODE, this checks that all labels are defined
+  code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
+  generate_exe();
+  reset_code_buffer();
+
+  END_INIT_BLOCK();
+}
+#else
+// no-op
+#define init_forward_jump_table(binding)
+#endif
+
 void codegen_glo_fun_decl(ast node) {
   ast decl = get_child__(FUN_DECL, DECL, node, 0);
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
@@ -2378,12 +2432,6 @@ void codegen_glo_fun_decl(ast node) {
     fatal_error("Returning arrays or structs from function not supported");
   }
 
-  // If the function is main
-  if (name_probe == MAIN_ID) {
-    // Check if main returns an exit code.
-    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
-  }
-
   binding = cgc_lookup_fun(name_probe, cgc_globals);
 
   if (binding == 0) {
@@ -2391,7 +2439,14 @@ void codegen_glo_fun_decl(ast node) {
     binding = cgc_globals;
   }
 
-  def_label(heap[binding+4]);
+  // If the function is main
+  if (name_probe == MAIN_ID) {
+    main_lbl = fun_binding_lbl(binding);
+    // Check if main returns an exit code.
+    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
+  }
+
+  def_label(fun_binding_lbl(binding));
 
   // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
   //   rt_debug(fp_filepath);
@@ -2411,6 +2466,9 @@ void codegen_glo_fun_decl(ast node) {
   cgc_fs = 0;
 
   ret();
+
+  // Register the function in the forward jump table during initialization
+  init_forward_jump_table(binding);
 
   cgc_locals_fun = save_locals_fun;
 }
@@ -2457,20 +2515,18 @@ void codegen_glo_decl(ast node) {
 void rt_putchar() {
   push_reg(reg_X);            // Allocate buffer on stack containing the character
   mov_reg_imm(reg_X, 1);      // reg_X = file descriptor (stdout)
-  mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer size
-  mov_reg_imm(reg_Z, 1);      // reg_Z = buffer address
+  mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer address
+  mov_reg_imm(reg_Z, 1);      // reg_Z = buffer size
   os_write();
   pop_reg(reg_X);             // Deallocate buffer
 }
 
 void rt_debug(char* msg) {
-  while (*msg != 0) {
-    mov_reg_imm(reg_X, *msg);
-    rt_putchar();
-    msg += 1;
-  }
-  mov_reg_imm(reg_X, '\n');
-  rt_putchar();
+  codegen_string(msg, msg + strlen(msg));
+  mov_reg_imm(reg_X, 1);           // reg_X = file descriptor (stdout)
+  pop_reg(reg_Y);                  // reg_Y = buffer address
+  mov_reg_imm(reg_Z, strlen(msg)); // reg_Z = buffer size
+  os_write();                      // Print the string
 }
 
 void rt_crash(char* msg) {
@@ -2531,8 +2587,142 @@ void rt_malloc() {
 
 #endif
 
-void codegen_end() {
-  def_label(setup_lbl);
+void codegen_builtin_movs(ast params) {
+  int i = 0;
+  int reg;
+  while (params != 0) {
+    switch (i) {
+      case 0: reg = reg_X; break;
+      case 1: reg = reg_Y; break;
+      case 2: reg = reg_Z; break;
+      default: fatal_error("declare_builtin: too many parameters");
+    }
+    mov_reg_mem(reg, reg_SP, WORD_SIZE * (i + 1)); // Get parameter from stack
+    params = cdr(params);
+    i += 1;
+  }
+}
+
+int declare_builtin(char* name, bool variadic, ast return_type, ast params) {
+  int lbl = alloc_label(name);
+  return_type = function_type(return_type, params);
+  if (variadic) return_type = make_variadic_func(return_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, name), lbl, return_type);
+  def_label(lbl);
+  codegen_builtin_movs(params);
+  return lbl;
+}
+
+void codegen_builtin() {
+#ifdef ONE_PASS_GENERATOR
+  int binding;
+#endif
+
+  // exit function
+  exit_lbl = declare_builtin("exit", false, void_type, list1(int_type));
+  os_exit();
+  init_forward_jump_table(cgc_globals);
+
+  // read function
+  declare_builtin("read", false, int_type, list3(int_type, void_star_type, int_type));
+  os_read();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // write function
+  declare_builtin("write", false, int_type, list3(int_type, void_star_type, int_type));
+  os_write();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // open function
+  // Regarding the mode parameter, it is required if the flag allows the
+  // creation of a new file. Otherwise, it may be omitted and is ignored by the
+  // OS.
+  // The manual says:
+  // > If neither O_CREAT nor O_TMPFILE is specified in flags, then mode is
+  // > ignored (and can thus be specified as 0, or simply omitted).  The mode
+  // > argument must be supplied if O_CREAT or O_TMPFILE is specified in flags;
+  // > if it is not supplied, some arbitrary bytes from the stack will be
+  // > applied as the file mode.
+  declare_builtin("open", true, int_type, list2(string_type, int_type));
+  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // mode, if present
+  os_open();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // close function
+  declare_builtin("close", false, int_type, list1(int_type));
+#ifdef ONE_PASS_GENERATOR
+  binding = cgc_globals; // Save the binding for the forward jump table
+#endif
+#ifndef NO_BUILTIN_LIBC
+  // fclose is just like close because FILE * is just the file descriptor in the builtin libc
+  declare_builtin("fclose", false, int_type, list1(int_type));
+#endif
+  os_close();
+  ret();
+  init_forward_jump_table(cgc_globals);
+  init_forward_jump_table(binding);
+
+  // seek function
+  declare_builtin("lseek", false, int_type, list3(int_type, int_type, int_type));
+  os_seek();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // unlink function
+  declare_builtin("unlink", false, int_type, list1(string_type));
+  os_unlink();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+#ifndef NO_BUILTIN_LIBC
+  // putchar function
+  declare_builtin("putchar", false, void_type, list1(char_type));
+  rt_putchar();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // getchar function
+  declare_builtin("getchar", false, char_type, 0);
+  mov_reg_imm(reg_X, 0); // stdin
+  rt_fgetc(reg_X);
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // fopen function
+  declare_builtin("fopen", false, int_type, list2(string_type, string_type));
+  rt_fopen();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // fgetc function
+  declare_builtin("fgetc", false, int_type, list1(int_type));
+  rt_fgetc(reg_X);
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // malloc function
+  declare_builtin("malloc", false, void_star_type, list1(int_type));
+  rt_malloc();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // free function (no-op)
+  declare_builtin("free", false, void_type, list1(void_star_type));
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // printf function stub
+  declare_builtin("printf", true, int_type, list1(string_type));
+  rt_crash("printf is not supported yet.");
+  ret();
+  init_forward_jump_table(cgc_globals);
+#endif
+}
+
+void init_memory_spaces(int glo_size) {
 
   // Allocate some space for the global variables.
   // The global variables used to be on the stack, but because the stack has a
@@ -2545,128 +2735,76 @@ void codegen_end() {
   //
   // Regarding initialization, os_allocate_memory uses mmap with the
   // MAP_ANONYMOUS flag so the memory should already be zeroed.
-  //
-  os_allocate_memory(cgc_global_alloc);   // Returns the globals table start address in reg_X
+
+  os_allocate_memory(glo_size);           // Returns the globals table start address in reg_X
   mov_reg_reg(reg_glo, reg_X);            // reg_glo = globals table start
 
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
   mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // init bump pointer
+}
 
+void codegen_begin() {
+
+  setup_lbl = alloc_label("setup");
+  init_start_lbl = alloc_label("init_start");
+  init_next_lbl = init_start_lbl;
+
+  // Make room for heap start and malloc bump pointer.
+  // reg_glo[0]: heap start
+  // reg_glo[WORD_SIZE]: malloc bump pointer
+  cgc_global_alloc += 2 * WORD_SIZE;
+
+  int_type = new_ast0(INT_KW, 0);
+  uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+  char_type = new_ast0(CHAR_KW, 0);
+  string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
+  void_type = new_ast0(VOID_KW, 0);
+  void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
+
+#ifdef ONE_PASS_GENERATOR
+  // Initialize the global variable table and heap for malloc
+  init_memory_spaces(RT_HEAP_SIZE);
+  // Jump to the initialization code
   jump(init_start_lbl);
+#else
+  jump(setup_lbl);
+#endif
+
+  codegen_builtin();
+}
+
+void codegen_end() {
+#ifndef ONE_PASS_GENERATOR
+  def_label(setup_lbl);
+  // Initialize the global variable table and heap for malloc
+  init_memory_spaces(cgc_global_alloc);
+  // Jump to the initialization code
+  jump(init_start_lbl);
+#endif
 
   def_label(init_next_lbl);
   setup_proc_args(0);
+#ifdef SAFE_MODE
+  if (!main_lbl) fatal_error("main function not found");
+#endif
   call(main_lbl);
   if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
   push_reg(reg_X); // exit process with result of main
-  push_reg(reg_X); // dummy return address (exit never needs it)
-
-  // exit function
-  def_label(exit_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_exit();
-
-  // read function
-  def_label(read_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
-  os_read();
-  ret();
-
-  // write function
-  def_label(write_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
-  os_write();
-  ret();
-
-  // open function
-  // Regarding the mode parameter, it is required if the flag allows the
-  // creation of a new file. Otherwise, it may be omitted and is ignored by the
-  // OS.
-  // The manual says:
-  // > If neither O_CREAT nor O_TMPFILE is specified in flags, then mode is
-  // > ignored (and can thus be specified as 0, or simply omitted).  The mode
-  // > argument must be supplied if O_CREAT or O_TMPFILE is specified in flags;
-  // > if it is not supplied, some arbitrary bytes from the stack will be
-  // > applied as the file mode.
-  def_label(open_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE);
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE);
-  os_open();
-  ret();
-
-  // close function
-  def_label(close_lbl);
-#ifndef NO_BUILTIN_LIBC
-  // fclose is just like close because FILE * is just the file descriptor in the builtin libc
-  def_label(fclose_lbl);
-#endif
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  os_close();
-  ret();
-
-  // seek function
-  def_label(seek_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // fd
-  mov_reg_mem(reg_Y, reg_SP, 2*WORD_SIZE); // offset
-  mov_reg_mem(reg_Z, reg_SP, 3*WORD_SIZE); // whence
-  os_seek();
-  ret();
-
-  // unlink function
-  def_label(unlink_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);   // filename
-  os_unlink();
-  ret();
-
-#ifndef NO_BUILTIN_LIBC
-  // putchar function
-  def_label(putchar_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_putchar();
-  ret();
-
-  // getchar function
-  def_label(getchar_lbl);
-  mov_reg_imm(reg_X, 0); // stdin
-  rt_fgetc(reg_X);
-  ret();
-
-  // fopen function
-  def_label(fopen_lbl);
-  rt_fopen();
-  ret();
-
-  // fgetc function
-  def_label(fgetc_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_fgetc(reg_X);
-  ret();
-
-  // malloc function
-  def_label(malloc_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  rt_malloc();
-  ret();
-
-  // free function
-  def_label(free_lbl);
-  mov_reg_mem(reg_X, reg_SP, WORD_SIZE);
-  // Free is NO-OP
-  ret();
-
-  // printf function stub
-  def_label(printf_lbl);
-  rt_crash("printf is not supported yet.");
-  ret();
-#endif
+  call(exit_lbl);
 
   assert_all_labels_defined();
 
+  // Finish writing the code to the file
   generate_exe();
+
+#ifdef ONE_PASS_GENERATOR
+  // Check that the size we assumed for the ELF header and globals are correct.
+  if (cgc_global_alloc >= RT_HEAP_SIZE) fatal_error("Not enough space for global variables");
+  if (code_address_base + code_alloc >= MAX_CODE_SIZE) fatal_error("codegen_end: code size too large, elf file is invalid.");
+#endif
+
+#ifdef PRINT_MEMORY_STATS
+  printf("# string_pool_alloc=%d heap_alloc=%d code_alloc=%d code_alloc_max=%d\n", string_pool_alloc, heap_alloc, code_alloc, code_alloc_max);
+#endif
 }
