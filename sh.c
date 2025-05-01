@@ -490,7 +490,7 @@ void print_glo_decls() {
 // Similar to env_var, but doesn't use the local environment and assumes that the
 // identifier is internal or global. This is faster than env_var when we know that
 // the variable is not local.
-text format_special_var(ast ident, ast prefixed_with_dollar) {
+text format_special_var(ast ident, bool prefixed_with_dollar) {
   int i;
   switch (get_op(ident)) {
     case IDENTIFIER_INTERNAL:
@@ -530,12 +530,27 @@ text local_var(int ident_probe) {
   }
 }
 
-text env_var_with_prefix(ast ident, ast prefixed_with_dollar) {
-  if (get_op(ident) == IDENTIFIER) {
-    if (cgc_lookup_var(get_val_(IDENTIFIER, ident), cgc_locals)) {
-      return local_var(get_val_(IDENTIFIER, ident));
+text local_var_or_param(int ident_probe, int binding, bool prefixed_with_dollar) {
+  if (binding_kind(binding) == BINDING_PARAM_LOCAL && is_constant_type(heap[binding + 4])) {
+    if (prefixed_with_dollar) {
+      return wrap_int(heap[binding + 3]);
     } else {
-      return global_var(get_val_(IDENTIFIER, ident));
+      return string_concat(wrap_char('$'), wrap_int(heap[binding + 3]));
+    }
+  } else {
+    return local_var(ident_probe);
+  }
+}
+
+text env_var_with_prefix(ast ident, bool prefixed_with_dollar) {
+  int binding;
+  int ident_probe;
+  if (get_op(ident) == IDENTIFIER) {
+    ident_probe = get_val_(IDENTIFIER, ident);
+    if ((binding = cgc_lookup_var(ident_probe, cgc_locals))) {
+      return local_var_or_param(ident_probe, binding, prefixed_with_dollar);
+    } else {
+      return global_var(ident_probe);
     }
   } else {
     return format_special_var(ident, prefixed_with_dollar);
@@ -671,17 +686,20 @@ text save_local_vars() {
   text res = 0;
   int counter = fun_gensym_ix;
 
+  // Save local variables and parameters
   while (env != 0) {
     ident = binding_ident(env);
-    res = concatenate_strings_with(string_concat(wrap_char('$'), local_var(ident)), res, wrap_char(' '));
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+      res = concatenate_strings_with(string_concat(wrap_char('$'), local_var(ident)), res, wrap_char(' '));
+    }
     env = binding_next(env);
   }
 
+  // Save internal variables
   while (counter > 0) {
     res = concatenate_strings_with(res, string_concat(wrap_char('$'), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1)), wrap_char(' '));
     counter -= 1;
   }
-
 
   if (res) {
     runtime_use_local_vars = true;
@@ -704,19 +722,25 @@ text restore_local_vars(int params_count) {
   int env_non_cst_size = 0;
 
   while (env != 0) {
-    env_non_cst_size += 1;
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+      env_non_cst_size += 1;
+    }
     env = binding_next(env);
   }
 
   env = cgc_locals_fun;
 
+  // Restore local variables and parameters
   while (env != 0) {
     ident = binding_ident(env);
-    res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), local_var(ident), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
-    local_var_pos += 1;
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+      res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), local_var(ident), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
+      local_var_pos += 1;
+    }
     env = binding_next(env);
   }
 
+  // Restore internal variables
   while (counter > 0) {
     res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
     local_var_pos += 1;
@@ -736,18 +760,23 @@ text restore_local_vars(int params_count) {
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
 // Save the value of local variables to positional parameters
 text let_params(int params) {
-  ast ident;
+  ast ident, decl;
   text res = 0;
   int params_ix = 2;
 
   while (params != 0) {
-    ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, car_(DECL, params), 0));
-    res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), local_var(ident), wrap_char(' '), format_special_var(new_dollar_ident(params_ix), false)), wrap_str_lit("; "));
+    decl = car_(DECL, params);
+    if (!is_constant_type(get_child_(DECL, decl, 1))) { // Skip constant params
+      ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+      res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), local_var(ident), wrap_char(' '), format_special_var(new_dollar_ident(params_ix), false)), wrap_str_lit("; "));
+    }
     params = tail(params);
     params_ix += 1;
   }
 
   runtime_use_local_vars |= res != 0;
+
+  if (res != 0) res = string_concat(wrap_char(' '), res);
 
   return res;
 }
@@ -759,16 +788,21 @@ text save_local_vars() {
   text res = 0;
   int counter = fun_gensym_ix;
 
+  // Save temporary variables
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(string_concat(wrap_str_lit("let "), format_special_var(ident, true)), res, wrap_str_lit("; "));
     counter -= 1;
   }
 
+  // Save local variables and parameters
   while (env != 0) {
-#ifdef SH_INITIALIZE_PARAMS_WITH_LET
+#if defined(SH_INITIALIZE_PARAMS_WITH_LET)
     if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
+#elif defined(OPTIMIZE_CONSTANT_PARAMS)
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || is_constant_type(heap[env + 4])) { // Skip constant params
 #else
+    {
 #endif
       ident = binding_ident(env);
       res = concatenate_strings_with(string_concat(wrap_str_lit("let "), local_var(ident)), res, wrap_str_lit("; "));
@@ -790,6 +824,7 @@ text restore_local_vars(int params_count) {
   text res = 0;
   int counter = fun_gensym_ix;
 
+  // Restore internal variables
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
@@ -798,7 +833,9 @@ text restore_local_vars(int params_count) {
 
   while (env != 0) {
     ident = binding_ident(env);
-    res = concatenate_strings_with(res, local_var(ident), wrap_char(' '));
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+      res = concatenate_strings_with(res, local_var(ident), wrap_char(' '));
+    }
 
     env = binding_next(env);
   }
@@ -2206,14 +2243,15 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
 }
 
 void comp_glo_fun_decl(ast node) {
-  ast decl = get_child__(FUN_DECL, DECL, node, 0);
+  ast fun_decl = get_child__(FUN_DECL, DECL, node, 0);
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
-  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
-  ast fun_type = get_child__(DECL, '(', decl, 1);
+  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, fun_decl, 0));
+  ast fun_type = get_child__(DECL, '(', fun_decl, 1);
   ast params = get_child_opt_('(', LIST, fun_type, 1);
-  text trailing_txt = 0;
+  text let_params_text = 0;
+  text function_comment = 0;
   int params_ix = 2; // Start at 2 because $1 is assigned to the return location
-  ast var;
+  ast decl;
   int save_loc_vars_fixup;
   int start_glo_decl_idx;
 
@@ -2232,25 +2270,30 @@ void comp_glo_fun_decl(ast node) {
   }
 
 #ifdef SH_INITIALIZE_PARAMS_WITH_LET
-  trailing_txt = let_params(params);
-  if (trailing_txt != 0) trailing_txt = string_concat(wrap_char(' '), trailing_txt);
+  let_params_text = let_params(params);
 #endif
 
-  if (trailing_txt == 0) {
-    // Show the mapping between the function parameters and $1, $2, etc.
-    while (params != 0) {
-      var = car_(DECL, params);
-      trailing_txt = concatenate_strings_with(trailing_txt, string_concat3(wrap_str_pool(get_val_(IDENTIFIER, get_child_(DECL, var, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
-      params = tail(params);
-      params_ix += 1;
+  // Show the mapping between the function parameters and $1, $2, etc.
+  while (params != 0) {
+    decl = car_(DECL, params);
+#ifdef SH_INITIALIZE_PARAMS_WITH_LET
+    if (is_constant_type(get_child_(DECL, decl, 1))) { // Skip constant params
+#endif
+      function_comment = concatenate_strings_with(function_comment, string_concat3(wrap_str_pool(get_val_(IDENTIFIER, get_child_(DECL, decl, 0))), wrap_str_lit(": $"), wrap_int(params_ix)), wrap_str_lit(", "));
+#ifdef SH_INITIALIZE_PARAMS_WITH_LET
     }
-    if (trailing_txt != 0) trailing_txt = string_concat(wrap_str_lit(" # "), trailing_txt);
+#endif
+    params = tail(params);
+    params_ix += 1;
   }
+  if (function_comment != 0) function_comment = string_concat(wrap_str_lit(" # "), function_comment);
 
-  append_glo_decl(string_concat3(
+
+  append_glo_decl(string_concat4(
     function_name(name_probe),
     wrap_str_lit("() {"),
-    trailing_txt
+    let_params_text,
+    function_comment
   ));
 
   in_tail_position = true;
@@ -2264,8 +2307,12 @@ void comp_glo_fun_decl(ast node) {
   params = get_child_opt_('(', LIST, fun_type, 1); // Reload params because params is now = 0
   params_ix = 2;
   while (params != 0) {
-    var = car_(DECL, params);
-    comp_assignment(get_child_(DECL, var, 0), new_dollar_ident(params_ix));
+    decl = car_(DECL, params);
+    if (!is_constant_type(get_child_(DECL, decl, 1))) { // Skip constant params
+      // We need to use the $1, $2, etc. identifiers because the function
+      // parameters are not in the local environment.
+      comp_assignment(get_child_(DECL, decl, 0), new_dollar_ident(params_ix));
+    }
     params = tail(params);
     params_ix += 1;
   }
@@ -2592,12 +2639,17 @@ void codegen_glo_decl(ast decl) {
   comp_glo_decl(decl);
   initialize_function_variables();
   print_glo_decls();
-  // Reset state
+  // Reset text and glo decls buffers
   glo_decl_ix = 0;
-  cgc_locals = cgc_locals_fun = 0; // Reset local environment
+  text_alloc = 1;
+
+  // Reset local environment
+  cgc_locals = cgc_locals_fun = 0;
+  cgc_fs = 1; // 1 to account for the return location parameter
+
+  // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
   cumul_text_alloc += text_alloc;
-  text_alloc = 1;
 }
 
 void codegen_end() {

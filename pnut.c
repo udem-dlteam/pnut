@@ -94,6 +94,9 @@ typedef int intptr_t;
 #if !defined(SH_SAVE_VARS_WITH_SET) && !defined(SH_INITIALIZE_PARAMS_WITH_LET)
 #define SH_SAVE_VARS_WITH_SET
 #endif
+#ifndef OPTIMIZE_CONSTANT_PARAMS_NOT
+#define OPTIMIZE_CONSTANT_PARAMS
+#endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
 
@@ -2612,6 +2615,20 @@ ast make_variadic_func(ast func_type) {
   set_child(func_type, 2, true); // Set the variadic flag
   return func_type;
 }
+
+#if defined(sh) && defined(OPTIMIZE_CONSTANT_PARAMS)
+// Used to optimize constant parameters of function
+bool is_constant_type(ast type) {
+  switch (get_op(type)) {
+    case '[': return false; // Array declarators cannot be marked as constant
+    case '(': return false; // Function declarators cannot be marked as constant
+    case '*': return TEST_TYPE_SPECIFIER(get_child_('*', type, 0), CONST_KW);
+    default:  return TEST_TYPE_SPECIFIER(get_child(type, 0), CONST_KW);
+  }
+}
+#else
+#define is_constant_type(type) false
+#endif
 
 // Type and declaration parser
 bool is_type_starter(int tok) {
