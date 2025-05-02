@@ -2608,16 +2608,19 @@ void initialize_function_variables() {
   text res = 0;
   int counter = fun_gensym_ix;
 
+  // Internal variables
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str_lit(" = "));
     counter -= 1;
   }
 
+  // Local variables and parameters
   while (env != 0) {
     ident = binding_ident(env);
-
-    res = concatenate_strings_with(res, local_var(ident), wrap_str_lit(" = "));
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+      res = concatenate_strings_with(res, local_var(ident), wrap_str_lit(" = "));
+    }
     env = binding_next(env);
   }
 
