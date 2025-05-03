@@ -1305,9 +1305,18 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // +x is equivalent to x
       return comp_rvalue_go(child0, context, test_side_effects, outer_op);
     } else if (op == '-' || op == '~' || op == '!') {
-      if (get_op(child0) == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
+      if (op == '-' && (get_op(child0) == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT)) {
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(-1, child0));
-      } else {
+      }
+#ifdef OPTIMIZE_CONSTANT_PARAMS
+      // The expansion of negative constant params prefixed with - result in
+      // --<number> which is parsed as pre-decrement. Add a space between the
+      // operator and the variable (constant param or not for consistency).
+      else if (get_op(child0) == IDENTIFIER) {
+        return wrap_if_needed(false, context, test_side_effects, string_concat3(wrap_char(op), wrap_char(' '), env_var_with_prefix(child0, false)), outer_op, op);
+      }
+#endif
+      else {
         sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
         return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char(op), sub1), outer_op, op);
       }

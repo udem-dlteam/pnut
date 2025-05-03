@@ -37,7 +37,7 @@ _wc_fd() { let fd $2; let filename $3
         : $((lines += 1))
       fi
       _is_word_separator sep $((_$((_buf + i))))
-      if [ $sep != 0 ] && [ $((!last_sep)) != 0 ] ; then
+      if [ $sep != 0 ] && [ $((! last_sep)) != 0 ] ; then
         : $((words += 1))
       fi
       last_sep=$sep

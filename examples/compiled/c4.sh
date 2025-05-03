@@ -322,7 +322,7 @@ _next() {
 _expr() { # lev: $2
   set $@ $lev $t $d
   lev=$2
-  if [ $((!_tk)) != 0 ] ; then
+  if [ $((! _tk)) != 0 ] ; then
     printf "%d: unexpected eof in expression\n" $_line
     exit -1
   elif [ $_tk = $_Num ] ; then
@@ -483,7 +483,7 @@ _expr() { # lev: $2
     _next __
     : $((_$((_e += 1)) = _IMM))
     if [ $_tk = $_Num ] ; then
-      : $((_$((_e += 1)) = -_ival))
+      : $((_$((_e += 1)) = - _ival))
       _next __
     else
       : $((_$((_e += 1)) = -1))
