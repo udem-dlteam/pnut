@@ -205,6 +205,10 @@ text concatenate_strings_with(text t1, text t2, text sep) {
   return string_concat3(t1, sep, t2);
 }
 
+#ifdef PNUT_SH
+#define puthex_unsigned(n) printf("%x", n)
+#define putoct_unsigned(n) printf("%o", n)
+#else
 // Output unsigned integer in hex
 void puthex_unsigned(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
@@ -217,6 +221,7 @@ void putoct_unsigned(int n) {
   if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
   putchar('0' + (n & 7));
 }
+#endif
 
 void print_escaped_char(char c, int for_printf) {
   // C escape sequences
