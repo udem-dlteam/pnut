@@ -231,7 +231,7 @@ _init_heap() {
   if [ $((_heap_start & (1 == 1))) != 0 ] ; then
     : $(((_heap_start += 1) - 1))
   fi
-  if [ $((!_heap_start)) != 0 ] ; then
+  if [ $((! _heap_start)) != 0 ] ; then
     exit 7
   fi
   _heap_mid=$((_heap_start + (_space_size >> 1)))
@@ -530,7 +530,7 @@ _decode() {
       op=4
       _pop n
     else
-      if [ $((!op)) != 0 ] ; then
+      if [ $((! op)) != 0 ] ; then
         _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
       fi
       if [ $n -ge $d ] ; then
@@ -635,7 +635,7 @@ _prim() { # no: $2
   elif [ $no = 3 ] ; then
     _pop x
     _read bytes_read $((x >> 1)) $buffer 1
-    if [ $((!bytes_read)) != 0 ] ; then
+    if [ $((! bytes_read)) != 0 ] ; then
       _push2 __ $((_$((_FALSE + __field1)))) $(((0 << 1) | 1))
     else
       _push2 __ $(((_$((buffer + 0)) << 1) | 1)) $(((0 << 1) | 1))
