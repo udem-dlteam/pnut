@@ -184,6 +184,9 @@ void putstr(char *str) {
   }
 }
 
+#ifdef PNUT_SH
+#define putint(n) printf("%d", n)
+#else
 void putint_aux(int n) {
   if (n <= -10) putint_aux(n / 10);
   putchar('0' - (n % 10));
@@ -197,6 +200,7 @@ void putint(int n) {
     putint_aux(-n);
   }
 }
+#endif
 
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
