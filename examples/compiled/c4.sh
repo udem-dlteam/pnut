@@ -1835,5 +1835,4 @@ __=0
 __code=0; # Exit code
 make_argv $(($# + 1)) "$0" "$@" # Setup argc/argv
 _main __code $(($# + 1)) $__argv
-
 exit $__code

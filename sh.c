@@ -2607,7 +2607,7 @@ void epilogue() {
     putstr("__code=0; # Exit code\n");
     if (runtime_use_make_argv) {
       putstr("make_argv $(($# + 1)) \"$0\" \"$@\" # Setup argc/argv\n");
-      putstr("_main __code $(($# + 1)) $__argv\n");
+      putstr("_main __code $(($# + 1)) $__argv");
     } else {
       putstr("_main __code");
     }

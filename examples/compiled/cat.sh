@@ -297,5 +297,4 @@ endlet() { # $1: return variable
 __code=0; # Exit code
 make_argv $(($# + 1)) "$0" "$@" # Setup argc/argv
 _main __code $(($# + 1)) $__argv
-
 exit $__code
