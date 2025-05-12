@@ -2833,8 +2833,10 @@ void codegen_end() {
 #endif
 
   def_label(init_next_lbl);
-#ifdef USE_STACK_FOR_GLOBALS
+#if defined(USE_STACK_FOR_GLOBALS) && defined(ONE_PASS_GENERATOR)
   setup_proc_args(RT_GLO_SIZE + RT_HEAP_SIZE);
+#elif defined(USE_STACK_FOR_GLOBALS)
+  setup_proc_args(cgc_global_alloc + RT_HEAP_SIZE);
 #else
   setup_proc_args(0);
 #endif
