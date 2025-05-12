@@ -1,7 +1,6 @@
 // common part of machine code generators
 void generate_exe();
 
-#define USE_STACK_FOR_GLOBALS
 // When placing globals on the stack, it's important that globals don't occupy
 // so much space they overflow the stack.
 #ifdef USE_STACK_FOR_GLOBALS
@@ -25,7 +24,11 @@ void generate_exe();
 #define MAX_CODE_SIZE 1000000
 #endif
 
+#ifdef ONE_PASS_GENERATOR
 #define CODE_SIZE 50000
+#else
+#define CODE_SIZE 500000
+#endif
 int code[CODE_SIZE];
 // Index of the next free byte in the code buffer
 int code_alloc = 0;
