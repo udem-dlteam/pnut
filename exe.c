@@ -2766,7 +2766,7 @@ void init_memory_spaces(int glo_size) {
   jump_cond_reg_reg(LT, loop_lbl, reg_Z, reg_Y); //    if (reg_Z < reg_Y) goto loop;
 
   add_reg_imm(reg_Y, -glo_size); // reg_Y = start of global variables/end of heap
-  add_reg_reg(reg_glo, reg_Y);   // reg_glo = start of global variables/end of heap
+  mov_reg_reg(reg_glo, reg_Y);   // reg_glo = start of global variables/end of heap
 
   add_reg_imm(reg_Y, -RT_HEAP_SIZE); // reg_Y = start of heap
   mov_mem_reg(reg_glo, 0, reg_Y);    // Set init heap start
