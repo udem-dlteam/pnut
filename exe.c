@@ -2750,24 +2750,24 @@ void init_memory_spaces(int glo_size) {
   // all systems (buider-hex0 in particular) support this syscall so pnut can
   // also place globals on the stack.
 #ifdef USE_STACK_FOR_GLOBALS
-  int glo_setup_loop_lbl = alloc_label("glo_setup_loop");
-  // Set to 0 the part of the stack that's used for global variables and heap
-  mov_reg_imm(reg_X, 0);              // reg_X = 0
-  mov_reg_reg(reg_Y, reg_SP);         // reg_Y = end of global variables (excluded)
-  grow_stack_bytes(glo_size);         // Allocate space for global variables
-  mov_reg_reg(reg_glo, reg_SP);       // reg_glo = start of global variables
+  int loop_lbl = alloc_label("glo_init_loop");
+  mov_reg_reg(reg_Y, reg_SP); // reg_Y = end of global variables/heap
+  grow_stack_bytes(glo_size + RT_HEAP_SIZE); // reg_SP = start of globals table/heap
+  mov_reg_reg(reg_Z, reg_SP); // reg_Z = start of globals table/heap
 
-  grow_stack_bytes(RT_HEAP_SIZE);     // Allocate space for heap
-  mov_mem_reg(reg_glo, 0, reg_SP);    // Set init heap start
-  mov_mem_reg(reg_glo, WORD_SIZE, reg_SP); // init bump pointer
+  // Loop over the range [reg_Z, reg_Y)
+  mov_reg_imm(reg_X, 0);                         // reg_X = 0
+  def_label(loop_lbl);                           // loop:
+  mov_mem_reg(reg_Z, 0, reg_X);                  //    *reg_Z = 0;
+  add_reg_imm(reg_Z, WORD_SIZE);                 //    reg_Z += WORD_SIZE;
+  jump_cond_reg_reg(LT, loop_lbl, reg_Z, reg_Y); //    if (reg_Z < reg_Y) goto loop;
 
-  // Iterate over the range [reg_glo, reg_Y) and set all the bytes to 0
-  def_label(glo_setup_loop_lbl);
-  mov_mem_reg(reg_glo, 0, reg_X);     // *reg_glo = 0;
-  add_reg_imm(reg_glo, WORD_SIZE);    // reg_glo += WORD_SIZE;
-  jump_cond_reg_reg(LT, glo_setup_loop_lbl, reg_glo, reg_Y); // if (reg_glo < reg_Y) goto glo_setup_loop_lbl;
+  add_reg_imm(reg_Y, -glo_size); // reg_Y = start of global variables/end of heap
+  add_reg_reg(reg_glo, reg_Y);   // reg_glo = start of global variables/end of heap
 
-  mov_reg_reg(reg_glo, reg_SP);       // reg_glo = stack pointer. reg_glo goes upwards, and reg_SP goes downwards
+  add_reg_imm(reg_Y, -RT_HEAP_SIZE); // reg_Y = start of heap
+  mov_mem_reg(reg_glo, 0, reg_Y);    // Set init heap start
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_Y); // init bump pointer
 
 #else
   // The global variables used to be on the stack, but because the stack has a
