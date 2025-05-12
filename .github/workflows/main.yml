@@ -94,6 +94,7 @@ jobs:
         run: |
           set -e
           ./run-tests.sh ${{ matrix.target }}
+          PNUT_OPTIONS="-DUSE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }}
 
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }} with one pass generator
         run: |
@@ -102,6 +103,7 @@ jobs:
             echo "Skipping one pass generator on macOS"
           else
             ./run-tests.sh ${{ matrix.target }} --one-pass-generator
+            PNUT_OPTIONS="-DUSE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }} --one-pass-generator
           fi
 
   tests-shell: # Run tests for pnut-sh on all supported shells
