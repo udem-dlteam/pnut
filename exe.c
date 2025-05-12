@@ -1311,7 +1311,7 @@ void codegen_call(ast node) {
   if (binding != 0) {
 #ifdef ONE_PASS_GENERATOR
     // When compiling in one pass mode, forward jumps must go through the jump table
-    if (is_label_defined(binding)) {
+    if (is_label_defined(fun_binding_lbl(binding))) {
       call(fun_binding_lbl(binding));
     } else {
       mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
