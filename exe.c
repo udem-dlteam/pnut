@@ -2827,16 +2827,16 @@ void codegen_end() {
 #ifndef ONE_PASS_GENERATOR
   def_label(setup_lbl);
   // Initialize the global variable table and heap for malloc
-  init_memory_spaces(cgc_global_alloc);
+  init_memory_spaces(word_size_align(cgc_global_alloc));
   // Jump to the initialization code
   jump(init_start_lbl);
 #endif
 
   def_label(init_next_lbl);
 #if defined(USE_STACK_FOR_GLOBALS) && defined(ONE_PASS_GENERATOR)
-  setup_proc_args(RT_GLO_SIZE + RT_HEAP_SIZE);
+  setup_proc_args(word_size_align(RT_GLO_SIZE + RT_HEAP_SIZE));
 #elif defined(USE_STACK_FOR_GLOBALS)
-  setup_proc_args(cgc_global_alloc + RT_HEAP_SIZE);
+  setup_proc_args(word_size_align(cgc_global_alloc + RT_HEAP_SIZE));
 #else
   setup_proc_args(0);
 #endif
