@@ -1,7 +1,7 @@
 // tests for recursion depth of macros
 
-// putchar
 #include <stdio.h>
+#include <stdlib.h>
 
 int test1 = 1;
 int test2 = 2;
@@ -33,7 +33,21 @@ void B(int a, int b) {
 #define B(a1, a2) C(a1, a2)
 #define C(a1, a2) B(a1, a2)
 
+struct STATE {
+  int regA;
+  int regB;
+};
+
+struct STATE *global_state;
+
+#define struct_field(sym) global_state->sym
+#define regA              struct_field(regA)
+
 void main() {
+  global_state = malloc(sizeof (struct STATE));
+  regA = 'A';
+  putchar(regA); putchar('\n');
+
   putdigit(test1);
   putdigit(test2);
   putdigit(test3);
