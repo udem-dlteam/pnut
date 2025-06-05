@@ -274,7 +274,45 @@ DEFINE_RUNTIME_FUN(char_to_int)
 #endif
 END_RUNTIME_FUN(char_to_int)
 
+// string packing/unpacking
+
+DEFINE_RUNTIME_FUN(unpack_string)
+DEPENDS_ON(char_to_int)
+  putstr("# Unpack a Shell string into an appropriately sized buffer\n");
+  putstr("unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
+  putstr("  __fgetc_buf=$1\n");
+  putstr("  __buffer=$2\n");
+  putstr("  __ends_with_eof=$3\n");
+#ifndef OPTIMIZE_LONG_LINES
+  putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
+  extract_first_char("  ", "__fgetc_buf", "_$__buffer")
+  putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
+  putstr("    : $((__buffer += 1))              # Move to the next buffer position\n");
+#else
+  putstr("  __fgetc_buf16=\n");
+  putstr("  __stdin_buf256=\n");
+  putstr("  __continue=1\n");
+  putstr("  while [ $__continue != 0 ] ; do\n");
+  extract_line_head("    ", "__stdin_buf256", "__fgetc_buf",  ANY_STRING_256, "256", "")
+  extract_line_head("    ", "__fgetc_buf16", "__stdin_buf256",  ANY_STRING_16,  "16", "        __continue=0\n")
+  putstr("    while [ ! -z \"$__fgetc_buf16\" ]; do\n");
+  extract_first_char("    ", "__fgetc_buf16", "_$__buffer")
+  putstr("      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character\n");
+  putstr("      : $((__buffer += 1))              # Move to the next buffer position\n");
+  putstr("    done\n");
+#endif
+  putstr("  done\n");
+  putstr("\n");
+  putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
+  putstr("    : $((_$__buffer = 10))            # Line ends with newline\n");
+  putstr("    : $((__buffer += 1))\n");
+  putstr("  fi\n");
+  putstr("  : $((_$__buffer = 0))               # Then \\0\n");
+  putstr("}\n");
+END_RUNTIME_FUN(unpack_string)
+
 // memory allocation
+
 DEFINE_RUNTIME_FUN(malloc)
   putstr("__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.\n\n");
   putstr("_malloc() { # $2 = object size\n");
@@ -351,46 +389,6 @@ DEFINE_RUNTIME_FUN(free)
   putstr("}\n");
 END_RUNTIME_FUN(free)
 
-// string packing/unpacking
-DEFINE_RUNTIME_FUN(unpack_string)
-DEPENDS_ON(malloc)
-DEPENDS_ON(char_to_int)
-  putstr("# Convert a Shell string to a C string\n");
-  putstr("unpack_string() {\n");
-  putstr("  __str=\"$2\"\n");
-  putstr("  _malloc $1 $((${#__str} + 1))\n");
-  putstr("  __ptr=$(($1))\n");
-#ifdef OPTIMIZE_LONG_LINES
-  putstr("  __us_buf16=\n");
-  putstr("  __us_buf256=\n");
-  putstr("  while [ ! -z \"$__str\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
-  extract_line_head("  ", "__us_buf256", "__str", ANY_STRING_256, "256", "")
-  extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
-  putstr("    while [ ! -z \"$__us_buf16\" ]; do\n");
-  extract_first_char("    ", "__us_buf16", "_$__ptr")
-  putstr("      __us_buf16=${__us_buf16#?}  # Remove the first character\n");
-  putstr("      : $((__ptr += 1))           # Move to the next buffer position\n");
-  putstr("    done\n");
-  putstr("  done\n");
-#else
-  putstr("  while [ -n \"$__str\" ] ; do\n");
-  putstr("    # Remove first char from string\n");
-  putstr("    __tail=\"${__str#?}\"\n");
-  putstr("    # Remove all but first char\n");
-  putstr("    __char=\"${__str%\"$__tail\"}\"\n");
-  putstr("    # Convert char to ASCII\n");
-  call_char_to_int("    ", "$__char")
-  putstr("    # Write character to memory\n");
-  putstr("    : $((_$__ptr = __c))\n");
-  putstr("    # Continue with rest of string\n");
-  putstr("    : $((__ptr += 1))\n");
-  putstr("    __str=\"$__tail\"\n");
-  putstr("  done\n");
-#endif
-  putstr("  : $((_$__ptr = 0))\n");
-  putstr("}\n");
-END_RUNTIME_FUN(unpack_string)
-
 DEFINE_RUNTIME_FUN(make_argv)
 DEPENDS_ON(malloc)
 DEPENDS_ON(unpack_string)
@@ -400,7 +398,8 @@ DEPENDS_ON(unpack_string)
   putstr("  __argv_ptr=$__argv\n");
   putstr("\n");
   putstr("  while [ $# -ge 1 ]; do\n");
-  putstr("    unpack_string _$__argv_ptr \"$1\"\n");
+  putstr("    _malloc _$__argv_ptr $((${#1} + 1))\n");
+  putstr("    unpack_string \"$1\" $((_$__argv_ptr)) 1\n");
   putstr("    : $((__argv_ptr += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
@@ -777,38 +776,7 @@ DEFINE_RUNTIME_FUN(read_byte)
 DEPENDS_ON(malloc)
 DEPENDS_ON(free)
 DEPENDS_ON(char_to_int)
-  putstr("# Unpack a Shell string into an appropriately sized buffer\n");
-  putstr("unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
-  putstr("  __fgetc_buf=$1\n");
-  putstr("  __buffer=$2\n");
-  putstr("  __ends_with_eof=$3\n");
-#ifndef OPTIMIZE_LONG_LINES
-  putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
-  extract_first_char("  ", "__fgetc_buf", "_$__buffer")
-  putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
-  putstr("    : $((__buffer += 1))              # Move to the next buffer position\n");
-#else
-  putstr("  __fgetc_buf16=\n");
-  putstr("  __stdin_buf256=\n");
-  putstr("  __continue=1\n");
-  putstr("  while [ $__continue != 0 ] ; do\n");
-  extract_line_head("    ", "__stdin_buf256", "__fgetc_buf",  ANY_STRING_256, "256", "")
-  extract_line_head("    ", "__fgetc_buf16", "__stdin_buf256",  ANY_STRING_16,  "16", "        __continue=0\n")
-  putstr("    while [ ! -z \"$__fgetc_buf16\" ]; do\n");
-  extract_first_char("    ", "__fgetc_buf16", "_$__buffer")
-  putstr("      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character\n");
-  putstr("      : $((__buffer += 1))              # Move to the next buffer position\n");
-  putstr("    done\n");
-#endif
-  putstr("  done\n");
-  putstr("\n");
-  putstr("  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?\n");
-  putstr("    : $((_$__buffer = 10))            # Line ends with newline\n");
-  putstr("    : $((__buffer += 1))\n");
-  putstr("  fi\n");
-  putstr("  : $((_$__buffer = 0))               # Then \\0\n");
-  putstr("}\n");
-  putstr("\n");
+DEPENDS_ON(unpack_string)
   putstr("refill_buffer() { # $1: fd\n");
   putstr("  __fd=$1\n");
   putstr("  __buffer=$((__buffer_fd$__fd))\n");
@@ -828,7 +796,7 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((__buffer_fd$__fd = __buffer))\n");
   putstr("    : $((__buflen_fd$__fd = __buflen))\n");
   putstr("  fi\n");
-  putstr("  unpack_line \"$__temp_buf\" $__buffer $__ends_with_eof\n");
+  putstr("  unpack_string \"$__temp_buf\" $__buffer $__ends_with_eof\n");
   putstr("}\n");
   putstr("\n");
   putstr("read_byte() { # $2: fd\n");
