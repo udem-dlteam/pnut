@@ -1559,7 +1559,7 @@ _printf() { # $1 = printf format string, $2... = printf args
 }
 
 # Unpack a Shell string into an appropriately sized buffer
-unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
   __ends_with_eof=$3
@@ -1644,7 +1644,7 @@ refill_buffer() { # $1: fd
     : $((__buffer_fd$__fd = __buffer))
     : $((__buflen_fd$__fd = __buflen))
   fi
-  unpack_line "$__temp_buf" $__buffer $__ends_with_eof
+  unpack_string "$__temp_buf" $__buffer $__ends_with_eof
 }
 
 read_byte() { # $2: fd
@@ -1757,73 +1757,14 @@ _close() { # $2: fd
   : $(($1 = 0))
 }
 
-# Convert a Shell string to a C string
-unpack_string() {
-  __str="$2"
-  _malloc $1 $((${#__str} + 1))
-  __ptr=$(($1))
-  __us_buf16=
-  __us_buf256=
-  while [ ! -z "$__str" ] || [ ! -z "$__us_buf256" ] ; do
-  if [ -z "$__us_buf256" ]; then
-    if [ ${#__str} -ge 256 ]; then
-      __temp="${__str#????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????}"
-      __us_buf256="${__str%"$__temp"}"
-      __str="$__temp"
-    else
-      __us_buf256="$__str"
-      __str=
-    fi
-  fi
-  if [ -z "$__us_buf16" ]; then
-    if [ ${#__us_buf256} -ge 16 ]; then
-      __temp="${__us_buf256#????????????????}"
-      __us_buf16="${__us_buf256%"$__temp"}"
-      __us_buf256="$__temp"
-    else
-      __us_buf16="$__us_buf256"
-      __us_buf256=
-    fi
-  fi
-    while [ ! -z "$__us_buf16" ]; do
-      case "$__us_buf16" in
-        " "*) : $((_$__ptr = 32))  ;;
-        "e"*) : $((_$__ptr = 101)) ;;
-        "="*) : $((_$__ptr = 61))  ;;
-        "t"*) : $((_$__ptr = 116)) ;;
-        ";"*) : $((_$__ptr = 59))  ;;
-        "i"*) : $((_$__ptr = 105)) ;;
-        ")"*) : $((_$__ptr = 41))  ;;
-        "("*) : $((_$__ptr = 40))  ;;
-        "n"*) : $((_$__ptr = 110)) ;;
-        "s"*) : $((_$__ptr = 115)) ;;
-        "l"*) : $((_$__ptr = 108)) ;;
-        "+"*) : $((_$__ptr = 43))  ;;
-        "p"*) : $((_$__ptr = 112)) ;;
-        "a"*) : $((_$__ptr = 97))  ;;
-        "r"*) : $((_$__ptr = 114)) ;;
-        "f"*) : $((_$__ptr = 102)) ;;
-        "d"*) : $((_$__ptr = 100)) ;;
-        "*"*) : $((_$__ptr = 42))  ;;
-        *)
-          char_to_int "${__us_buf16%"${__us_buf16#?}"}"
-          : $((_$__ptr = __c))
-          ;;
-      esac
-      __us_buf16=${__us_buf16#?}  # Remove the first character
-      : $((__ptr += 1))           # Move to the next buffer position
-    done
-  done
-  : $((_$__ptr = 0))
-}
-
 make_argv() {
   __argc=$1; shift;
   _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.
   __argv_ptr=$__argv
 
   while [ $# -ge 1 ]; do
-    unpack_string _$__argv_ptr "$1"
+    _malloc _$__argv_ptr $((${#1} + 1))
+    unpack_string "$1" $((_$__argv_ptr)) 1
     : $((__argv_ptr += 1))
     shift
   done

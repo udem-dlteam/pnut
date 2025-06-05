@@ -194,25 +194,23 @@ _getchar() {
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
 }
 
-# Convert a Shell string to a C string
-unpack_string() {
-  __str="$2"
-  _malloc $1 $((${#__str} + 1))
-  __ptr=$(($1))
-  while [ -n "$__str" ] ; do
-    # Remove first char from string
-    __tail="${__str#?}"
-    # Remove all but first char
-    __char="${__str%"$__tail"}"
-    # Convert char to ASCII
-    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
-    # Write character to memory
-    : $((_$__ptr = __c))
-    # Continue with rest of string
-    : $((__ptr += 1))
-    __str="$__tail"
+# Unpack a Shell string into an appropriately sized buffer
+unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+  __fgetc_buf=$1
+  __buffer=$2
+  __ends_with_eof=$3
+  while [ ! -z "$__fgetc_buf" ]; do
+    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+    : $((_$__buffer = __c))
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buffer += 1))              # Move to the next buffer position
   done
-  : $((_$__ptr = 0))
+
+  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
+    : $((_$__buffer = 10))            # Line ends with newline
+    : $((__buffer += 1))
+  fi
+  : $((_$__buffer = 0))               # Then \0
 }
 
 make_argv() {
@@ -221,7 +219,8 @@ make_argv() {
   __argv_ptr=$__argv
 
   while [ $# -ge 1 ]; do
-    unpack_string _$__argv_ptr "$1"
+    _malloc _$__argv_ptr $((${#1} + 1))
+    unpack_string "$1" $((_$__argv_ptr)) 1
     : $((__argv_ptr += 1))
     shift
   done

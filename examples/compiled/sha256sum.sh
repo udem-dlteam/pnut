@@ -300,7 +300,7 @@ _free() { # $2 = object to free
 }
 
 # Unpack a Shell string into an appropriately sized buffer
-unpack_line() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
   __ends_with_eof=$3
@@ -337,7 +337,7 @@ refill_buffer() { # $1: fd
     : $((__buffer_fd$__fd = __buffer))
     : $((__buflen_fd$__fd = __buflen))
   fi
-  unpack_line "$__temp_buf" $__buffer $__ends_with_eof
+  unpack_string "$__temp_buf" $__buffer $__ends_with_eof
 }
 
 read_byte() { # $2: fd
@@ -459,34 +459,14 @@ _close() { # $2: fd
   : $(($1 = 0))
 }
 
-# Convert a Shell string to a C string
-unpack_string() {
-  __str="$2"
-  _malloc $1 $((${#__str} + 1))
-  __ptr=$(($1))
-  while [ -n "$__str" ] ; do
-    # Remove first char from string
-    __tail="${__str#?}"
-    # Remove all but first char
-    __char="${__str%"$__tail"}"
-    # Convert char to ASCII
-    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
-    # Write character to memory
-    : $((_$__ptr = __c))
-    # Continue with rest of string
-    : $((__ptr += 1))
-    __str="$__tail"
-  done
-  : $((_$__ptr = 0))
-}
-
 make_argv() {
   __argc=$1; shift;
   _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.
   __argv_ptr=$__argv
 
   while [ $# -ge 1 ]; do
-    unpack_string _$__argv_ptr "$1"
+    _malloc _$__argv_ptr $((${#1} + 1))
+    unpack_string "$1" $((_$__argv_ptr)) 1
     : $((__argv_ptr += 1))
     shift
   done
