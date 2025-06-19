@@ -2653,9 +2653,6 @@ void codegen_begin() {
 int max_text_alloc = 0;
 int cumul_text_alloc = 0;
 void codegen_glo_decl(ast decl) {
-  comp_glo_decl(decl);
-  initialize_function_variables();
-  print_glo_decls();
   // Reset text and glo decls buffers
   glo_decl_ix = 0;
   text_alloc = 1;
@@ -2663,6 +2660,10 @@ void codegen_glo_decl(ast decl) {
   // Reset local environment
   cgc_locals = cgc_locals_fun = 0;
   cgc_fs = 1; // 1 to account for the return location parameter
+
+  comp_glo_decl(decl);
+  initialize_function_variables();
+  print_glo_decls();
 
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
