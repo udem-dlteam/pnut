@@ -1288,11 +1288,13 @@ void codegen_call(ast node) {
 
   // Check if the function is a direct call, find the binding if it is
   if (get_op(fun) == IDENTIFIER) {
+    #ifdef ENABLE_PNUT_INLINE_INTERRUPT
     if (get_val_(IDENTIFIER, fun) == intern_str("PNUT_INLINE_INTERRUPT")) {
       debug_interrupt();
       push_reg(reg_X); // Dummy push to keep the stack balanced
       return;
     }
+    #endif
     binding = resolve_identifier(get_val_(IDENTIFIER, fun));
     if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }
