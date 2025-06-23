@@ -2479,8 +2479,10 @@ void codegen_glo_fun_decl(ast node) {
   }
 
   // Poor man's debug info
+#ifdef ADD_DEBUG_INFO
   debug_interrupt(); // Marker to helps us find the function in the disassembly
   codegen_string(STRING_BUF(name_probe), STRING_BUF_END(name_probe));
+#endif
 
   def_label(fun_binding_lbl(binding));
 
