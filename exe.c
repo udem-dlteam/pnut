@@ -413,6 +413,9 @@ void os_open();
 void os_close();
 void os_seek();
 void os_unlink();
+void os_mkdir();
+void os_chmod();
+void os_access();
 
 void rt_putchar();
 void rt_debug(char* msg);
@@ -2698,6 +2701,24 @@ void codegen_builtin() {
   // unlink function
   declare_builtin("unlink", false, int_type, list1(string_type));
   os_unlink();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // mkdir function
+  declare_builtin("mkdir", false, int_type, list2(string_type, int_type));
+  os_mkdir();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // chmod function
+  declare_builtin("chmod", false, int_type, list2(string_type, int_type));
+  os_chmod();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // stat/access function
+  declare_builtin("access", false, int_type, list2(string_type, int_type));
+  os_access();
   ret();
   init_forward_jump_table(cgc_globals);
 
