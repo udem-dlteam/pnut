@@ -11,8 +11,11 @@ build/*
 artifact/*
 artifact.zip
 kit/build/*
+kit/cat
 kit/chmod
+kit/cp
 kit/mkdir
-kit/untar
-kit/ungz
+kit/sha256sum
 kit/simple-patch
+kit/ungz
+kit/untar
