@@ -38,11 +38,11 @@ struct GZ_FILE {
   }
 
 #ifndef SOURCE_LEN
-#define SOURCE_LEN 104857600 // 100MB
+#define SOURCE_LEN 10485760 // 100MB
 #endif
 
 #ifndef DEST_LEN
-#define DEST_LEN 104857600 // 100MB
+#define DEST_LEN 10485760 // 100MB
 #endif
 
 unsigned char source[SOURCE_LEN];
