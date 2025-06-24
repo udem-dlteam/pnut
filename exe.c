@@ -25,9 +25,9 @@ void generate_exe();
 #endif
 
 #ifdef ONE_PASS_GENERATOR
-#define CODE_SIZE 50000
+#define CODE_SIZE 100000
 #else
-#define CODE_SIZE 500000
+#define CODE_SIZE 5000000
 #endif
 int code[CODE_SIZE];
 // Index of the next free byte in the code buffer
