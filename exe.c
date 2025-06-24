@@ -109,7 +109,7 @@ void reset_code_buffer() {
 #endif
 
 void emit_i8(int a) {
-  if (code_alloc >= MAX_CODE_SIZE) {
+  if (code_alloc >= CODE_SIZE) {
     fatal_error("code buffer overflow");
   }
   code[code_alloc] = (a & 0xff);
