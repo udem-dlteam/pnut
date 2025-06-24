@@ -42,10 +42,15 @@ compile_with_pnut() {
   ./kit/chmod 755 kit/$1
 }
 
-compile_with_pnut simple-patch
+# Note that these executables are placed in the kit directory because we don't
+# have mkdir yet and so we cannot create the build directory.
+compile_with_pnut cat
+compile_with_pnut cp
 compile_with_pnut mkdir
-compile_with_pnut untar
+compile_with_pnut sha256sum
+compile_with_pnut simple-patch
 compile_with_pnut ungz
+compile_with_pnut untar
 
 ./kit/mkdir -p kit/build
 
