@@ -1,7 +1,7 @@
 #include "../include/stdlib.h"
 #include "../include/stdio.h"
 
-#define HEAP_SIZE 1000000000
+#define HEAP_SIZE 10485760
 
 // TCC defines malloc, free and realloc as macros in libtcc.c which conflicts
 // with our definitions here. This wouldn't be a problem if the libc was
@@ -21,7 +21,10 @@ void *malloc(size_t size) {
   size += sizeof(size_t); // size + size_t (for size)
   char *result = _heap + _heap_alloc;
   _heap_alloc += size;
-  if (_heap_alloc > HEAP_SIZE) return 0; // out of memory
+  if (_heap_alloc > HEAP_SIZE) {
+    PNUT_INLINE_INTERRUPT();
+    return 0; // out of memory
+  }
   *((size_t*)result) = size; // store size
   return result + sizeof(size_t); // return pointer to memory, after size field
 }
