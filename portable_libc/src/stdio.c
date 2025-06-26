@@ -402,3 +402,11 @@ int sprintf(char *str, const char *format, ...) {
 //     }
 //   }
 // }
+
+void putchar(int c) {
+  fputc(c, stdout);
+}
+
+int getchar(void) {
+  return fgetc(stdin);
+}
