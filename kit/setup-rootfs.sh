@@ -93,7 +93,7 @@ copy_c_file_and_dependencies() {
 copy_c_file_and_dependencies "pnut/pnut.c" "trousse/pnut_src" "-Dtarget_i386_linux -DSAFE_MODE -DBOOTSTRAP_TCC"
 
 # Cheating a bit to go faster
-gcc -o trousse/pnut-exe-gcc trousse/pnut_src/pnut.c -Dtarget_i386_linux -DBOOTSTRAP_TCC -DSAFE_MODE -DONE_PASS_GENERATOR
+# gcc -o trousse/pnut-exe-gcc trousse/pnut_src/pnut.c -Dtarget_i386_linux -DBOOTSTRAP_TCC -DSAFE_MODE -DONE_PASS_GENERATOR
 
 # And the libc
 sudo cp -r pnut/portable_libc trousse/
@@ -143,15 +143,16 @@ done
 EOF
 
 # And Mes and TCC's archive
-sudo cp pnut/kit/tcc-0.9.27.tar.gz trousse/tcc-0.9.27.tar.gz
-sudo cp pnut/kit/tcc-0.9.26.tar.gz trousse/tcc-0.9.26.tar.gz
-sudo cp pnut/kit/mes-0.27.tar.gz trousse/mes-0.27.tar.gz
+mkdir -p trousse/files
+# sudo cp pnut/kit/tcc-0.9.27.tar.gz trousse/tcc-0.9.27.tar.gz
+sudo cp pnut/kit/tcc-0.9.26.tar.gz trousse/files/tcc-0.9.26.tar.gz
+sudo cp pnut/kit/mes-0.27.tar.gz trousse/files/mes-0.27.tar.gz
 
-sudo cp pnut/kit/mes-config.h trousse/mes-config.h
+sudo cp pnut/kit/mes-config.h trousse/files/mes-config.h
 
 # Copy patches required for TCC
-mkdir -p trousse/tcc-patches
-sudo cp ../live-bootstrap/steps/tcc-0.9.26/simple-patches/* trousse/tcc-patches/
+mkdir -p trousse/files/tcc-patches
+sudo cp ../live-bootstrap/steps/tcc-0.9.26/simple-patches/* trousse/files/tcc-patches/
 
 pwd
 cp ../pnut/kit/bootstrap-tcc.sh trousse/bootstrap-tcc.sh
