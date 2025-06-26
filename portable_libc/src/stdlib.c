@@ -1,7 +1,7 @@
 #include "../include/stdlib.h"
 #include "../include/stdio.h"
 
-#define HEAP_SIZE 10485760
+#define HEAP_SIZE 26214400 // 25 MB heap size
 
 // TCC defines malloc, free and realloc as macros in libtcc.c which conflicts
 // with our definitions here. This wouldn't be a problem if the libc was
@@ -66,7 +66,7 @@ void putstr(const char *str) {
 
 double strtod(const char *str, char **endptr) {
   // Support the literals that are used in TCC:
-  // 0.0, 1.0, 4294967296.0
+  // 0.0, 1.0, 4294967296.0, 0.9999
   if (str[0] == '0' && str[1] == '.' && str[2] == '0' && str[3] == 0) {
     if (endptr) *endptr = (char*)str + 3;
     return 0x0;;
@@ -76,6 +76,9 @@ double strtod(const char *str, char **endptr) {
   } else if (str[0] == '4' && str[1] == '2' && str[2] == '9' && str[3] == '4' && str[4] == '9' && str[5] == '6' && str[6] == '7' && str[7] == '2' && str[8] == '9' && str[9] == '6' && str[10] == '.' && str[11] == '0' && str[12] == 0) {
     if (endptr) *endptr = (char*)str + 12;
     return 0x41d0000000000000;
+  } else if (str[0] == '0' && str[1] == '.' && str[2] == '9' && str[3] == '9' && str[4] == '9' && str[5] == '9' && str[6] == 0) {
+    if (endptr) *endptr = (char*)str + 6;
+    return 0x3FEFFF2E48E8A71E; // 0.9999
   } else {
     putstr("Unknown strtod: ");
     putstr(str);
