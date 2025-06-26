@@ -4045,9 +4045,9 @@ int main(int argc, char **argv) {
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             i += 1;
-            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
           } else {
-            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
           }
           break;
 
