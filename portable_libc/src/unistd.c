@@ -15,3 +15,7 @@ int chmod(const char *pathname, mode_t mode);
 int access(const char *pathname, int amode);
 
 */
+
+char *getcwd(char *buf, size_t size) {
+  return NULL; // Not implemented
+}
