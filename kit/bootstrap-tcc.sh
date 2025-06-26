@@ -7,6 +7,7 @@ set -e -u -x
 TCC_DIR=tcc-0.9.26-1147-gee75a10c
 MES_DIR=mes-0.27
 BUILD_DIR=build
+PATCHES_DIR="files/tcc-patches"
 
 MES_ARCH=x86
 TCC_TARGET_ARCH=I386
@@ -32,24 +33,24 @@ mkdir -p $BUILD_DIR
 
 # Patch TCC to be compatible with Pnut
 # These patches are copied from https://github.com/fosslinux/live-bootstrap/pull/524/files
-simple-patch ${TCC_DIR}/tcctools.c  tcc-patches/remove-fileopen.before tcc-patches/remove-fileopen.after \
+simple-patch ${TCC_DIR}/tcctools.c  $PATCHES_DIR/remove-fileopen.before $PATCHES_DIR/remove-fileopen.after \
   || echo "Failed to patch tcctools.c with remove-fileopen"
-simple-patch ${TCC_DIR}/tcctools.c  tcc-patches/addback-fileopen.before tcc-patches/addback-fileopen.after \
+simple-patch ${TCC_DIR}/tcctools.c  $PATCHES_DIR/addback-fileopen.before $PATCHES_DIR/addback-fileopen.after \
   || echo "Failed to patch tcctools.c with addback-fileopen"
-simple-patch ${TCC_DIR}/tccpp.c     tcc-patches/array_sizeof.before tcc-patches/array_sizeof.after \
+simple-patch ${TCC_DIR}/tccpp.c     $PATCHES_DIR/array_sizeof.before $PATCHES_DIR/array_sizeof.after \
   || echo "Failed to patch tccpp.c with array_sizeof"
-simple-patch ${TCC_DIR}/libtcc.c    tcc-patches/error_set_jmp_enabled.before tcc-patches/error_set_jmp_enabled.after \
+simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/error_set_jmp_enabled.before $PATCHES_DIR/error_set_jmp_enabled.after \
   || echo "Failed to patch libtcc.c with error_set_jmp_enabled"
-simple-patch ${TCC_DIR}/libtcc.c    tcc-patches/sscanf_TCC_VERSION.before tcc-patches/sscanf_TCC_VERSION.after \
+simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/sscanf_TCC_VERSION.before $PATCHES_DIR/sscanf_TCC_VERSION.after \
   || echo "Failed to patch libtcc.c with sscanf_TCC_VERSION"
-simple-patch ${TCC_DIR}/tcc.h       tcc-patches/undefine_TCC_IS_NATIVE.before tcc-patches/undefine_TCC_IS_NATIVE.after \
+simple-patch ${TCC_DIR}/tcc.h       $PATCHES_DIR/undefine_TCC_IS_NATIVE.before $PATCHES_DIR/undefine_TCC_IS_NATIVE.after \
   || echo "Failed to patch tcc.h with undefine_TCC_IS_NATIVE"
 
 touch ${TCC_DIR}/config.h
 
 # We can finally compile TCC with pnut-exe
 
-./pnut-exe-gcc                                              \
+./pnut-exe                                              \
   -I portable_libc/include/                             \
   -D __intptr_t_defined=1                               \
   -D BOOTSTRAP=1                                        \
@@ -72,13 +73,13 @@ touch ${TCC_DIR}/config.h
   -o $BUILD_DIR/tcc-pnut
 
 # Revert the patches to match live-bootstrap
-simple-patch ${TCC_DIR}/tcc.h       tcc-patches/undefine_TCC_IS_NATIVE.before tcc-patches/undefine_TCC_IS_NATIVE.after \
+simple-patch ${TCC_DIR}/tcc.h       $PATCHES_DIR/undefine_TCC_IS_NATIVE.before $PATCHES_DIR/undefine_TCC_IS_NATIVE.after \
   || echo "Failed to patch tcc.h with undefine_TCC_IS_NATIVE"
-simple-patch ${TCC_DIR}/libtcc.c    tcc-patches/sscanf_TCC_VERSION.before tcc-patches/sscanf_TCC_VERSION.after \
+simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/sscanf_TCC_VERSION.before $PATCHES_DIR/sscanf_TCC_VERSION.after \
   || echo "Failed to patch libtcc.c with sscanf_TCC_VERSION"
-simple-patch ${TCC_DIR}/libtcc.c    tcc-patches/error_set_jmp_enabled.before tcc-patches/error_set_jmp_enabled.after \
+simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/error_set_jmp_enabled.before $PATCHES_DIR/error_set_jmp_enabled.after \
   || echo "Failed to patch libtcc.c with error_set_jmp_enabled"
-simple-patch ${TCC_DIR}/tccpp.c     tcc-patches/array_sizeof.before tcc-patches/array_sizeof.after \
+simple-patch ${TCC_DIR}/tccpp.c     $PATCHES_DIR/array_sizeof.before $PATCHES_DIR/array_sizeof.after \
   || echo "Failed to patch tccpp.c with array_sizeof"
 
 # Install Mes's libc
@@ -89,7 +90,7 @@ cp $MES_DIR/include/linux/${MES_ARCH}/syscall.h $MES_DIR/include/arch/syscall.h
 
 # Create config.h
 touch ${MES_DIR}/include/mes/config.h
-cp mes-config.h $MES_DIR/include/mes/config.h
+cp files/mes-config.h $MES_DIR/include/mes/config.h
 
 # Compile the mes C library for tcc-boot0
 
