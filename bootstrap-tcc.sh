@@ -11,7 +11,7 @@ PNUT_ARCH=i386_linux
 
 : ${PNUT_OPTIONS:=} # Default to empty options
 
-PNUT_EXE_OPTIONS="$PNUT_OPTIONS -DBOOTSTRAP_LONG -Dtarget_$PNUT_ARCH -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS"
+PNUT_EXE_OPTIONS="$PNUT_OPTIONS -DBOOTSTRAP_LONG -Dtarget_$PNUT_ARCH -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DONE_PASS_GENERATOR"
 PNUT_SH_OPTIONS="$PNUT_OPTIONS -DRT_NO_INIT_GLOBALS -Dsh"
 PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
@@ -86,6 +86,7 @@ if [ $use_gcc -eq 0 ]; then
   ./$TEMP_DIR/pnut-exe                                    \
     -I portable_libc/include/                             \
     -D BOOTSTRAP=1                                        \
+    -D __intptr_t_defined=1                               \
     -D HAVE_LONG_LONG=0                                   \
     -D TCC_TARGET_${TCC_TARGET_ARCH}=1                    \
     -D CONFIG_SYSROOT=\"/\"                               \
@@ -102,7 +103,7 @@ if [ $use_gcc -eq 0 ]; then
     -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"          \
     $TCC_DIR/tcc.c                                        \
     portable_libc/libc.c                                  \
-    > $TEMP_DIR/tcc-pnut
+    -o $TEMP_DIR/tcc-pnut
 
   chmod +x $TEMP_DIR/tcc-pnut
 
