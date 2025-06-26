@@ -1368,6 +1368,15 @@ void codegen_call(ast node) {
       call(fun_binding_lbl(binding));
     } else {
       mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#ifdef SAFE_MODE
+      // In safe mode, we check that the indirect call location is initialized
+      mov_reg_imm(reg_Y, 0);
+      int good_lbl = alloc_label(0);
+      // Check if reg_X == 0 and call debug_interrupt otherwise
+      jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
+      debug_interrupt();
+      def_label(good_lbl);
+#endif
       call_reg(reg_X);
     }
 #else
