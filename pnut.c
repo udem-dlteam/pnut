@@ -8,6 +8,14 @@
 #include <fcntl.h> // for open
 #include <unistd.h> // for write
 
+#ifdef BOOTSTRAP_TCC
+#define BOOTSTRAP_LONG
+#define NO_BUILTIN_LIBC
+#define ENABLE_PNUT_INLINE_INTERRUPT
+#define UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+#define ADD_DEBUG_INFO
+#endif
+
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
 // On 64 bit platforms, intptr_t is a long long int.
