@@ -46,13 +46,13 @@ int main(int argc, char **argv) {
   char *patch_after = read_file(argv[3]);
   int after_patch_len = strlen(patch_after);
 
-  int fd_output = open(argv[1], O_WRONLY | O_TRUNC); // Open the output file, truncating it
-  ASSERT(fd_output >= 0, "Error opening after patch file");
-
   // Find the before patch string in the file content
   char *pos = strstr(file_content, patch_before);
   ASSERT(pos != NULL, "Error finding patch string");
   int pos_index = pos - file_content;
+
+  int fd_output = open(argv[1], O_WRONLY | O_TRUNC); // Open the output file, truncating it
+  ASSERT(fd_output >= 0, "Error opening after patch file");
 
   // Create a new file content with the after patch
   write(fd_output, file_content, pos_index); // Write before patch
