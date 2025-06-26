@@ -58,8 +58,8 @@ FILE *fdopen(int fd, const char *mode) {
 }
 
 FILE *fopen(const char *pathname, const char *mode) {
-  int fd = open(pathname, fopen_flags(mode), 0666); // 0666 is the default mode
-  if (fd == -1) {
+  int fd = open(pathname, fopen_flags(mode), 0666); // 0666 is t
+  if (fd <= 0) {
     return 0;
   } else {
     return fdopen(fd, mode);
