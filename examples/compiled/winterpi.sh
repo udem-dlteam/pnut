@@ -42,13 +42,12 @@ _main() {
     c=$((d % 10000))
     k=$((k - 14))
   done
-  printf \\$(((__NEWLINE__)/64))$(((__NEWLINE__)/8%8))$(((__NEWLINE__)%8))
+  printf "\n"
   : $(($1 = 0))
   endlet $1 c d b k i
 }
 
 # Character constants
-readonly __NEWLINE__=10
 readonly __0__=48
 # Runtime library
 # Local variables
