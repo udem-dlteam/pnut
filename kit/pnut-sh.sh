@@ -6145,17 +6145,16 @@ _fun_call_params() { let params $2
   endlet $1 __t1 code_params param params
 }
 
-: $((__t4 = __t3 = __t2 = __t1 = char_code = ident = res = param = 0))
+: $((__t4 = __t3 = __t2 = __t1 = ident = res = param = 0))
 _comp_putchar_inline() { let param $2
-  let res; let ident; let char_code; let __t1; let __t2; let __t3; let __t4
-  _get_val char_code $param
-  if { _get_op __t1 $param; [ $__t1 = $_CHARACTER ]; } && { { [ $char_code -ge 32 ] && [ $char_code -le 126 ]; } || [ $char_code = $__NEWLINE__ ]; } ; then
+  let res; let ident; let __t1; let __t2; let __t3; let __t4
+  if { _get_op __t1 $param; [ $__t1 = $_CHARACTER ]; } && { { { _get_val __t1 $param; [ $__t1 -ge 32 ]; } && { _get_val __t1 $param; [ $__t1 -le 126 ]; }; } || { _get_val __t1 $param; [ $__t1 = $__NEWLINE__ ]; }; } ; then
     defstr __str_256 "printf \""
     _wrap_str_lit __t1 $__str_256
     _get_val __t2 $param
     _escape_text __t2 $((-__t2)) 1
     _string_concat3 $1 $__t1 $__t2 $((-__DQUOTE__))
-    endlet $1 __t4 __t3 __t2 __t1 char_code ident res param
+    endlet $1 __t4 __t3 __t2 __t1 ident res param
     return
   fi
   _comp_rvalue res $param $_RVALUE_CTX_ARITH_EXPANSION
@@ -6191,7 +6190,7 @@ _comp_putchar_inline() { let param $2
   defstr __str_261 "printf \\\\\\\\"
   _wrap_str_lit __t1 $__str_261
   _string_concat $1 $__t1 $res
-  endlet $1 __t4 __t3 __t2 __t1 char_code ident res param
+  endlet $1 __t4 __t3 __t2 __t1 ident res param
 }
 
 : $((__t3 = __t2 = __t1 = escape = params_text = format_str_end = format_str = 0))
