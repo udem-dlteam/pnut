@@ -98,7 +98,7 @@ _encode() {
       fi
     fi
   done
-  printf \\$(((__NEWLINE__)/64))$(((__NEWLINE__)/8%8))$(((__NEWLINE__)%8))
+  printf "\n"
   endlet $1 b3 b2 b1
 }
 
@@ -160,7 +160,6 @@ _main() { let argc $2; let myargv $3
 
 # Character constants
 readonly __NUL__=0
-readonly __NEWLINE__=10
 readonly __MINUS__=45
 readonly __d__=100
 # Runtime library
