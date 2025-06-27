@@ -1597,9 +1597,10 @@ text fun_call_params(ast params) {
 text comp_putchar_inline(ast param) {
   text res;
   ast ident;
-  int char_code = get_val_(CHARACTER, param);
+  int char_code;
 
-  if (get_op(param) == CHARACTER && ((char_code >= 32 && char_code <= 126) || char_code == '\n')) { // Printable ASCII characters
+  if (get_op(param) == CHARACTER && char_code == get_val_(CHARACTER, param)
+    && ((char_code >= 32 && char_code <= 126) || char_code == '\n')) { // Printable ASCII characters
     return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_char(get_val_(CHARACTER, param)), true), wrap_char('\"'));
   }
 
