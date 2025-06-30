@@ -109,7 +109,7 @@ jobs:
   tests-shell: # Run tests for pnut-sh on all supported shells
     strategy:
       matrix:
-        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
+        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh", "osh"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -117,8 +117,20 @@ jobs:
 
       - name: Install ${{ matrix.shell }} shell
         run: |
+          set -e
           sudo apt-get update
-          sudo apt-get install -y coreutils time ${{ matrix.shell }}
+          if [[ "${{ matrix.shell }}" != "osh" ]]; then
+            sudo apt-get install -y coreutils time ${{ matrix.shell }}
+          else
+            OSH_VERSION="0.33.0"
+            sudo apt-get install -y coreutils time build-essential wget
+            wget https://oils.pub/download/oils-for-unix-$OSH_VERSION.tar.gz
+            tar -xzf oils-for-unix-$OSH_VERSION.tar.gz
+            cd oils-for-unix-$OSH_VERSION
+            ./configure      # completes very quickly
+            _build/oils.sh   # 30-60 seconds
+            sudo ./install
+          fi
 
       - name: Run tests with ${{ matrix.shell }}
         run: |
@@ -133,7 +145,7 @@ jobs:
   bootstrap-pnut-sh:
     strategy:
       matrix:
-        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
+        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh", "osh"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -141,8 +153,20 @@ jobs:
 
       - name: Install ${{ matrix.shell }} shell
         run: |
+          set -e
           sudo apt-get update
-          sudo apt-get install -y coreutils time ${{ matrix.shell }}
+          if [[ "${{ matrix.shell }}" != "osh" ]]; then
+            sudo apt-get install -y coreutils time ${{ matrix.shell }}
+          else
+            OSH_VERSION="0.33.0"
+            sudo apt-get install -y coreutils time build-essential wget
+            wget https://oils.pub/download/oils-for-unix-$OSH_VERSION.tar.gz
+            tar -xzf oils-for-unix-$OSH_VERSION.tar.gz
+            cd oils-for-unix-$OSH_VERSION
+            ./configure      # completes very quickly
+            _build/oils.sh   # 30-60 seconds
+            sudo ./install
+          fi
 
       - name: Bootstrap pnut-sh.sh on ${{ matrix.shell }}
         run: |
@@ -152,7 +176,7 @@ jobs:
   bootstrap-pnut-exe:
     strategy:
       matrix:
-        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh"]
+        shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh", "osh"]
         target: ["i386_linux", "x86_64_linux", "x86_64_mac"]
         include:
           - target: i386_linux
@@ -168,12 +192,30 @@ jobs:
 
       - name: Install ${{ matrix.shell }} shell
         run: |
+          set -e
+          SHELL_PACKAGE_NAME=""
+          # osh must be built from source, so we handle it separately
+          if [[ "${{ matrix.shell }}" != "osh" ]]; then
+            SHELL_PACKAGE_NAME=${{ matrix.shell }}
+          fi
+
           if [ ${{ matrix.host }} = "macos-latest" ]; then
-            brew install coreutils ${{ matrix.shell }}
+            brew install coreutils $SHELL_PACKAGE_NAME
           else
             sudo apt-get update
-            sudo apt-get install -y coreutils time ${{ matrix.shell }}
+            sudo apt-get install -y coreutils time build-essential $SHELL_PACKAGE_NAME
           fi
+
+          if [[ "${{ matrix.shell }}" = "osh" ]]; then
+            OSH_VERSION="0.33.0"
+            wget https://oils.pub/download/oils-for-unix-$OSH_VERSION.tar.gz
+            tar -xzf oils-for-unix-$OSH_VERSION.tar.gz
+            cd oils-for-unix-$OSH_VERSION
+            ./configure      # completes very quickly
+            _build/oils.sh   # 30-60 seconds
+            sudo ./install
+          fi
+
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
         run: |
