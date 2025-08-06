@@ -13,6 +13,14 @@
 
 #include <string.h>
 
+// Add includes for all subcommands so process-includes.sh puts them at the top
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <setjmp.h>
+
 #define ENTRY_POINT cat_main
 #include "cat.c"
 #undef ENTRY_POINT
