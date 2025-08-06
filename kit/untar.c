@@ -40,6 +40,10 @@
 #include <windows.h>
 #endif
 
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
+
 #define BLOCKSIZE 512
 
 /* System call to create a directory. */
@@ -228,7 +232,7 @@ untar(FILE *a, const char *path)
 }
 
 int
-main(int argc, char **argv)
+ENTRY_POINT(int argc, char **argv)
 {
 	FILE *a;
 

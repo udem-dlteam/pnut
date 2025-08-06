@@ -1,3 +1,9 @@
+/*
+ * ungz.c
+ * A simple GZIP decompressor that reads from a file or stdin and writes to a file or stdout.
+ * Usage: ./ungz --file input.gz --output output.txt
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +12,10 @@
 
 #include "puff.c"
 #include "crc.c"
+
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
 
 // GZIP file format is specified in RFC 1952
 // https://web.archive.org/web/20240421215142/https://dl.acm.org/doi/pdf/10.17487/RFC1952
@@ -45,10 +55,10 @@ struct GZ_FILE {
 #define DEST_LEN 10485760 // 100MB
 #endif
 
-unsigned char source[SOURCE_LEN];
-unsigned char dest[DEST_LEN];
+unsigned char gz_source[SOURCE_LEN];
+unsigned char gz_dest[DEST_LEN];
 
-int main(int argc, char **argv) {
+int ENTRY_POINT(int argc, char **argv) {
   int in_fd  = STDIN;
   int out_fd = STDOUT;
 
@@ -124,6 +134,7 @@ int main(int argc, char **argv) {
     int crc16 = 0;
     if (gz_header.flags & FHCRC) {
       crc16 = extra[filename_len + comment_len + 2] | (extra[filename_len + comment_len + 3] << 8);
+      (void) crc16;
       printf("CRC16 not yet implemented\n");
       exit(1);
     }
@@ -142,26 +153,26 @@ int main(int argc, char **argv) {
   //  0:  successful inflate
   // <0:  error
   //
-  int compressed_size = read(in_fd, source, SOURCE_LEN);
+  int compressed_size = read(in_fd, gz_source, SOURCE_LEN);
   ASSERT((compressed_size < SOURCE_LEN), "Input space exhausted when reading file. Recompile ungz.c with a larger SOURCE_LEN.");
-  int puff_ret = puff(dest, &dest_len, source, &src_len);
+  int puff_ret = puff(gz_dest, &dest_len, gz_source, &src_len);
   switch (puff_ret) {
     case 0:
       // Successful inflate, we can go and check the CRC then output
       ASSERT(src_len + 8 <= compressed_size, "Input file is missing CRC32 and ISIZE");
 
       // CRC32 is at the end of the compressed data
-      unsigned long crc32 =  source[src_len + 0]        | (source[src_len + 1] << 8)
-                          | (source[src_len + 2] << 16) | (source[src_len + 3] << 24);
+      unsigned long crc32 =  gz_source[src_len + 0]        | (gz_source[src_len + 1] << 8)
+                          | (gz_source[src_len + 2] << 16) | (gz_source[src_len + 3] << 24);
 
-      unsigned long isize =  source[src_len + 4]        | (source[src_len + 5] << 8)
-                          | (source[src_len + 6] << 16) | (source[src_len + 7] << 24);
+      unsigned long isize =  gz_source[src_len + 4]        | (gz_source[src_len + 5] << 8)
+                          | (gz_source[src_len + 6] << 16) | (gz_source[src_len + 7] << 24);
 
       // Check CRC32 and ISIZE
-      unsigned long computed_crc = crc(dest, dest_len);
+      unsigned long computed_crc = crc(gz_dest, dest_len);
       ASSERT(computed_crc == crc32, "CRC32 mismatch");
       ASSERT(isize == dest_len, "ISIZE mismatch");
-      write(out_fd, dest, dest_len);
+      write(out_fd, gz_dest, dest_len);
       break;
 
     case 1:

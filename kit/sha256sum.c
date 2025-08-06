@@ -4,11 +4,13 @@
  * Usage: ./sha256sum.sh <files>
  */
 
-#include <stdio.h>
-
 #include <fcntl.h>
+#include <stdio.h>
 #include <unistd.h>
-#include <stdlib.h>
+
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
 
 #define BLOCK_SIZE 64
 
@@ -157,8 +159,6 @@ void sha256_add_block(char *bytes) {
   for (i=0; i<8; ++i) hash[i] = (hash[i] + temp[i]) & u32mask;
 }
 
-char buf[BLOCK_SIZE];
-
 void hex(int byte) {
   char *digits = "0123456789abcdef";
   putchar(digits[0xf & (byte >> 4)]);
@@ -171,6 +171,7 @@ int process_file(char *filename) {
   int fd;
   int n = BLOCK_SIZE;
   int h;
+  char buf[BLOCK_SIZE];
 
   sha256_setup();
   sha256_init();
@@ -228,11 +229,11 @@ int process_file(char *filename) {
   return 0;
 }
 
-int main(int argc, char **myargv) {
+int ENTRY_POINT(int argc, char **myargv) {
 
   int i;
 
-  for (i=1; i<argc; ++i) {
+  for (i = 1; i < argc; ++i) {
     if (process_file(myargv[i]) != 0) break;
   }
 
