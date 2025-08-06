@@ -1,6 +1,9 @@
 /*
  * cp.c: Copy the contents of one file to another
  *
+ * Warning: This is a very minimal implementation of the 'cp' command.
+ * It does __not__ propagate file permissions.
+ *
  * Usage: ./cp.sh <source> <destination>
  */
 
@@ -8,6 +11,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
 
 #ifndef O_RDONLY
 #define O_RDONLY 0
@@ -22,26 +29,26 @@ void file_error(char *filename) {
   exit(1);
 }
 
-#define BUFFER_LEN 1024
-char* buffer[BUFFER_LEN];
+#define BUF_SIZE 1024
 
-int main(int argc, char **args) {
+int ENTRY_POINT(int argc, char **argv) {
   int src, dst;
-  char c;
   int len;
+  char buffer[BUF_SIZE];
 
   if (argc != 3) {
     printf("Usage: cp <source> <destination>\n");
     return 1;
   }
 
-  src = open(args[1], O_RDONLY);
-  dst = open(args[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  // TODO: Propagate permissions from source file
+  src = open(argv[1], O_RDONLY);
+  dst = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-  if (src == -1) { file_error(args[1]); }
-  if (dst == -1) { file_error(args[2]); }
+  if (src == -1) { file_error(argv[1]); }
+  if (dst == -1) { file_error(argv[2]); }
 
-  while ((len = read(src, buffer, BUFFER_LEN)) != 0) {
+  while ((len = read(src, buffer, BUF_SIZE)) != 0) {
     write(dst, buffer, len);
   }
 }

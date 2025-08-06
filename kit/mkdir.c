@@ -1,9 +1,25 @@
+/*
+ * mkdir.c: Create directories
+ *
+ * Usage: ./mkdir.sh [-p|--parents] <directory>...
+ *
+ * Known issues: Blows up if the directory already exists.
+ *
+ * Options:
+ *   -p, --parents   Create parent directories as needed
+ *
+ */
+
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
-void create_dir(int create_parent_dirs, char *pathname, int mode) {
+void create_dir_recursive(int create_parent_dirs, char *pathname, int mode) {
 	int res;
 
 	// Try creating the directory, if it fails, we'll try to create the parent
@@ -16,7 +32,7 @@ void create_dir(int create_parent_dirs, char *pathname, int mode) {
     // of the pathname while creating the parent directories.
     char *parent_dirs_path = strrchr(pathname, '/');
     parent_dirs_path[0] = '\0';
-    create_dir(create_parent_dirs, pathname, mode);
+    create_dir_recursive(create_parent_dirs, pathname, mode);
 
     // Restore the original pathname and try creating the directory again.
     parent_dirs_path[0] = '/';
@@ -29,7 +45,7 @@ void create_dir(int create_parent_dirs, char *pathname, int mode) {
 	}
 }
 
-int main(int argc, char **argv) {
+int ENTRY_POINT(int argc, char **argv) {
 	int create_parent_dirs = 0;
 
   while (argc > 1) {
@@ -43,7 +59,7 @@ int main(int argc, char **argv) {
       if(argv[1][strlen(argv[1]) - 1] == '/') {
         argv[1][strlen(argv[1]) - 1] = '\0';
       }
-      create_dir(create_parent_dirs, argv[1], 0755);
+      create_dir_recursive(create_parent_dirs, argv[1], 0755);
       argv += 1;
       argc -= 1;
     }

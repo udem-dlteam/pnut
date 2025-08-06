@@ -1,8 +1,18 @@
+/*
+ * simple-patch.c
+ * A simple patch utility that replaces a specific string in a file with another string.
+ * Usage: ./simple-patch file before-patch after-patch
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
 
 #define ASSERT(x, msg) \
   if (!(x)) { \
@@ -31,7 +41,7 @@ char *read_file(char *filename) {
 }
 
 // Usage: simple-patch file before-patch after-patch
-int main(int argc, char **argv) {
+int ENTRY_POINT(int argc, char **argv) {
   if (argc != 4) {
     fprintf(stderr, "Usage: %s file before-patch after-patch\n", argv[0]);
     return 1;
