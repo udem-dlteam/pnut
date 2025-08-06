@@ -9,11 +9,14 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
+
 #define BUF_SIZE 1024
 
-char buf[BUF_SIZE];
-
 void cat_fd(int fd) {
+  char buf[BUF_SIZE];
   int n = BUF_SIZE;
   while (n == BUF_SIZE) {
     n = read(fd, buf, BUF_SIZE);
@@ -28,16 +31,16 @@ void cat_file(char *filename) {
   close(fd);
 }
 
-int main(int argc, char **myargv) {
+int ENTRY_POINT(int argc, char **argv) {
 
   int i;
 
   if (argc >= 2) {
-    for (i=1; i<argc; ++i) {
-      if (myargv[i][0] == '-' && myargv[i][1] == '\0') {
+    for (i = 1; i < argc; ++i) {
+      if (argv[i][0] == '-' && argv[i][1] == '\0') {
         cat_fd(0);
       } else {
-        cat_file(myargv[i]);
+        cat_file(argv[i]);
       }
     }
   } else {
