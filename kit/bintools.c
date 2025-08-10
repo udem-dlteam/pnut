@@ -150,19 +150,27 @@ void create_dir_recursive(int create_parent_dirs, char *pathname, int mode) {
 	res = mkdir(pathname, mode);
 
 	if(res != 0 && create_parent_dirs) {
-    // Find the last slash in the pathname, then temporarily remove the last part
-    // of the pathname while creating the parent directories.
+    // Find the last slash in the pathname, then temporarily remove the last
+    // part of the pathname while creating the parent directories.
+    // If there are no slashes in the path, then we are already at the root
+    // directory and something wrong happened.
     char *parent_dirs_path = strrchr(pathname, '/');
-    parent_dirs_path[0] = '\0';
-    create_dir_recursive(create_parent_dirs, pathname, mode);
 
-    // Restore the original pathname and try creating the directory again.
-    parent_dirs_path[0] = '/';
-    res = mkdir(pathname, mode);
+    if (parent_dirs_path) {
+      parent_dirs_path[0] = '\0';
+      create_dir_recursive(create_parent_dirs, pathname, mode);
+
+      // Restore the original pathname and try creating the directory again.
+      parent_dirs_path[0] = '/';
+      res = mkdir(pathname, mode);
+    } else {
+      printf("Could not create directory %s. It probably already exists.\n", pathname);
+      exit(1);
+    }
 	}
 
 	if(res != 0) {
-		printf("Could not create directory %s\n", pathname);
+		printf("Could not create directory %s. It probably already exists.\n", pathname);
     exit(1);
 	}
 }
