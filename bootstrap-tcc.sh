@@ -181,7 +181,7 @@ $TEMP_DIR/tcc-pnut -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include
 $TEMP_DIR/tcc-pnut -ar cr $TEMP_DIR/boot0-lib/libc.a $TEMP_DIR/boot0-lib/unified-libc.o
 
 # libtcc1.a
-$TEMP_DIR/tcc-pnut -c -D HAVE_CONFIG_H=1 -D HAVE_LONG_LONG=1 -D HAVE_FLOAT=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/libtcc1.o $MES_DIR/lib/libtcc1.c
+$TEMP_DIR/tcc-pnut -c -o $TEMP_DIR/boot0-lib/libtcc1.o kit/libtcc1.c
 $TEMP_DIR/tcc-pnut -ar cr $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libtcc1.o
 
 # libgetopt.a
@@ -221,7 +221,7 @@ $TEMP_DIR/tcc-boot0 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/includ
 $TEMP_DIR/tcc-boot0 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/crtn.o $MES_DIR/lib/linux/${MES_ARCH}-mes-gcc/crtn.c
 $TEMP_DIR/tcc-boot0 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/crti.o $MES_DIR/lib/linux/${MES_ARCH}-mes-gcc/crti.c
 
-$TEMP_DIR/tcc-boot0 -c -D HAVE_CONFIG_H=1 -D HAVE_LONG_LONG=1 -D HAVE_FLOAT=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/libtcc1.o $MES_DIR/lib/libtcc1.c
+$TEMP_DIR/tcc-boot0 -c -o $TEMP_DIR/boot0-lib/libtcc1.o kit/libtcc1.c
 $TEMP_DIR/tcc-boot0 -ar cr $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libtcc1.o
 
 $TEMP_DIR/tcc-boot0 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/unified-libc.o $TEMP_DIR/boot0/unified-libc.c
@@ -259,7 +259,7 @@ $TEMP_DIR/tcc-boot1 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/includ
 $TEMP_DIR/tcc-boot1 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/crtn.o $MES_DIR/lib/linux/${MES_ARCH}-mes-gcc/crtn.c
 $TEMP_DIR/tcc-boot1 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/crti.o $MES_DIR/lib/linux/${MES_ARCH}-mes-gcc/crti.c
 
-$TEMP_DIR/tcc-boot1 -c -D HAVE_CONFIG_H=1 -D HAVE_LONG_LONG=1 -D HAVE_FLOAT=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/libtcc1.o $MES_DIR/lib/libtcc1.c
+$TEMP_DIR/tcc-boot1 -c -o $TEMP_DIR/boot0-lib/libtcc1.o kit/libtcc1.c
 $TEMP_DIR/tcc-boot1 -ar cr $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libtcc1.o
 
 $TEMP_DIR/tcc-boot1 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/unified-libc.o $TEMP_DIR/boot0/unified-libc.c
@@ -301,7 +301,7 @@ $TEMP_DIR/tcc-boot2 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/includ
 $TEMP_DIR/tcc-boot2 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/crtn.o $MES_DIR/lib/linux/${MES_ARCH}-mes-gcc/crtn.c
 $TEMP_DIR/tcc-boot2 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/crti.o $MES_DIR/lib/linux/${MES_ARCH}-mes-gcc/crti.c
 
-$TEMP_DIR/tcc-boot2 -c -D HAVE_CONFIG_H=1 -D HAVE_LONG_LONG=1 -D HAVE_FLOAT=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/libtcc1.o $MES_DIR/lib/libtcc1.c
+$TEMP_DIR/tcc-boot2 -c -o $TEMP_DIR/boot0-lib/libtcc1.o kit/libtcc1.c
 $TEMP_DIR/tcc-boot2 -ar cr $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libtcc1.o
 
 $TEMP_DIR/tcc-boot2 -c -D HAVE_CONFIG_H=1 -I $MES_DIR/include -I $MES_DIR/include/linux/${MES_ARCH} -o $TEMP_DIR/boot0-lib/unified-libc.o $TEMP_DIR/boot0/unified-libc.c
