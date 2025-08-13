@@ -223,6 +223,34 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -L $LIB_PATH \
       $TCC_DIR/tcc.c
 
+  $CC \
+      -g \
+      -c \
+      -v \
+      -static \
+      -o $TEMP_DIR/tcc-$NEW_CC.o \
+      -D BOOTSTRAP=1 \
+      -D HAVE_FLOAT=1 \
+      -D HAVE_BITFIELD=1 \
+      -D HAVE_LONG_LONG=1 \
+      -D HAVE_SETJMP=1 \
+      -I $MES_DIR/include \
+      -D TCC_TARGET_${TCC_TARGET_ARCH}=1 \
+      -D CONFIG_TCCDIR=\"$LIB_PATH/tcc\" \
+      -D CONFIG_TCC_CRTPREFIX=\"$LIB_PATH\" \
+      -D CONFIG_TCC_LIBPATHS=\"$LIB_PATH:$LIB_PATH/tcc\" \
+      -D CONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\" \
+      -D TCC_LIBGCC=\"$LIB_PATH/libc.a\" \
+      -D TCC_LIBTCC1=\"libtcc1.a\" \
+      -D CONFIG_TCC_ELFINTERP=\"/mes/loader\" \
+      -D CONFIG_TCCBOOT=1 \
+      -D CONFIG_TCC_STATIC=1 \
+      -D CONFIG_USE_LIBGCC=1 \
+      -D TCC_VERSION=\"0.9.26\" \
+      -D ONE_SOURCE=1 \
+      -L $LIB_PATH \
+      $TCC_DIR/tcc.c
+
   sha256sum $LIB_PATH/crt1.o $LIB_PATH/crtn.o $LIB_PATH/crti.o
 }
 
@@ -237,4 +265,5 @@ sha256sum $TEMP_DIR/boot0-lib/crt1.o $TEMP_DIR/boot1-lib/crt1.o $TEMP_DIR/boot2-
 sha256sum $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libc.a
 sha256sum $TEMP_DIR/boot1-lib/tcc/libtcc1.a $TEMP_DIR/boot1-lib/libc.a
 sha256sum $TEMP_DIR/boot2-lib/tcc/libtcc1.a $TEMP_DIR/boot2-lib/libc.a
+sha256sum $TEMP_DIR/tcc-boot0.o $TEMP_DIR/tcc-boot1.o $TEMP_DIR/tcc-boot2.o $TEMP_DIR/tcc-boot3.o
 sha256sum $TEMP_DIR/tcc-boot0 $TEMP_DIR/tcc-boot1 $TEMP_DIR/tcc-boot2 $TEMP_DIR/tcc-boot3
