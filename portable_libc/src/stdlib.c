@@ -1,5 +1,7 @@
-#include "../include/stdlib.h"
-#include "../include/stdio.h"
+#include <pnut_lib.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 #define HEAP_SIZE 26214400 // 25 MB heap size
 
@@ -22,7 +24,6 @@ void *malloc(size_t size) {
   char *result = _heap + _heap_alloc;
   _heap_alloc += size;
   if (_heap_alloc > HEAP_SIZE) {
-    PNUT_INLINE_INTERRUPT();
     return 0; // out of memory
   }
   *((size_t*)result) = size; // store size
@@ -55,59 +56,44 @@ void *realloc(void *ptr, size_t size) {
   return ptr;
 }
 
-#ifdef PNUT_CC
-
-void putstr(const char *str) {
-  while (*str) {
-    putchar(*str);
-    str++;
-  }
-}
-
 double strtod(const char *str, char **endptr) {
-  // Support the literals that are used in TCC:
-  // 0.0, 1.0, 4294967296.0, 0.9999
-  if (str[0] == '0' && str[1] == '.' && str[2] == '0' && str[3] == 0) {
-    if (endptr) *endptr = (char*)str + 3;
-    return 0x0;;
-  } else if (str[0] == '1' && str[1] == '.' && str[2] == '0' && str[3] == 0) {
-    if (endptr) *endptr = (char*)str + 3;
-    return 0x3ff0000000000000;
-  } else if (str[0] == '4' && str[1] == '2' && str[2] == '9' && str[3] == '4' && str[4] == '9' && str[5] == '6' && str[6] == '7' && str[7] == '2' && str[8] == '9' && str[9] == '6' && str[10] == '.' && str[11] == '0' && str[12] == 0) {
-    if (endptr) *endptr = (char*)str + 12;
-    return 0x41d0000000000000;
-  } else if (str[0] == '0' && str[1] == '.' && str[2] == '9' && str[3] == '9' && str[4] == '9' && str[5] == '9' && str[6] == 0) {
-    if (endptr) *endptr = (char*)str + 6;
-    return 0x3FEFFF2E48E8A71E; // 0.9999
+  if (strcmp(str, "0.0") == 0) {
+    return 0x0000000000000000;
+  } else if (strcmp(str, "1.0") == 0) {
+    return 0x3FF0000000000000;
+  } else if (strcmp(str, "4294967296.0") == 0) {
+    return 0x41F0000000000000;
   } else {
-    putstr("Unknown strtod: ");
-    putstr(str);
-    exit(1);
-    return 0; /*TODO*/
+    printf("strtod: Unknown string: %s\n", str);
+    pnut_abort("stdtod: Unknown string: ");
+    return 0;
   }
 }
 
 float strtof(const char *str, char **endptr) {
-  putstr("Unknown strtof: ");
-  putstr(str);
-  exit(1);
+  return (float) strtod(str, endptr);
 }
 
 long double strtold(const char *str, char **endptr) {
-  putstr("Unknown strtold: ");
-  putstr(str);
-  exit(1);
+  return (long double) strtod(str, endptr);
 }
 
-unsigned long long strtoull(const char *nptr, char **endptr, int base) {
+unsigned long long strtoull(const char *str, char **endptr, int base) {
+  unsigned long long n = 0;
+  int d;
+  const char *probe = str;
+  int nb_digits = 0;
+
+  while (*probe && *probe <= ' ') probe++; /* skip spaces */
+
   if (base == 0) { // base = 0 => determine base with prefix
     // 0x   => base 16
     // 0    => base 8
     // else => base 10
-    if (nptr[0] == '0') {
-      if (nptr[1] == 'x') {
+    if (probe[0] == '0') {
+      if (probe[1] == 'x') {
         base = 16;
-        nptr += 2;
+        probe += 2;
       } else {
         base = 8;
       }
@@ -116,54 +102,40 @@ unsigned long long strtoull(const char *nptr, char **endptr, int base) {
     }
   }
 
-  unsigned long long n = 0;
-  switch (base) {
-    case 8:
-      while (*nptr >= '0' && *nptr <= '7') {
-        n = n*8 + *nptr - '0';
-        nptr++;
-      }
-      break;
-    case 10:
-      while (*nptr >= '0' && *nptr <= '9') {
-        n = n*10 + *nptr - '0';
-        nptr++;
-      }
-      break;
-    case 16:
-      while (1) {
-        if (*nptr >= '0' && *nptr <= '9') {
-          n = n*16 + *nptr - '0';
-        } else if (*nptr >= 'A' && *nptr <= 'F') {
-          n = n*16 + *nptr - 'A' + 10;
-        } else if (*nptr >= 'a' && *nptr <= 'f') {
-          n = n*16 + *nptr - 'a' + 10;
-        } else {
-          break;
-        }
-        nptr++;
-      }
-      break;
-    default:
-      putstr("Unknown strtoull base");
-      exit(1);
-      return -1;
+  while (1) {
+    d = *probe;
+    if (d >= '0' && d <= '9') {
+      d = d - '0';
+    } else if (d >= 'A' && d <= 'Z') {
+      d = d - 'A' + 10;
+    } else if (d >= 'a' && d <= 'z') {
+      d = d - 'a' + 10;
+    } else {
+      d = 99;
+    }
+
+    if (d >= base) break;
+    n = n * base + d;
+    nb_digits++;
+    probe++;
   }
 
   if (endptr) {
-    *endptr = (char*)nptr;
+    if (nb_digits == 0) {
+      *endptr = (char*) str;
+    } else {
+      *endptr = (char*) probe;
+    }
   }
 
   return n;
 }
 
-#endif
+long long strtoll(const char *str, char **endptr, int base) {
 
-long int strtol(const char *str, char **endptr, int base) {
-
-  char *probe = str;
+  const char *probe = (char *) str;
   int neg;
-  int n = 0;
+  long long n = 0;
   int nb_digits = 0;
   int d;
 
@@ -208,13 +180,21 @@ long int strtol(const char *str, char **endptr, int base) {
 
   if (endptr) {
     if (nb_digits == 0) {
-      *endptr = str;
+      *endptr = (char *) str;
     } else {
-      *endptr = probe;
+      *endptr = (char *) probe;
     }
   }
 
   return neg ? n : -n;
+}
+
+long strtol(const char *str, char **endptr, int base) {
+  return (long) strtoll(str, endptr, base);
+}
+
+unsigned long strtoul(const char *str, char **endptr, int base) {
+  return (unsigned long) strtoull(str, endptr, base);
 }
 
 int atoi(const char *str) {
@@ -225,44 +205,42 @@ char *getenv(const char *name) {
   return 0; /*TODO*/
 }
 
-char* qsort_buf1;
-char* qsort_buf2;
-char* qsort_buf3;
-int qsort_buf_len = -1;
-
-void *memcpy(void *dest, const void *src, size_t n);
-
-int compare(int (*compar)(void *, void *)) {
-  return compar(qsort_buf1, qsort_buf2);
+void qswap (char *a, char *b, size_t size) {
+  while (size > 0) {
+    char tmp = *a;
+    *a++ = *b;
+    *b++ = tmp;
+    size--;
+  }
 }
 
-void swap(void *base, size_t size, int i, int j) {
-  memcpy(qsort_buf3, base + i*size, size);    // temp = base[i]
-  memcpy(base + i*size, base + j*size, size); // base[i] = base[j]
-  memcpy(base + j*size, qsort_buf3, size);    // base[j] = temp
-}
-
-void qsort(void *base, size_t nmemb, size_t size, int (*compar)(void *, void *)) {
-  if (qsort_buf_len < size) {
-    qsort_buf1 = realloc(qsort_buf1, size);
-    qsort_buf2 = realloc(qsort_buf2, size);
-    qsort_buf3 = realloc(qsort_buf3, size);
-    qsort_buf_len = size;
+// Implement Lomuto partition scheme
+size_t qpartition(void *base, size_t count, size_t size, int (*compare) (void const *, void const *)) {
+  void *p = base + count * size;
+  size_t i = 0;
+  size_t j;
+  for (j = 0; j < count; j++) {
+    int c = compare(base + j * size, p);
+    if (c < 0) {
+      // j^th element < pivot => swap it with i^th element
+      qswap (base + i * size, base + j * size, size);
+      i++;
+    } else if (c == 0) {
+      // Small optimization, no need to swap when equal
+      i++;
+    }
   }
 
-  int has_swapped = 1;
-  int i;
-  // Simple bubble sort
-  while (has_swapped) {
-    has_swapped = 0;
+  int c2 = compare(base + count * size, base + i * size);
+  if (c2 < 0)
+    qswap (base + i * size, base + count * size, size);
+  return i;
+}
 
-    for (i = 0; i < nmemb - 1; i++) {
-      memcpy(qsort_buf1, base + i*size, size);
-      memcpy(qsort_buf2, base + (i+1)*size, size);
-      if (compare(compar) > 0) {
-        swap(base, size, i, i+1);
-        has_swapped = 1;
-      }
-    }
+void qsort (void *base, size_t count, size_t size, int (*compare) (void const *, void const *)) {
+  if (count > 1) {
+    int p = qpartition(base, count - 1, size, compare);
+    qsort (base, p, size, compare);
+    qsort (base + p * size, count - p, size, compare);
   }
 }

@@ -1,4 +1,4 @@
-#include "../include/sys/types.h"
+#include <sys/types.h>
 
 void *memset(void *dest, int c, size_t n) {
 
@@ -94,11 +94,11 @@ char *strcat(char *dest, const char *src) {
 char *strchr(const char *s, int c) {
 
   while (*s) {
-    if (*s == c) return s;
+    if (*s == c) return (char *) s;
     ++s;
   }
 
-  return c == 0 ? s : 0;
+  return c == 0 ? (char *) s : 0;
 }
 
 char *strrchr(const char *s, int c) {
@@ -106,11 +106,11 @@ char *strrchr(const char *s, int c) {
   char *result = 0;
 
   while (*s != 0) {
-    if (*s == c) result = s;
+    if (*s == c) result = (char *) s;
     ++s;
   }
 
-  return c == 0 ? s : result;
+  return c == 0 ? (char *) s : result;
 }
 
 int strcmp(const char *l, const char *r) {
@@ -136,16 +136,15 @@ int strncmp(const char *s1, const char *s2, size_t n) {
 
 void *memmem(const void* haystack, size_t hl, const void* needle, size_t nl) {
   int i;
-  if (nl>hl) return 0;
-  for (i=hl-nl+1; i; --i) {
-    if (!memcmp(haystack,needle,nl))
+  if (nl > hl) return 0;
+  for (i = hl - nl + 1; i; --i) {
+    if (!memcmp(haystack, needle, nl))
       return (char*)haystack;
     ++haystack;
   }
   return 0;
 }
 
-char *strstr(char const *haystack, char const *needle)
-{
+char *strstr(char const *haystack, char const *needle) {
   return memmem(haystack, strlen(haystack), needle, strlen(needle));
 }
