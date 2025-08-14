@@ -164,7 +164,11 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
   mkdir -p "$LIB_PATH"
   mkdir -p "$LIB_PATH/tcc"
 
+  INCLUDE_DIR=""
+
   if [ $mes_libc -eq 1 ]; then
+    INCLUDE_DIR="$MES_DIR/include" # Mes libc
+
     for file in "crt1" "crtn" "crti"; do
       $CC -c                                                                   \
         -D HAVE_CONFIG_H=1                                                     \
@@ -183,6 +187,8 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
 
     $CC -ar cr $LIB_PATH/libc.a $LIB_PATH/unified-libc.o
   else
+    INCLUDE_DIR="portable_libc/include" # pnut libc
+
     $CC -c portable_libc/src/crt1.c -o "$LIB_PATH/crt1.o"
     touch "$LIB_PATH/crtn.o" # Empty file
     touch "$LIB_PATH/crti.o" # Empty file
@@ -206,12 +212,12 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -D HAVE_BITFIELD=1 \
       -D HAVE_LONG_LONG=1 \
       -D HAVE_SETJMP=1 \
-      -I $MES_DIR/include \
+      -I $INCLUDE_DIR \
       -D TCC_TARGET_${TCC_TARGET_ARCH}=1 \
       -D CONFIG_TCCDIR=\"$LIB_PATH/tcc\" \
       -D CONFIG_TCC_CRTPREFIX=\"$LIB_PATH\" \
       -D CONFIG_TCC_LIBPATHS=\"$LIB_PATH:$LIB_PATH/tcc\" \
-      -D CONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\" \
+      -D CONFIG_TCC_SYSINCLUDEPATHS=\"$INCLUDE_DIR\" \
       -D TCC_LIBGCC=\"$LIB_PATH/libc.a\" \
       -D TCC_LIBTCC1=\"libtcc1.a\" \
       -D CONFIG_TCC_ELFINTERP=\"/mes/loader\" \
@@ -223,6 +229,8 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -L $LIB_PATH \
       $TCC_DIR/tcc.c
 
+  # Create tcc-$NEW_CC.o file to help debugging. Hardcode the compile options
+  # with paths to make sure they are the same when using the mes and pnut libc.
   $CC \
       -g \
       -c \
@@ -239,7 +247,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -D CONFIG_TCCDIR=\"$LIB_PATH/tcc\" \
       -D CONFIG_TCC_CRTPREFIX=\"$LIB_PATH\" \
       -D CONFIG_TCC_LIBPATHS=\"$LIB_PATH:$LIB_PATH/tcc\" \
-      -D CONFIG_TCC_SYSINCLUDEPATHS=\"$MES_DIR/include\" \
+      -D CONFIG_TCC_SYSINCLUDEPATHS=\"SOME_DIRECTORY\" \
       -D TCC_LIBGCC=\"$LIB_PATH/libc.a\" \
       -D TCC_LIBTCC1=\"libtcc1.a\" \
       -D CONFIG_TCC_ELFINTERP=\"/mes/loader\" \
