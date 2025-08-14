@@ -1,6 +1,6 @@
 #ifndef _STRING_H
 
-#include "sys/types.h"
+#include <sys/types.h>
 
 void *memset(void *dest, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
@@ -18,7 +18,7 @@ int strcmp(const char *l, const char *r);
 char *strerror(int errnum);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strpbrk(const char *dest, const char *breakset);
-char *strstr(char *__haystack, char *__needle);
-void *memmem(void const *haystack, int haystack_len, void const *needle, int needle_len);
+char *strstr(char const *haystack, char const *needle);
+void *memmem(void const *haystack, size_t haystack_len, void const *needle, size_t needle_len);
 
 #endif

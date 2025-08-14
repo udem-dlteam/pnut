@@ -1,7 +1,7 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
-#include "sys/types.h"
+#include <sys/types.h>
 
 typedef int mode_t;
 
@@ -10,7 +10,7 @@ void exit(int status);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, void *buf, size_t count);
 
-int open(const char *pathname, int flags, mode_t mode);
+int open(const char *pathname, int flags, ...);
 int close(int fd);
 
 // lseek whence options
@@ -21,8 +21,6 @@ int close(int fd);
 off_t lseek(int fd, off_t offset, int whence);
 
 int unlink(const char *pathname);
-int mkdir(const char *pathname, mode_t mode);
-int chmod(const char *pathname, mode_t mode);
 
 // Access flags to test for read, write, execute permissions
 #define	R_OK	4		/* Test for read permission.  */

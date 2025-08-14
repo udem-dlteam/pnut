@@ -1,7 +1,7 @@
-#include "../include/stdio.h"
-#include "../include/stdlib.h"
-#include "../include/unistd.h"
-#include "../include/fcntl.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 FILE _standard_files[4];
 
@@ -80,11 +80,12 @@ int fseek(FILE* stream, long offset, int origin) {
   return lseek(_get_fd(stream), offset, origin);
 }
 
-off_t ftell(FILE * stream) {
-  return lseek (_get_fd(stream), 0, SEEK_CUR);
+long ftell(FILE * stream) {
+  return lseek(_get_fd(stream), 0, SEEK_CUR);
 }
 
 size_t fread(void *data, size_t size, size_t count, FILE *stream) {
+  if (size == 0 || count == 0) return 0; // Avoid divide by 0
   return read(_get_fd(stream), data, size * count) / size;
 }
 
@@ -93,6 +94,20 @@ int remove(const char *filename) {
 }
 
 char _output_buf[1];
+
+int fgetc(FILE *stream) {
+  int fd = _get_fd(stream);
+  char c;
+  if (fd == -1) {
+    pnut_abort("fgetc: string input not supported");
+  } else {
+    if (read(fd, &c, 1) == 1) {
+      return c;
+    } else {
+      return EOF;
+    }
+  }
+}
 
 int fputc(int c, FILE *stream) {
   int fd = _get_fd(stream);
@@ -111,7 +126,7 @@ int fputc(int c, FILE *stream) {
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
   const char *p = ptr;
   size_t n = size * nmemb;
-  while (n) {
+  while (n > 0) {
     fputc(*p, stream);
     ++p;
     --n;
@@ -403,8 +418,8 @@ int sprintf(char *str, const char *format, ...) {
 //   }
 // }
 
-void putchar(int c) {
-  fputc(c, stdout);
+int putchar(int c) {
+  return fputc(c, stdout);
 }
 
 int getchar(void) {

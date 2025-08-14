@@ -1,8 +1,8 @@
 #ifndef _STDIO_H
 #define _STDIO_H
 
-#include "sys/types.h"
-#include "stdarg.h"
+#include <sys/types.h>
+#include <stdarg.h>
 
 #ifndef EOF
 #define EOF (-1)
@@ -12,21 +12,7 @@
 #define NULL 0
 #endif
 
-#ifdef USE_STRUCT
-
-typedef struct {
-  int fd;
-  char buf[1];
-  char *string_output_buf;
-  size_t string_output_buf_size;
-  size_t string_output_len;
-} FILE;
-
-#else
-
 typedef int FILE;
-
-#endif
 
 #ifdef PNUT_CC
 
@@ -45,11 +31,11 @@ extern FILE *stderr;
 int getchar(void);
 int putchar(int);
 
-int fgetc(FILE *stream);
 FILE *fopen(const char *pathname, const char *mode);
 FILE *fdopen(int fd, const char *mode);
 int fclose(FILE *stream);
 
+int fgetc(FILE *stream);
 int fputc(int c, FILE *stream);
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 int fputs(const char *s, FILE *stream);
