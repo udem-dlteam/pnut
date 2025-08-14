@@ -1,12 +1,21 @@
 #ifndef _CRT1_H
 #define _CRT1_H
 
-void _exit(int status);
-int _read(int fd, void *buf, int count);
-int _write(int fd, void *buf, int count);
-int _open(const char *pathname, int flags, int mode);
-int _close(int fd);
-int _lseek(int fd, int offset, int whence);
-int _unlink(const char *pathname);
+#include <stdarg.h>
+#include <unistd.h>
+#include <sys/types.h>
+
+// Primitives
+void exit(int status);
+ssize_t read(int fd, void *buf, size_t count);
+ssize_t write(int fd, void *buf, size_t count);
+int open(const char *pathname, int flags, ...);
+int close(int fd);
+off_t lseek(int fd, off_t offset, int whence);
+int unlink(const char *pathname);
+int mkdir(const char *pathname, mode_t mode);
+int chmod(const char *pathname, mode_t mode);
+int access(const char *pathname, int amode);
+char *_getcwd(char *buf, size_t size);
 
 #endif

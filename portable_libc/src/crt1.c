@@ -1,4 +1,7 @@
-#include "../include/crt1.h"
+#include <crt1.h>
+#include <stdarg.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 int main(int argc, char **argv); /* defined in user program */
 
@@ -28,8 +31,8 @@ void _start() {
   exit(main(argc, argv));
 }
 
-int read(int fd, void *buf, int count) {
-  int result;
+ssize_t read(int fd, void *buf, size_t count) {
+  ssize_t result;
   __asm__ (
     "mov   $3, %%eax\n"  /* 3 = SYS_READ */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
@@ -38,8 +41,8 @@ int read(int fd, void *buf, int count) {
   return result;
 }
 
-int write(int fd, void *buf, int count) {
-  int result;
+ssize_t write(int fd, void *buf, size_t count) {
+  ssize_t result;
   __asm__ (
     "mov   $4, %%eax\n"  /* 4 = SYS_WRITE */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
@@ -48,7 +51,12 @@ int write(int fd, void *buf, int count) {
   return result;
 }
 
-int open(const char *pathname, int flags, int mode) {
+int open(const char *pathname, int flags, ...) {
+  va_list ap;
+  va_start(ap, flags);
+  int mode = va_arg(ap, int);
+  va_end(ap);
+
   int result;
   __asm__ (
     "mov   $5, %%eax\n"  /* 5 = SYS_OPEN */
@@ -61,22 +69,76 @@ int open(const char *pathname, int flags, int mode) {
 int close(int fd) {
   int result;
   __asm__ (
-    "mov   $5, %%eax\n"  /* 6 = SYS_CLOSE */
+    "mov   $6, %%eax\n"  /* 6 = SYS_CLOSE */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
     : "=a" (result) : "b" (fd)
   );
   return result;
 }
 
-int lseek(int fd, int offset, int whence) {
-  int result;
+off_t lseek(int fd, off_t offset, int whence) {
+  off_t result;
   __asm__ (
-    "mov   $8, %%eax\n"  /* 8 = SYS_LSEEK */
+    "mov   $19, %%eax\n"  /* 8 = SYS_LSEEK */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
     : "=a" (result) : "b" (fd), "c" (offset), "d" (whence)
   );
   return result;
 }
+
+int unlink(const char *pathname) {
+  int result;
+  __asm__ (
+    "mov   $10, %%eax\n"  /* 10 = SYS_UNLINK */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : "=a" (result) : "b" (pathname)
+  );
+  return result;
+}
+
+int mkdir(const char *pathname, mode_t mode) {
+  int result;
+  __asm__ (
+    "mov   $39, %%eax\n"  /* 39 = SYS_MKDIR */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : "=a" (result) : "b" (pathname), "c" (mode)
+  );
+  return result;
+}
+
+int chmod(const char *pathname, mode_t mode) {
+  int result;
+  __asm__ (
+    "mov   $15, %%eax\n"  /* 15 = SYS_CHMOD */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : "=a" (result) : "b" (pathname), "c" (mode)
+  );
+  return result;
+}
+
+int access(const char *pathname, int amode) {
+  int result;
+  __asm__ (
+    "mov   $21, %%eax\n"  /* 21 = SYS_ACCESS */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : "=a" (result) : "b" (pathname), "c" (amode)
+  );
+  return result;
+}
+
+char *_getcwd(char *buf, size_t size) {
+  char *result;
+  __asm__ (
+    "mov   $183, %%eax\n"  /* 79 = SYS_GETCWD */
+    ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
+    : "=a" (result) : "b" (buf), "c" (size)
+  );
+  return result;
+}
+
+#else
+
+#error Unsupported architecture
 
 #endif
 
