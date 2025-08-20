@@ -41,20 +41,22 @@ void create_dir_recursive(int create_parent_dirs, char *pathname, int mode) {
 
     if (parent_dirs_path) {
       parent_dirs_path[0] = '\0';
-      create_dir_recursive(create_parent_dirs, pathname, mode);
+      create_dir_recursive(create_parent_dirs, pathname, mode); //
 
       // Restore the original pathname and try creating the directory again.
       parent_dirs_path[0] = '/';
       res = mkdir(pathname, mode);
     } else {
-      printf("Could not create directory %s. It probably already exists.\n", pathname);
-      exit(1);
+      if (!create_parent_dirs)
+        printf("Could not create directory %s. It probably already exists.\n", pathname);
+      exit(create_parent_dirs ? 0 : 1);
     }
 	}
 
 	if(res != 0) {
-		printf("Could not create directory %s. It probably already exists.\n", pathname);
-    exit(1);
+    if (!create_parent_dirs)
+      printf("Could not create directory %s. It probably already exists.\n", pathname);
+    exit(create_parent_dirs ? 0 : 1);
 	}
 }
 
@@ -67,7 +69,7 @@ int ENTRY_POINT(int argc, char **argv) {
       argv += 1;
       argc -= 1;
 		}
-		else {
+    else {
       // Strip trailing '/' if present
       if(argv[1][strlen(argv[1]) - 1] == '/') {
         argv[1][strlen(argv[1]) - 1] = '\0';
