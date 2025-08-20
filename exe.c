@@ -477,14 +477,14 @@ int labels_ix = 0;
 void def_label(int lbl);
 #endif
 
-void assert_all_labels_defined() {
+void assert_all_labels_defined(int init_next_lbl) {
   int i = 0;
   int lbl;
   // Check that all labels are defined
   for (; i < labels_ix; i++) {
     lbl = labels[i];
+    if (lbl != init_next_lbl && heap[lbl + 1] > 0) {
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
-    if (heap[lbl + 1] > 0) {
       if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
         def_label(lbl);
         rt_debug("Function or label is not defined\n");
@@ -494,9 +494,7 @@ void assert_all_labels_defined() {
         // TODO: This should crash but let's just return for now to see how far we can get
         ret();
       }
-    }
 #else
-    if (heap[lbl + 1] > 0) {
       putstr("Label ");
       if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
         putstr((char*) heap[lbl + 2]);
@@ -505,8 +503,8 @@ void assert_all_labels_defined() {
       }
       putstr(" is not defined\n");
       exit(1);
-    }
 #endif
+    }
   }
 }
 
@@ -530,7 +528,7 @@ int alloc_label(char* name) {
 }
 #else
 
-#define assert_all_labels_defined() // No-op
+#define assert_all_labels_defined(x) // No-op
 #define add_label(lbl) // No-op
 #define alloc_label(name) alloc_label_()
 
@@ -2513,7 +2511,7 @@ void init_forward_jump_table(int binding) {
   // At this point, all labels should be defined, which means we can safely
   // output the code and overwrite the code buffer.
 
-  assert_all_labels_defined(); // In SAFE_MODE, this checks that all labels are defined
+  assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
   code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
   generate_exe();
   reset_code_buffer();
@@ -2956,7 +2954,7 @@ void codegen_end() {
   push_reg(reg_X); // exit process with result of main
   call(exit_lbl);
 
-  assert_all_labels_defined();
+  assert_all_labels_defined(init_next_lbl);
 
   // Finish writing the code to the file
   generate_exe();
