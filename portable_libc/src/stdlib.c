@@ -58,10 +58,13 @@ void *realloc(void *ptr, size_t size) {
 
 double strtod(const char *str, char **endptr) {
   if (strcmp(str, "0.0") == 0) {
+    if (endptr) *endptr = (char *) str + 3;
     return 0x0000000000000000;
   } else if (strcmp(str, "1.0") == 0) {
+    if (endptr) *endptr = (char *) str + 3;
     return 0x3FF0000000000000;
   } else if (strcmp(str, "4294967296.0") == 0) {
+    if (endptr) *endptr = (char *) str + 12;
     return 0x41F0000000000000;
   } else {
     printf("strtod: Unknown string: %s\n", str);
