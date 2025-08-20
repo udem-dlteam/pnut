@@ -29,6 +29,9 @@
 #define ENTRY_POINT cat_main
 #include "cat.c"
 #undef ENTRY_POINT
+#define ENTRY_POINT chmod_main
+#include "chmod.c"
+#undef ENTRY_POINT
 #define ENTRY_POINT cp_main
 #include "cp.c"
 #undef ENTRY_POINT
@@ -71,10 +74,12 @@ int invoke_subcommand(char* name, int argc, char **argv) {
       // Shift arguments to pass to subcommand
       return invoke_subcommand(argv[1], argc - 1, argv + 1);
     }
-  } else if (strcmp(name, "cp") == 0) {
-    return cp_main(argc, argv);
   } else if (strcmp(name, "cat") == 0) {
     return cat_main(argc, argv);
+  } else if (strcmp(name, "chmod") == 0) {
+    return chmod_main(argc, argv);
+  } else if (strcmp(name, "cp") == 0) {
+    return cp_main(argc, argv);
   } else if (strcmp(name, "mkdir") == 0) {
     return mkdir_main(argc, argv);
   } else if (strcmp(name, "sha256sum") == 0) {
