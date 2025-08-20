@@ -291,10 +291,12 @@ void print_tok_type(int tok) {
     putchar(tok);
   }
   else {
-    printf("tok=%d\n", tok);
+    putstr("tok="); putint(tok); putstr("\n");
     fatal_error("print_tok_type: unknown token");
   }
 }
+
+#ifdef DEBUG_PARSER
 
 void ast_to_sexp(ast obj);
 
@@ -309,26 +311,26 @@ void ast_list_to_sexp(ast obj) {
 void type_ast_to_sexp(ast type) {
   switch (get_op(type)) {
     case '*':
-      printf("(* ");
+      putstr("(* ");
       type_ast_to_sexp(get_child_('*', type, 1));
-      printf(")");
+      putstr(")");
       break;
 
     case '[':
-      printf("[");
+      putstr("[");
       type_ast_to_sexp(get_child_('[', type, 0));
-      printf(" ");
+      putstr(" ");
       putint(get_child_('[', type, 1));
-      printf("]");
+      putstr("]");
       break;
 
     case '(':
-      printf("(-> (");
+      putstr("(-> (");
       ast_list_to_sexp(get_child_opt_('(', LIST, type, 1)); // Function args
-      if (get_child_('(', type, 2)) printf(" ..."); // Varargs
-      printf(") ");
+      if (get_child_('(', type, 2)) putstr(" ..."); // Varargs
+      putstr(") ");
       type_ast_to_sexp(get_child_('(', type, 0));
-      printf(")");
+      putstr(")");
       break;
 
     case CHAR_KW:
@@ -346,17 +348,19 @@ void type_ast_to_sexp(ast type) {
     case STRUCT_KW:
     case UNION_KW:
     case ENUM_KW:
-      printf("(");
+      putstr("(");
       print_tok_type(get_op(type));
-      printf(" ");
+      putstr(" ");
       ast_to_sexp(get_child(type, 0)); // Struct/union name
-      printf(" ");
+      putstr(" ");
       ast_list_to_sexp(get_child(type, 2)); // Struct/union members
-      printf(")");
+      putstr(")");
       break;
 
     default:
-      printf("<Unknown type %d>", get_op(type));
+      putstr("<Unknown type ");
+      putint(get_op(type));
+      putstr(">");
       exit(1);
   }
 }
@@ -365,7 +369,7 @@ void ast_to_sexp(ast obj) {
   int i = 0;
 
   if (obj == 0) {
-    printf("#f");
+    putstr("#f");
     return;
   }
 
@@ -392,7 +396,7 @@ void ast_to_sexp(ast obj) {
       //   print_string_char(get_val_(CHARACTER, obj));
       //   putchar('\'');
       // }
-      printf("(char ");
+      putstr("(char ");
       putint(get_val_(CHARACTER, obj));
       putchar(')');
       break;
@@ -403,9 +407,9 @@ void ast_to_sexp(ast obj) {
       break;
 
     case TYPEDEF_KW:
-      printf("(typedef ");
+      putstr("(typedef ");
       ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, LIST, obj, 0));
-      printf(")");
+      putstr(")");
       break;
 
     case ENUM_KW:
@@ -424,59 +428,59 @@ void ast_to_sexp(ast obj) {
         putchar(' ');
         ast_to_sexp(get_child_(DECL, obj, 2));
       }
-      printf(")");
+      putstr(")");
       break;
 
     case FUN_DECL:
-      printf("(define-fun ");
+      putstr("(define-fun ");
       putstr(STRING_BUF(get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, get_child__(FUN_DECL, DECL, obj, 0), 0))));
       putchar(' ');
       type_ast_to_sexp(get_child_(DECL, get_child__(FUN_DECL, DECL, obj, 0), 1)); // Get type out of decl
       putchar(' ');
       ast_to_sexp(get_child_(FUN_DECL, obj, 1)); // Body
-      printf(")");
+      putstr(")");
       break;
 
     case CAST:
-      printf("(cast ");
+      putstr("(cast ");
       type_ast_to_sexp(get_child_(DECL, get_child__(CAST, DECL, obj, 0), 1)); // Get type out of decl
-      printf(" ");
+      putstr(" ");
       ast_to_sexp(get_child_(CAST, obj, 1));
-      printf(")");
+      putstr(")");
       break;
 
     case SIZEOF_KW:
-      printf("(sizeof ");
+      putstr("(sizeof ");
       if (get_op(get_child_(SIZEOF_KW, obj, 0)) == DECL) {
         type_ast_to_sexp(get_child_(DECL, get_child_(SIZEOF_KW, obj, 0), 1));
       } else {
         ast_to_sexp(get_child_(SIZEOF_KW, obj, 0));
       }
-      printf(")");
+      putstr(")");
       break;
 
     case '[':
-      printf("(array_at ");
+      putstr("(array_at ");
       ast_to_sexp(get_child_('[', obj, 0));
-      printf(" ");
+      putstr(" ");
       ast_to_sexp(get_child_('[', obj, 1));
-      printf(")");
+      putstr(")");
       break;
 
     case '(': // Function calls, we print the function and its arguments
-      printf("(");
+      putstr("(");
       ast_to_sexp(get_child_('(', obj, 0));
       if (get_child_('(', obj, 1) != 0) {
-        printf(" ");
+        putstr(" ");
         ast_to_sexp(get_child_('(', obj, 1));
       }
-      printf(")");
+      putstr(")");
       break;
 
     case LIST:
-      printf("(list ");
+      putstr("(list ");
       ast_list_to_sexp(obj);
-      printf(")");
+      putstr(")");
       break;
 
     case '{':
@@ -500,19 +504,9 @@ void ast_to_sexp(ast obj) {
   }
 }
 
-// void show_struct(ast struct_type) {
-//   ast members = get_child(canonicalize_type(struct_type), 2);
+#endif
 
-//   char* name = string_pool + get_val(get_val(get_child(struct_type, 1)));
-
-//   printf("##### Struct %s #####\n", name);
-//   printf("sizeof(%s) = %d\n", name, struct_size(struct_type));
-
-//   while (get_op(members) == ',') {
-//     printf("%s = obj[%d]\n", string_pool + get_val(get_val(get_child(members, 0))), struct_member_offset(struct_type, get_child(members, 0)));
-//     members = get_child(members, 2);
-//   }
-// }
+#if DEBUG_CPP
 
 void print_tokens(int tokens) {
   while (tokens != 0) {
@@ -559,3 +553,5 @@ void print_macro_stack() {
   print_macro_ctx(i, macro_ident, macro_tok_lst, macro_args);
   putstr("\n################################\n");
 }
+
+#endif
