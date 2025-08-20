@@ -1,0 +1,6 @@
+#include "math.c"
+#include "pnut_lib.c"
+#include "setjmp.c"
+#include "stdio.c"
+#include "stdlib.c"
+#include "string.c"
