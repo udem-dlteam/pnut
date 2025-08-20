@@ -1087,6 +1087,7 @@ ast value_type(ast node) {
       // TODO: Check that the operands have compatible types?
       return value_type(child0);
     } else if (op == '(') {
+      // TODO: Use resolve_identifier to allow indirect calls
       binding = cgc_lookup_fun(get_val_(IDENTIFIER, child0), cgc_globals);
       if (binding != 0) {
         // heap[binding+5] is the '(' type
