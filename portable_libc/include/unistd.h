@@ -1,7 +1,11 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
+#ifdef FLAT_INCLUDES
+#include <types.h>
+#else
 #include <sys/types.h>
+#endif
 
 typedef int mode_t;
 

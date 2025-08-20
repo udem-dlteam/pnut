@@ -1,7 +1,11 @@
 #ifndef _STDLIB_H
 #define _STDLIB_H
 
+#ifdef FLAT_INCLUDES
+#include <types.h>
+#else
 #include <sys/types.h>
+#endif
 
 void exit(int status);
 void *malloc(size_t size);

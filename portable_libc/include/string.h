@@ -1,6 +1,10 @@
 #ifndef _STRING_H
 
+#ifdef FLAT_INCLUDES
+#include <types.h>
+#else
 #include <sys/types.h>
+#endif
 
 void *memset(void *dest, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);

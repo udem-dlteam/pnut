@@ -1,7 +1,12 @@
 #ifndef _STDIO_H
 #define _STDIO_H
 
+#ifdef FLAT_INCLUDES
+#include <types.h>
+#else
 #include <sys/types.h>
+#endif
+
 #include <stdarg.h>
 
 #ifndef EOF
