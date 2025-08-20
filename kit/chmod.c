@@ -1,4 +1,9 @@
-// Chmod utility
+/*
+ * chmod.c: Change the file mode (permissions) of the specified files
+ *
+ * Usage: ./chmod.sh [--verbose] MODE FILE...
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +15,11 @@
 #include <sys/stat.h>
 #endif
 
-int main(int argc, char **argv) {
+#ifndef ENTRY_POINT
+#define ENTRY_POINT main
+#endif
+
+int ENTRY_POINT(int argc, char **argv) {
   int verbose = 0;
   int permissions = -1;
 
