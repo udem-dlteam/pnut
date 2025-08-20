@@ -3501,19 +3501,6 @@ ast parse_cast_expression() {
   ast type;
 
   if (tok == '(') {
-    // Ideally, we'd parse as many ( as needed, but then we would have to
-    // backtrack when the first parenthesis is for a parenthesized expression
-    // and not a cast.
-    // I think we could write a version of parse_parenthesized_expression that
-    // already has the first parenthesis consumed. It would be called when
-    // after parsing the cast and cast expression, there are still parenthesis
-    // to close, but I'm not sure how we could create the AST since it's all
-    // very top down and that would flip the order of the AST creation.
-
-    // Concretely, this means we can't parse cast expressions where the type
-    // is wrapped in parenthesis, like in the following example:
-    // (((char *)) var)
-    // But that should be ok for TCC.
     get_tok();
 
     if (is_type_starter(tok)) {
