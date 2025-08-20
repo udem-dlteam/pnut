@@ -2,8 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
+
+#ifdef FLAT_INCLUDES
+#include <stat.h>
+#else
+#include <sys/stat.h>
+#endif
 
 int main(int argc, char **argv) {
   int verbose = 0;

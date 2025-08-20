@@ -17,7 +17,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef FLAT_INCLUDES
+#include <stat.h>
+#else
 #include <sys/stat.h>
+#endif
 
 void create_dir_recursive(int create_parent_dirs, char *pathname, int mode) {
 	int res;
