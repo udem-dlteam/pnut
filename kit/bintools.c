@@ -17,9 +17,14 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <setjmp.h>
+
+#ifdef FLAT_INCLUDES
+#include <stat.h>
+#else
+#include <sys/stat.h>
+#endif
 
 #define ENTRY_POINT cat_main
 /*
@@ -140,6 +145,10 @@ int ENTRY_POINT(int argc, char **argv) {
 #define ENTRY_POINT main
 #endif
 
+
+#ifdef FLAT_INCLUDES
+#else
+#endif
 
 void create_dir_recursive(int create_parent_dirs, char *pathname, int mode) {
 	int res;
@@ -1670,6 +1679,9 @@ int ENTRY_POINT(int argc, char **argv) {
 /* These are all highly standard and portable headers. */
 
 /* This is for mkdir(); this may need to be changed for some platforms. */
+#ifdef FLAT_INCLUDES
+#else
+#endif
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <windows.h>

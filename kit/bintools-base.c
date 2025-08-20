@@ -17,9 +17,14 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <setjmp.h>
+
+#ifdef FLAT_INCLUDES
+#include <stat.h>
+#else
+#include <sys/stat.h>
+#endif
 
 #define ENTRY_POINT cat_main
 #include "cat.c"

@@ -34,7 +34,11 @@
 #include <string.h>
 
 /* This is for mkdir(); this may need to be changed for some platforms. */
+#ifdef FLAT_INCLUDES
+#include <stat.h>
+#else
 #include <sys/stat.h>
+#endif
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <windows.h>
