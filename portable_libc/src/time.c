@@ -1,5 +1,10 @@
 #include <time.h>
+
+#ifdef FLAT_INCLUDES
+#include <time.h>
+#else
 #include <sys/time.h>
+#endif
 
 #ifdef ADD_LIBC_STUB
 

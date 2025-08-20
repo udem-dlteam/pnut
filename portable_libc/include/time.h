@@ -1,7 +1,11 @@
 #ifndef _TIME_H
 #define _TIME_H
 
+#ifdef FLAT_INCLUDES
+#include <time.h>
+#else
 #include <sys/time.h>
+#endif
 
 struct tm {
   int tm_sec;

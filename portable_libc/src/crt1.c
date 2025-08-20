@@ -1,7 +1,12 @@
 #include <crt1.h>
 #include <stdarg.h>
 #include <unistd.h>
+
+#ifdef FLAT_INCLUDES
+#include <types.h>
+#else
 #include <sys/types.h>
+#endif
 
 int main(int argc, char **argv); /* defined in user program */
 

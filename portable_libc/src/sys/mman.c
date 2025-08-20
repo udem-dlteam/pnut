@@ -1,4 +1,8 @@
+#ifdef FLAT_INCLUDES
+#include <mman.h>
+#else
 #include <sys/mman.h>
+#endif
 
 #ifdef ADD_LIBC_STUB
 

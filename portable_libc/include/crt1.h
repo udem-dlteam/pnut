@@ -3,7 +3,12 @@
 
 #include <stdarg.h>
 #include <unistd.h>
+
+#ifdef FLAT_INCLUDES
+#include <types.h>
+#else
 #include <sys/types.h>
+#endif
 
 // Primitives
 void exit(int status);
