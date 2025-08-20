@@ -17,6 +17,10 @@ log() {
   fi
 }
 
+warn() {
+  printf "%s\n" "$1" >&2
+}
+
 error() {
   printf "Error: %s\n" "$1" >&2
   exit 1
@@ -137,7 +141,7 @@ base64_update() {
     "+")         : $(( acc = (acc << 6) + b64_plus )) ;;
     "/")         : $(( acc = (acc << 6) + b64_slash )) ;;
     "=") return 1 ;; # End of data, do not process '='. Bits from padding do not terminate the last byte.
-    *)   log "Invalid base64 character: '$1'"; exit 1 ;;
+    *)   printf "Invalid base64 character: '$1'\n"; exit 1 ;;
   esac
   return 0
 }
@@ -174,7 +178,7 @@ extract_fun_start() { # $1: file name, $2: normalized file name
   printf "extract_%s() {\n" "$2"
   file_path="${1%/*}" # Remove everything after the last slash, if any
   if [ -n "$file_path" ] && [ "$1" != "$file_path" ]; then
-    printf "  mkdir -p '%s' || { printf \"Skipping file %s, mkdir failed\\\\n\"; return 1; }\n" "$file_path" "$1"
+    printf "  mkdir -p '%s' > /dev/null 2>&1 || { printf \"Skipping file %s (no mkdir)\\\\n\"; return 1; }\n" "$file_path" "$1"
   fi
   printf "  printf \"Extracting %s\\\\n\"\n" "$1"
 }
@@ -186,17 +190,17 @@ extract_fun_end() {
 }
 
 process_file() { # $1: file to process, $2: path
-  normalized_name="$(normalize_name "$1")"
+  normalized_name="$(normalize_name "${2:-$1}")"
   extension="${1##*.}" # Get the file extension by removing everything before the last dot
   [ "$1" = "$extension" ] && extension="" # If there's no dot, set extension to empty
   log "Processing file '$1' => '$normalized_name'."
 
-  extract_fun_start "$1" "$normalized_name"
+  extract_fun_start "${2:-$1}" "$normalized_name"
 
   if [ $opt_all_binary -ne 0 ] || is_bin_file_ext "$extension"; then
     log "Processing binary file '$1'."
     use_bin_decode=1
-    printf "  decode_bin << '%s' > %s\n" "$EOF_SEP" "$1"
+    printf "  decode_bin << '%s' > %s\n" "$EOF_SEP" "${2:-$1}"
     uuencode -mr "$1" "$1"
     printf "%s\n" "$EOF_SEP"
   else
@@ -205,7 +209,7 @@ process_file() { # $1: file to process, $2: path
     # descriptor If we could, we'd be able to skip the pcat function and just
     # use the heredoc directly like so: `{fd}<< EOF ... EOF`
     use_pcat=1
-    printf "  pcat << '%s' > %s\n" "$EOF_SEP" "$1"
+    printf "  pcat << '%s' > %s\n" "$EOF_SEP" "${2:-$1}"
     pcat "$1" < "$1" || {
       log "Warning: Last line does not end with a newline, adding it."
       printf "\n"
@@ -215,7 +219,7 @@ process_file() { # $1: file to process, $2: path
   extract_fun_end "$normalized_name"
 }
 
-process_dir() {
+process_dir() { # $1: directory to process
   log "Processing directory '$1'."
   IFS=" "
   for file in "$1"/*; do
@@ -224,7 +228,7 @@ process_dir() {
     elif [ -d "$file" ]; then
       process_dir "$file"
     else
-      log "Skipping '$file': not a file or directory."
+      warn "Skipping '$file': not a file or directory."
     fi
   done
 }
@@ -233,12 +237,20 @@ gen_header
 
 # Loop over the arguments, if it's a file, then
 for arg in "$@"; do
+  # if the file has a ':' character in it, overwrite the path with whatever is after the ':'
+  path=${arg##*:}
+  if [ "$path" != "$arg" ]; then
+    log "Overwriting path: $arg -> $path"
+    arg=${arg%:*} # Remove ':$path'
+  else
+    path=""
+  fi
   if [ -f "$arg" ]; then
-    process_file "$arg"
+    process_file "$arg" "$path"
   elif [ -d "$arg" ]; then
     process_dir "$arg"
   else
-    log "Skipping '$arg': not a file or directory."
+    warn "Skipping '$arg': not a file or directory."
   fi
 done
 
