@@ -1053,6 +1053,7 @@ void u64_to_obj(int *x) {
 
 int accum_digit(int base) {
   int digit = 99;
+  int MININT = -2147483648;
   if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
   } else if ('A' <= ch && ch <= 'Z') {
@@ -1063,10 +1064,10 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; // character is not a digit in that base
   } else {
-    // TODO: Put overflow check back
-    // if ((val < limit) || ((val == limit) && (digit > limit * base - MININT))) {
-    //   fatal_error("literal integer overflow");
-    // }
+    int limit = MININT / base;
+    if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
+      fatal_error("literal integer overflow");
+    }
 
 #ifdef SUPPORT_64_BIT_LITERALS
     u64_mul_u32(val_32, base);
@@ -2700,7 +2701,7 @@ ast parse_enum() {
         && get_op(value) != INTEGER_U && get_op(value) != INTEGER_UL && get_op(value) != INTEGER_ULL
         && get_op(value) != INTEGER_L && get_op(value) != INTEGER_LL
            ) {
-        value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+          value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
         }
 #endif
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
