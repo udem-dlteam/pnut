@@ -79,7 +79,6 @@ typedef int intptr_t;
 //#define DEBUG_SHOW_ERR_ORIGIN
 
 // Use positional parameter directly for function parameters that are constants
-#define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Make get_ch() use a length-1 character buffer to lookahead and skip line continuations
