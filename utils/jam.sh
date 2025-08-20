@@ -201,7 +201,7 @@ process_file() { # $1: file to process, $2: path
     log "Processing binary file '$1'."
     use_bin_decode=1
     printf "  decode_bin << '%s' > %s\n" "$EOF_SEP" "${2:-$1}"
-    uuencode -mr "$1" "$1"
+    base64 -w 80 < "$1"
     printf "%s\n" "$EOF_SEP"
   else
     log "Processing text file '$1'."
