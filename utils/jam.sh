@@ -178,8 +178,10 @@ extract_fun_start() { # $1: file name, $2: normalized file name
   printf "extract_%s() {\n" "$2"
   file_path="${1%/*}" # Remove everything after the last slash, if any
   if [ -n "$file_path" ] && [ "$1" != "$file_path" ]; then
-    printf "  mkdir -p '%s' > /dev/null 2>&1 || { printf \"Skipping file %s (no mkdir)\\\\n\"; return 1; }\n" "$file_path" "$1"
+    printf "  mkdir -p '%s' > /dev/null 2>&1 || { printf \"Skipping %s (no mkdir)\\\\n\"; return 1; }\n" "$file_path" "$1"
   fi
+  # Check if file already exists
+  printf "  [ -e '%s' ] && { printf \"Skipping %s (already exists)\\\\n\"; return 0; }\n" "$1" "$1"
   printf "  printf \"Extracting %s\\\\n\"\n" "$1"
 }
 
