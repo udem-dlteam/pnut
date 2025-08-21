@@ -193,7 +193,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
     touch "$LIB_PATH/crtn.o" # Empty file
     touch "$LIB_PATH/crti.o" # Empty file
 
-    $CC -c -I portable_libc/include -o "$LIB_PATH/libc.o" portable_libc/libc.c
+    $CC -c -D ADD_LIBC_STUB -I portable_libc/include -o "$LIB_PATH/libc.o" portable_libc/libc.c
     $CC -ar cr "$LIB_PATH/libc.a" "$LIB_PATH/libc.o"
   fi
 
