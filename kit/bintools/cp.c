@@ -45,8 +45,8 @@ int ENTRY_POINT(int argc, char **argv) {
   src = open(argv[1], O_RDONLY);
   dst = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-  if (src == -1) { file_error(argv[1]); }
-  if (dst == -1) { file_error(argv[2]); }
+  if (src <= 0) { file_error(argv[1]); }
+  if (dst <= 0) { file_error(argv[2]); }
 
   while ((len = read(src, buffer, BUF_SIZE)) != 0) {
     write(dst, buffer, len);

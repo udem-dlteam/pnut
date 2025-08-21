@@ -5,13 +5,22 @@
 #
 # Usage: cat [file ...]
 
+posix_cat() {
+  IFS=
+  while read -r line; do
+    printf "%s\n" "$line"
+  done
+
+  # Print the last line if it's not empty (for files with no trailing newline)
+  if [ -n "$line" ]; then
+    printf "%s" "$line"
+  fi
+}
+
 cat() {
   for file in "$@"; do
     if [ -f "$file" ]; then
-      echo "#### $file ####\n" # Extra newline for better readability
-      while IFS= read -r line; do
-        printf '%s\n' "$line"
-      done < "$file"
+      posix_cat < "$file"
     else
       printf 'cat: %s: No such file\n' "$file"
     fi
