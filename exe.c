@@ -1,11 +1,35 @@
 // common part of machine code generators
 void generate_exe();
 
-// 1MB heap
+// When placing globals on the stack, it's important that globals don't occupy
+// so much space they overflow the stack.
+#ifdef USE_STACK_FOR_GLOBALS
+// 128KB heap because it's also on the stack
+#define RT_HEAP_SIZE 131072
+// Allow overriding globals size with -D option. Default is 2MB
+#ifndef RT_GLO_SIZE
+#define RT_GLO_SIZE 2097152
+#endif
+#else
+// 100MB
 #define RT_HEAP_SIZE 104857600
+// Allow overriding globals size with -D option. Default is 100MB
+#ifndef RT_GLO_SIZE
+#define RT_GLO_SIZE 104857600
+#endif
+#endif
 
-#define MAX_CODE_SIZE 500000
-int code[MAX_CODE_SIZE];
+// Maximum code size, used for program size in elf header when using one-pass generator
+#ifndef MAX_CODE_SIZE
+#define MAX_CODE_SIZE 1000000
+#endif
+
+#ifdef ONE_PASS_GENERATOR
+#define CODE_SIZE 50000
+#else
+#define CODE_SIZE 500000
+#endif
+int code[CODE_SIZE];
 // Index of the next free byte in the code buffer
 int code_alloc = 0;
 // Total number of bytes emitted
@@ -85,7 +109,7 @@ void reset_code_buffer() {
 #endif
 
 void emit_i8(int a) {
-  if (code_alloc >= MAX_CODE_SIZE) {
+  if (code_alloc >= CODE_SIZE) {
     fatal_error("code buffer overflow");
   }
   code[code_alloc] = (a & 0xff);
@@ -222,6 +246,7 @@ void jump_rel(int offset);
 void call(int lbl);
 void call_reg(int reg);
 void ret();
+void debug_interrupt();
 
 void load_mem_location(int dst, int base, int offset, int width, bool is_signed) {
   if (is_signed) {
@@ -390,6 +415,9 @@ void os_open();
 void os_close();
 void os_seek();
 void os_unlink();
+void os_mkdir();
+void os_chmod();
+void os_access();
 
 void rt_putchar();
 void rt_debug(char* msg);
@@ -425,6 +453,9 @@ void grow_stack_bytes(int bytes) {
   add_reg_imm(reg_SP, -word_size_align(bytes));
 }
 
+void rt_debug(char* msg);
+void rt_crash(char* msg);
+
 // Label definition
 
 enum {
@@ -438,9 +469,13 @@ enum {
 #define END_INIT_BLOCK()   \
   jump(init_next_lbl);
 
-#ifdef SAFE_MODE
+#if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
 int labels[100000];
 int labels_ix = 0;
+
+#ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+void def_label(int lbl);
+#endif
 
 void assert_all_labels_defined() {
   int i = 0;
@@ -448,6 +483,19 @@ void assert_all_labels_defined() {
   // Check that all labels are defined
   for (; i < labels_ix; i++) {
     lbl = labels[i];
+#ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+    if (heap[lbl + 1] > 0) {
+      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
+        def_label(lbl);
+        rt_debug("Function or label is not defined\n");
+        rt_debug("name = ");
+        rt_debug((char*) heap[lbl + 2]);
+        rt_debug("\n");
+        // TODO: This should crash but let's just return for now to see how far we can get
+        ret();
+      }
+    }
+#else
     if (heap[lbl + 1] > 0) {
       putstr("Label ");
       if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
@@ -458,18 +506,25 @@ void assert_all_labels_defined() {
       putstr(" is not defined\n");
       exit(1);
     }
+#endif
   }
 }
 
 void add_label(int lbl) {
+  if (labels_ix >= sizeof(labels) / sizeof(labels[0])) fatal_error("labels array is full");
+
   labels[labels_ix++] = lbl;
 }
 
 int alloc_label(char* name) {
-  int lbl = alloc_obj(3);
+  int lbl = alloc_obj(5);
   heap[lbl] = GENERIC_LABEL;
   heap[lbl + 1] = 0; // Address of label
   heap[lbl + 2] = (intptr_t) name; // Name of label
+  heap[lbl + 3] = (intptr_t) fp_filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  heap[lbl + 4] = line_number;
+#endif
   add_label(lbl);
   return lbl;
 }
@@ -542,7 +597,21 @@ void def_label(int lbl) {
   if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
 
   if (addr < 0) {
-    fatal_error("label defined more than once");
+#ifdef SAFE_MODE
+    putstr("Label ");
+    if (heap[lbl + 2] != 0) {
+      putstr((char*) heap[lbl + 2]);
+    } else {
+      putint(lbl);
+    }
+    putstr(" previously defined at ");
+    putstr((char*) heap[lbl + 3]);
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+    putstr(":");
+    putint(heap[lbl + 4]);
+#endif
+    fatal_error(" being redefined");
+#endif
   } else {
     heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
@@ -1264,6 +1333,13 @@ void codegen_call(ast node) {
 
   // Check if the function is a direct call, find the binding if it is
   if (get_op(fun) == IDENTIFIER) {
+    #ifdef ENABLE_PNUT_INLINE_INTERRUPT
+    if (get_val_(IDENTIFIER, fun) == intern_str("PNUT_INLINE_INTERRUPT")) {
+      debug_interrupt();
+      push_reg(reg_X); // Dummy push to keep the stack balanced
+      return;
+    }
+    #endif
     binding = resolve_identifier(get_val_(IDENTIFIER, fun));
     if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }
@@ -1288,7 +1364,7 @@ void codegen_call(ast node) {
   if (binding != 0) {
 #ifdef ONE_PASS_GENERATOR
     // When compiling in one pass mode, forward jumps must go through the jump table
-    if (is_label_defined(binding)) {
+    if (is_label_defined(fun_binding_lbl(binding))) {
       call(fun_binding_lbl(binding));
     } else {
       mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
@@ -2447,6 +2523,12 @@ void codegen_glo_fun_decl(ast node) {
     if (get_op(fun_return_type) != VOID_KW) main_returns = true;
   }
 
+  // Poor man's debug info
+#ifdef ADD_DEBUG_INFO
+  debug_interrupt(); // Marker to helps us find the function in the disassembly
+  codegen_string(STRING_BUF(name_probe), STRING_BUF_END(name_probe));
+#endif
+
   def_label(fun_binding_lbl(binding));
 
   // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
@@ -2532,6 +2614,7 @@ void rt_debug(char* msg) {
 
 void rt_crash(char* msg) {
   rt_debug(msg);
+  mov_reg_imm(reg_X, 42); // exit code
   os_exit();
 }
 
@@ -2578,7 +2661,7 @@ void rt_malloc() {
   // Make sure the heap is large enough.
   // new bump pointer (reg_x) >= end of heap (reg_y)
   jump_cond_reg_reg(LE, end_lbl, reg_X, reg_Y);
-  rt_crash("Heap overflow");
+  rt_crash("Heap overflow\n");
 
   def_label(end_lbl);
   mov_reg_mem(reg_Y, reg_glo, WORD_SIZE); // Old bump pointer
@@ -2678,6 +2761,24 @@ void codegen_builtin() {
   ret();
   init_forward_jump_table(cgc_globals);
 
+  // mkdir function
+  declare_builtin("mkdir", false, int_type, list2(string_type, int_type));
+  os_mkdir();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // chmod function
+  declare_builtin("chmod", false, int_type, list2(string_type, int_type));
+  os_chmod();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // stat/access function
+  declare_builtin("access", false, int_type, list2(string_type, int_type));
+  os_access();
+  ret();
+  init_forward_jump_table(cgc_globals);
+
 #ifndef NO_BUILTIN_LIBC
   // putchar function
   declare_builtin("putchar", false, void_type, list1(char_type));
@@ -2724,8 +2825,32 @@ void codegen_builtin() {
 }
 
 void init_memory_spaces(int glo_size) {
-
   // Allocate some space for the global variables.
+  //
+  // By default, the global variables are placed in a mmapped region, but not
+  // all systems (buider-hex0 in particular) support this syscall so pnut can
+  // also place globals on the stack.
+#ifdef USE_STACK_FOR_GLOBALS
+  int loop_lbl = alloc_label("glo_init_loop");
+  mov_reg_reg(reg_Y, reg_SP); // reg_Y = end of global variables/heap
+  grow_stack_bytes(glo_size + RT_HEAP_SIZE); // reg_SP = start of globals table/heap
+  mov_reg_reg(reg_Z, reg_SP); // reg_Z = start of globals table/heap
+
+  // Loop over the range [reg_Z, reg_Y)
+  mov_reg_imm(reg_X, 0);                         // reg_X = 0
+  def_label(loop_lbl);                           // loop:
+  mov_mem_reg(reg_Z, 0, reg_X);                  //    *reg_Z = 0;
+  add_reg_imm(reg_Z, WORD_SIZE);                 //    reg_Z += WORD_SIZE;
+  jump_cond_reg_reg(LT, loop_lbl, reg_Z, reg_Y); //    if (reg_Z < reg_Y) goto loop;
+
+  add_reg_imm(reg_Y, -glo_size); // reg_Y = start of global variables/end of heap
+  mov_reg_reg(reg_glo, reg_Y);   // reg_glo = start of global variables/end of heap
+
+  add_reg_imm(reg_Y, -RT_HEAP_SIZE); // reg_Y = start of heap
+  mov_mem_reg(reg_glo, 0, reg_Y);    // Set init heap start
+  mov_mem_reg(reg_glo, WORD_SIZE, reg_Y); // init bump pointer
+
+#else
   // The global variables used to be on the stack, but because the stack has a
   // limited size, it is better to allocate a separate memory region so global
   // variables are not limited by the stack size.
@@ -2743,6 +2868,7 @@ void init_memory_spaces(int glo_size) {
   os_allocate_memory(RT_HEAP_SIZE);       // Returns the heap start address in reg_X
   mov_mem_reg(reg_glo, 0, reg_X);         // Set init heap start
   mov_mem_reg(reg_glo, WORD_SIZE, reg_X); // init bump pointer
+#endif
 }
 
 void codegen_begin() {
@@ -2765,7 +2891,7 @@ void codegen_begin() {
 
 #ifdef ONE_PASS_GENERATOR
   // Initialize the global variable table and heap for malloc
-  init_memory_spaces(RT_HEAP_SIZE);
+  init_memory_spaces(RT_GLO_SIZE);
   // Jump to the initialization code
   jump(init_start_lbl);
 #else
@@ -2779,13 +2905,19 @@ void codegen_end() {
 #ifndef ONE_PASS_GENERATOR
   def_label(setup_lbl);
   // Initialize the global variable table and heap for malloc
-  init_memory_spaces(cgc_global_alloc);
+  init_memory_spaces(word_size_align(cgc_global_alloc));
   // Jump to the initialization code
   jump(init_start_lbl);
 #endif
 
   def_label(init_next_lbl);
+#if defined(USE_STACK_FOR_GLOBALS) && defined(ONE_PASS_GENERATOR)
+  setup_proc_args(word_size_align(RT_GLO_SIZE + RT_HEAP_SIZE));
+#elif defined(USE_STACK_FOR_GLOBALS)
+  setup_proc_args(word_size_align(cgc_global_alloc + RT_HEAP_SIZE));
+#else
   setup_proc_args(0);
+#endif
 #ifdef SAFE_MODE
   if (!main_lbl) fatal_error("main function not found");
 #endif
@@ -2801,7 +2933,7 @@ void codegen_end() {
 
 #ifdef ONE_PASS_GENERATOR
   // Check that the size we assumed for the ELF header and globals are correct.
-  if (cgc_global_alloc >= RT_HEAP_SIZE) fatal_error("Not enough space for global variables");
+  if (cgc_global_alloc >= RT_GLO_SIZE) fatal_error("Not enough space for global variables");
   if (code_address_base + code_alloc >= MAX_CODE_SIZE) fatal_error("codegen_end: code size too large, elf file is invalid.");
 #endif
 

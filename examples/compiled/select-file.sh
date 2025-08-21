@@ -270,33 +270,23 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
-__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
-
-_malloc() { # $2 = object size
-  : $((_$__ALLOC = $2)) # Track object size
-  : $(($1 = $__ALLOC + 1))
-  : $((__ALLOC += $2 + 1))
-}
-
-# Convert a Shell string to a C string
-unpack_string() {
-  __str="$2"
-  _malloc $1 $((${#__str} + 1))
-  __ptr=$(($1))
-  while [ -n "$__str" ] ; do
-    # Remove first char from string
-    __tail="${__str#?}"
-    # Remove all but first char
-    __char="${__str%"$__tail"}"
-    # Convert char to ASCII
-    __c=$(printf "%d" "'$__char"); __c=$((__c > 0 ? __c : 256 + __c))
-    # Write character to memory
-    : $((_$__ptr = __c))
-    # Continue with rest of string
-    : $((__ptr += 1))
-    __str="$__tail"
+# Unpack a Shell string into an appropriately sized buffer
+unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+  __fgetc_buf=$1
+  __buffer=$2
+  __ends_with_eof=$3
+  while [ ! -z "$__fgetc_buf" ]; do
+    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+    : $((_$__buffer = __c))
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buffer += 1))              # Move to the next buffer position
   done
-  : $((_$__ptr = 0))
+
+  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
+    : $((_$__buffer = 10))            # Line ends with newline
+    : $((__buffer += 1))
+  fi
+  : $((_$__buffer = 0))               # Then \0
 }
 
 __code=0; # Exit code

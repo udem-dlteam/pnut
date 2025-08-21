@@ -22,7 +22,7 @@ _main() {
       : $((lines += 1))
     fi
     _is_word_separator sep $c
-    if [ $sep != 0 ] && [ $((!last_sep)) != 0 ] ; then
+    if [ $sep != 0 ] && [ $((! last_sep)) != 0 ] ; then
       : $((words += 1))
     fi
     last_sep=$sep

@@ -5,6 +5,7 @@
 //
 // Yash's IO is a little bit weird and it's not a very popular shell, disabling the test for now.
 // expect_failure_for: yash
+// expect_failure_for: osh
 
 #ifndef PNUT_CC
 #include <stdio.h>

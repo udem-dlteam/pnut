@@ -21,7 +21,7 @@ void compile(char* file) {
   get_tok();
 
   while (tok != EOF) {
-    decl = parse_definition(0);
+    decl = parse_declaration(false);
     codegen_glo_decl(decl);
   }
 

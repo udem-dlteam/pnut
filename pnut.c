@@ -94,6 +94,9 @@ typedef int intptr_t;
 #if !defined(SH_SAVE_VARS_WITH_SET) && !defined(SH_INITIALIZE_PARAMS_WITH_LET)
 #define SH_SAVE_VARS_WITH_SET
 #endif
+#ifndef OPTIMIZE_CONSTANT_PARAMS_NOT
+#define OPTIMIZE_CONSTANT_PARAMS
+#endif
 // Inline ascii code of character literal
 #define SH_INLINE_CHAR_LITERAL_not
 
@@ -181,6 +184,9 @@ void putstr(char *str) {
   }
 }
 
+#ifdef PNUT_SH
+#define putint(n) printf("%d", n)
+#else
 void putint_aux(int n) {
   if (n <= -10) putint_aux(n / 10);
   putchar('0' - (n % 10));
@@ -194,6 +200,7 @@ void putint(int n) {
     putint_aux(-n);
   }
 }
+#endif
 
 void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
@@ -362,7 +369,7 @@ int prev_ch = EOF;
 int tok;
 int val;
 
-#define STRING_POOL_SIZE 500000
+#define STRING_POOL_SIZE 250000
 char string_pool[STRING_POOL_SIZE];
 int string_pool_alloc = 0;
 int string_start;
@@ -371,13 +378,13 @@ int hash;
 // These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
-#define HEAP_SIZE 2000000
+#define HEAP_SIZE 196608 // 192 KB
 intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
 int alloc_result;
 
-int alloc_obj(int size) {
+int alloc_obj(const int size) {
 
   alloc_result = heap_alloc;
 
@@ -390,11 +397,11 @@ int alloc_obj(int size) {
   return alloc_result;
 }
 
-int get_op(ast node) {
+int get_op(const ast node) {
   return heap[node] & 1023;
 }
 
-ast get_nb_children(ast node) {
+ast get_nb_children(const ast node) {
   return heap[node] >> 10;
 }
 
@@ -497,19 +504,19 @@ ast get_child_opt_go(char* file, int line, int expected_parent_node, int expecte
 
 #else
 
-int get_val(ast node) {
+int get_val(const ast node) {
   return heap[node+1];
 }
 
-void set_val(ast node, int val) {
+void set_val(const ast node, const int val) {
   heap[node+1] = val;
 }
 
-ast get_child(ast node, int i) {
+ast get_child(const ast node, const int i) {
   return heap[node+i+1];
 }
 
-void set_child(ast node, int i, ast child) {
+void set_child(const ast node, const int i, const ast child) {
   heap[node+i+1] = child;
 }
 
@@ -522,7 +529,7 @@ void set_child(ast node, int i, ast child) {
 
 ast ast_result;
 
-ast new_ast0(int op, int val) {
+ast new_ast0(const int op, const int val) {
 
   ast_result = alloc_obj(2);
 
@@ -532,7 +539,7 @@ ast new_ast0(int op, int val) {
   return ast_result;
 }
 
-ast new_ast1(int op, ast child0) {
+ast new_ast1(const int op, const ast child0) {
 
   ast_result = alloc_obj(2);
 
@@ -542,7 +549,7 @@ ast new_ast1(int op, ast child0) {
   return ast_result;
 }
 
-ast new_ast2(int op, ast child0, ast child1) {
+ast new_ast2(const int op, const ast child0, const ast child1) {
 
   ast_result = alloc_obj(3);
 
@@ -553,7 +560,7 @@ ast new_ast2(int op, ast child0, ast child1) {
   return ast_result;
 }
 
-ast new_ast3(int op, ast child0, ast child1, ast child2) {
+ast new_ast3(const int op, const ast child0, const ast child1, const ast child2) {
 
   ast_result = alloc_obj(4);
 
@@ -565,7 +572,7 @@ ast new_ast3(int op, ast child0, ast child1, ast child2) {
   return ast_result;
 }
 
-ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
+ast new_ast4(const int op, const ast child0, const ast child1, const ast child2, const ast child3) {
 
   ast_result = alloc_obj(5);
 
@@ -578,7 +585,7 @@ ast new_ast4(int op, ast child0, ast child1, ast child2, ast child3) {
   return ast_result;
 }
 
-ast clone_ast(ast orig) {
+ast clone_ast(const ast orig) {
   int nb_children = get_nb_children(orig);
   int i;
 
@@ -595,23 +602,21 @@ ast clone_ast(ast orig) {
   return ast_result;
 }
 
-// TODO: Use macro to avoid indirection?
-// Functions used to create and access lists.
-ast cons(int child0, int child1)    { return new_ast2(LIST, child0, child1); }
-ast car(int pair)                   { return get_child_(LIST, pair, 0); }
-ast car_(int expected_op, int pair) { return get_child__(LIST, expected_op, pair, 0); }
-ast cdr(int pair)                   { return get_child_(LIST, pair, 1); }
-ast cdr_(int expected_op, int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
-void set_car(int pair, int value)   { return set_child(pair, 0, value); }
-void set_cdr(int pair, int value)   { return set_child(pair, 1, value); }
-ast list1(int child0)               { return new_ast2(LIST, child0, 0); }
-ast list2(int child0, int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
-ast list3(int child0, int child1, int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
+ast cons(const int child0, const int child1)    { return new_ast2(LIST, child0, child1); }
+ast car(const int pair)                         { return get_child_(LIST, pair, 0); }
+ast cdr(const int pair)                         { return get_child_(LIST, pair, 1); }
+ast car_(const int expected_op, const int pair) { return get_child__(LIST, expected_op, pair, 0); }
+ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
+void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
+void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
+ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
+ast list2(const int child0, const int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
+ast list3(const int child0, const int child1, const int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
 #define tail(x) cdr_(LIST, x)
 
 // Returns the only element of a singleton list, if it is a singleton list.
 // Otherwise, returns 0.
-ast list_singleton(ast list) {
+ast list_singleton(const ast list) {
   if (list != 0 && tail(list) == 0) {
     return car(list);
   } else {
@@ -2612,6 +2617,20 @@ ast make_variadic_func(ast func_type) {
   set_child(func_type, 2, true); // Set the variadic flag
   return func_type;
 }
+
+#if defined(sh) && defined(OPTIMIZE_CONSTANT_PARAMS)
+// Used to optimize constant parameters of function
+bool is_constant_type(ast type) {
+  switch (get_op(type)) {
+    case '[': return false; // Array declarators cannot be marked as constant
+    case '(': return false; // Function declarators cannot be marked as constant
+    case '*': return TEST_TYPE_SPECIFIER(get_child_('*', type, 0), CONST_KW);
+    default:  return TEST_TYPE_SPECIFIER(get_child(type, 0), CONST_KW);
+  }
+}
+#else
+#define is_constant_type(type) false
+#endif
 
 // Type and declaration parser
 bool is_type_starter(int tok) {

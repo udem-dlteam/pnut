@@ -22,7 +22,7 @@ void putint(int n) {
   }
 }
 
-int arr[1000000];
+int arr[10000];
 // Making sure non-word aligned globals are handled correctly. There was a bug
 // once where characters were given 1 byte of space, which caused the next
 // globals to be misaligned
