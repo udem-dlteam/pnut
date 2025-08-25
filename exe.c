@@ -24,7 +24,7 @@ void generate_exe();
 #define MAX_CODE_SIZE 1000000
 #endif
 
-#ifdef ONE_PASS_GENERATOR
+#if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
 #define CODE_SIZE 100000
 #else
 #define CODE_SIZE 5000000
@@ -2514,8 +2514,10 @@ void init_forward_jump_table(int binding) {
 
   assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
   code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
+#ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   generate_exe();
   reset_code_buffer();
+#endif
 
   END_INIT_BLOCK();
 }

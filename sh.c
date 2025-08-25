@@ -402,7 +402,7 @@ void append_glo_decl(text decl) {
 }
 
 int append_glo_decl_fixup() {
-  glo_decls[glo_decl_ix] = -nest_level; // Negative value to indicate that it's a fixup
+  glo_decls[glo_decl_ix] = -nest_level - 1; // Negative value to indicate that it's a fixup
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = 0;
   glo_decl_ix += 3;
@@ -412,7 +412,7 @@ int append_glo_decl_fixup() {
 void fixup_glo_decl(int fixup_ix, text decl) {
   if (glo_decls[fixup_ix] >= 0) fatal_error("fixup_glo_decl: invalid fixup");
 
-  glo_decls[fixup_ix] = -glo_decls[fixup_ix]; // Make nest level positive
+  glo_decls[fixup_ix] = -glo_decls[fixup_ix] - 1; // Make nest level positive
   glo_decls[fixup_ix + 2] = decl;
 }
 
@@ -2610,7 +2610,7 @@ void epilogue() {
 }
 
 // Initialize local and synthetic variables used by function
-void initialize_function_variables() {
+text initialize_function_variables() {
   int env = cgc_locals_fun;
   ast ident;
   text res = 0;
@@ -2634,9 +2634,8 @@ void initialize_function_variables() {
 
   if (res != 0) {
     res = string_concat3(wrap_str_lit(": $(("), res, wrap_str_lit(" = 0))"));
-    print_text(res);
-    putchar('\n');
   }
+  return res;
 }
 
 void codegen_begin() {
@@ -2647,17 +2646,23 @@ void codegen_begin() {
 int max_text_alloc = 0;
 int cumul_text_alloc = 0;
 void codegen_glo_decl(ast decl) {
+  int var_init_fixup;
+#ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   // Reset text and glo decls buffers
   glo_decl_ix = 0;
   text_alloc = 1;
+#endif
 
   // Reset local environment
   cgc_locals = cgc_locals_fun = 0;
   cgc_fs = 1; // 1 to account for the return location parameter
 
+  var_init_fixup = append_glo_decl_fixup();
   comp_glo_decl(decl);
-  initialize_function_variables();
+  fixup_glo_decl(var_init_fixup, initialize_function_variables());
+#ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   print_glo_decls();
+#endif
 
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
@@ -2665,6 +2670,9 @@ void codegen_glo_decl(ast decl) {
 }
 
 void codegen_end() {
+#ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
+  print_glo_decls();
+#endif
   epilogue();
 #ifdef PRINT_MEMORY_STATS
   printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
