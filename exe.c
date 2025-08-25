@@ -2523,8 +2523,10 @@ void init_forward_jump_table(int binding) {
 
   assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
   code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
+#ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   generate_exe();
   reset_code_buffer();
+#endif
 
   END_INIT_BLOCK();
 }
