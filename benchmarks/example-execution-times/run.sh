@@ -1,13 +1,16 @@
 set -e -u
 
-DIR="benchmarks/example-execution-times"
-COMP_DIR="$DIR/compiled"
+TEMP_DIR="build/example-execution-times"
+COMP_DIR="$TEMP_DIR/compiled"
 
 # Create the compiled directory if it doesn't exist
-mkdir -p $COMP_DIR
+mkdir -p "$TEMP_DIR"
+mkdir -p "$COMP_DIR"
 
-programs="examples/sha256sum.c examples/empty.c examples/hello.c examples/fib.c examples/cat.c examples/cp.c examples/wc.c examples/c4.c examples/repl.c"
-runners="ksh dash bash yash zsh gcc pnut"
+programs="examples/c4.c examples/repl.c"
+runners="pnut"
+
+fail() { echo "$1"; exit $2; }
 
 print_time()
 {
@@ -15,23 +18,18 @@ print_time()
   printf "%s %s\n" "$((ms/1000)).$((ms/100%10))$((ms/10%10))$((ms%10))s" "$2"
 }
 
-run() {
-  name=$(basename $2 ".c")
-  options="${3-}"
+measure_time() {
+  bash -c "time $1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"
+}
 
-  if [ $1 = "gcc" ]; then
-    executable="$COMP_DIR/$name-gcc.exe"
-    gcc -o "$executable" -O3 $2
-    TIME_MS=$(( `bash -c "time ./$executable $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  elif [ $1 = "pnut" ]; then
-    executable="$COMP_DIR/$name-pnut.exe"
-    ./$COMP_DIR/pnut-exe.exe $2 > $executable
-    chmod +x $executable
-    TIME_MS=$(( `bash -c "time ./$executable $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  else
-    TIME_MS=$(( `bash -c "time $1 $COMP_DIR/$name-on-shell.sh $options > $COMP_DIR/$name-output-with-$1" 2>&1 | fgrep real | sed -e "s/real[^0-9]*//g" -e "s/m/*60000+/g" -e "s/s//g" -e "s/\\+0\\./-1000+1/g" -e "s/\\.//g"` ))
-  fi
-  print_time $TIME_MS "for: $1 with $name on $options $(sha256sum $COMP_DIR/$name-output-with-$1 | cut -d' ' -f1)"
+# Options passed when generating pnut-sh (to customize shell code generation)
+pnut_compile_options() {
+  echo `sed -n -e "/\/\/ pnut-options:/p" "$1" | sed -e "s/^\/\/ pnut-options://" |  tr '\n' ',' | sed -e 's/,$//'`
+}
+
+# Options passed to pnut-sh (mostly include paths or macro definitions)
+compile_options() {
+  echo `sed -n -e "/\/\/ comp-options:/p" "$1" | sed -e "s/^\/\/ comp-options://" |  tr '\n' ',' | sed -e 's/,$//'`
 }
 
 run_program_options() { # $1 = program, $2 = runner
@@ -49,10 +47,25 @@ run_program_options() { # $1 = program, $2 = runner
   esac
 }
 
-comp_program_options() { # $1 = program
-  case $1 in
-    "examples/c4.c") echo "-I./examples/c4-libs/" ;;
-  esac
+run() {
+  runner="$1"
+  name=$(basename $2 ".c")
+  comp_options="${3-}"
+  run_options="${4-}"
+
+  if [ $runner = "gcc" ]; then
+    executable="$COMP_DIR/$name-gcc.exe"
+    gcc -o "$executable" -O3 $2 $comp_options 2> /dev/null || fail "Error: Failed to compile $2"
+    TIME_MS=$(measure_time "./$executable $run_options > $COMP_DIR/$name-output-with-$runner")
+  elif [ $runner = "pnut" ]; then
+    executable="$COMP_DIR/$name-pnut.exe"
+    ./$COMP_DIR/pnut-exe $2 $comp_options -o $executable
+    chmod +x $executable
+    TIME_MS=$(measure_time "./$executable $run_options > $COMP_DIR/$name-output-with-$runner")
+  else
+    TIME_MS=$(measure_time "$runner $COMP_DIR/$name.sh $run_options > $COMP_DIR/$name-output-with-$runner")
+  fi
+  print_time $TIME_MS "for: $runner with $name on $comp_options/$run_options $(sha256sum $COMP_DIR/$name-output-with-$runner | cut -d' ' -f1)"
 }
 
 # Generate 64k file
@@ -69,30 +82,26 @@ done;
 # (display "Hello, world!")
 echo '(display "Hello, world!")' > $COMP_DIR/program.scm
 
-PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh -DOPTIMIZE_LONG_LINES"
-PNUT_x86_OPTIONS="-Dtarget_i386_linux"
-#PNUT_x86_OPTIONS="-Dtarget_x86_64_linux"
-#PNUT_x86_OPTIONS="-Dtarget_x86_64_mac"
-gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c
-gcc -o $COMP_DIR/pnut-exe.exe $PNUT_x86_OPTIONS -O3 pnut.c
-./$COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut.sh
-./$COMP_DIR/pnut-exe.exe $PNUT_SH_OPTIONS pnut.c > $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
-
-chmod +x $COMP_DIR/pnut-sh-compiled-by-pnut-exe.exe
+PNUT_SH_OPTIONS="-Dsh -DRT_NO_INIT_GLOBALS"
+# BOOTSTRAP_LONG so long long are mapped to 32-bit integers (long long is used in c4)
+# ALLOW_RECURSIVE_MACROS so repl.c can be compiled to work around a recursive macro expansion bug
+PNUT_EXE_OPTIONS="-Dtarget_i386_linux -DONE_PASS_GENERATOR -DBOOTSTRAP_LONG -DALLOW_RECURSIVE_MACROS"
+gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c 2> /dev/null || fail "Error: Failed to compile pnut-sh"
+gcc -o $COMP_DIR/pnut-exe $PNUT_EXE_OPTIONS -O3 pnut.c 2> /dev/null || fail "Error: Failed to compile pnut-exe"
 
 for prog in $programs; do
-  # Compile using pnut-sh compiled with gcc and pnut.
-  # This makes sure that the programs are compiled correctly.
-  name=$(basename $prog ".c")
-  $COMP_DIR/pnut-sh-base.exe $prog $(comp_program_options $prog) > $COMP_DIR/$name-with-gcc.sh
-  ksh $COMP_DIR/pnut.sh $prog $(comp_program_options $prog) > $COMP_DIR/$name-on-shell.sh
+  filename=$(basename $prog .c);
+  pnut_opts=$(pnut_compile_options $prog)
+  file_opts=$(compile_options $prog)
 
-  # if ! diff "$COMP_DIR/$name-with-gcc.sh" "$COMP_DIR/$name-on-shell.sh" > /dev/null ; then
-  #   echo "Warning: Compiling $name with pnut-sh.exe and pnut-sh.sh produced different outputs"
-  #   exit
-  # fi
+  printf "Compiling $filename with $pnut_opts ${file_opts:+"$file_opts "}\n"
+  # Compile pnut-sh with specific options
+  gcc -o "$TEMP_DIR/pnut-sh-for-$filename.exe" $PNUT_SH_OPTIONS $pnut_opts pnut.c 2> /dev/null || fail "Error: Failed to compile pnut with $pnut_opts"
+  # Then generate the executable
+  ./$TEMP_DIR/pnut-sh-for-$filename.exe "$prog" $file_opts > $COMP_DIR/$filename.sh
+  chmod +x $COMP_DIR/$filename.sh
 
   for runner in $runners; do
-    run "$runner" $prog "$(run_program_options $prog $runner)"
+    run "$runner" $prog "$file_opts" "$(run_program_options $prog $runner)"
   done
 done
