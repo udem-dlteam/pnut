@@ -94,8 +94,15 @@ measure_size() { # $1 = output-name, $2 = options
   printf "Expanded includes:\n"
   wc "$TEMP_DIR/$1.c"
   wc "$TEMP_DIR/$1.sh"
-  printf "Ratio (Original): "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l < $TEMP_DIR/$1.c)"
-  printf "Ratio (Cleaned):  "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')"
+  _SH_LINES=$(wc -l < $TEMP_DIR/$1.sh)
+  _C_LINES=$(wc -l < $TEMP_DIR/$1.c)
+  _C_CLEAN_LINES=$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')
+  _RATIO=$(echo "scale=3; $_SH_LINES / $_C_LINES" | bc -l)
+  _RATIO_CLEAN=$(echo "scale=3; $_SH_LINES / $_C_CLEAN_LINES" | bc -l)
+  printf "Ratio (Original): %d/%d = %s\n" "$_C_LINES" "$_SH_LINES" "$_RATIO"
+  printf "Ratio (Cleaned):  %d/%d = %s\n" "$_C_CLEAN_LINES" "$_SH_LINES" "$_RATIO_CLEAN"
+  printf "Latex: \\\\texttt{<filename>.c} & $_C_CLEAN_LINES & $_SH_LINES ($_RATIO_CLEAN \$\\\\times\$) & TODO  \\\\\\\\ \\hline\n"
+  printf "Runtime length: %s\n" $(sed -n '/# Runtime library/,$p' $TEMP_DIR/$1.sh | wc -l)
 
   printf "\n"
 }
@@ -106,10 +113,10 @@ gcc -o "$TEMP_DIR/pnut-includes.exe" pnut.c -DDEBUG_EXPAND_INCLUDES
 gcc -o "$TEMP_DIR/pnut-sh.exe" pnut.c -DRT_NO_INIT_GLOBALS -Dsh
 
 # Measuring for pnut-sh
-measure_size "pnut-sh" "-Dsh"
+measure_size "pnut-sh" "-Dsh -DRT_NO_INIT_GLOBALS"
 
 # ...and for the other targets
-measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
+# measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
 measure_size "pnut-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
-# measure_size "pnut-x86_64_linux" "-Dtarget_x86_64_linux"
-# measure_size "pnut-x86_64_mac" "-Dtarget_x86_64_mac"
+measure_size "pnut-x86_64_linux-one-pass" "-Dtarget_x86_64_linux -DONE_PASS_GENERATOR"
+measure_size "pnut-x86_64_mac" "-Dtarget_x86_64_mac"
