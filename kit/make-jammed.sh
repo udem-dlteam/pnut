@@ -1,10 +1,12 @@
 set -e -u
 
 WITH_TAR_GZ=0
+JAM_OPT=""
 
 while [ $# -gt 0 ]; do
   case $1 in
     --with-tcc-tar-gz)    WITH_TAR_GZ="1"; shift 1 ;;
+    --binary)             JAM_OPT="$JAM_OPT --binary"; shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -18,7 +20,7 @@ program_dependencies() {
 
 FILES_TO_INCLUDE="
 kit/pnut-sh.sh:pnut-sh.sh
-$(program_dependencies "pnut.c" "-Dtarget_i386_linux -DSAFE_MODE -DBOOTSTRAP_TCC")
+$(program_dependencies "pnut.c" "-Dtarget_i386_linux -DBOOTSTRAP_TCC")
 kit/bintools.c:bintools.c
 portable_libc/include/fcntl.h:fcntl.h
 portable_libc/include/math.h:math.h
@@ -47,14 +49,14 @@ portable_libc/libc.c
 kit/tcc-patches
 kit/libtcc1.c
 kit/config.h
-
 "
 
 if [ $WITH_TAR_GZ -eq 1 ]; then
   FILES_TO_INCLUDE="$FILES_TO_INCLUDE kit/tcc-0.9.26.tar.gz"
 else
   tar -xzf kit/tcc-0.9.26.tar.gz
-  FILES_TO_INCLUDE="$FILES_TO_INCLUDE tcc-0.9.26-1147-gee75a10c"
+  FILES_TO_INCLUDE="$FILES_TO_INCLUDE $(program_dependencies "tcc-0.9.26-1147-gee75a10c/tcc.c" "-DONE_SOURCE")"
+  # FILES_TO_INCLUDE="$FILES_TO_INCLUDE tcc-0.9.26-1147-gee75a10c"
 fi
 
 FILES=""    # Paths of all files added to jam archive
@@ -129,7 +131,7 @@ fi
 
 EOF
 
-./utils/jam.sh $JAM_ARGS >> kit/jammed.sh
+./utils/jam.sh $JAM_OPT $JAM_ARGS >> kit/jammed.sh
 
 # Evaluate disk usage:
 jammed_size=$(wc -c kit/jammed.sh | awk '{print $1}')
@@ -140,3 +142,5 @@ files_size=$(wc -c $FILES | grep total | awk '{print $1}')
 echo "kit/jammed.sh: $jammed_size bytes"
 echo "Individual files size: $files_size bytes"
 echo "Ratio: $(echo "scale=3; $jammed_size / $files_size" | bc -l)"
+
+# wc $FILES
