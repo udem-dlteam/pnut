@@ -1,7 +1,10 @@
-# Benchmark jammed:
-
-# sudo rm -rf island && ./pnut/kit/setup-rootfs.sh
-# sudo chroot island /bin/bash -c 'cd trousse; /bin/bash'
+# Benchmark jammed.sh extraction:
+#
+# There is a small difference with this and the extraction done during the
+# bootstrap, which is that this benchmark executes with the bintools already
+# bootstrapped (and compiled from GCC), meaning the `mkdir` calls execute more
+# quickly. This is unlikely to make a measurable difference so this is good
+# enough.
 
 TEMP_DIR="build/jammed"
 
@@ -16,7 +19,7 @@ printf_timing() {
 
 for shell in ksh dash bash yash osh zsh; do
   root_dir=$(pwd)
-  rm -rf "$TEMP_DIR/$shell" # Make sure it's empty
+  rm -rf "$TEMP_DIR/$shell" # Make sure it's empty to start fresh
   mkdir -p "$TEMP_DIR/$shell"
   cp kit/jammed.sh "$TEMP_DIR/$shell/jammed.sh"
   cd "$TEMP_DIR/$shell"

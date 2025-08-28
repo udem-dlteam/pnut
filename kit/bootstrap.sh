@@ -3,20 +3,27 @@
 # Script to bootstrap tcc after jammed.sh was extracted.
 # It prepares the environment and builds the necessary tools, before building TCC.
 
-set -e -u -x
+set -e -u
+
+: ${PNUT_OPTIONS:=} # Default to empty options
+: ${INSTALL_EXECS:=1} # Default to not installing
 
 # 1. Unpack jammed.sh
 # ./jammed.sh
 
-# 2. Copy jammed.sh
-$SHELL cat.sh jammed.sh > jammed-no-exec.sh
+# 2. Copy jammed.sh if jammed-no-exec.sh doesn't exist
+if [ ! -e "jammed-no-exec.sh" ]; then
+  $SHELL cat.sh jammed.sh > jammed-no-exec.sh
+fi
+
+PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dtarget_i386_linux -DONE_PASS_GENERATOR"
 
 # 3. Bootstrap pnut-exe (if necessary)
 if [ ! -e "pnut-exe" ]; then
   # 3a. Bootstrap pnut-exe
-  $SHELL pnut-sh.sh pnut.c -Dtarget_i386_linux -DONE_PASS_GENERATOR > pnut-exe.sh
+  $SHELL pnut-sh.sh pnut.c $PNUT_EXE_OPTIONS > pnut-exe.sh
   # 3b. Make executable version of pnut-exe. Overwrite jammed.sh to reuse its execute bit.
-  $SHELL pnut-exe.sh pnut.c -Dtarget_i386_linux -DBOOTSTRAP_TCC -DONE_PASS_GENERATOR -o jammed.sh
+  $SHELL pnut-exe.sh pnut.c $PNUT_EXE_OPTIONS -DBOOTSTRAP_TCC -o jammed.sh
 
   # 4. Compile bintools with pnut-exe (named jammed.sh)
   ./jammed.sh -D FLAT_INCLUDES -I "./" bintools.c bintools-libc.c -o bintools
@@ -30,20 +37,23 @@ else
 fi
 
 # 5. Install bintools and pnut-exe
-for tool in cp chmod mkdir sha256sum simple-patch ungz untar; do
-  ./bintools cp ./bintools /usr/bin/$tool
-  ./bintools chmod 755 /usr/bin/$tool
-done
-cp ./pnut-exe /usr/bin/pnut-exe
-chmod 755 /usr/bin/pnut-exe
+if [ $INSTALL_EXECS -eq 1 ]; then
+  printf "Installing bintools and pnut-exe\n"
+  for tool in cp chmod mkdir sha256sum simple-patch ungz untar; do
+    ./bintools cp ./bintools /usr/bin/$tool
+    ./bintools chmod 755 /usr/bin/$tool
+  done
+  ./bintools cp ./pnut-exe /usr/bin/pnut-exe
+  ./bintools chmod 755 /usr/bin/pnut-exe
+fi
 
 # 6. Extract the rest of the files (now that mkdir is available)
-$SHELL ./jammed-no-exec.sh --force-no-exec
+time $SHELL ./jammed-no-exec.sh --force-no-exec
 
 # 7. Unpack tcc if in .tar.gz
 if [ -e  kit/tcc-0.9.26.tar.gz ]; then
-  ungz --file kit/tcc-0.9.26.tar.gz --output tcc-0.9.26.tar
-  untar tcc-0.9.26.tar
+  ./bintools ungz --file kit/tcc-0.9.26.tar.gz --output tcc-0.9.26.tar
+  ./bintools untar tcc-0.9.26.tar
 elif [ ! -e "tcc-0.9.26-1147-gee75a10c" ]; then
   printf "Error: tcc-0.9.26-1147-gee75a10c not found\n"
   exit 1
@@ -59,52 +69,29 @@ INCLUDE_PATH="portable_libc/include" # pnut libc
 PATCHES_DIR="kit/tcc-patches"
 
 TCC_TARGET_ARCH=I386
-PNUT_ARCH=i386_linux
 
-: ${PNUT_OPTIONS:=} # Default to empty options
+if [ ! -d "$TEMP_DIR" ]; then ./bintools mkdir -p "$TEMP_DIR"; fi
 
-PNUT_EXE_OPTIONS="$PNUT_OPTIONS -DBOOTSTRAP_LONG -Dtarget_$PNUT_ARCH -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DONE_PASS_GENERATOR"
-
-if [ ! -d "$TEMP_DIR" ]; then mkdir -p "$TEMP_DIR"; fi
-
-# Make a version of pnut-exe that doesn't include the built-in libc
-# pnut-exe $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe-for-tcc
-# chmod +x $TEMP_DIR/pnut-exe-for-tcc
-# sha256sum $TEMP_DIR/pnut-exe-for-tcc
+# We continue with the extraction
 
 # Step 0: Patch TCC
+./bintools cp kit/config.h $TCC_DIR/config.h
 
-pcat() {
-  IFS=
-  while read -r line; do
-    printf "%s\n" "$line"
-  done
-}
-
-cp kit/config.h $TCC_DIR/config.h
-
-# simple-patch ${TCC_DIR}/tcctools.c  $PATCHES_DIR/remove-fileopen.before $PATCHES_DIR/remove-fileopen.after \
-#   || { printf "Failed to patch tcctools.c with remove-fileopen\n"; exit 1; }
-# simple-patch ${TCC_DIR}/tcctools.c  $PATCHES_DIR/addback-fileopen.before $PATCHES_DIR/addback-fileopen.after \
-#   || { printf "Failed to patch tcctools.c with addback-fileopen\n"; exit 1; }
-simple-patch ${TCC_DIR}/tccpp.c     $PATCHES_DIR/array_sizeof.before $PATCHES_DIR/array_sizeof.after \
+./bintools simple-patch ${TCC_DIR}/tccpp.c     $PATCHES_DIR/array_sizeof.before $PATCHES_DIR/array_sizeof.after \
   || { printf "Failed to patch tccpp.c with array_sizeof\n"; exit 1; }
-# setjump always returns 0, not needed
-# simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/error_set_jmp_enabled.before $PATCHES_DIR/error_set_jmp_enabled.after \
-#   || { printf "Failed to patch libtcc.c with error_set_jmp_enabled\n"; exit 1; }
-simple-patch ${TCC_DIR}/tccgen.c    $PATCHES_DIR/fix_stack_64_bit_operands_on_32_bit.before $PATCHES_DIR/fix_stack_64_bit_operands_on_32_bit.after \
+./bintools simple-patch ${TCC_DIR}/tccgen.c    $PATCHES_DIR/fix_stack_64_bit_operands_on_32_bit.before $PATCHES_DIR/fix_stack_64_bit_operands_on_32_bit.after \
   || { printf "Failed to patch tccgen.c with fix_stack_64_bit_operands_on_32_bit\n"; exit 1; }
-simple-patch ${TCC_DIR}/tccgen.c       $PATCHES_DIR/float_negation.before $PATCHES_DIR/float_negation.after \
+./bintools simple-patch ${TCC_DIR}/tccgen.c       $PATCHES_DIR/float_negation.before $PATCHES_DIR/float_negation.after \
   || { printf "Failed to patch tccgen.c with float_negation\n"; exit 1; }
-simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/sscanf_TCC_VERSION.before $PATCHES_DIR/sscanf_TCC_VERSION.after \
+./bintools simple-patch ${TCC_DIR}/libtcc.c    $PATCHES_DIR/sscanf_TCC_VERSION.before $PATCHES_DIR/sscanf_TCC_VERSION.after \
   || { printf "Failed to patch libtcc.c with sscanf_TCC_VERSION\n"; exit 1; }
-simple-patch ${TCC_DIR}/tcc.h       $PATCHES_DIR/undefine_TCC_IS_NATIVE.before $PATCHES_DIR/undefine_TCC_IS_NATIVE.after \
+./bintools simple-patch ${TCC_DIR}/tcc.h       $PATCHES_DIR/undefine_TCC_IS_NATIVE.before $PATCHES_DIR/undefine_TCC_IS_NATIVE.after \
   || { printf "Failed to patch tcc.h with undefine_TCC_IS_NATIVE\n"; exit 1; }
 
 # Step 1: Bootstrap initial version of TCC (tcc-pnut)
 
 # Compile tcc-pnut
-pnut-exe                                                                     \
+time ./pnut-exe                                                              \
   -I portable_libc/include/                                                  \
   -D BOOTSTRAP=1                                                             \
   -D HAVE_LONG_LONG=0                                                        \
@@ -126,7 +113,7 @@ pnut-exe                                                                     \
   portable_libc/libc.c                                                       \
   -o $TEMP_DIR/tcc-pnut
 
-chmod 755 $TEMP_DIR/tcc-pnut
+./bintools chmod 755 $TEMP_DIR/tcc-pnut
 
 go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $2 if empty)
   CC="$1"
@@ -137,8 +124,8 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
     LIB_PATH="$TEMP_DIR/$3-lib"
   fi
 
-  mkdir -p "$LIB_PATH"
-  mkdir -p "$LIB_PATH/tcc"
+  ./bintools mkdir -p "$LIB_PATH"
+  ./bintools mkdir -p "$LIB_PATH/tcc"
 
   $CC -c portable_libc/src/crt1.c -o "$LIB_PATH/crt1.o"
   printf "" > "$LIB_PATH/crtn.o" # Empty file
@@ -179,18 +166,18 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -L $LIB_PATH \
       $TCC_DIR/tcc.c
 
-  sha256sum $LIB_PATH/crt1.o $LIB_PATH/crtn.o $LIB_PATH/crti.o
+  ./bintools sha256sum $LIB_PATH/crt1.o $LIB_PATH/crtn.o $LIB_PATH/crti.o
 }
 
-go "$TEMP_DIR/tcc-pnut" "boot0"
-go "$TEMP_DIR/tcc-boot0" "boot1"
-go "$TEMP_DIR/tcc-boot1" "boot2"
+time go "$TEMP_DIR/tcc-pnut" "boot0"
+time go "$TEMP_DIR/tcc-boot0" "boot1"
+time go "$TEMP_DIR/tcc-boot1" "boot2"
 # Make sure we've reached a fixed point
-go "$TEMP_DIR/tcc-boot2" "boot3" "boot2"
+time go "$TEMP_DIR/tcc-boot2" "boot3" "boot2"
 
 # Confirm with hashes that we're at a fixed point
-sha256sum $TEMP_DIR/boot0-lib/crt1.o $TEMP_DIR/boot1-lib/crt1.o $TEMP_DIR/boot2-lib/crt1.o
-sha256sum $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libc.a
-sha256sum $TEMP_DIR/boot1-lib/tcc/libtcc1.a $TEMP_DIR/boot1-lib/libc.a
-sha256sum $TEMP_DIR/boot2-lib/tcc/libtcc1.a $TEMP_DIR/boot2-lib/libc.a
-sha256sum $TEMP_DIR/tcc-boot0 $TEMP_DIR/tcc-boot1 $TEMP_DIR/tcc-boot2 $TEMP_DIR/tcc-boot3
+./bintools sha256sum $TEMP_DIR/boot0-lib/crt1.o $TEMP_DIR/boot1-lib/crt1.o $TEMP_DIR/boot2-lib/crt1.o
+./bintools sha256sum $TEMP_DIR/boot0-lib/tcc/libtcc1.a $TEMP_DIR/boot0-lib/libc.a
+./bintools sha256sum $TEMP_DIR/boot1-lib/tcc/libtcc1.a $TEMP_DIR/boot1-lib/libc.a
+./bintools sha256sum $TEMP_DIR/boot2-lib/tcc/libtcc1.a $TEMP_DIR/boot2-lib/libc.a
+./bintools sha256sum $TEMP_DIR/tcc-boot0 $TEMP_DIR/tcc-boot1 $TEMP_DIR/tcc-boot2 $TEMP_DIR/tcc-boot3
