@@ -137,7 +137,6 @@ void print_tok(int tok, int val) {
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
-  else if (tok == PARENS)           putstr("(");
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
@@ -259,8 +258,6 @@ void print_tok_type(int tok) {
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
-
-  else if (tok == PARENS)           putstr("(");
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
@@ -456,11 +453,6 @@ void ast_to_sexp(ast obj) {
         ast_to_sexp(get_child_(SIZEOF_KW, obj, 0));
       }
       printf(")");
-      break;
-
-    case PARENS:
-      // Ignore parens nodes
-      ast_to_sexp(get_child_(PARENS, obj, 0));
       break;
 
     case '[':

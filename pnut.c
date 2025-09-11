@@ -346,7 +346,6 @@ enum {
   PLUS_PLUS_POST,
   MINUS_MINUS_POST,
   ELLIPSIS,
-  PARENS,
   INITIALIZER_LIST,
   DECL,
   DECLS,
@@ -1298,16 +1297,6 @@ void handle_define() {
 
 }
 
-#ifdef sh
-// Remove PARENS node from an expression, useful when we want to check what's
-// the top level operator of an expression without considering the parenthesis.
-ast non_parenthesized_operand(ast node) {
-  while (get_op(node) == PARENS) node = get_child_(PARENS, node, 0);
-
-  return node;
-}
-#endif
-
 int eval_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
   int op1;
@@ -1318,7 +1307,6 @@ int eval_constant(ast expr, bool if_macro) {
   if (get_nb_children(expr) >= 2) child1 = get_child(expr, 1);
 
   switch (op) {
-    case PARENS:      return eval_constant(child0, if_macro);
     case INTEGER:
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
     case INTEGER_L:
@@ -2691,7 +2679,6 @@ ast parse_enum() {
         // Preserve the type of integer literals (dec/hex/oct) by only creating
         // a new node if the value is not already a literal. We use the last
         // literal type to determine which type to use when creating a new node.
-        value = non_parenthesized_operand(value);
         if (get_op(value) != INTEGER && get_op(value) != INTEGER_HEX && get_op(value) != INTEGER_OCT) {
           value = new_ast0(last_literal_type, -eval_constant(value, false));
         }
@@ -3295,7 +3282,7 @@ ast parse_parenthesized_expression(bool first_par_already_consumed) {
 
   expect_tok(')');
 
-  return new_ast1(PARENS, result);
+  return result;
 }
 
 ast parse_primary_expression() {
