@@ -2705,11 +2705,15 @@ void codegen_end() {
     putstr("__code=0; # Exit code\n");
     if (runtime_use_make_argv) {
       putstr("make_argv $(($# + 1)) \"$0\" \"$@\" # Setup argc/argv\n");
-      putstr("_main __code $(($# + 1)) $__argv");
+      putstr("_main __code $(($# + 1)) $__argv\n");
     } else {
-      putstr("_main __code");
+      putstr("_main __code\n");
     }
-    putstr("\nexit $__code\n");
+#ifdef SH_PROFILE_MEMORY
+    putstr("__ENV_VARS_AFTER=$(set | wc -l)\n");
+    putstr("printf \"# %d shell variables used\\n\" \"$((__ENV_VARS_AFTER - __ENV_VARS_BEFORE))\" >&2\n");
+#endif
+    putstr("exit $__code\n");
   }
 
 #ifdef PRINT_MEMORY_STATS
