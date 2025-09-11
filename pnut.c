@@ -166,6 +166,11 @@
   // There is no practical reason to enable this option.
   // #define ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
 
+  // Profile memory usage in the generated shell code.
+  // After the `main` function returns, the generated shell code will print the
+  // number of shell variables used by the program.
+  // #define SH_PROFILE_MEMORY
+
   // Make sure we don't use the long line optimization when RT_COMPACT is on
   #ifdef RT_COMPACT
   #undef SH_OPTIMIZE_LONG_LINES
