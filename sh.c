@@ -1032,7 +1032,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       return 0;
     }
   } else if (nb_children == 1) {
-    if (op == '&' || op == '*' || op == '+' || op == '-' || op == '~' || op == '!' || op == PARENS) {
+    if (op == '&' || op == '*' || op == '+' || op == '-' || op == '~' || op == '!') {
       // TODO: Reuse ast node?
       return new_ast1(op, handle_side_effects_go(child0, executes_conditionally));
     } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
@@ -1301,7 +1301,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // literal or a variable.
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_BASE, 0, op);
       return wrap_if_needed(false, context, test_side_effects, string_concat(wrap_char('_'), sub1), outer_op, op);
-    } else if (op == '+' || op == PARENS) {
+    } else if (op == '+') {
       // +x is equivalent to x
       return comp_rvalue_go(child0, context, test_side_effects, outer_op);
     } else if (op == '-' || op == '~' || op == '!') {
@@ -1417,23 +1417,21 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       //
       // As a heuristic, we add parenthesis whenever the left or right side of
       // the operator is a different comparison operator.
-      sub1 = non_parenthesized_operand(child0); // un-parenthesized lhs
-      sub2 = non_parenthesized_operand(child1); // un-parenthesized rhs
 
       // if lhs is && or ||, and different from the current operator
-      if ((get_op(sub1) == AMP_AMP || get_op(sub1) == BAR_BAR) && get_op(sub1) != op) {
-        sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
+      if ((get_op(child0) == AMP_AMP || get_op(child0) == BAR_BAR) && get_op(child0) != op) {
+        sub1 = comp_rvalue_go(child0, RVALUE_CTX_TEST, child2, op);
         sub1 = string_concat3(wrap_str_lit("{ "), sub1, wrap_str_lit("; }"));
       } else {
-        sub1 = comp_rvalue_go(sub1, RVALUE_CTX_TEST, child2, op);
+        sub1 = comp_rvalue_go(child0, RVALUE_CTX_TEST, child2, op);
       }
 
       // if rhs is && or ||, and different from the current operator
-      if ((get_op(sub2) == AMP_AMP || get_op(sub2) == BAR_BAR) && get_op(sub2) != op) {
-        sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
+      if ((get_op(child1) == AMP_AMP || get_op(child1) == BAR_BAR) && get_op(child1) != op) {
+        sub2 = comp_rvalue_go(child1, RVALUE_CTX_TEST, child3, op);
         sub2 = string_concat3(wrap_str_lit("{ "), sub2, wrap_str_lit("; }"));
       } else {
-        sub2 = comp_rvalue_go(sub2, RVALUE_CTX_TEST, child3, op);
+        sub2 = comp_rvalue_go(child1, RVALUE_CTX_TEST, child3, op);
       }
       return string_concat3(sub1, op_to_str(op), sub2);
     } else {
@@ -1533,8 +1531,6 @@ text comp_lvalue_address(ast node) {
     return string_concat3(sub1, wrap_str_lit(" + "), sub2);
   } else if (op == CAST) {
     return comp_lvalue_address(get_child_(CAST, node, 1));
-  } else if (op == PARENS) {
-    return comp_lvalue_address(get_child_(PARENS, node, 0));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue_address: unknown lvalue");
@@ -1562,8 +1558,6 @@ text comp_lvalue(ast node) {
     return string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))"));
   } else if (op == CAST) {
     return comp_lvalue(get_child_(CAST, node, 1));
-  } else if (op == PARENS) {
-    return comp_lvalue_address(get_child_(PARENS, node, 0));
   } else {
     printf("op=%d %c\n", op, op);
     fatal_error("comp_lvalue: unknown lvalue");

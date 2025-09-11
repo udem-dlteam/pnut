@@ -837,7 +837,7 @@ _main() { # argc: $2, argv: $3
     return
   fi
   poolsz=$((256 * 1024))
-  if _malloc _sym $poolsz; [ $((!_sym)) != 0 ] ; then
+  if _malloc _sym $poolsz; [ $((! _sym)) != 0 ] ; then
     printf "could not malloc(%d) symbol area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
@@ -849,13 +849,13 @@ _main() { # argc: $2, argv: $3
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc _data $poolsz; [ $((!_data)) != 0 ] ; then
+  if _malloc _data $poolsz; [ $((! _data)) != 0 ] ; then
     printf "could not malloc(%d) data area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
     return
   fi
-  if _malloc sp $poolsz; [ $((!sp)) != 0 ] ; then
+  if _malloc sp $poolsz; [ $((! sp)) != 0 ] ; then
     printf "could not malloc(%d) stack area\n" $poolsz
     : $(($1 = -1))
     : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
