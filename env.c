@@ -185,8 +185,11 @@ void cgc_add_enclosing_switch(int loop_fs, int break_lbl, int next_case_lbl) {
   cgc_locals = binding;
 }
 
+int cgc_glo_obj = 0;
+
 void cgc_add_global(int ident, int width, ast type, bool is_static_local) {
-  int binding = alloc_obj(5);
+  int binding = alloc_glo_obj(5);
+  cgc_glo_obj += 5;
   heap[binding+0] = is_static_local ? cgc_locals : cgc_globals;
   heap[binding+1] = BINDING_VAR_GLOBAL;
   heap[binding+2] = ident;
@@ -202,9 +205,11 @@ void cgc_add_global(int ident, int width, ast type, bool is_static_local) {
 
 void cgc_add_global_fun(int ident, int label, ast type) {
 #ifdef ONE_PASS_GENERATOR
-  int binding = alloc_obj(7);
+  int binding = alloc_glo_obj(7);
+  cgc_glo_obj += 7;
 #else
-  int binding = alloc_obj(6);
+  int binding = alloc_glo_obj(6);
+  cgc_glo_obj += 6;
 #endif
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_FUN;
@@ -220,7 +225,8 @@ void cgc_add_global_fun(int ident, int label, ast type) {
 }
 
 void cgc_add_enum(int ident, int value) {
-  int binding = alloc_obj(4);
+  int binding = alloc_glo_obj(4);
+  cgc_glo_obj += 4;
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_ENUM_CST;
   heap[binding+2] = ident;
@@ -238,7 +244,8 @@ void cgc_add_goto_label(int ident, int lbl) {
 }
 
 void cgc_add_typedef(int ident, enum BINDING struct_or_union_or_enum, ast type) {
-  int binding = alloc_obj(4);
+  int binding = alloc_glo_obj(4);
+  cgc_glo_obj += 4;
   heap[binding+0] = cgc_globals;
   heap[binding+1] = struct_or_union_or_enum;
   heap[binding+2] = ident;
