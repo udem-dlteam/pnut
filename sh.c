@@ -377,6 +377,7 @@ int preallocated_dollar_idents[IDENTIFIER_DOLLAR_PREALLOC_SIZE]; // 1 to 10
 
 void init_comp_context() {
   int i = 0;
+  alloc_obj_to_global = true;
   // Initialize characters_useds table
   while (i < 16) {
     characters_useds[i] = 0;
@@ -406,6 +407,7 @@ void init_comp_context() {
     preallocated_dollar_idents[i] = new_ast0(IDENTIFIER_DOLLAR, i);
     i += 1;
   }
+  alloc_obj_to_global = false;
 }
 
 void append_glo_decl(text decl) {
@@ -1025,7 +1027,7 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
   // reused after the function call, so resetting the gensym counter.
   gensym_ix = start_gensym_ix;
 
-  sub1 = cons(new_ast2('=', assign_to, node), 0);
+  sub1 = ast_cons(new_ast2('=', assign_to, node), 0);
   if (executes_conditionally) {
     if (conditional_fun_calls == 0) { conditional_fun_calls = sub1; }
     else { set_child(conditional_fun_calls_tail, 1, sub1); }
@@ -1069,7 +1071,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       /* We must initialize strings before the expression */
       sub2 = fresh_string_ident(get_val_(STRING, node));
       sub1 = new_ast2('=', sub2, get_val_(STRING, node));
-      sub1 = cons(sub1, 0);
+      sub1 = ast_cons(sub1, 0);
 
       // Add to end of literals_inits
       if (literals_inits == 0) { literals_inits = sub1; }
@@ -2245,7 +2247,7 @@ bool comp_return(ast return_value) {
       append_glo_decl(wrap_str_lit("break"));
     }
   } else if (!in_tail_position) {
-    rest_loc_var_fixups = cons(append_glo_decl_fixup(), rest_loc_var_fixups);
+    rest_loc_var_fixups = ast_cons(append_glo_decl_fixup(), rest_loc_var_fixups);
     append_glo_decl(wrap_str_lit("return"));
   }
 
@@ -2716,9 +2718,12 @@ void codegen_end() {
     putstr("exit $__code\n");
   }
 
-#ifdef PRINT_MEMORY_STATS
-  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
-#endif
+  #ifdef PRINT_MEMORY_STATS
+    printf("\n# string_pool_alloc=%d glo_heap_alloc=%d max_heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, glo_heap_alloc - HASH_PRIME, max_heap_alloc - GLO_HEAP_SIZE, max_text_alloc, cumul_text_alloc);
+    printf("# ast_cons_counter=%d cons_counter=%d temp_cons_counter=%d\n", ast_cons_counter, cons_counter, temp_cons_counter);
+    printf("# clone_obj_count=%d\n", clone_obj_count);
+    printf("# probe_count=%d\n", probe_count);
+  #endif
 }
 
 // Initialize local and synthetic variables used by function
@@ -2763,9 +2768,11 @@ void codegen_begin() {
 }
 
 #ifdef PRINT_MEMORY_STATS
+int max_heap_alloc = 0;
 int max_text_alloc = 0;
 int cumul_text_alloc = 0;
 #endif
+
 void codegen_glo_decl(ast decl) {
   int var_init_fixup;
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
@@ -2787,6 +2794,7 @@ void codegen_glo_decl(ast decl) {
 
 #ifdef PRINT_MEMORY_STATS
   // Statistics
+  max_heap_alloc = max_heap_alloc > heap_alloc ? max_heap_alloc : heap_alloc;
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
   cumul_text_alloc += text_alloc;
 #endif

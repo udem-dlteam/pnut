@@ -38,6 +38,8 @@ int code_address_base = 0;
 #ifdef PRINT_MEMORY_STATS
 // Maximum size of the code buffer, used for debugging
 int code_alloc_max = 0;
+// Maximum heap size
+int max_heap_alloc = 0;
 #endif
 
 /* ONE_PASS_GENERATOR option:
@@ -477,9 +479,12 @@ enum {
 
 #define START_INIT_BLOCK() \
   def_label(init_next_lbl); \
-  init_next_lbl = alloc_label("init_next");
+  init_next_lbl = alloc_glo_label("init_next");
 #define END_INIT_BLOCK()   \
   jump(init_next_lbl);
+
+int alloc_label_count = 0;
+int alloc_glo_label_count = 0;
 
 #if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
 #define LABELS_ARR_SIZE 100000
@@ -539,14 +544,38 @@ int alloc_label(char* name) {
   add_label(lbl);
   return lbl;
 }
+
+int alloc_glo_label(char* name) {
+  int lbl = alloc_glo_obj(5);
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  heap[lbl + 2] = (intptr_t) name; // Name of label
+  heap[lbl + 3] = (intptr_t) fp_filepath;
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  heap[lbl + 4] = line_number;
+#endif
+  add_label(lbl);
+  return lbl;
+}
 #else
 
 #define assert_all_labels_defined(x) // No-op
 #define add_label(lbl) // No-op
 #define alloc_label(name) alloc_label_()
+#define alloc_glo_label(name) alloc_glo_label_()
 
 int alloc_label_() {
   int lbl = alloc_obj(2);
+  alloc_label_count += 1;
+  heap[lbl] = GENERIC_LABEL;
+  heap[lbl + 1] = 0; // Address of label
+  add_label(lbl);
+  return lbl;
+}
+
+int alloc_glo_label_() {
+  int lbl = alloc_glo_obj(2);
+  alloc_glo_label_count += 1;
   heap[lbl] = GENERIC_LABEL;
   heap[lbl + 1] = 0; // Address of label
   add_label(lbl);
@@ -1711,9 +1740,9 @@ void codegen_rvalue(ast node) {
           break;
         case BINDING_ENUM_CST:
 #ifdef SUPPORT_64_BIT_LITERALS
-          mov_reg_large_imm(reg_X, get_val(heap[binding+3]));
+          mov_reg_large_imm(reg_X, heap[binding+3]);
 #else
-          mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
+          mov_reg_imm(reg_X, heap[binding+3]);
 #endif
           push_reg(reg_X);
           break;
@@ -1970,17 +1999,23 @@ void codegen_enum(ast node) {
   ast name = get_child_opt_(ENUM_KW, IDENTIFIER, node, 1);
   ast cases = get_child_opt_(ENUM_KW, LIST, node, 2);
   ast cas;
+  int cas_int;
   int binding;
+  int val;
 
   if (name != 0 && cases != 0) { // if enum has a name and members (not a reference to an existing type)
     binding = cgc_lookup_enum(get_val_(IDENTIFIER, name), cgc_globals);
     if (binding != 0) { fatal_error("codegen_enum: enum already declared"); }
-    cgc_add_typedef(get_val_(IDENTIFIER, name), BINDING_TYPE_ENUM, node);
+    cgc_add_typedef(get_val_(IDENTIFIER, name), BINDING_TYPE_ENUM, promote_obj_to_global(node));
   }
 
   while (cases != 0) {
     cas = car_('=', cases);
-    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child_('=', cas, 1));
+#ifdef SUPPORT_64_BIT_LITERALS
+    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_val(get_child__('=', INTEGER, cas, 1)));
+#else
+    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), -get_val_(INTEGER, get_child__('=', INTEGER, cas, 1)));
+#endif
     cases = tail(cases);
   }
 }
@@ -2226,14 +2261,14 @@ void codegen_glo_var_decl(ast node) {
   if (get_op(type) == '(') {
     // Forward declaration
     binding = cgc_lookup_fun(name_symbol, cgc_globals);
-    if (binding == 0) cgc_add_global_fun(name_symbol, alloc_label(symbol_buf(name_symbol)), type);
+    if (binding == 0) cgc_add_global_fun(name_symbol, alloc_glo_label(symbol_buf(name_symbol)), promote_obj_to_global(type));
 
   } else {
     handle_enum_struct_union_type_decl(type);
     infer_array_length(type, init);
 
     if (binding == 0) {
-      cgc_add_global(name_symbol, type_width(type, true, true), type, false);
+      cgc_add_global(name_symbol, type_width(type, true, true), promote_obj_to_global(type), false);
       binding = cgc_globals;
     }
 
@@ -2285,7 +2320,7 @@ void codegen_static_local_var_decl(ast node) {
 
   if (init != 0) {
     // Skip over the initialization code that will run during program initialization
-    skip_init_lbl = alloc_label("skip_init");
+    skip_init_lbl = alloc_glo_label("skip_init");
     jump(skip_init_lbl);
     START_INIT_BLOCK();
     codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
@@ -2646,7 +2681,7 @@ void init_forward_jump_table(int binding) {
   // At this point, all labels should be defined, which means we can safely
   // output the code and overwrite the code buffer.
 
-  assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
+  assert_all_labels_defined(); // In SAFE_MODE, this checks that all labels are defined
 #ifdef PRINT_MEMORY_STATS
   code_alloc_max = TERNARY(code_alloc > code_alloc_max, code_alloc, code_alloc_max);
 #endif
@@ -2679,7 +2714,7 @@ void codegen_glo_fun_decl(ast node) {
   binding = cgc_lookup_fun(name_symbol, cgc_globals);
 
   if (binding == 0) {
-    cgc_add_global_fun(name_symbol, alloc_label(symbol_buf(name_symbol)), fun_type);
+    cgc_add_global_fun(name_probe, alloc_glo_label(symbol_buf(name_probe)), promote_obj_to_global(fun_type));
     binding = cgc_globals;
   }
 
@@ -2765,6 +2800,8 @@ void codegen_glo_decl(ast node) {
     dump_node(node);
     fatal_error("codegen_glo_decl: unexpected declaration");
   }
+
+  max_heap_alloc = heap_alloc > max_heap_alloc ? heap_alloc : max_heap_alloc;
 }
 
 void rt_putchar() {
@@ -2860,10 +2897,10 @@ void codegen_builtin_movs(ast params) {
 }
 
 int declare_builtin(char* name, bool variadic, ast return_type, ast params) {
-  int lbl = alloc_label(name);
+  int lbl = alloc_glo_label(name);
   return_type = function_type(return_type, params);
   if (variadic) return_type = make_variadic_func(return_type);
-  cgc_add_global_fun(init_ident(IDENTIFIER, name), lbl, return_type);
+  cgc_add_global_fun(init_ident(IDENTIFIER, name), lbl, promote_obj_to_global(return_type));
   def_label(lbl);
   codegen_builtin_movs(params);
   return lbl;
@@ -3051,8 +3088,8 @@ void init_memory_spaces(int glo_size) {
 
 void codegen_begin() {
 
-  setup_lbl = alloc_label("setup");
-  init_start_lbl = alloc_label("init_start");
+  setup_lbl = alloc_glo_label("setup");
+  init_start_lbl = alloc_glo_label("init_start");
   init_next_lbl = init_start_lbl;
 
   // Make room for heap start and malloc bump pointer.
@@ -3060,6 +3097,8 @@ void codegen_begin() {
   // reg_glo[WORD_SIZE]: malloc bump pointer
   cgc_global_alloc += 2 * WORD_SIZE;
 
+  // Initialize commonly used types
+  alloc_obj_to_global = true;
   int_type = new_ast0(INT_KW, 0);
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
@@ -3068,6 +3107,7 @@ void codegen_begin() {
   string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
   void_type = new_ast0(VOID_KW, 0);
   void_star_type = pointer_type(new_ast0(VOID_KW, 0), false);
+  alloc_obj_to_global = false;
 
 #ifdef ONE_PASS_GENERATOR
   // Initialize the global variable table and heap for malloc
@@ -3118,6 +3158,11 @@ void codegen_end() {
 #endif
 
 #ifdef PRINT_MEMORY_STATS
-  printf("# string_pool_alloc=%d heap_alloc=%d code_alloc=%d code_alloc_max=%d\n", string_pool_alloc, heap_alloc, code_alloc, code_alloc_max);
+  printf("# string_pool_alloc=%d glo_heap_alloc=%d max_heap_alloc=%d code_alloc=%d code_alloc_max=%d\n", string_pool_alloc, glo_heap_alloc - HASH_PRIME, max_heap_alloc - GLO_HEAP_SIZE, code_alloc, code_alloc_max);
+  printf("# ast_cons_counter=%d cons_counter=%d temp_cons_counter=%d\n", ast_cons_counter, cons_counter, temp_cons_counter);
+  printf("# alloc_label_count=%d alloc_glo_label_count=%d\n", alloc_label_count, alloc_glo_label_count);
+  printf("# cgc_glo_obj=%d\n", cgc_glo_obj);
+  printf("# clone_obj_count=%d\n", clone_obj_count);
+  printf("# probe_count=%d\n", probe_count);
 #endif
 }

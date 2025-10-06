@@ -84,6 +84,7 @@ int cgc_add_local(const enum BINDING binding_type, const int ident, const ast ty
 }
 
 #ifdef sh
+
 void cgc_add_local_var(const enum BINDING binding_type, const int ident, const ast type) {
   cgc_fs += 1;
   cgc_locals = cgc_add_local(binding_type, ident, type, cgc_locals);
@@ -119,6 +120,7 @@ int cgc_loop_depth(int binding) {
   }
   return loop_depth;
 }
+
 #else
 
 int cgc_lookup_binding_ident(const int binding_type, const int ident, int binding) {
@@ -198,8 +200,11 @@ void cgc_add_enclosing_switch(const int loop_fs, const int break_lbl, const int 
   cgc_locals = binding;
 }
 
-void cgc_add_global(const int ident, const int width, const ast type, const bool is_static_local) {
-  int binding = alloc_obj(5);
+int cgc_glo_obj = 0;
+
+void cgc_add_global(int ident, int width, ast type, bool is_static_local) {
+  int binding = alloc_glo_obj(5);
+  cgc_glo_obj += 5;
   heap[binding+0] = TERNARY(is_static_local, cgc_locals, cgc_globals);
   heap[binding+1] = BINDING_VAR_GLOBAL;
   heap[binding+2] = ident;
@@ -215,9 +220,11 @@ void cgc_add_global(const int ident, const int width, const ast type, const bool
 
 void cgc_add_global_fun(const int ident, const int label, const ast type) {
 #ifdef ONE_PASS_GENERATOR
-  int binding = alloc_obj(7);
+  int binding = alloc_glo_obj(7);
+  cgc_glo_obj += 7;
 #else
-  int binding = alloc_obj(6);
+  int binding = alloc_glo_obj(6);
+  cgc_glo_obj += 6;
 #endif
   heap[binding+0] = cgc_globals;
   heap[binding+1] = BINDING_FUN;
@@ -252,14 +259,15 @@ void cgc_add_goto_label(const int ident, const int lbl) {
   cgc_locals_fun = binding;
 }
 
-#endif
-
 void cgc_add_typedef(const int ident, const enum BINDING struct_or_union_or_enum, const ast type) {
-  int binding = alloc_obj(4);
+  int binding = alloc_glo_obj(4);
+  cgc_glo_obj += 4;
   heap[binding+0] = cgc_globals;
   heap[binding+1] = struct_or_union_or_enum;
   heap[binding+2] = ident;
   heap[binding+3] = type;
   cgc_globals = binding;
 }
+#endif
+
 #endif
