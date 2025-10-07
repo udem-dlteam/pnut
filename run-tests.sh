@@ -100,8 +100,8 @@ compile_pnut() { # extra pnut compilation options: $1, expect_failed_compilation
   pnut_exe_backend="./tests/pnut$extra_opts_suffix.$ext"
 
   if [ ! -f "$pnut_exe" ]; then
-    gcc "$pnut_source" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" 2> /dev/null \
-      || fail "Error: Failed to compile $pnut_source with $backend"
+    gcc "$pnut_source" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" \
+      || fail "Error: gcc failed to compile $pnut_source with $backend"
   fi
 
   if [ "$bootstrap" -eq 1 ]; then
