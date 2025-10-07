@@ -1591,9 +1591,13 @@ text fun_call_params(ast params) {
 text comp_putchar_inline(ast param) {
   text res;
   ast ident;
+  char c;
 
-  if (get_op(param) == CHARACTER && get_val_(CHARACTER, param) >= 32 && get_val_(CHARACTER, param) <= 126) { // Printable ASCII characters
-    return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_char(get_val_(CHARACTER, param)), true), wrap_char('\"'));
+  if (get_op(param) == CHARACTER) {
+    c = get_val_(CHARACTER, param);
+    if ((c >= 32 && c <= 126) || c == '\n') { // Printable ASCII characters + newline
+      return string_concat3(wrap_str_lit("printf \""), escape_text(wrap_char(c), true), wrap_char('\"'));
+    }
   }
 
   res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
