@@ -212,7 +212,7 @@ _process_file() { let filename $2
     printf \\$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
     : $((filename += 1))
   done
-  printf \\$(((__NEWLINE__)/64))$(((__NEWLINE__)/8%8))$(((__NEWLINE__)%8))
+  printf "\n"
   : $(($1 = 0))
   endlet $1 h n fd i filename
 }
@@ -231,8 +231,6 @@ _main() { let argc $2; let myargv $3
   endlet $1 __t1 i myargv argc
 }
 
-# Character constants
-readonly __NEWLINE__=10
 # Runtime library
 
 unpack_escaped_string() { # $1 = string, $2 = size (optional)

@@ -2,11 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdlib.h>
-#include <strings.h>
 #include <string.h>
 #include <stdint.h> // for intptr_t
 #include <fcntl.h> // for open
 #include <unistd.h> // for write
+
+#ifdef BOOTSTRAP_TCC
+#define BOOTSTRAP_LONG
+#define NO_BUILTIN_LIBC
+#endif
 
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
@@ -72,7 +76,6 @@ typedef int intptr_t;
 //#define DEBUG_SHOW_ERR_ORIGIN
 
 // Use positional parameter directly for function parameters that are constants
-#define OPTIMIZE_CONSTANT_PARAM_not
 #define SUPPORT_ADDRESS_OF_OP_not
 
 // Make get_ch() use a length-1 character buffer to lookahead and skip line continuations
@@ -377,7 +380,7 @@ int hash;
 // These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
-#define HEAP_SIZE 196608 // 192 KB
+#define HEAP_SIZE 786432 // 768 KB
 intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
@@ -1046,6 +1049,7 @@ void u64_to_obj(int *x) {
 
 int accum_digit(int base) {
   int digit = 99;
+  int MININT = -2147483648;
   if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
   } else if ('A' <= ch && ch <= 'Z') {
@@ -1056,10 +1060,10 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; // character is not a digit in that base
   } else {
-    // TODO: Put overflow check back
-    // if ((val < limit) || ((val == limit) && (digit > limit * base - MININT))) {
-    //   fatal_error("literal integer overflow");
-    // }
+    int limit = MININT / base;
+    if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
+      fatal_error("literal integer overflow");
+    }
 
 #ifdef SUPPORT_64_BIT_LITERALS
     u64_mul_u32(val_32, base);
@@ -1728,16 +1732,21 @@ void init_pnut_macros() {
   init_builtin_int_macro("PNUT_EXE_32", 1);
   init_builtin_int_macro("PNUT_I386", 1);
   init_builtin_int_macro("PNUT_I386_LINUX", 1);
+  init_builtin_int_macro("__linux__", 1);
+  init_builtin_int_macro("__i386__", 1);
 #elif defined (target_x86_64_linux)
   init_builtin_int_macro("PNUT_EXE", 1);
   init_builtin_int_macro("PNUT_EXE_64", 1);
   init_builtin_int_macro("PNUT_X86_64", 1);
   init_builtin_int_macro("PNUT_X86_64_LINUX", 1);
+  init_builtin_int_macro("__linux__", 1);
+  init_builtin_int_macro("__x86_64__", 1);
 #elif defined (target_x86_64_mac)
   init_builtin_int_macro("PNUT_EXE", 1);
   init_builtin_int_macro("PNUT_EXE_64", 1);
   init_builtin_int_macro("PNUT_X86_64", 1);
   init_builtin_int_macro("PNUT_X86_64_MAC", 1);
+  init_builtin_int_macro("__x86_64__", 1);
 #endif
 
 }
@@ -2684,7 +2693,12 @@ ast parse_enum() {
         }
         last_literal_type = get_op(value);
 #else
-        value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+        if (get_op(value) != INTEGER
+        && get_op(value) != INTEGER_U && get_op(value) != INTEGER_UL && get_op(value) != INTEGER_ULL
+        && get_op(value) != INTEGER_L && get_op(value) != INTEGER_LL
+           ) {
+          value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+        }
 #endif
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
       } else {
@@ -3484,19 +3498,6 @@ ast parse_cast_expression() {
   ast type;
 
   if (tok == '(') {
-    // Ideally, we'd parse as many ( as needed, but then we would have to
-    // backtrack when the first parenthesis is for a parenthesized expression
-    // and not a cast.
-    // I think we could write a version of parse_parenthesized_expression that
-    // already has the first parenthesis consumed. It would be called when
-    // after parsing the cast and cast expression, there are still parenthesis
-    // to close, but I'm not sure how we could create the AST since it's all
-    // very top down and that would flip the order of the AST creation.
-
-    // Concretely, this means we can't parse cast expressions where the type
-    // is wrapped in parenthesis, like in the following example:
-    // (((char *)) var)
-    // But that should be ok for TCC.
     get_tok();
 
     if (is_type_starter(tok)) {
@@ -4035,9 +4036,9 @@ int main(int argc, char **argv) {
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             i += 1;
-            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
           } else {
-            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
           }
           break;
 

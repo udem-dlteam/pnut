@@ -24,10 +24,10 @@ void generate_exe();
 #define MAX_CODE_SIZE 1000000
 #endif
 
-#ifdef ONE_PASS_GENERATOR
-#define CODE_SIZE 50000
+#if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
+#define CODE_SIZE 100000
 #else
-#define CODE_SIZE 500000
+#define CODE_SIZE 5000000
 #endif
 int code[CODE_SIZE];
 // Index of the next free byte in the code buffer
@@ -469,21 +469,22 @@ enum {
   jump(init_next_lbl);
 
 #if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
-int labels[100000];
+#define LABELS_ARR_SIZE 100000
+int labels[LABELS_ARR_SIZE];
 int labels_ix = 0;
 
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
 void def_label(int lbl);
 #endif
 
-void assert_all_labels_defined() {
+void assert_all_labels_defined(int init_next_lbl) {
   int i = 0;
   int lbl;
   // Check that all labels are defined
   for (; i < labels_ix; i++) {
     lbl = labels[i];
+    if (lbl != init_next_lbl && heap[lbl + 1] > 0) {
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
-    if (heap[lbl + 1] > 0) {
       if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
         def_label(lbl);
         rt_debug("Function or label is not defined\n");
@@ -493,9 +494,7 @@ void assert_all_labels_defined() {
         // TODO: This should crash but let's just return for now to see how far we can get
         ret();
       }
-    }
 #else
-    if (heap[lbl + 1] > 0) {
       putstr("Label ");
       if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
         putstr((char*) heap[lbl + 2]);
@@ -504,13 +503,13 @@ void assert_all_labels_defined() {
       }
       putstr(" is not defined\n");
       exit(1);
-    }
 #endif
+    }
   }
 }
 
 void add_label(int lbl) {
-  if (labels_ix >= sizeof(labels) / sizeof(labels[0])) fatal_error("labels array is full");
+  if (labels_ix >= LABELS_ARR_SIZE) fatal_error("labels array is full");
 
   labels[labels_ix++] = lbl;
 }
@@ -529,7 +528,7 @@ int alloc_label(char* name) {
 }
 #else
 
-#define assert_all_labels_defined() // No-op
+#define assert_all_labels_defined(x) // No-op
 #define add_label(lbl) // No-op
 #define alloc_label(name) alloc_label_()
 
@@ -1088,6 +1087,7 @@ ast value_type(ast node) {
       // TODO: Check that the operands have compatible types?
       return value_type(child0);
     } else if (op == '(') {
+      // TODO: Use resolve_identifier to allow indirect calls
       binding = cgc_lookup_fun(get_val_(IDENTIFIER, child0), cgc_globals);
       if (binding != 0) {
         // heap[binding+5] is the '(' type
@@ -1367,6 +1367,15 @@ void codegen_call(ast node) {
       call(fun_binding_lbl(binding));
     } else {
       mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#ifdef SAFE_MODE
+      // In safe mode, we check that the indirect call location is initialized
+      mov_reg_imm(reg_Y, 0);
+      int good_lbl = alloc_label(0);
+      // Check if reg_X == 0 and call debug_interrupt otherwise
+      jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
+      debug_interrupt();
+      def_label(good_lbl);
+#endif
       call_reg(reg_X);
     }
 #else
@@ -1505,6 +1514,30 @@ int codegen_lvalue(ast node) {
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       fatal_error("codegen_lvalue: unknown lvalue with 2 children");
+    }
+
+  } else if (nb_children == 3) {
+
+    if (op == '?') {
+
+      int lbl1 = alloc_label(0); // false label
+      int lbl2 = alloc_label(0); // end label
+      codegen_rvalue(child0);
+      pop_reg(reg_X);
+      grow_fs(-1);
+      xor_reg_reg(reg_Y, reg_Y);
+      jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
+      lvalue_width = codegen_lvalue(child1); // value when true, assume that lvalue_width is the same for both cases
+      jump(lbl2);
+      def_label(lbl1);
+      grow_fs(-1); // here, the child#1 is not on the stack, so we adjust it
+      codegen_lvalue(get_child_('?', node, 2)); // value when false
+      grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
+      def_label(lbl2);
+
+    } else {
+      putstr("op="); putint(op); putchar('\n');
+      fatal_error("codegen_lvalue: unknown lvalue with 3 children");
     }
 
   } else {
@@ -1854,7 +1887,7 @@ void codegen_enum(ast node) {
 
   while (cases != 0) {
     cas = car_('=', cases);
-    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child__('=', INTEGER, cas, 1));
+    cgc_add_enum(get_val_(IDENTIFIER, get_child__('=', IDENTIFIER, cas, 0)), get_child_('=', cas, 1));
     cases = tail(cases);
   }
 }
@@ -2479,10 +2512,12 @@ void init_forward_jump_table(int binding) {
   // At this point, all labels should be defined, which means we can safely
   // output the code and overwrite the code buffer.
 
-  assert_all_labels_defined(); // In SAFE_MODE, this checks that all labels are defined
+  assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
   code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
+#ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   generate_exe();
   reset_code_buffer();
+#endif
 
   END_INIT_BLOCK();
 }
@@ -2922,7 +2957,7 @@ void codegen_end() {
   push_reg(reg_X); // exit process with result of main
   call(exit_lbl);
 
-  assert_all_labels_defined();
+  assert_all_labels_defined(init_next_lbl);
 
   // Finish writing the code to the file
   generate_exe();
