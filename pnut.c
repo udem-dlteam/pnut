@@ -1232,22 +1232,22 @@ int lookup_macro_token(int args, int tok, int val) {
 
 int read_macro_tokens(int args) {
   int toks = 0; // List of token to replay
-  int tail;
+  int rest;
 
   // Accumulate tokens so they can be replayed when the macro is used
   if (tok != '\n' && tok != EOF) {
     // Append the token/value pair to the replay list
     toks = cons(lookup_macro_token(args, tok, val), 0);
-    tail = toks;
+    rest = toks;
     get_tok_macro();
     while (tok != '\n' && tok != EOF) {
-      set_cdr(tail, cons(lookup_macro_token(args, tok, val), 0));
-      tail = cdr(tail); // Advance tail
+      set_cdr(rest, cons(lookup_macro_token(args, tok, val), 0));
+      rest = cdr(rest); // Advance tail
       get_tok_macro();
     }
 
     // Check that there are no leading or trailing ##
-    if (car(car(toks)) == HASH_HASH || car(car(tail)) == HASH_HASH) {
+    if (car(car(toks)) == HASH_HASH || car(car(rest)) == HASH_HASH) {
       syntax_error("'##' cannot appear at either end of a macro expansion");
     }
   }
@@ -1756,7 +1756,7 @@ void init_pnut_macros() {
 int macro_parse_argument() {
   int arg_tokens = 0;
   int parens_depth = 0;
-  int tail;
+  int rest;
 
   while ((parens_depth > 0 || (tok != ',' && tok != ')')) && tok != EOF) {
     if (tok == '(') parens_depth += 1; // Enter parenthesis
@@ -1764,10 +1764,10 @@ int macro_parse_argument() {
 
     if (arg_tokens == 0) {
       arg_tokens = cons(cons(tok, val), 0);
-      tail = arg_tokens;
+      rest = arg_tokens;
     } else {
-      set_cdr(tail, cons(cons(tok, val), 0));
-      tail = cdr(tail);
+      set_cdr(rest, cons(cons(tok, val), 0));
+      rest = cdr(rest);
     }
     get_tok_macro_expand();
   }
@@ -2650,7 +2650,7 @@ ast parse_enum() {
   ast name;
   ast ident;
   ast result = 0;
-  ast tail;
+  ast rest;
   ast value = 0;
   int next_value = 0;
   int last_literal_type = INTEGER; // Default to decimal integer for enum values
@@ -2706,10 +2706,10 @@ ast parse_enum() {
 
       if (result == 0) {
         result = cons(new_ast2('=', ident, value), 0);
-        tail = result;
+        rest = result;
       } else {
-        set_child(tail, 1, cons(new_ast2('=', ident, value), 0));
-        tail = get_child_(LIST, tail, 1);
+        set_child(rest, 1, cons(new_ast2('=', ident, value), 0));
+        rest = get_child_(LIST, rest, 1);
       }
 
       if (tok == ',') {
@@ -2730,7 +2730,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
   ast name;
   ast type_specifier, decl;
   ast result = 0;
-  ast tail;
+  ast rest;
   bool ends_in_flex_array = false;
 
   expect_tok(struct_or_union_tok);
@@ -2762,19 +2762,19 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         decl = new_ast3(DECL, 0, type_specifier, 0);
 
         if (result == 0) {
-          tail = result = cons(decl, 0);
+          rest = result = cons(decl, 0);
         } else {
-          set_child(tail, 1, cons(decl, 0));
-          tail = get_child_(LIST, tail, 1);
+          set_child(rest, 1, cons(decl, 0));
+          rest = get_child_(LIST, rest, 1);
         }
       } else {
         while (1) {
           decl = parse_declarator(false, type_specifier);
           if (result == 0) {
-            tail = result = cons(decl, 0);
+            rest = result = cons(decl, 0);
           } else {
-            set_child(tail, 1, cons(decl, 0));
-            tail = get_child_(LIST, tail, 1);
+            set_child(rest, 1, cons(decl, 0));
+            rest = get_child_(LIST, rest, 1);
           }
 
           if (get_child_(DECL, decl, 1) == VOID_KW) parse_error("member with void type not allowed in struct/union", tok);
@@ -2953,7 +2953,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 bool parse_param_list_is_variadic = false;
 int parse_param_list() {
   ast result = 0;
-  ast tail;
+  ast rest;
   ast decl;
 
   parse_param_list_is_variadic = false;
@@ -2984,10 +2984,10 @@ int parse_param_list() {
     if (tok == ',') get_tok();
 
     if (result == 0) {
-      tail = result = cons(decl, 0);
+      rest = result = cons(decl, 0);
     } else {
-      set_child(tail, 1, cons(decl, 0));
-      tail = get_child_(LIST, tail, 1);
+      set_child(rest, 1, cons(decl, 0));
+      rest = get_child_(LIST, rest, 1);
     }
   }
 
@@ -3134,7 +3134,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
 }
 
 ast parse_initializer_list() {
-  ast result = 0, tail = 0;
+  ast result = 0;
+  ast rest = 0;
 
   expect_tok('{');
 
@@ -3143,10 +3144,10 @@ ast parse_initializer_list() {
     if (tok == '{') fatal_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
-      tail = result = cons(parse_initializer(), 0);
+      rest = result = cons(parse_initializer(), 0);
     } else {
-      set_child(tail, 1, cons(parse_initializer(), 0));
-      tail = get_child_(LIST, tail, 1);
+      set_child(rest, 1, cons(parse_initializer(), 0));
+      rest = get_child_(LIST, rest, 1);
     }
     if (tok == ',') get_tok();
     else break;
@@ -3181,14 +3182,14 @@ ast parse_declarator_and_initializer(bool is_for_typedef, ast type_specifier) {
 
 ast parse_declarators(bool is_for_typedef, ast type_specifier, ast first_declarator) {
   ast declarators = cons(first_declarator, 0); // Wrap the declarators in a list
-  ast tail = declarators;
+  ast rest = declarators;
 
   // Otherwise, this is a variable or declaration
   while (tok != ';') {
     if (tok == ',') {
       get_tok();
-      set_child(tail, 1, cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
-      tail = get_child__(LIST, LIST, tail, 1);
+      set_child(rest, 1, cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
+      rest = get_child__(LIST, LIST, rest, 1);
     } else {
       parse_error("';' or ',' expected", tok);
     }
@@ -3300,7 +3301,7 @@ ast parse_parenthesized_expression(bool first_par_already_consumed) {
 ast parse_primary_expression() {
 
   ast result = 0;
-  ast tail;
+  ast rest;
 
   if (tok == IDENTIFIER || tok == CHARACTER || tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
@@ -3320,10 +3321,10 @@ ast parse_primary_expression() {
 
     if (tok == STRING) { // Contiguous strings
       result = cons(get_val_(STRING, result), 0); // Result is now a list of string values
-      tail = result;
+      rest = result;
       while (tok == STRING) {
-        set_cdr(tail, cons(val, 0));
-        tail = cdr(tail);
+        set_cdr(rest, cons(val, 0));
+        rest = cdr(rest);
         get_tok();
       }
 
@@ -3909,7 +3910,7 @@ ast parse_compound_statement() {
 
   ast result = 0;
   ast child1;
-  ast tail;
+  ast rest;
 
   expect_tok('{');
 
@@ -3921,7 +3922,7 @@ ast parse_compound_statement() {
       child1 = parse_statement();
     }
     result = new_ast2('{', child1, 0);
-    tail = result;
+    rest = result;
     while (tok != '}' && tok != EOF) {
       if (is_type_starter(tok)) {
         child1 = parse_declaration(true);
@@ -3929,8 +3930,8 @@ ast parse_compound_statement() {
         child1 = parse_statement();
       }
       child1 = new_ast2('{', child1, 0);
-      set_child(tail, 1, child1);
-      tail = child1;
+      set_child(rest, 1, child1);
+      rest = child1;
     }
   }
 
