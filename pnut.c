@@ -270,9 +270,11 @@ void restore_include_context() {
   // We skip freeing the filepath because it may belong to the string pool
 
   include_stack_top -= INCLUDE_ENTRY_SIZE;
-  fp          = (FILE *) include_stack[include_stack_top];
-  fp_filepath = (char*)  include_stack[include_stack_top + 1];
-  fp_dirname  = (char*)  include_stack[include_stack_top + 2];
+  // Must add parentheses because M2-Planet parses the cast operator with higher
+  // precedence than the dereference operator.
+  fp          = (FILE*) (include_stack[include_stack_top]);
+  fp_filepath = (char*) (include_stack[include_stack_top + 1]);
+  fp_dirname  = (char*) (include_stack[include_stack_top + 2]);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   line_number   = include_stack[include_stack_top + 3];
   column_number = include_stack[include_stack_top + 4];
