@@ -169,7 +169,7 @@ typedef int FILE;
 //  - last_tok_column_number: column number of the last token read, used for error messages.
 //  - include_stack: the stack to save the state of the reader when including a file.
 
-FILE *fp = 0; // Current file pointer that's being read
+FILE *fp; // Current file pointer that's being read
 char* fp_filepath = 0; // The path of the current file being read
 char *fp_dirname = 0; // The directory of the current file being read
 char* include_search_path = 0; // Search path for include files
