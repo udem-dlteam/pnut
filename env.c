@@ -187,7 +187,7 @@ void cgc_add_enclosing_switch(int loop_fs, int break_lbl, int next_case_lbl) {
 
 void cgc_add_global(int ident, int width, ast type, bool is_static_local) {
   int binding = alloc_obj(5);
-  heap[binding+0] = is_static_local ? cgc_locals : cgc_globals;
+  heap[binding+0] = TERNARY(is_static_local, cgc_locals, cgc_globals);
   heap[binding+1] = BINDING_VAR_GLOBAL;
   heap[binding+2] = ident;
   heap[binding+3] = cgc_global_alloc;

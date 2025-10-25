@@ -12,6 +12,16 @@
 #define NO_BUILTIN_LIBC
 #endif
 
+// M2-Planet doesn't support ternary operator.
+#ifdef NO_TERNARY_SUPPORT
+// Ternary operator can be implemented using arithmetic operations.
+// Note that unlike the standard ternary operator, both sides are always
+// evaluated, and the condition expression is evaluated twice.
+#define TERNARY(cond, if_true, if_false) (((cond) == 0) * (if_false) + ((cond) != 0) * (if_true))
+#else
+#define TERNARY(cond, if_true, if_false) ((cond) ? (if_true) : (if_false))
+#endif
+
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
 // On 64 bit platforms, intptr_t is a long long int.
@@ -1333,10 +1343,10 @@ int eval_constant(ast expr, bool if_macro) {
     case '+':
       op1 = eval_constant(child0, if_macro);
       if (get_nb_children(expr) == 1) {
-        return op == '-' ? -op1 : op1;
+        return TERNARY(op == '-', -op1, op1);
       } else {
         op2 = eval_constant(child1, if_macro);
-        return op == '-' ? op1 - op2 : op1 + op2;
+        return TERNARY(op == '-', (op1 - op2), (op1 + op2));
       }
 
     case '?':
@@ -1476,7 +1486,7 @@ void handle_preprocessor_directive() {
   if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
     temp = val;
     get_tok_macro(); // Get the macro name
-    push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
+    push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
     get_tok_macro(); // Skip the macro name
   } else if (tok == IF_KW) {
     temp = evaluate_if_condition() != 0;
@@ -1528,7 +1538,7 @@ void handle_preprocessor_directive() {
     } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
 #ifndef DEBUG_EXPAND_INCLUDES
       temp = val;
-      putstr(temp == WARNING_ID ? "warning:" : "error:");
+      putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
       // Print the rest of the line, it does not support \ at the end of the line but that's ok
       while (ch != '\n' && ch != EOF) {
         putchar(ch); get_ch();
@@ -2191,9 +2201,9 @@ void get_tok() {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
 #ifdef SUPPORT_64_BIT_LITERALS
-            tok = val_32[0] == 0 && val_32[1] == 0 ? INTEGER : INTEGER_OCT;
+            tok = TERNARY(val_32[0] == 0 && val_32[1] == 0, INTEGER, INTEGER_OCT);
 #else
-            tok = val == 0 ? INTEGER : INTEGER_OCT;
+            tok = TERNARY(val == 0, INTEGER, INTEGER_OCT);
 #endif
 #endif
           }
@@ -2228,7 +2238,7 @@ void get_tok() {
             get_ch();
           }
           if (ch == 'u' || ch == 'U') {
-            tok = tok == INTEGER_LL ? INTEGER_ULL : INTEGER_UL;
+            tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
             get_ch();
           }
         }
@@ -2601,7 +2611,7 @@ ast get_type_specifier(ast type_or_decl) {
 }
 
 ast pointer_type(ast parent_type, bool is_const) {
-  return new_ast2('*', is_const ? MK_TYPE_SPECIFIER(CONST_KW) : 0, parent_type);
+  return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
 }
 
 ast function_type(ast parent_type, ast params) {
