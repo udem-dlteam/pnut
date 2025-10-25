@@ -256,7 +256,7 @@ void restore_include_context() {
   if (include_stack_top == 0) fatal_error("Include stack is empty");
 
   fclose(fp);
-  free(fp_dirname);
+  if (fp_dirname != 0) free(fp_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
   include_stack_top -= INCLUDE_ENTRY_SIZE;
@@ -966,12 +966,10 @@ char *file_parent_directory(char *path) {
     i += 1;
   }
   if (last_slash == -1) {
-    path = malloc(1);
-    path[0] = '\0';
+    return 0;
   } else {
-    path = substr(path, 0, last_slash + 1);
+    return substr(path, 0, last_slash + 1);
   }
-  return path;
 }
 
 void include_file(char *file_name, char *relative_to) {
