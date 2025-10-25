@@ -695,8 +695,8 @@ void accum_string_integer(int n) {
 
 int probe;
 int probe_start;
-int c1;
-int c2;
+char c1;
+char c2;
 int end_ident_i;
 
 // Like end_ident, but for strings instead of identifiers
