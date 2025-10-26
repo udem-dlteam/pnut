@@ -392,7 +392,12 @@ int hash;
 // These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
+// Some C implementations place globals on the stack, where size is limited.
+#ifdef SMALL_HEAP
+#define HEAP_SIZE 131072 // 128 KB
+#else
 #define HEAP_SIZE 786432 // 768 KB
+#endif
 intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
