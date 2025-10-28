@@ -818,8 +818,10 @@ void os_access() {
   #define SYS_ACCESS 0x2000021
   #define SYS_MMAP_MAP_TYPE 0x1020
   #define SYS_MMAP 0x20000C5
-  #define SYS_BRK 0x2000011
   #define SYS_EXIT 0x2000001
+#ifdef USE_BRK_SYSCALL
+  #error "USE_BRK_SYSCALL is not supported on macOS"
+#endif
 #endif
 
 // For 64 bit System V ABI.
@@ -850,7 +852,7 @@ void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
   syscall_();                    // syscall
 }
 
-#ifdef USE_BRK_SYSCALL
+#if defined(USE_BRK_SYSCALL) && defined(SYS_BRK)
 // Use brk/sbrk syscalls instead of mmap for memory allocation
 // This is needed for environments like builder-hex0 that don't support mmap
 void os_allocate_memory(int size) {

@@ -95,7 +95,9 @@ jobs:
           set -e
           ./run-tests.sh ${{ matrix.target }}
           PNUT_OPTIONS="-D USE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }}
-          PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./run-tests.sh ${{ matrix.target }}
+          if [ ${{ matrix.host }} != "macos-latest" ]; then
+            PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./run-tests.sh ${{ matrix.target }}
+          fi
 
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }} with one pass generator
         run: |
@@ -223,8 +225,8 @@ jobs:
         run: |
           set -e
           ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
-          PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
           if [ ${{ matrix.host }} != "macos-latest" ]; then
+            PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
             ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --one-pass-generator --stats
             PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --one-pass-generator --stats
           fi
