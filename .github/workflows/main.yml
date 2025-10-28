@@ -94,7 +94,8 @@ jobs:
         run: |
           set -e
           ./run-tests.sh ${{ matrix.target }}
-          PNUT_OPTIONS="-DUSE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }}
+          PNUT_OPTIONS="-D USE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }}
+          PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./run-tests.sh ${{ matrix.target }}
 
       - name: Run ${{ matrix.target }} tests on ${{ matrix.host }} with one pass generator
         run: |
@@ -103,7 +104,8 @@ jobs:
             echo "Skipping one pass generator on macOS"
           else
             ./run-tests.sh ${{ matrix.target }} --one-pass-generator
-            PNUT_OPTIONS="-DUSE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }} --one-pass-generator
+            PNUT_OPTIONS="-D USE_STACK_FOR_GLOBALS" ./run-tests.sh ${{ matrix.target }} --one-pass-generator
+            PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./run-tests.sh ${{ matrix.target }} --one-pass-generator
           fi
 
   tests-shell: # Run tests for pnut-sh on all supported shells
@@ -221,8 +223,10 @@ jobs:
         run: |
           set -e
           ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
+          PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
           if [ ${{ matrix.host }} != "macos-latest" ]; then
             ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --one-pass-generator --stats
+            PNUT_OPTIONS="-D USE_BRK_SYSCALL" ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --one-pass-generator --stats
           fi
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
