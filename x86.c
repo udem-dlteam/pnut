@@ -712,6 +712,21 @@ void syscall_3(int syscall_code, int bx_reg, int cx_reg, int dx_reg) {
   pop_reg(BX);                   // restore address of global variables table
 }
 
+#ifdef USE_BRK_SYSCALL
+// Use brk/sbrk syscalls instead of mmap for memory allocation
+// This is needed for environments like builder-hex0 that don't support mmap
+void os_allocate_memory(int size) {
+  mov_reg_imm(reg_X, 0);
+  syscall_3(45, reg_X, -1, -1);   // brk(0) to get current break address, SYS_BRK = 45
+
+  push_reg(reg_X);                // save current break address
+  add_reg_imm(reg_X, size);       // add current break + size
+
+  syscall_3(45, reg_X, -1, -1);   // extend program break, SYS_BRK = 45
+  pop_reg(reg_X);                 // restore original break address
+}
+#else
+// Use mmap syscall for memory allocation (original implementation)
 void os_allocate_memory(int size) {
   push_reg(BX);           // save address of global variables table
   mov_reg_imm(AX, 192);   // mov  eax, 192 == SYS_MMAP2
@@ -724,6 +739,7 @@ void os_allocate_memory(int size) {
   int_i8(0x80);           // int  0x80     # system call
   pop_reg(BX);            // restore address of global variables table
 }
+#endif
 
 void os_exit() {
   syscall_3(1, reg_X, -1, -1); // SYS_EXIT = 1
@@ -782,6 +798,7 @@ void os_access() {
   #define SYS_STAT 4
   #define SYS_MMAP_MAP_TYPE 0x22
   #define SYS_MMAP 9
+  #define SYS_BRK 12
   #define SYS_EXIT 60
 #endif
 
@@ -802,6 +819,9 @@ void os_access() {
   #define SYS_MMAP_MAP_TYPE 0x1020
   #define SYS_MMAP 0x20000C5
   #define SYS_EXIT 0x2000001
+#ifdef USE_BRK_SYSCALL
+  #error "USE_BRK_SYSCALL is not supported on macOS"
+#endif
 #endif
 
 // For 64 bit System V ABI.
@@ -832,6 +852,21 @@ void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
   syscall_();                    // syscall
 }
 
+#if defined(USE_BRK_SYSCALL) && defined(SYS_BRK)
+// Use brk/sbrk syscalls instead of mmap for memory allocation
+// This is needed for environments like builder-hex0 that don't support mmap
+void os_allocate_memory(int size) {
+  mov_reg_imm(reg_X, 0);
+  syscall_3(SYS_BRK, reg_X, -1, -1);  // brk(0) to get current break address
+
+  push_reg(reg_X);                    // save current break address
+  add_reg_imm(reg_X, size);           // add current break + size
+
+  syscall_3(SYS_BRK, reg_X, -1, -1);  // Extend program break
+  pop_reg(reg_X);                     // restore original break address
+}
+#else
+// Use mmap syscall for memory allocation (original implementation)
 void os_allocate_memory(int size) {
   mov_reg_imm(DI, 0);                  // mov rdi, 0 | NULL
   mov_reg_imm(SI, size);               // mov rsi, size | size
@@ -842,6 +877,7 @@ void os_allocate_memory(int size) {
   mov_reg_imm(AX, SYS_MMAP);           // mov rax, SYS_MMAP
   syscall_();                          // syscall
 }
+#endif
 
 void os_exit() {
   syscall_3(SYS_EXIT, reg_X, -1, -1);
