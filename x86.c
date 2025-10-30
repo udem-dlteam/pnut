@@ -688,7 +688,7 @@ void mov_reg_lbl(int reg, int lbl) {
                            // <--- The stack now has the address of the next instruction
   pop_reg(reg);            // pop reg_X (1 byte)
   add_reg_lbl(reg, lbl);   // load address of label to reg_X (6 or 7 bytes if 32 or 64 bit)
-  add_reg_imm(reg, WORD_SIZE == 8 ? 8 : 7); // adjust for the pop and add instructions
+  add_reg_imm(reg, TERNARY(WORD_SIZE == 8, 8, 7)); // adjust for the pop and add instructions
 }
 
 // For 32 bit linux.

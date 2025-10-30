@@ -329,8 +329,7 @@ int power_of_2_log(int n) {
 }
 
 void mul_for_pointer_arith(int reg, int width) {
-  int other_reg = reg == reg_X ? reg_Y : reg_X;
-
+  int other_reg = TERNARY(reg == reg_Y, reg_X, reg_Y);
   if (width == 1) return;
 
   if (is_power_of_2(width)) {
@@ -886,7 +885,7 @@ int struct_union_size(ast type) {
 
   // Set the struct_union_size_largest_member global to "return" it
   struct_union_size_largest_member = largest_member_size;
-  return get_op(type) == STRUCT_KW ? sum_size : max_size;
+  return TERNARY(get_op(type) == STRUCT_KW, sum_size, max_size);
 }
 
 // Find offset of struct member
@@ -1158,10 +1157,10 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
 
-  if      (op == '<')     cond = is_signed ? LT : LT_U;
-  else if (op == '>')     cond = is_signed ? GT : GT_U;
-  else if (op == LT_EQ)   cond = is_signed ? LE : LE_U;
-  else if (op == GT_EQ)   cond = is_signed ? GE : GE_U;
+  if      (op == '<')     cond = TERNARY(is_signed, LT, LT_U);
+  else if (op == '>')     cond = TERNARY(is_signed, GT, GT_U);
+  else if (op == LT_EQ)   cond = TERNARY(is_signed, LE, LE_U);
+  else if (op == GT_EQ)   cond = TERNARY(is_signed, GE, GE_U);
   else if (op == EQ_EQ)   cond = EQ;
   else if (op == EXCL_EQ) cond = NE;
 
@@ -1781,7 +1780,7 @@ void codegen_rvalue(ast node) {
       pop_reg(reg_X);
       push_reg(reg_X);
       xor_reg_reg(reg_Y, reg_Y);
-      jump_cond_reg_reg(op == AMP_AMP ? EQ : NE, lbl1, reg_X, reg_Y);
+      jump_cond_reg_reg(TERNARY(op == AMP_AMP, EQ, NE), lbl1, reg_X, reg_Y); // if lhs == 0, jump to lbl1
       pop_reg(reg_X); grow_fs(-1);
       codegen_rvalue(child1);
       grow_fs(-1);
@@ -1944,7 +1943,7 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
 
     // Place the bytes of the string in the memory location allocated for the array
     for (; i < arr_len; i += 1) {
-      mov_reg_imm(reg_X, i < str_len ? string_start[i] : 0);
+      mov_reg_imm(reg_X, TERNARY(i < str_len, string_start[i], 0));
       write_mem_location(base_reg, offset + i, reg_X, 1);
     }
   } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
@@ -2513,7 +2512,7 @@ void init_forward_jump_table(int binding) {
   // output the code and overwrite the code buffer.
 
   assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
-  code_alloc_max = code_alloc > code_alloc_max ? code_alloc : code_alloc_max;
+  code_alloc_max = TERNARY(code_alloc > code_alloc_max, code_alloc, code_alloc_max);
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   generate_exe();
   reset_code_buffer();

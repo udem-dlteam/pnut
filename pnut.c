@@ -12,6 +12,16 @@
 #define NO_BUILTIN_LIBC
 #endif
 
+// M2-Planet doesn't support ternary operator.
+#ifdef NO_TERNARY_SUPPORT
+// Ternary operator can be implemented using arithmetic operations.
+// Note that unlike the standard ternary operator, both sides are always
+// evaluated, and the condition expression is evaluated twice.
+#define TERNARY(cond, if_true, if_false) (((cond) == 0) * (if_false) + ((cond) != 0) * (if_true))
+#else
+#define TERNARY(cond, if_true, if_false) ((cond) ? (if_true) : (if_false))
+#endif
+
 #ifdef PNUT_CC
 // When bootstrapping pnut, intptr_t is not defined.
 // On 64 bit platforms, intptr_t is a long long int.
@@ -256,13 +266,15 @@ void restore_include_context() {
   if (include_stack_top == 0) fatal_error("Include stack is empty");
 
   fclose(fp);
-  free(fp_dirname);
+  if (fp_dirname != 0) free(fp_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
   include_stack_top -= INCLUDE_ENTRY_SIZE;
-  fp          = (FILE *) include_stack[include_stack_top];
-  fp_filepath = (char*)  include_stack[include_stack_top + 1];
-  fp_dirname  = (char*)  include_stack[include_stack_top + 2];
+  // Must add parentheses because M2-Planet parses the cast operator with higher
+  // precedence than the dereference operator.
+  fp          = (FILE*) (include_stack[include_stack_top]);
+  fp_filepath = (char*) (include_stack[include_stack_top + 1]);
+  fp_dirname  = (char*) (include_stack[include_stack_top + 2]);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   line_number   = include_stack[include_stack_top + 3];
   column_number = include_stack[include_stack_top + 4];
@@ -380,7 +392,12 @@ int hash;
 // These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
+// Some C implementations place globals on the stack, where size is limited.
+#ifdef SMALL_HEAP
+#define HEAP_SIZE 131072 // 128 KB
+#else
 #define HEAP_SIZE 786432 // 768 KB
+#endif
 intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
@@ -685,8 +702,8 @@ void accum_string_integer(int n) {
 
 int probe;
 int probe_start;
-int c1;
-int c2;
+char c1;
+char c2;
 int end_ident_i;
 
 // Like end_ident, but for strings instead of identifiers
@@ -966,12 +983,10 @@ char *file_parent_directory(char *path) {
     i += 1;
   }
   if (last_slash == -1) {
-    path = malloc(1);
-    path[0] = '\0';
+    return 0;
   } else {
-    path = substr(path, 0, last_slash + 1);
+    return substr(path, 0, last_slash + 1);
   }
-  return path;
 }
 
 void include_file(char *file_name, char *relative_to) {
@@ -1234,22 +1249,22 @@ int lookup_macro_token(int args, int tok, int val) {
 
 int read_macro_tokens(int args) {
   int toks = 0; // List of token to replay
-  int tail;
+  int rest;
 
   // Accumulate tokens so they can be replayed when the macro is used
   if (tok != '\n' && tok != EOF) {
     // Append the token/value pair to the replay list
     toks = cons(lookup_macro_token(args, tok, val), 0);
-    tail = toks;
+    rest = toks;
     get_tok_macro();
     while (tok != '\n' && tok != EOF) {
-      set_cdr(tail, cons(lookup_macro_token(args, tok, val), 0));
-      tail = cdr(tail); // Advance tail
+      set_cdr(rest, cons(lookup_macro_token(args, tok, val), 0));
+      rest = cdr(rest); // Advance tail
       get_tok_macro();
     }
 
     // Check that there are no leading or trailing ##
-    if (car(car(toks)) == HASH_HASH || car(car(tail)) == HASH_HASH) {
+    if (car(car(toks)) == HASH_HASH || car(car(rest)) == HASH_HASH) {
       syntax_error("'##' cannot appear at either end of a macro expansion");
     }
   }
@@ -1335,10 +1350,10 @@ int eval_constant(ast expr, bool if_macro) {
     case '+':
       op1 = eval_constant(child0, if_macro);
       if (get_nb_children(expr) == 1) {
-        return op == '-' ? -op1 : op1;
+        return TERNARY(op == '-', -op1, op1);
       } else {
         op2 = eval_constant(child1, if_macro);
-        return op == '-' ? op1 - op2 : op1 + op2;
+        return TERNARY(op == '-', (op1 - op2), (op1 + op2));
       }
 
     case '?':
@@ -1478,7 +1493,7 @@ void handle_preprocessor_directive() {
   if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
     temp = val;
     get_tok_macro(); // Get the macro name
-    push_if_macro_mask(temp == IFDEF_ID ? tok == MACRO : tok != MACRO);
+    push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
     get_tok_macro(); // Skip the macro name
   } else if (tok == IF_KW) {
     temp = evaluate_if_condition() != 0;
@@ -1530,7 +1545,7 @@ void handle_preprocessor_directive() {
     } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
 #ifndef DEBUG_EXPAND_INCLUDES
       temp = val;
-      putstr(temp == WARNING_ID ? "warning:" : "error:");
+      putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
       // Print the rest of the line, it does not support \ at the end of the line but that's ok
       while (ch != '\n' && ch != EOF) {
         putchar(ch); get_ch();
@@ -1758,7 +1773,7 @@ void init_pnut_macros() {
 int macro_parse_argument() {
   int arg_tokens = 0;
   int parens_depth = 0;
-  int tail;
+  int rest;
 
   while ((parens_depth > 0 || (tok != ',' && tok != ')')) && tok != EOF) {
     if (tok == '(') parens_depth += 1; // Enter parenthesis
@@ -1766,10 +1781,10 @@ int macro_parse_argument() {
 
     if (arg_tokens == 0) {
       arg_tokens = cons(cons(tok, val), 0);
-      tail = arg_tokens;
+      rest = arg_tokens;
     } else {
-      set_cdr(tail, cons(cons(tok, val), 0));
-      tail = cdr(tail);
+      set_cdr(rest, cons(cons(tok, val), 0));
+      rest = cdr(rest);
     }
     get_tok_macro_expand();
   }
@@ -2193,9 +2208,9 @@ void get_tok() {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
 #ifdef SUPPORT_64_BIT_LITERALS
-            tok = val_32[0] == 0 && val_32[1] == 0 ? INTEGER : INTEGER_OCT;
+            tok = TERNARY(val_32[0] == 0 && val_32[1] == 0, INTEGER, INTEGER_OCT);
 #else
-            tok = val == 0 ? INTEGER : INTEGER_OCT;
+            tok = TERNARY(val == 0, INTEGER, INTEGER_OCT);
 #endif
 #endif
           }
@@ -2230,7 +2245,7 @@ void get_tok() {
             get_ch();
           }
           if (ch == 'u' || ch == 'U') {
-            tok = tok == INTEGER_LL ? INTEGER_ULL : INTEGER_UL;
+            tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
             get_ch();
           }
         }
@@ -2603,7 +2618,7 @@ ast get_type_specifier(ast type_or_decl) {
 }
 
 ast pointer_type(ast parent_type, bool is_const) {
-  return new_ast2('*', is_const ? MK_TYPE_SPECIFIER(CONST_KW) : 0, parent_type);
+  return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
 }
 
 ast function_type(ast parent_type, ast params) {
@@ -2652,7 +2667,7 @@ ast parse_enum() {
   ast name;
   ast ident;
   ast result = 0;
-  ast tail;
+  ast rest;
   ast value = 0;
   int next_value = 0;
   int last_literal_type = INTEGER; // Default to decimal integer for enum values
@@ -2708,10 +2723,10 @@ ast parse_enum() {
 
       if (result == 0) {
         result = cons(new_ast2('=', ident, value), 0);
-        tail = result;
+        rest = result;
       } else {
-        set_child(tail, 1, cons(new_ast2('=', ident, value), 0));
-        tail = get_child_(LIST, tail, 1);
+        set_child(rest, 1, cons(new_ast2('=', ident, value), 0));
+        rest = get_child_(LIST, rest, 1);
       }
 
       if (tok == ',') {
@@ -2732,7 +2747,7 @@ ast parse_struct_or_union(int struct_or_union_tok) {
   ast name;
   ast type_specifier, decl;
   ast result = 0;
-  ast tail;
+  ast rest;
   bool ends_in_flex_array = false;
 
   expect_tok(struct_or_union_tok);
@@ -2764,19 +2779,19 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         decl = new_ast3(DECL, 0, type_specifier, 0);
 
         if (result == 0) {
-          tail = result = cons(decl, 0);
+          rest = result = cons(decl, 0);
         } else {
-          set_child(tail, 1, cons(decl, 0));
-          tail = get_child_(LIST, tail, 1);
+          set_child(rest, 1, cons(decl, 0));
+          rest = get_child_(LIST, rest, 1);
         }
       } else {
         while (1) {
           decl = parse_declarator(false, type_specifier);
           if (result == 0) {
-            tail = result = cons(decl, 0);
+            rest = result = cons(decl, 0);
           } else {
-            set_child(tail, 1, cons(decl, 0));
-            tail = get_child_(LIST, tail, 1);
+            set_child(rest, 1, cons(decl, 0));
+            rest = get_child_(LIST, rest, 1);
           }
 
           if (get_child_(DECL, decl, 1) == VOID_KW) parse_error("member with void type not allowed in struct/union", tok);
@@ -2955,7 +2970,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 bool parse_param_list_is_variadic = false;
 int parse_param_list() {
   ast result = 0;
-  ast tail;
+  ast rest;
   ast decl;
 
   parse_param_list_is_variadic = false;
@@ -2986,10 +3001,10 @@ int parse_param_list() {
     if (tok == ',') get_tok();
 
     if (result == 0) {
-      tail = result = cons(decl, 0);
+      rest = result = cons(decl, 0);
     } else {
-      set_child(tail, 1, cons(decl, 0));
-      tail = get_child_(LIST, tail, 1);
+      set_child(rest, 1, cons(decl, 0));
+      rest = get_child_(LIST, rest, 1);
     }
   }
 
@@ -3136,7 +3151,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
 }
 
 ast parse_initializer_list() {
-  ast result = 0, tail = 0;
+  ast result = 0;
+  ast rest = 0;
 
   expect_tok('{');
 
@@ -3145,10 +3161,10 @@ ast parse_initializer_list() {
     if (tok == '{') fatal_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
-      tail = result = cons(parse_initializer(), 0);
+      rest = result = cons(parse_initializer(), 0);
     } else {
-      set_child(tail, 1, cons(parse_initializer(), 0));
-      tail = get_child_(LIST, tail, 1);
+      set_child(rest, 1, cons(parse_initializer(), 0));
+      rest = get_child_(LIST, rest, 1);
     }
     if (tok == ',') get_tok();
     else break;
@@ -3183,14 +3199,14 @@ ast parse_declarator_and_initializer(bool is_for_typedef, ast type_specifier) {
 
 ast parse_declarators(bool is_for_typedef, ast type_specifier, ast first_declarator) {
   ast declarators = cons(first_declarator, 0); // Wrap the declarators in a list
-  ast tail = declarators;
+  ast rest = declarators;
 
   // Otherwise, this is a variable or declaration
   while (tok != ';') {
     if (tok == ',') {
       get_tok();
-      set_child(tail, 1, cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
-      tail = get_child__(LIST, LIST, tail, 1);
+      set_child(rest, 1, cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
+      rest = get_child__(LIST, LIST, rest, 1);
     } else {
       parse_error("';' or ',' expected", tok);
     }
@@ -3302,7 +3318,7 @@ ast parse_parenthesized_expression(bool first_par_already_consumed) {
 ast parse_primary_expression() {
 
   ast result = 0;
-  ast tail;
+  ast rest;
 
   if (tok == IDENTIFIER || tok == CHARACTER || tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
@@ -3322,10 +3338,10 @@ ast parse_primary_expression() {
 
     if (tok == STRING) { // Contiguous strings
       result = cons(get_val_(STRING, result), 0); // Result is now a list of string values
-      tail = result;
+      rest = result;
       while (tok == STRING) {
-        set_cdr(tail, cons(val, 0));
-        tail = cdr(tail);
+        set_cdr(rest, cons(val, 0));
+        rest = cdr(rest);
         get_tok();
       }
 
@@ -3911,7 +3927,7 @@ ast parse_compound_statement() {
 
   ast result = 0;
   ast child1;
-  ast tail;
+  ast rest;
 
   expect_tok('{');
 
@@ -3923,7 +3939,7 @@ ast parse_compound_statement() {
       child1 = parse_statement();
     }
     result = new_ast2('{', child1, 0);
-    tail = result;
+    rest = result;
     while (tok != '}' && tok != EOF) {
       if (is_type_starter(tok)) {
         child1 = parse_declaration(true);
@@ -3931,8 +3947,8 @@ ast parse_compound_statement() {
         child1 = parse_statement();
       }
       child1 = new_ast2('{', child1, 0);
-      set_child(tail, 1, child1);
-      tail = child1;
+      set_child(rest, 1, child1);
+      rest = child1;
     }
   }
 
