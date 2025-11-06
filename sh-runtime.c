@@ -6,15 +6,6 @@
 #define DEFAULT_USE 0
 #endif
 
-#define DEFINE_RUNTIME_FUN(name) \
-bool runtime_use_ ## name = DEFAULT_USE; \
-bool runtime_ ## name ## _defined = false; \
-void runtime_ ## name () { \
-RETURN_IF_TRUE(runtime_ ## name ## _defined)
-#define END_RUNTIME_FUN(name) putstr("\n"); }
-#define DEPENDS_ON(name) runtime_ ## name ();
-#define RETURN_IF_TRUE(var) if (var) return; var = true;
-
 #ifdef RT_COMPACT
 #define call_char_to_int(prefix, char_var) putstr(prefix "__c=$(printf \"%d\" \"'" char_var "\"); __c=$((__c > 0 ? __c : 256 + __c))\n");
 #else
@@ -80,7 +71,10 @@ RETURN_IF_TRUE(runtime_ ## name ## _defined)
 
 // Local variables
 
-DEFINE_RUNTIME_FUN(local_vars)
+bool runtime_use_local_vars = DEFAULT_USE;
+bool runtime_local_vars_defined = false;
+void runtime_local_vars() {
+  if (runtime_local_vars_defined++) return;
   putstr("# Local variables\n");
   putstr("__=0\n");
 #ifndef SH_SAVE_VARS_WITH_SET
@@ -104,11 +98,15 @@ DEFINE_RUNTIME_FUN(local_vars)
   putstr("  : $(($__ret=__tmp))   # Restore return value\n");
   putstr("}\n");
 #endif
-END_RUNTIME_FUN(local_vars)
+  putstr("\n");
+}
 
 // char<->int conversion
 
-DEFINE_RUNTIME_FUN(char_to_int)
+bool runtime_use_char_to_int = DEFAULT_USE;
+bool runtime_char_to_int_defined = false;
+void runtime_char_to_int() {
+  if (runtime_char_to_int_defined++) return;
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
   putstr("__c2i_0=48\n");
@@ -272,12 +270,16 @@ DEFINE_RUNTIME_FUN(char_to_int)
   putstr("  esac\n");
   putstr("}\n");
 #endif
-END_RUNTIME_FUN(char_to_int)
+  putstr("\n");
+}
 
 // string packing/unpacking
 
-DEFINE_RUNTIME_FUN(unpack_string)
-DEPENDS_ON(char_to_int)
+bool runtime_use_unpack_string = DEFAULT_USE;
+bool runtime_unpack_string_defined = false;
+void runtime_unpack_string() {
+  if (runtime_unpack_string_defined++) return;
+  runtime_char_to_int();
   putstr("# Unpack a Shell string into an appropriately sized buffer\n");
   putstr("unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
   putstr("  __fgetc_buf=$1\n");
@@ -309,11 +311,15 @@ DEPENDS_ON(char_to_int)
   putstr("  fi\n");
   putstr("  : $((_$__buffer = 0))               # Then \\0\n");
   putstr("}\n");
-END_RUNTIME_FUN(unpack_string)
+  putstr("\n");
+}
 
 // memory allocation
 
-DEFINE_RUNTIME_FUN(malloc)
+bool runtime_use_malloc = DEFAULT_USE;
+bool runtime_malloc_defined = false;
+void runtime_malloc() {
+  if (runtime_malloc_defined++) return;
   putstr("__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.\n\n");
   putstr("_malloc() { # $2 = object size\n");
 #ifdef RT_FREE_UNSETS_VARS
@@ -326,9 +332,13 @@ DEFINE_RUNTIME_FUN(malloc)
   putstr("  : $((__ALLOC += $2))\n");
 #endif
   putstr("}\n");
-END_RUNTIME_FUN(malloc)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(initialize)
+bool runtime_use_initialize = DEFAULT_USE;
+bool runtime_initialize_defined = false;
+void runtime_initialize() {
+  if (runtime_initialize_defined++) return;
   putstr("# Initialize memory with the list of values.\n");
   putstr("# When the expected number of elements is higher than the actual number of\n");
   putstr("# elements, the remaining elements are set to 0\n");
@@ -347,14 +357,18 @@ DEFINE_RUNTIME_FUN(initialize)
   putstr("    : $((__i += 1))\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(initialize)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(defarr)
-DEPENDS_ON(malloc)
+bool runtime_use_defarr = DEFAULT_USE;
+bool runtime_defarr_defined = false;
+void runtime_defarr() {
+  if (runtime_defarr_defined++) return;
+  runtime_malloc();
 #ifdef RT_NO_INIT_GLOBALS
   // If some array initializers were used, defarr is extended to support initialization
   if (runtime_use_initialize) {
-    DEPENDS_ON(initialize)
+    runtime_initialize();
     putstr("defarr() {\n");
     putstr("  _malloc $1 $2;\n");
     putstr("  if [ $# -gt 2 ]; then initialize $@; fi\n");
@@ -363,19 +377,27 @@ DEPENDS_ON(malloc)
     putstr("defarr() { _malloc $1 $2; }\n");
   }
 #else
-DEPENDS_ON(initialize)
+  runtime_initialize();
   putstr("defarr() { _malloc $1 $2; initialize_memory $@; }\n");
 #endif
-END_RUNTIME_FUN(defarr)
+  putstr("\n");
+}
 
 #ifdef SUPPORT_ADDRESS_OF_OP
-DEFINE_RUNTIME_FUN(defglo)
-DEPENDS_ON(malloc)
+bool runtime_use_defglo = DEFAULT_USE;
+bool runtime_defglo_defined = false;
+void runtime_defglo() {
+  if (runtime_defglo_defined++) return;
+  runtime_malloc();
   putstr("defglo() { _malloc $1 1 ; }\n");
-END_RUNTIME_FUN(defglo)
+  putstr("\n");
+}
 #endif
 
-DEFINE_RUNTIME_FUN(free)
+bool runtime_use_free = DEFAULT_USE;
+bool runtime_free_defined = false;
+void runtime_free() {
+  if (runtime_free_defined++) return;
   putstr("_free() { # $2 = object to free\n");
 #ifdef RT_FREE_UNSETS_VARS
   putstr("  __ptr=$(($2 - 1))          # Start of object\n");
@@ -387,11 +409,15 @@ DEFINE_RUNTIME_FUN(free)
 #endif
   putstr("  : $(($1 = 0))              # Return 0\n");
   putstr("}\n");
-END_RUNTIME_FUN(free)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(make_argv)
-DEPENDS_ON(malloc)
-DEPENDS_ON(unpack_string)
+bool runtime_use_make_argv = DEFAULT_USE;
+bool runtime_make_argv_defined = false;
+void runtime_make_argv() {
+  if (runtime_make_argv_defined++) return;
+  runtime_malloc();
+  runtime_unpack_string();
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
   putstr("  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.\n");
@@ -404,7 +430,8 @@ DEPENDS_ON(unpack_string)
   putstr("    shift\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(make_argv)
+  putstr("\n");
+}
 
 #ifdef OPTIMIZE_LONG_LINES
 #define handle_empty_buffer(prefix, buf_var) putstr(prefix "    if [ -z \"$" buf_var "\" ]; then next_sub_buffer; fi\n");
@@ -444,9 +471,12 @@ END_RUNTIME_FUN(make_argv)
   putstr(prefix "esac\n");
 
 // See https://en.wikipedia.org/wiki/Escape_sequences_in_C#Table_of_escape_sequences
-DEFINE_RUNTIME_FUN(unpack_escaped_string)
-DEPENDS_ON(malloc)
-DEPENDS_ON(char_to_int)
+bool runtime_use_unpack_escaped_string = DEFAULT_USE;
+bool runtime_unpack_escaped_string_defined = false;
+void runtime_unpack_escaped_string() {
+  if (runtime_unpack_escaped_string_defined++) return;
+  runtime_malloc();
+  runtime_char_to_int();
 #ifdef OPTIMIZE_LONG_LINES
   putstr("next_sub_buffer() {\n");
     extract_line_head("  ", "__us_buf256", "__str", ANY_STRING_256, "256", "")
@@ -482,10 +512,14 @@ DEPENDS_ON(char_to_int)
   putstr("    : $((__ptr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(unpack_escaped_string)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(defstr)
-DEPENDS_ON(unpack_escaped_string)
+bool runtime_use_defstr = DEFAULT_USE;
+bool runtime_defstr_defined = false;
+void runtime_defstr() {
+  if (runtime_defstr_defined++) return;
+  runtime_unpack_escaped_string();
   putstr("# Define a string, and return a reference to it in the varible taken as argument.\n");
   putstr("# If the variable is already defined, this function does nothing.\n");
   putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
@@ -501,24 +535,36 @@ DEPENDS_ON(unpack_escaped_string)
   putstr("  set -u\n");
 #endif
   putstr("}\n");
-END_RUNTIME_FUN(defstr)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(exit)
+bool runtime_use_exit = DEFAULT_USE;
+bool runtime_exit_defined = false;
+void runtime_exit() {
+  if (runtime_exit_defined++) return;
   putstr("_exit() { # $2: exit status\n");
   putstr("  exit $2\n");
   putstr("}\n");
-END_RUNTIME_FUN(exit)
+  putstr("\n");
+}
 
 // Input / output
-DEFINE_RUNTIME_FUN(putchar)
+bool runtime_use_putchar = DEFAULT_USE;
+bool runtime_putchar_defined = false;
+void runtime_putchar() {
+  if (runtime_putchar_defined++) return;
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
-END_RUNTIME_FUN(putchar)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(getchar)
-DEPENDS_ON(char_to_int)
+bool runtime_use_getchar = DEFAULT_USE;
+bool runtime_getchar_defined = false;
+void runtime_getchar() {
+  if (runtime_getchar_defined++) return;
+  runtime_char_to_int();
   putstr("__stdin_buf=\n");
   putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
 #ifdef OPTIMIZE_LONG_LINES
@@ -565,12 +611,16 @@ DEPENDS_ON(char_to_int)
   putstr("    __stdin_buf=\"${__stdin_buf#?}\"                  # remove the current char from $__stdin_buf\n");
 #endif
   putstr("}\n");
-END_RUNTIME_FUN(getchar)
+  putstr("\n");
+}
 
 // An implementation of puts, used to replace printf("%s", ...) calls.
-DEFINE_RUNTIME_FUN(put_pstr)
+bool runtime_use_put_pstr = DEFAULT_USE;
+bool runtime_put_pstr_defined = false;
+void runtime_put_pstr() {
+  if (runtime_put_pstr_defined++) return;
 #ifndef RT_INLINE_PUTCHAR
-DEPENDS_ON(putchar)
+  runtime_putchar();
 #endif
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
@@ -584,12 +634,16 @@ DEPENDS_ON(putchar)
   putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(put_pstr)
+  putstr("\n");
+}
 
 // POSIX shell printf documentation: https://web.archive.org/web/20240829022722/https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
 // C printf documentation: ISO/IEC 9899:1999 - 7.19.6 Formatted input/output functions (page 273)
-DEFINE_RUNTIME_FUN(printf)
-DEPENDS_ON(put_pstr)
+bool runtime_use_printf = DEFAULT_USE;
+bool runtime_printf_defined = false;
+void runtime_printf() {
+  if (runtime_printf_defined++) return;
+  runtime_put_pstr();
   putstr("read_int() {\n");
   putstr("  __int=\n");
   putstr("  while [ $((__c = _$__fmt_ptr)) != 0 ] && [ $__c -ge 48 ] && [ $__c -le 57 ]; do\n");
@@ -700,11 +754,15 @@ DEPENDS_ON(put_pstr)
   putstr("    fi\n");
   putstr("  done\n");
   putstr("}\n");
-END_RUNTIME_FUN(printf)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(open)
-DEPENDS_ON(malloc)
-DEPENDS_ON(put_pstr)
+bool runtime_use_open = DEFAULT_USE;
+bool runtime_open_defined = false;
+void runtime_open() {
+  if (runtime_open_defined++) return;
+  runtime_malloc();
+  runtime_put_pstr();
   putstr("_malloc __buffer_fd0 1000   # Allocate buffer\n");
   putstr(": $((_$__buffer_fd0 = 0))   # Init buffer to \"\"\n");
   putstr(": $((__cursor_fd0 = 0))     # Make buffer empty\n");
@@ -770,13 +828,17 @@ DEPENDS_ON(put_pstr)
   putstr("  fi\n");
   putstr("  : $(($1 = __fd))\n");
   putstr("}\n");
-END_RUNTIME_FUN(open)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(read_byte)
-DEPENDS_ON(malloc)
-DEPENDS_ON(free)
-DEPENDS_ON(char_to_int)
-DEPENDS_ON(unpack_string)
+bool runtime_use_read_byte = DEFAULT_USE;
+bool runtime_read_byte_defined = false;
+void runtime_read_byte() {
+  if (runtime_read_byte_defined++) return;
+  runtime_malloc();
+  runtime_free();
+  runtime_char_to_int();
+  runtime_unpack_string();
   putstr("refill_buffer() { # $1: fd\n");
   putstr("  __fd=$1\n");
   putstr("  __buffer=$((__buffer_fd$__fd))\n");
@@ -817,11 +879,15 @@ DEPENDS_ON(unpack_string)
   putstr("  : $(($1 = _$((__buffer + __cursor))))\n");
   putstr("  : $((__cursor_fd$__fd = __cursor + 1))  # Increment cursor\n");
   putstr("}\n");
-END_RUNTIME_FUN(read_byte)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(read)
-DEPENDS_ON(read_byte)
-DEPENDS_ON(open)
+bool runtime_use_read = DEFAULT_USE;
+bool runtime_read_defined = false;
+void runtime_read() {
+  if (runtime_read_defined++) return;
+  runtime_read_byte();
+  runtime_open();
   putstr("_read() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
@@ -832,10 +898,14 @@ DEPENDS_ON(open)
   putstr("  done\n");
   putstr("  : $(($1 = __i))\n");
   putstr("}\n");
-END_RUNTIME_FUN(read)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(write)
-DEPENDS_ON(open)
+bool runtime_use_write = DEFAULT_USE;
+bool runtime_write_defined = false;
+void runtime_write() {
+  if (runtime_write_defined++) return;
+  runtime_open();
   putstr("_write() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
@@ -845,13 +915,17 @@ DEPENDS_ON(open)
   putstr("  done\n");
   putstr("  : $(($1 = __count))\n");
   putstr("}\n");
-END_RUNTIME_FUN(write)
+  putstr("\n");
+}
 
 // exec $fd<&- does not work as expected so we instead have a case statement
 // that calls the appropriate exec command to open and close file descriptors.
-DEFINE_RUNTIME_FUN(fopen)
-DEPENDS_ON(malloc)
-DEPENDS_ON(open)
+bool runtime_use_fopen = DEFAULT_USE;
+bool runtime_fopen_defined = false;
+void runtime_fopen() {
+  if (runtime_fopen_defined++) return;
+  runtime_malloc();
+  runtime_open();
   putstr("# Open the file and return a FILE* for the file.\n");
   putstr("# The FILE structure contains the file descriptor.\n");
   putstr("_fopen() { # $2: File name, $3: Mode\n");
@@ -860,11 +934,15 @@ DEPENDS_ON(open)
   putstr("  : $((_$__file = __fd))  # Save fd\n");
   putstr("  : $(($1 = __file))\n");
   putstr("}\n");
-END_RUNTIME_FUN(fopen)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(close)
-DEPENDS_ON(open)
-DEPENDS_ON(free)
+bool runtime_use_close = DEFAULT_USE;
+bool runtime_close_defined = false;
+void runtime_close() {
+  if (runtime_close_defined++) return;
+  runtime_open();
+  runtime_free();
   putstr("_close() { # $2: fd\n");
   putstr("  __fd=$2\n");
   putstr("  __buf=$((__buffer_fd$__fd))  # Get buffer\n");
@@ -878,27 +956,36 @@ DEPENDS_ON(free)
   putstr("  esac\n");
   putstr("  : $(($1 = 0))\n");
   putstr("}\n");
-END_RUNTIME_FUN(close)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(fclose)
-DEPENDS_ON(free)
-DEPENDS_ON(close)
+bool runtime_use_fclose = DEFAULT_USE;
+bool runtime_fclose_defined = false;
+void runtime_fclose() {
+  if (runtime_fclose_defined++) return;
+  runtime_free();
+  runtime_close();
   putstr("_fclose() { # $2: file\n");
   putstr("  __file=$2\n");
   putstr("  __fd=$((_$__file))  # Get fd\n");
   putstr("  _free __ $__file    # Release FILE structure\n");
   putstr("  _close $1 $__fd\n");
   putstr("}\n");
-END_RUNTIME_FUN(fclose)
+  putstr("\n");
+}
 
-DEFINE_RUNTIME_FUN(fgetc)
-DEPENDS_ON(read_byte)
+bool runtime_use_fgetc = DEFAULT_USE;
+bool runtime_fgetc_defined = false;
+void runtime_fgetc() {
+  if (runtime_fgetc_defined++) return;
+  runtime_read_byte();
   putstr("_fgetc() { # $2: file\n");
   putstr("  __file=$2\n");
   putstr("  __fd=$((_$__file))\n");
   putstr("  read_byte $1 $__fd\n");
   putstr("}\n");
-END_RUNTIME_FUN(fgetc)
+  putstr("\n");
+}
 
 void produce_runtime() {
   if (runtime_use_defstr)     runtime_defstr();
