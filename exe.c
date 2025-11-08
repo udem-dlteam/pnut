@@ -557,7 +557,9 @@ void use_label(int lbl) {
 
   int addr = heap[lbl + 1];
 
+#ifdef SAFE_MODE
   if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
+#endif
 
   if (addr < 0) {
     // label address is currently known
@@ -591,7 +593,9 @@ void def_label(int lbl) {
   int label_addr = code_alloc;
   int next;
 
+#ifdef SAFE_MODE
   if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+#endif
 
   if (addr < 0) {
 #ifdef SAFE_MODE
@@ -630,7 +634,9 @@ void jump_to_goto_label(int lbl) {
   int lbl_fs = heap[lbl + 2];
   int start_code_alloc = code_alloc;
 
+#ifdef SAFE_MODE
   if (heap[lbl] != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
+#endif
 
   if (addr < 0) {
     // label address is currently known
@@ -660,7 +666,9 @@ void def_goto_label(int lbl) {
   int goto_fs;
   int start_code_alloc;
 
+#ifdef SAFE_MODE
   if (heap[lbl] != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
+#endif
 
   if (addr < 0) {
     fatal_error("goto label defined more than once");
