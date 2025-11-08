@@ -108,7 +108,7 @@ void reset_code_buffer() {
 }
 #endif
 
-void emit_i8(int a) {
+void emit_i8(const int a) {
   if (code_alloc >= CODE_SIZE) {
     fatal_error("code buffer overflow");
   }
@@ -116,28 +116,28 @@ void emit_i8(int a) {
   code_alloc += 1;
 }
 
-void emit_2_i8(int a, int b) {
+void emit_2_i8(const int a, const int b) {
   emit_i8(a);
   emit_i8(b);
 }
 
-void emit_4_i8(int a, int b, int c, int d) {
+void emit_4_i8(const int a, const int b, const int c, const int d) {
   emit_2_i8(a, b);
   emit_2_i8(c, d);
 }
 
-void emit_i32_le(int n) {
+void emit_i32_le(const int n) {
   emit_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
-void emit_i64_le(int n) {
+void emit_i64_le(const int n) {
   emit_i32_le(n);
   // Sign extend to 64 bits. Arithmetic shift by 31 gives -1 for negative numbers and 0 for positive numbers.
   emit_i32_le(n >> 31);
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
-void emit_i32_le_large_imm(int imm_obj) {
+void emit_i32_le_large_imm(const int imm_obj) {
   if (imm_obj <= 0) {
     emit_i32_le(-imm_obj);
   } else {
@@ -147,7 +147,7 @@ void emit_i32_le_large_imm(int imm_obj) {
   }
 }
 
-void emit_i64_le_large_imm(int imm_obj) {
+void emit_i64_le_large_imm(const int imm_obj) {
   if (imm_obj <= 0) {
     emit_i64_le(-imm_obj);
   } else {
@@ -158,22 +158,22 @@ void emit_i64_le_large_imm(int imm_obj) {
 #endif
 
 char write_buf[1];
-void write_i8(int n) {
+void write_i8(const int n) {
   write_buf[0] = (n & 0xff);
   write(output_fd, write_buf, 1);
 }
 
-void write_2_i8(int a, int b) {
+void write_2_i8(const int a, const int b) {
   write_i8(a);
   write_i8(b);
 }
 
-void write_4_i8(int a, int b, int c, int d) {
+void write_4_i8(const int a, const int b, const int c, const int d) {
   write_2_i8(a, b);
   write_2_i8(c, d);
 }
 
-void write_i32_le(int n) {
+void write_i32_le(const int n) {
   write_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
@@ -183,7 +183,7 @@ bool main_returns = false;
 // Environment tracking
 #include "env.c"
 
-void grow_fs(int words) {
+void grow_fs(const int words) {
   cgc_fs += words;
 }
 
