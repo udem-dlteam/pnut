@@ -36,12 +36,12 @@ int text_alloc = 1; // Start at 1 because 0 is the empty text
 
 // Text pool nodes
 enum TEXT_NODES {
-  TEXT_TREE,
-  TEXT_INTEGER,
-  TEXT_INTEGER_HEX,
-  TEXT_INTEGER_OCT,
-  TEXT_STRING,
-  TEXT_ESCAPED
+  TEXT_TREE,        // Concatenation of texts
+  TEXT_INTEGER,     // Integer to be printed in decimal
+  TEXT_INTEGER_HEX, // Integer to be printed in hexadecimal
+  TEXT_INTEGER_OCT, // Integer to be printed in octal
+  TEXT_STRING,      // Pointer to immutable string
+  TEXT_ESCAPED      // Escaped string, used for printf
 };
 
 // Place prototype of mutually recursive functions here
@@ -82,28 +82,28 @@ ast handle_side_effects_go(ast node, int executes_conditionally);
 
 #define wrap_char(c) (-c)
 
-text wrap_int(int i) {
+text wrap_int(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
-text wrap_int_hex(int i) {
+text wrap_int_hex(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_HEX);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
-text wrap_int_oct(int i) {
+text wrap_int_oct(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_OCT);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
-text wrap_integer(int multiply, int obj) {
+text wrap_integer(const int multiply, const int obj) {
   switch (get_op(obj)) {
     case INTEGER:
       return wrap_int(multiply * -get_val_(INTEGER, obj));
@@ -117,7 +117,7 @@ text wrap_integer(int multiply, int obj) {
   }
 }
 
-text escape_text(text t, bool for_printf) {
+text escape_text(const text t, const bool for_printf) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
 
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_ESCAPED);
@@ -126,7 +126,7 @@ text escape_text(text t, bool for_printf) {
   return (text_alloc += 3) - 3;
 }
 
-text string_concat(text t1, text t2) {
+text string_concat(const text t1, const text t2) {
   if (text_alloc + 4 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(2);
@@ -135,7 +135,7 @@ text string_concat(text t1, text t2) {
   return (text_alloc += 4) - 4;
 }
 
-text string_concat3(text t1, text t2, text t3) {
+text string_concat3(const text t1, const text t2, const text t3) {
   if (text_alloc + 5 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(3);
@@ -145,7 +145,7 @@ text string_concat3(text t1, text t2, text t3) {
   return (text_alloc += 5) - 5;
 }
 
-text string_concat4(text t1, text t2, text t3, text t4) {
+text string_concat4(const text t1, const text t2, const text t3, const text t4) {
   if (text_alloc + 6 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(4);
@@ -156,7 +156,7 @@ text string_concat4(text t1, text t2, text t3, text t4) {
   return (text_alloc += 6) - 6;
 }
 
-text string_concat5(text t1, text t2, text t3, text t4, text t5) {
+text string_concat5(const text t1, const text t2, const text t3, const text t4, const text t5) {
   if (text_alloc + 7 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(5);
@@ -169,7 +169,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 }
 
 // Dead code but keeping it around in case we need to wrap mutable strings
-// text wrap_str(char *s) {
+// text wrap_str(char * const s) {
 //   int i = 0;
 //   int result = text_alloc;
 //
@@ -187,7 +187,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 // }
 
 // Like wrap_str, but assumes that the string is immutable and doesn't need to be copied
-text wrap_str_imm(char *s, char *end) {
+text wrap_str_imm(char * const s, char * const end) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_STRING);
   text_pool[text_alloc + 1] = TEXT_FROM_PTR(s);
@@ -195,15 +195,15 @@ text wrap_str_imm(char *s, char *end) {
   return (text_alloc += 3) - 3;
 }
 
-text wrap_str_lit(char *s) {
+text wrap_str_lit(char * const s) {
   return wrap_str_imm(s, 0);
 }
 
-text wrap_str_pool(int ident_probe) {
+text wrap_str_pool(const int ident_probe) {
   return wrap_str_imm(STRING_BUF(ident_probe), 0);
 }
 
-text concatenate_strings_with(text t1, text t2, text sep) {
+text concatenate_strings_with(const text t1, const text t2, const text sep) {
   if (t1 == 0) return t2;
   if (t2 == 0) return t1;
   return string_concat3(t1, sep, t2);
