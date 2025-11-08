@@ -203,12 +203,15 @@ void putstr(char *str) {
 
 #ifdef PNUT_SH
 #define putint(n) printf("%d", n)
+#define puthex_unsigned(n) printf("%x", n)
+#define putoct_unsigned(n) printf("%o", n)
 #else
 void putint_aux(int n) {
   if (n <= -10) putint_aux(n / 10);
   putchar('0' - (n % 10));
 }
 
+// Output signed integer
 void putint(int n) {
   if (n < 0) {
     putchar('-');
@@ -217,6 +220,24 @@ void putint(int n) {
     putint_aux(-n);
   }
 }
+
+#ifdef sh
+
+// Output unsigned integer in hex
+void puthex_unsigned(int n) {
+  // Because n is signed, we clear the upper bits after shifting in case n was negative
+  if ((n >> 4) & 0x0fffffff) puthex_unsigned((n >> 4) & 0x0fffffff);
+  putchar("0123456789abcdef"[n & 15]);
+}
+
+// Output unsigned integer in octal
+void putoct_unsigned(int n) {
+  // Because n is signed, we clear the upper bits after shifting in case n was negative
+  if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
+  putchar('0' + (n & 7));
+}
+#endif
+
 #endif
 
 void fatal_error(char *msg) {
