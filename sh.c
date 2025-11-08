@@ -1569,16 +1569,7 @@ text fun_call_params(ast params) {
   return code_params;
 }
 
-// Workaround because #if defined(SH_AVOID_PRINTF_USE) || defined(SH_INLINE_PUTCHAR) doesn't work
-#ifdef SH_AVOID_PRINTF_USE
-#define INCLUDE_COMP_PUTCHAR_INLINE
-#endif
-
-#ifdef SH_INLINE_PUTCHAR
-#define INCLUDE_COMP_PUTCHAR_INLINE
-#endif
-
-#ifdef INCLUDE_COMP_PUTCHAR_INLINE
+#if defined(SH_INLINE_PUTCHAR) || defined(SH_AVOID_PRINTF_USE)
 text comp_putchar_inline(ast param) {
   text res;
   ast ident;
