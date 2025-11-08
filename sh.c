@@ -892,49 +892,54 @@ text character_ident(int c) {
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
     return string_concat5(wrap_char('_'), wrap_char('_'), wrap_char(c), wrap_char('_'), wrap_char('_'));
+  } else if (c < 32) {
+    // First 32 characters are control characters.
+    char* control_character_identifiers =
+      "__NUL__\0"     "__SOH__\0"     "__STX__\0"     "__ETX__\0"
+      "__EOT__\0"     "__ENQ__\0"     "__ACK__\0"     "__BEL__\0"
+      "__BS__\0\0"    "__HT__\0\0"    "__LF__\0\0"    "__VT__\0\0"
+      "__FF__\0\0"    "__CR__\0\0"    "__SO__\0\0"    "__SI__\0\0"
+      "__DLE__\0"     "__DC1__\0"     "__DC2__\0"     "__DC3__\0"
+      "__DC4__\0"     "__NAK__\0"     "__SYN__\0"     "__ETB__\0"
+      "__CAN__\0"     "__EM__\0\0"    "__SUB__\0"     "__ESC__\0"
+      "__FS__\0\0"    "__GS__\0\0"    "__RS__\0\0"    "__US__\0\0"
+    ;
+    // Control characters
+    return wrap_str_lit(control_character_identifiers + (c * 8)); // Each string has length 7 + null terminator
+  } else if (c < '0') {
+    // Symbols from space to /
+    char* printable_character_identifiers1 =
+      "__SPACE__\0\0\0\0\0\0"     "__EXCL__\0\0\0\0\0\0\0"    "__DQUOTE__\0\0\0\0\0"        "__HASH__\0\0\0\0\0\0\0"
+      "__DOLLAR__\0\0\0\0\0"      "__PERCENT__\0\0\0\0"       "__AMP__\0\0\0\0\0\0\0\0"     "__QUOTE__\0\0\0\0\0\0"
+      "__LPAREN__\0\0\0\0\0"      "__RPAREN__\0\0\0\0\0"      "__STAR__\0\0\0\0\0\0\0"      "__PLUS__\0\0\0\0\0\0\0"
+      "__COMMA__\0\0\0\0\0\0"     "__MINUS__\0\0\0\0\0\0"     "__PERIOD__\0\0\0\0\0"        "__SLASH__\0\0\0\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 15); // Each string has length 14 + null terminator
+  } else if (c <= 'A') {
+    // Symbols from : to @
+    char* printable_character_identifiers2 =
+      "__COLON__\0\0\0\0\0\0"     "__SEMICOLON__\0\0"         "__LT__\0\0\0\0\0\0\0\0\0"    "__EQ__\0\0\0\0\0\0\0\0\0"
+      "__GT__\0\0\0\0\0\0\0\0\0"  "__QUESTION__\0\0\0"        "__AT__\0\0\0\0\0\0\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers2 + (c - ':') * 15); // Each string has length 14 + null terminator
+  } else if (c <= 'a') {
+    // Symbols from [ to `
+    char* printable_character_identifiers3 =
+      "__LBRACK__\0\0\0\0\0"      "__BACKSLASH__\0\0"         "__RBRACK__\0\0\0\0\0"        "__CARET__\0\0\0\0\0\0"
+      "__UNDERSCORE__\0"          "__BACKTICK__\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers3 + (c - '[') * 15); // Each string has length 14 + null terminator
+  } else if (c <= 127) {
+    // Symbols from { to ~ and DEL (127)
+    char* printable_character_identifiers4 =
+      "__LBRACE__\0\0\0\0\0"      "__BAR__\0\0\0\0\0\0\0\0"   "__RBRACE__\0\0\0\0\0"        "__TILDE__\0\0\0\0\0\0"
+      "__DEL__\0\0\0\0\0\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers4 + (c - '{') * 15); // Each string has length 14 + null terminator
   } else {
-    if      (c == '\0') return wrap_str_lit("__NUL__");
-    else if (c == '\n') return wrap_str_lit("__NEWLINE__");
-    else if (c == ' ')  return wrap_str_lit("__SPACE__");
-    else if (c == '!')  return wrap_str_lit("__EXCL__");
-    else if (c == '"')  return wrap_str_lit("__DQUOTE__");
-    else if (c == '#')  return wrap_str_lit("__SHARP__");
-    else if (c == '$')  return wrap_str_lit("__DOLLAR__");
-    else if (c == '%')  return wrap_str_lit("__PERCENT__");
-    else if (c == '&')  return wrap_str_lit("__AMP__");
-    else if (c == '\'') return wrap_str_lit("__QUOTE__");
-    else if (c == '(')  return wrap_str_lit("__LPAREN__");
-    else if (c == ')')  return wrap_str_lit("__RPAREN__");
-    else if (c == '*')  return wrap_str_lit("__STAR__");
-    else if (c == '+')  return wrap_str_lit("__PLUS__");
-    else if (c == ',')  return wrap_str_lit("__COMMA__");
-    else if (c == '-')  return wrap_str_lit("__MINUS__");
-    else if (c == '.')  return wrap_str_lit("__PERIOD__");
-    else if (c == '/')  return wrap_str_lit("__SLASH__");
-    else if (c == ':')  return wrap_str_lit("__COLON__");
-    else if (c == ';')  return wrap_str_lit("__SEMICOLON__");
-    else if (c == '<')  return wrap_str_lit("__LT__");
-    else if (c == '=')  return wrap_str_lit("__EQ__");
-    else if (c == '>')  return wrap_str_lit("__GT__");
-    else if (c == '?')  return wrap_str_lit("__QUESTION__");
-    else if (c == '@')  return wrap_str_lit("__AT__");
-    else if (c == '^')  return wrap_str_lit("__CARET__");
-    else if (c == '[')  return wrap_str_lit("__LBRACK__");
-    else if (c == '\\') return wrap_str_lit("__BACKSLASH__");
-    else if (c == ']')  return wrap_str_lit("__RBRACK__");
-    else if (c == '_')  return wrap_str_lit("__UNDERSCORE__");
-    else if (c == '`')  return wrap_str_lit("__BACKTICK__");
-    else if (c == '{')  return wrap_str_lit("__LBRACE__");
-    else if (c == '|')  return wrap_str_lit("__BAR__");
-    else if (c == '}')  return wrap_str_lit("__RBRACE__");
-    else if (c == '~')  return wrap_str_lit("__TILDE__");
-    else if (c == '\a') return wrap_str_lit("__ALARM__");
-    else if (c == '\b') return wrap_str_lit("__BACKSPACE__");
-    else if (c == '\f') return wrap_str_lit("__PAGE__");
-    else if (c == '\r') return wrap_str_lit("__RET__");
-    else if (c == '\t') return wrap_str_lit("__TAB__");
-    else if (c == '\v') return wrap_str_lit("__VTAB__");
-    else { fatal_error("Unknown character"); return 0; }
+    dump_char(c);
+    fatal_error("character_ident: invalid character");
+    return 0;
   }
 }
 
