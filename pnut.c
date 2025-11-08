@@ -763,6 +763,59 @@ void get_tok();
 void get_ident();
 void expect_tok_(int expected_tok, char* file, int line);
 
+#ifdef SAFE_MODE
+
+// Debugging functions
+// When bootstrapping, the debugging functions are disabled to reduce code size.
+
+void dump_string(char *prefix, char *str) {
+  putstr(prefix);
+  putchar('"');
+  putstr(str);
+  putchar('"');
+  putchar('\n');
+}
+
+void dump_int(char *prefix, int n) {
+  putstr(prefix);
+  putint(n);
+  putchar('\n');
+}
+
+void dump_char(int c) {
+  dump_int("char = ", c);
+}
+
+void dump_tok(int tok) {
+  dump_int("tok = ", tok);
+}
+
+void dump_ident(int probe) {
+  dump_string("ident = ", STRING_BUF(probe));
+}
+
+void dump_node(ast node) {
+  putstr("op=");
+  putint(get_op(node));
+  putstr(" with #children =");
+  putint(get_nb_children(node));
+  putchar('\n');
+}
+
+void dump_op(int op) {
+  dump_int("op = ", op);
+}
+
+#else
+#define dump_string(prefix, str)
+#define dump_int(prefix, n)
+#define dump_char(c)
+#define dump_tok(tok)
+#define dump_ident(probe)
+#define dump_node(node)
+#define dump_op(op)
+#endif
+
 #define IFDEF_DEPTH_MAX 20
 bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
 bool if_macro_stack_ix = 0;
@@ -1001,7 +1054,7 @@ void include_file(char *file_name, char *relative_to) {
   }
   fp = fopen(fp_filepath, "r");
   if (fp == 0) {
-    putstr(fp_filepath); putchar('\n');
+    dump_string("#include ", fp_filepath);
     fatal_error("Could not open file");
   }
 
@@ -1286,7 +1339,7 @@ void handle_define() {
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
   if (tok != IDENTIFIER && tok != MACRO && (tok < AUTO_KW || tok > WHILE_KW)) {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("#define directive can only be followed by a identifier");
   }
 
@@ -1432,7 +1485,7 @@ int eval_constant(ast expr, bool if_macro) {
       }
 
     default:
-      putstr("op="); putint(op); putchar('\n');
+      dump_op(op);
       fatal_error("unsupported operator in constant expression");
       return 0;
   }
@@ -1477,7 +1530,7 @@ void handle_include() {
     }
     get_tok_macro(); // Skip the string
   } else {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("expected string to #include directive");
   }
 }
@@ -1540,7 +1593,7 @@ void handle_preprocessor_directive() {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
         get_tok_macro(); // Skip the macro name
       } else {
-        putstr("tok="); putint(tok); putchar('\n');
+        dump_tok(tok);
         syntax_error("#undef directive can only be followed by a identifier");
       }
     } else if (tok == IDENTIFIER && val == DEFINE_ID) {
@@ -1561,7 +1614,8 @@ void handle_preprocessor_directive() {
       tok = '\n';
 #endif
     } else {
-      putstr("tok="); putint(tok); putstr(": "); putstr(STRING_BUF(val)); putchar('\n');
+      dump_tok(tok);
+      dump_string("directive = ", STRING_BUF(val));
       syntax_error("unsupported preprocessor directive");
     }
   } else {
@@ -1570,12 +1624,9 @@ void handle_preprocessor_directive() {
   }
 
   if (tok != '\n' && tok != EOF) {
-    putstr("tok="); putint(tok); putchar('\n');
-    putstr("directive="); putint(tok); putchar('\n');
+    dump_tok(tok);
     if (tok == IDENTIFIER || tok == MACRO) {
-      putstr("string = ");
-      putstr(STRING_BUF(val));
-      putchar('\n');
+      dump_string("directive = ", STRING_BUF(val));
     }
     syntax_error("preprocessor expected end of line");
   }
@@ -1799,10 +1850,9 @@ int macro_parse_argument() {
 void check_macro_arity(int macro_args_count, int macro) {
   int expected_argc = cdr(heap[macro + 3]);
   if (macro_args_count != expected_argc) {
-    putstr("expected_argc="); putint(expected_argc);
-    putstr(" != macro_args_count="); putint(macro_args_count);
-    putchar('\n');
-    putstr("macro="); putstr(STRING_BUF(macro)); putchar('\n');
+    dump_int("expected_argc = ", expected_argc);
+    dump_int("macro_args_count = ", macro_args_count);
+    dump_string("macro = ", STRING_BUF(macro));
     syntax_error("macro argument count mismatch");
   }
 }
@@ -1956,7 +2006,7 @@ void stringify() {
   get_tok_macro();
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("expected macro argument after #");
   }
   arg = get_macro_arg(val);
@@ -2022,9 +2072,8 @@ void paste_tokens(int left_tok, int left_val) {
               ) {
       accum_string_integer(-right_val);
     } else {
-      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
-      // show identifier/macro string
-      putstr("left="); putstr(STRING_BUF(left_val)); putchar('\n');
+      dump_ident(left_val);
+      dump_tok(right_tok);
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -2055,11 +2104,13 @@ void paste_tokens(int left_tok, int left_val) {
       val = end_ident();
       tok = heap[val+2]; // The kind of the identifier
     } else {
-      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
+      dump_tok(left_tok);
+      dump_tok(right_tok);
       syntax_error("cannot paste an integer with a non-integer");
     }
   } else {
-    putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
+    dump_tok(left_tok);
+    dump_tok(right_tok);
     syntax_error("cannot paste a non-identifier or non-integer");
   }
 }
@@ -2475,6 +2526,7 @@ void get_tok() {
               get_ch();
               tok = ELLIPSIS;
             } else {
+              dump_char(ch);
               syntax_error("invalid token");
             }
           } else {
@@ -2495,11 +2547,11 @@ void get_tok() {
           if (ch == '\n') { // Continues with next token
             get_ch();
           } else {
-            putstr("ch="); putint(ch); putchar('\n');
+            dump_char(ch);
             syntax_error("unexpected character after backslash");
           }
         } else {
-          putstr("ch="); putint(ch); putchar('\n');
+          dump_char(ch);
           syntax_error("invalid token");
         }
       }
@@ -2579,8 +2631,8 @@ void expect_tok_(int expected_tok, char* file, int line) {
     putstr("expected tok="); print_tok_type(expected_tok);
     putstr("\ncurrent tok="); print_tok_type(tok); putchar('\n');
 #else
-    putstr("expected tok="); putint(expected_tok);
-    putstr("\ncurrent tok="); putint(tok); putchar('\n');
+    dump_int("expected tok = ", expected_tok);
+    dump_int("current tok = ", tok);
 #endif
     parse_error_internal("unexpected token", tok, file, line);
   }

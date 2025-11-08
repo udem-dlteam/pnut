@@ -697,7 +697,7 @@ ast dereference_type(ast type) {
     case '*': // Pointer type
       return get_child_('*', type, 1);
     default:
-      putstr("type="); putint(get_op(type)); putchar('\n');
+      dump_op(get_op(type));
       fatal_error("dereference_type: non pointer is being dereferenced with *");
       return -1;
   }
@@ -839,7 +839,7 @@ ast canonicalize_type(ast type) {
   }
 
   if (binding == 0) {
-    putstr("type="); putstr(STRING_BUF(get_val_(IDENTIFIER, get_child(type, 1)))); putchar('\n');
+    dump_ident(get_val_(IDENTIFIER, get_child(type, 1)));
     fatal_error("canonicalize_type: type is not defined");
   }
   res = heap[binding+3];
@@ -969,7 +969,7 @@ int resolve_identifier(int ident_probe) {
   binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
   if (binding != 0) return binding;
 
-  putstr("ident = "); putstr(STRING_BUF(ident_probe)); putchar('\n');
+  dump_ident(ident_probe);
   fatal_error("identifier not found");
   return 0;
 }
@@ -1014,16 +1014,13 @@ ast value_type(ast node) {
         case BINDING_FUN:
           return heap[binding+5];
         default:
-          putstr("ident = ");
-          putstr(STRING_BUF(get_val_(IDENTIFIER, node)));
-          putchar('\n');
+          dump_ident(get_val_(IDENTIFIER, node));
           fatal_error("value_type: unknown identifier");
           return -1;
       }
-
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("value_type: unknown expression with nb_children == 0");
+      dump_node(node);
+      fatal_error("value_type: unexpected operator");
       return -1;
     }
 
@@ -1047,7 +1044,7 @@ ast value_type(ast node) {
     } else if (op == SIZEOF_KW) {
       return int_type; // sizeof always returns an integer
     } else {
-      putstr("op="); putint(op); putchar('\n');
+      dump_node(node);
       fatal_error("value_type: unexpected operator");
       return -1;
     }
@@ -1080,8 +1077,8 @@ ast value_type(ast node) {
       } else if (get_op(right_type) == '[' || get_op(right_type) == '*') {
         return dereference_type(right_type);
       } else {
-        putstr("left_type="); putint(get_op(left_type)); putchar('\n');
-        putstr("right_type="); putint(get_op(right_type)); putchar('\n');
+        dump_op(get_op(left_type));
+        dump_op(get_op(right_type));
         fatal_error("value_type: non pointer is being dereferenced as array");
         return -1;
       }
@@ -1095,7 +1092,7 @@ ast value_type(ast node) {
       if (is_function_type(left_type)) {
         return function_return_type(left_type);
       } else {
-        fatal_error("Not a function or function pointer");
+        fatal_error("value_type: not a function or function pointer");
         return -1;
       }
     } else if (op == '.') {
@@ -1118,7 +1115,7 @@ ast value_type(ast node) {
     } else if (op == CAST) {
       return get_child_(DECL, child0, 1);
     } else {
-      fatal_error("value_type: unknown expression with 2 children");
+      fatal_error("value_type: unexpected operator");
       return -1;
     }
 
@@ -1128,14 +1125,14 @@ ast value_type(ast node) {
       // We assume that the 2 cases have the same type.
       return value_type(child1);
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("value_type: unknown expression with 3 children");
+      dump_node(node);
+      fatal_error("value_type: unexpected operator");
       return -1;
     }
 
   } else {
-    putstr("op="); putint(op); putchar('\n');
-    fatal_error("value_type: unknown expression with >4 children");
+    dump_node(node);
+    fatal_error("value_type: unexpected operator");
     return -1;
   }
 }
@@ -1260,7 +1257,7 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     add_reg_reg(reg_X, reg_Y);
     load_mem_location(reg_X, reg_X, 0, width, is_signed);
   } else {
-    putstr("op="); putint(op); putchar('\n');
+    dump_op(op);
     fatal_error("codegen_binop: unknown op");
   }
 
@@ -1346,6 +1343,7 @@ void codegen_call(ast node) {
   // Make sure fun has a type that can be called, either a function pointer or a function
   ast type = value_type(fun);
   if (!is_function_type(type)) {
+    dump_node(type);
     fatal_error("Not a function or function pointer");
   }
   if (get_op(type) == '*') type = get_child_('*', type, 1); // Dereference function pointer
@@ -1450,8 +1448,8 @@ int codegen_lvalue(ast node) {
       }
       lvalue_width = type_width(heap[binding+4], true, false);
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("codegen_lvalue: unknown lvalue with nb_children == 0");
+      dump_node(node);
+      fatal_error("codegen_lvalue: unexpected operator");
     }
 
   } else if (nb_children == 1) {
@@ -1461,7 +1459,7 @@ int codegen_lvalue(ast node) {
       grow_fs(-1);
       lvalue_width = ref_type_width(value_type(child0));
     } else {
-      putstr("op="); putint(op); putchar('\n');
+      dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
     }
 
@@ -1511,7 +1509,8 @@ int codegen_lvalue(ast node) {
       lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
-      fatal_error("codegen_lvalue: unknown lvalue with 2 children");
+      dump_node(node);
+      fatal_error("codegen_lvalue: unexpected operator");
     }
 
   } else if (nb_children == 3) {
@@ -1534,13 +1533,13 @@ int codegen_lvalue(ast node) {
       def_label(lbl2);
 
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("codegen_lvalue: unknown lvalue with 3 children");
+      dump_node(node);
+      fatal_error("codegen_lvalue: unexpected operator");
     }
 
   } else {
-    putstr("op="); putint(op); putchar('\n');
-    fatal_error("codegen_lvalue: unknown lvalue with >2 children");
+    dump_node(node);
+    fatal_error("codegen_lvalue: unexpected operator");
   }
 
   if (lvalue_width == 0) {
@@ -1644,15 +1643,15 @@ void codegen_rvalue(ast node) {
           break;
 
         default:
-          putstr("ident = "); putstr(STRING_BUF(get_val_(IDENTIFIER, node))); putchar('\n');
+          dump_ident(get_val_(IDENTIFIER, node));
           fatal_error("codegen_rvalue: identifier not found");
           break;
       }
     } else if (op == STRING) {
       codegen_string(STRING_BUF(get_val_(STRING, node)), STRING_BUF_END(get_val_(STRING, node)));
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("codegen_rvalue: unknown rvalue with nb_children == 0");
+      dump_node(node);
+      fatal_error("codegen_rvalue: unexpected operator");
     }
 
   } else if (nb_children == 1) {
@@ -1731,7 +1730,7 @@ void codegen_rvalue(ast node) {
       }
       push_reg(reg_X);
     } else {
-      putstr("op="); putint(op); putchar('\n');
+      dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
     }
 
@@ -1857,13 +1856,13 @@ void codegen_rvalue(ast node) {
       grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
       def_label(lbl2);
     } else {
-      putstr("op="); putint(op); putchar('\n');
-      fatal_error("codegen_rvalue: unknown rvalue with 3 children");
+      dump_node(node);
+      fatal_error("codegen_rvalue: unexpected operator");
     }
 
   } else {
-    putstr("op="); putint(op); putchar('\n');
-    fatal_error("codegen_rvalue: unknown rvalue with >4 children");
+    dump_node(node);
+    fatal_error("codegen_rvalue: unexpected operator");
   }
 
   grow_fs(1);
@@ -2618,8 +2617,7 @@ void codegen_glo_decl(ast node) {
   } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
-    putstr("op="); putint(op);
-    putstr(" with "); putint(get_nb_children(node)); putstr(" children\n");
+    dump_node(node);
     fatal_error("codegen_glo_decl: unexpected declaration");
   }
 }

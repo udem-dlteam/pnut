@@ -20,7 +20,7 @@ void handle_shell_include() {
     restore_include_context();
     get_tok_macro(); // Skip the string
   } else {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("expected string to #include_shell directive");
   }
 }
@@ -622,7 +622,7 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 
   // Make sure we're not shadowing an existing local variable
   if (cgc_lookup_var(ident_probe, cgc_locals)) {
-    putstr("var="); putstr(STRING_BUF(ident_probe)); putchar('\n');
+    dump_ident(ident_probe);
     fatal_error("Variable is already in local environment");
   }
 
@@ -648,7 +648,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   ast type = get_child_(DECL, variable, 1);
   if (name[0] == '_'
   || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
-    printf("%s ", name);
+    dump_string("Variable name: ", name);
     fatal_error("variable name is invalid. It can't start or end with '_'.");
   }
 
@@ -656,7 +656,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
   // This check only applies to local variables because globals are prefixed with _.
   if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
-    printf("\"%s\" ", name);
+    dump_string("Variable name: ", name);
     fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
   }
 
@@ -664,7 +664,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     // Local variables don't correspond to memory locations, and can't store
     // more than 1 number/pointer.
     if (get_op(type) == '[' || get_op(type) == STRUCT_KW) {
-      printf("\"%s\" variable: ", name);
+      dump_string("Variable name: ", name);
       fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
   } else {
@@ -674,7 +674,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
       || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
       || get_op(type) == STRUCT_KW) { // Struct value type
-      printf("\"%s\" variable: ", name);
+      dump_string("Variable name: ", name);
       fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
     }
   }
@@ -879,7 +879,7 @@ text op_to_str(int op) {
   else if (op == SLASH_EQ)   return wrap_str_lit(" /= ");
   else if (op == STAR_EQ)    return wrap_str_lit(" *= ");
   else {
-    printf("op=%d %c\n", op, op);
+    dump_op(op);
     fatal_error("op_to_str: unexpected operator");
     return 0;
   }
@@ -897,7 +897,7 @@ text test_op_to_str(int op) {
   else if (op == LT_EQ)      return wrap_str_lit(" -le ");
   else if (op == GT_EQ)      return wrap_str_lit(" -ge ");
   else {
-    printf("op=%d %c\n", op, op);
+    dump_op(op);
     fatal_error("test_op_to_str: unexpected operator");
     return 0;
   }
@@ -1031,7 +1031,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       literals_inits = cons(new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
       return sub1;
     } else {
-      printf("op=%d %c", op, op);
+      dump_node(node);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -1045,7 +1045,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
     } else {
-      printf("op=%d %c", op, op);
+      dump_node(node);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -1107,7 +1107,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
 
     return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    dump_node(node);
     fatal_error("unexpected operator");
     return 0;
   }
@@ -1294,8 +1294,8 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else {
-      printf("op=%d %c", op, op);
-      fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
+      dump_node(node);
+      fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
     }
   } else if (nb_children == 1) {
@@ -1351,20 +1351,20 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         } else if (get_op(child0) == STRUCT_KW) {
           return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
         } else {
-          printf("op=%d %c\n", get_op(child0), get_op(child0));
-          printf("op=%d %c\n", get_op(get_child(child0, 1)), get_op(get_child(child0, 1)));
+          dump_node(child0);
+          dump_node(get_child(child0, 1));
           fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
           return 0;
         }
       } else {
-        printf("op=%d %c\n", get_op(child0), get_op(child0));
+        dump_node(child0);
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
     } else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
     } else {
-      printf("op=%d %c", op, op);
+      dump_node(node);
       fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
     }
@@ -1398,7 +1398,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(child1, context, 0, op);
     } else {
-      fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
+      fatal_error("comp_rvalue_go: unknown rvalue");
       return 0;
     }
   } else if (nb_children == 3 && op == '?') {
@@ -1447,7 +1447,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
     }
   } else {
-    printf("op=%d %c\n", op, op);
+    dump_node(node);
     fatal_error("comp_rvalue_go: unknown rvalue");
     return 0;
   }
@@ -1536,7 +1536,7 @@ text comp_lvalue_address(ast node) {
   } else if (op == CAST) {
     return comp_lvalue_address(get_child_(CAST, node, 1));
   } else {
-    printf("op=%d %c\n", op, op);
+    dump_node(node);
     fatal_error("comp_lvalue_address: unknown lvalue");
     return 0;
   }
@@ -1563,7 +1563,7 @@ text comp_lvalue(ast node) {
   } else if (op == CAST) {
     return comp_lvalue(get_child_(CAST, node, 1));
   } else {
-    printf("op=%d %c\n", op, op);
+    dump_node(node);
     fatal_error("comp_lvalue: unknown lvalue");
     return 0;
   }
@@ -1674,14 +1674,14 @@ void handle_printf_call(char *format_str, ast params) {
         case ' ': case '#': case '+': case '-': case '0': // Flags
           // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
           // 16 bits meaning we can easily convert char -> bit if we wanted to.
-          if (state != PRINTF_STATE_FLAGS) fatal_error("Invalid printf format: Flags must come before width and precision");
+          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
           break;
 
         // Width or precision literal
         case '1': case '2': case '3':
         case '4': case '5': case '6':
         case '7': case '8': case '9':
-          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("Invalid printf format: Width or precision already specified by a number");
+          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
           while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
           has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
           has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
@@ -1691,12 +1691,12 @@ void handle_printf_call(char *format_str, ast params) {
 
         // Precision
         case '.':
-          if (state >= PRINTF_STATE_PRECISION) fatal_error("Invalid printf format: precision already specified");
+          if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
           state = PRINTF_STATE_PRECISION;
           break;
 
         case '*':
-          if (param == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           if (state == PRINTF_STATE_FLAGS) {
             width_text = comp_rvalue(param, RVALUE_CTX_BASE);
             has_width = true;
@@ -1704,13 +1704,13 @@ void handle_printf_call(char *format_str, ast params) {
             precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
             has_precision = true;
           } else {
-            fatal_error("Width or precision already specified by a number");
+            fatal_error("printf: width or precision already specified");
           }
           param = 0;
           break;
 
         case '%':
-          if (state != PRINTF_STATE_FLAGS) fatal_error("Cannot use flags, width or precision with %%");
+          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
           mod = false;
           break;
 
@@ -1719,12 +1719,12 @@ void handle_printf_call(char *format_str, ast params) {
           if (*format_str == 'l') {
             while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
             if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
-              printf("*format_str=%c%c\n", *(format_str - 1), *format_str);
-              fatal_error("Invalid printf format: Unsupported long specifier");
+              dump_string("format_str = ", specifier_start);
+              fatal_error("printf: unsupported format specifier");
             }
           }
 
-          if (param == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
           params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
           params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
@@ -1737,9 +1737,9 @@ void handle_printf_call(char *format_str, ast params) {
         // shells, so we make a separate printf call using the \\ooo format.
         // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
         case 'c':
-          if (param == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           // TODO: Find way to support width that's not too verbose
-          if (has_width)   fatal_error("Width not supported for %c");
+          if (has_width) fatal_error("printf: width not supported for %c");
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
           // New format string starts after the %
@@ -1753,7 +1753,7 @@ void handle_printf_call(char *format_str, ast params) {
 
         // We can't a string to printf directly, it needs to be unpacked first.
         case 's':
-          if (param == 0)       fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           runtime_use_put_pstr = true;
           // If the format specifier has width or precision, we have to pack the string and call then printf.
           // Otherwise, we can call _put_pstr directly and avoid the subshell.
@@ -1774,9 +1774,8 @@ void handle_printf_call(char *format_str, ast params) {
           break;
 
         default:
-          printf("specifier=%s\n", specifier_start);
-          printf("format char='%c'\n", *format_str);
-          fatal_error("Unsupported format specifier");
+          dump_string("format_str = ", specifier_start);
+          fatal_error("printf: unsupported format specifier");
       }
     } else if (*format_str == '%') {
       mod = true;
@@ -1875,8 +1874,8 @@ void comp_assignment(ast lhs, ast rhs) {
       }
     }
   } else {
-    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
-    fatal_error("unknown lhs");
+    dump_node(lhs);
+    fatal_error("comp_assignment: unknown lhs");
   }
 }
 
@@ -2573,7 +2572,7 @@ void comp_glo_decl(ast node) {
   } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
     handle_enum_struct_union_type_decl(node);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    dump_node(node);
     fatal_error("comp_glo_decl: unexpected declaration");
   }
 }
