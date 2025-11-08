@@ -703,6 +703,13 @@ ast dereference_type(ast type) {
   }
 }
 
+ast function_return_type(ast type) {
+  if (get_op(type) == '*') {
+    type = get_child_('*', type, 1);
+  }
+  return get_child_('(', type, 0);
+}
+
 // Type, structure and union handling
 int struct_union_size(ast struct_type);
 
@@ -715,9 +722,7 @@ bool is_pointer_type(ast type) {
 bool is_function_type(ast type) {
   int op = get_op(type);
   if (op == '*') {
-    if (get_op(get_child_('*', type, 1)) == '(') {
-      return true;
-    }
+    op = get_op(get_child_('*', type, 1));
   }
   return op == '(';
 }
@@ -1086,16 +1091,11 @@ ast value_type(ast node) {
       // TODO: Check that the operands have compatible types?
       return value_type(child0);
     } else if (op == '(') {
-      // TODO: Use resolve_identifier to allow indirect calls
-      binding = cgc_lookup_fun(get_val_(IDENTIFIER, child0), cgc_globals);
-      if (binding != 0) {
-        // heap[binding+5] is the '(' type
-        return get_child_('(', heap[binding+5], 0);
+      left_type = value_type(child0);
+      if (is_function_type(left_type)) {
+        return function_return_type(left_type);
       } else {
-        putstr("ident = ");
-        putstr(STRING_BUF(get_val_(IDENTIFIER, child0)));
-        putchar('\n');
-        fatal_error("value_type: function not found");
+        fatal_error("Not a function or function pointer");
         return -1;
       }
     } else if (op == '.') {
@@ -1346,8 +1346,7 @@ void codegen_call(ast node) {
   // Make sure fun has a type that can be called, either a function pointer or a function
   ast type = value_type(fun);
   if (!is_function_type(type)) {
-    putstr("type="); putint(get_op(type)); putchar('\n');
-    fatal_error("Called object is not a function or function pointer");
+    fatal_error("Not a function or function pointer");
   }
   if (get_op(type) == '*') type = get_child_('*', type, 1); // Dereference function pointer
   // allow_extra_params is true if the function is called indirectly or if the function is variadic

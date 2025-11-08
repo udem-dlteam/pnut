@@ -31,6 +31,14 @@ void fun4() {
   putstr("fun4\n");
 }
 
+int return_0() {
+  return 0;
+}
+
+int (*return_0_ptr())() {
+  return &return_0;
+}
+
 void (*funs[4])() = {&fun1, &fun2, *fun3, **fun4};
 
 void calls_funs(void (*funs[])(), int n) {
@@ -61,6 +69,13 @@ int main() {
   f_ptr2(0);
   f_ptr3(0);
   f_ptr4(0);
+  funs[0]();
+  funs[3]();
+  // Indirect call on non-literal expression
+  int one = return_0_ptr()() + 1;
+  if (one != 1) {
+    return 1;
+  }
   call_fun(putstr,    "hello\n");
   call_fun(*putstr,   "hello\n");
   call_fun(&putstr,   "hello\n");
