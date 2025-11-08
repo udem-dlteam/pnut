@@ -12,6 +12,10 @@
 #define NO_BUILTIN_LIBC
 #endif
 
+#ifdef SH_PNUT_BOOTSTRAP_ONLY
+#define SH_SUPPORT_SHELL_INCLUDE
+#endif
+
 // M2-Planet doesn't support ternary operator.
 #ifdef NO_TERNARY_SUPPORT
 // Ternary operator can be implemented using arithmetic operations.
@@ -1478,7 +1482,7 @@ void handle_include() {
   }
 }
 
-#ifdef sh
+#ifdef SH_SUPPORT_SHELL_INCLUDE
 void handle_shell_include();
 #endif
 
@@ -1522,7 +1526,7 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the STRING token
       handle_include();
     }
-#ifdef sh
+#ifdef SH_SUPPORT_SHELL_INCLUDE
     // Not standard C, but serves to mix existing shell code with compiled C code
     else if (tok == IDENTIFIER && val == INCLUDE_SHELL_ID) {
       get_tok_macro(); // Get the STRING token

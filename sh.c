@@ -2,6 +2,8 @@
 
 #include "sh-runtime.c"
 
+#ifdef SH_SUPPORT_SHELL_INCLUDE
+
 void handle_shell_include() {
   int c;
   if (tok == STRING) {
@@ -22,6 +24,8 @@ void handle_shell_include() {
     syntax_error("expected string to #include_shell directive");
   }
 }
+
+#endif // SH_SUPPORT_SHELL_INCLUDE
 
 // codegen
 
