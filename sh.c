@@ -604,12 +604,8 @@ ast new_fresh_ident(int ix) {
 
 ast fresh_ident() {
   gensym_ix += 1;
-  if (gensym_ix > fun_gensym_ix) {
-    fun_gensym_ix = gensym_ix;
-  }
-  if (gensym_ix > max_gensym_ix) {
-    max_gensym_ix = gensym_ix;
-  }
+  fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
+  max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
 
   return new_fresh_ident(gensym_ix);
 }
@@ -636,13 +632,6 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 
   // The var is not part of the environment, so we add it.
   cgc_add_local_var(kind, ident_probe, get_child_(DECL, decl, 1));
-}
-
-void add_fun_params_to_local_env(ast lst) {
-  while (lst != 0) {
-    add_var_to_local_env(car_(DECL, lst), BINDING_PARAM_LOCAL);
-    lst = tail(lst);
-  }
 }
 
 // Since global and internal variables are prefixed with _, we restrict the name
@@ -688,9 +677,11 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   }
 }
 
-void check_decls(ast lst) {
+void handle_function_params(ast lst) {
   while (lst != 0) {
-    assert_var_decl_is_safe(car_(DECL, lst), true);
+    ast decl = car_(DECL, lst);
+    assert_var_decl_is_safe(decl, true);
+    add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = tail(lst);
   }
 }
@@ -2292,8 +2283,7 @@ void comp_glo_fun_decl(ast node) {
 
   top_level_stmt = false;
 
-  check_decls(params);
-  add_fun_params_to_local_env(params);
+  handle_function_params(params);
 
   // If the function is main
   if (name_probe == MAIN_ID) {
