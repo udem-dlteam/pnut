@@ -132,7 +132,9 @@ void print_tok(int tok, int val) {
   else if (tok == RSHIFT)       putstr(">>");
   else if (tok == SLASH_EQ)     putstr("/=");
   else if (tok == STAR_EQ)      putstr("*=");
+#ifdef FULL_PREPROCESSOR_SUPPORT
   else if (tok == HASH_HASH)    putstr("##");
+#endif
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
@@ -253,7 +255,9 @@ void print_tok_type(int tok) {
   else if (tok == RSHIFT)       putstr(">>");
   else if (tok == SLASH_EQ)     putstr("/=");
   else if (tok == STAR_EQ)      putstr("*=");
+#ifdef FULL_PREPROCESSOR_SUPPORT
   else if (tok == HASH_HASH)    putstr("##");
+#endif
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");

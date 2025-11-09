@@ -17,6 +17,9 @@
 #define ALLOW_RECURSIVE_MACROS
 #define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
 #else
+// general pnut features
+#define FULL_PREPROCESSOR_SUPPORT
+// pnut-sh specific features
 #define SH_SUPPORT_SHELL_INCLUDE
 #endif
 
@@ -384,7 +387,9 @@ enum {
   RSHIFT,
   SLASH_EQ,
   STAR_EQ,
+#ifdef FULL_PREPROCESSOR_SUPPORT
   HASH_HASH,
+#endif
   PLUS_PLUS_PRE,
   MINUS_MINUS_PRE,
   PLUS_PLUS_POST,
@@ -1345,10 +1350,12 @@ int read_macro_tokens(int args) {
       get_tok_macro();
     }
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
     // Check that there are no leading or trailing ##
     if (car(car(toks)) == HASH_HASH || car(car(rest)) == HASH_HASH) {
       syntax_error("'##' cannot appear at either end of a macro expansion");
     }
+#endif
   }
 
   return toks;
@@ -2024,6 +2031,8 @@ bool attempt_macro_expansion(int macro) {
   }
 }
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
+
 // https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
 void stringify() {
   int arg;
@@ -2140,6 +2149,8 @@ void paste_tokens(int left_tok, int left_val) {
   }
 }
 
+#endif // FULL_PREPROCESSOR_SUPPORT
+
 void get_tok() {
 
 #ifdef SH_INCLUDE_C_CODE
@@ -2174,6 +2185,7 @@ void get_tok() {
         // So we reload the kind from the ident table.
         if (tok >= IDENTIFIER) tok = heap[val + 2];
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
         // Check if the next token is ## for token pasting
         if (macro_tok_lst != 0 && car(car(macro_tok_lst)) == HASH_HASH) {
           if (tok == MACRO || tok == MACRO_ARG) {
@@ -2196,6 +2208,7 @@ void get_tok() {
           paste_last_token = false; // We are done pasting
           paste_tokens(tok, val);
         }
+#endif // FULL_PREPROCESSOR_SUPPORT
 
         if (tok == MACRO) { // Nested macro expansion!
           if (attempt_macro_expansion(val)) {
@@ -2205,10 +2218,13 @@ void get_tok() {
         } else if (tok == MACRO_ARG && expand_macro_arg) {
           begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
           continue;
-        } else if (tok == '#') { // Stringizing!
+        }
+#ifdef FULL_PREPROCESSOR_SUPPORT
+        else if (tok == '#') { // Stringizing!
           stringify();
           break;
         }
+#endif // FULL_PREPROCESSOR_SUPPORT
         break;
       } else if (macro_stack_ix != 0) {
         return_to_parent_macro();
@@ -2536,10 +2552,12 @@ void get_tok() {
         } else if (ch == '#') {
 
           get_ch();
+#ifdef FULL_PREPROCESSOR_SUPPORT
           if (ch == '#') {
             get_ch();
             tok = HASH_HASH;
           }
+#endif // FULL_PREPROCESSOR_SUPPORT
 
           break;
 
