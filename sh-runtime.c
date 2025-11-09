@@ -109,6 +109,11 @@ void runtime_char_to_int() {
   if (runtime_char_to_int_defined++) return;
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
+#ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+  putstr("char_to_int() {\n");
+  putstr("  case $1 in\n");
+  putstr("    [[:alnum:]]) __c=$((__$1__)) ;;\n");
+#else
   putstr("__c2i_0=48\n");
   putstr("__c2i_1=49\n");
   putstr("__c2i_2=50\n");
@@ -175,6 +180,7 @@ void runtime_char_to_int() {
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
   putstr("    [[:alnum:]]) __c=$((__c2i_$1)) ;;\n");
+#endif
 #else
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");

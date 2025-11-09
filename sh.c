@@ -351,12 +351,13 @@ int gensym_ix = 0;              // Counter for fresh_ident
 int fun_gensym_ix = 0;          // Maximum value of gensym_ix for the current function
 int max_gensym_ix = 0;          // Maximum value of gensym_ix for all functions
 int string_counter = 0;         // Counter for string literals
-#define CHARACTERS_BITFIELD_SIZE 16
-int characters_useds[16];       // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
-bool any_character_used = false; // If any character is used
 ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a function
 bool main_defined = false;      // If the main function is defined
 bool top_level_stmt = true;     // If the current statement is at the top level
+
+#define CHARACTERS_BITFIELD_SIZE 16
+int characters_useds[16];        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
+bool any_character_used = false; // If any character is used
 
 // Internal identifier node types used by the compiler
 enum IDENTIFIER_TYPE {
@@ -379,6 +380,16 @@ void init_comp_context() {
     characters_useds[i] = 0;
     i += 1;
   }
+
+#ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+  // Mark all alphanum characters as used: A-Z, a-z, 0-9
+  any_character_used = true;
+  characters_useds[3] = 0x03FF; // 0-9 (bit 48 to 57)
+  characters_useds[4] = 0xFFFE; // A-O (bit 65 to 79)
+  characters_useds[5] = 0x07FF; // Q-Z (bit 80 to 90)
+  characters_useds[6] = 0xFFFE; // A-O (bit 65 to 79)
+  characters_useds[7] = 0x07FF; // Q-Z (bit 80 to 90)
+#endif
 
   // Initialize preallocated_fresh_idents
   i = 0;
