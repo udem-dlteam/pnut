@@ -2642,18 +2642,12 @@ void comp_glo_decl(ast node) {
   }
 }
 
-void prologue() {
-  putstr("#!/bin/sh\n");
-#ifdef RT_UNSAFE_HEAP
-  putstr("set -e -f\n");
-#else
-  putstr("set -e -u -f\n");
-#endif
-  putstr("LC_ALL=C\n\n");
-}
-
-void epilogue() {
+void codegen_end() {
   int c;
+
+#ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
+  print_glo_decls();
+#endif
 
   if (any_character_used) {
     putstr("# Character constants\n");
@@ -2679,6 +2673,10 @@ void epilogue() {
     }
     putstr("\nexit $__code\n");
   }
+
+#ifdef PRINT_MEMORY_STATS
+  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
+#endif
 }
 
 // Initialize local and synthetic variables used by function
@@ -2712,11 +2710,20 @@ text initialize_function_variables() {
 
 void codegen_begin() {
   init_comp_context();
-  prologue();
+
+  putstr("#!/bin/sh\n");
+#ifdef RT_UNSAFE_HEAP
+  putstr("set -e -f\n");
+#else
+  putstr("set -e -u -f\n");
+#endif
+  putstr("LC_ALL=C\n\n");
 }
 
+#ifdef PRINT_MEMORY_STATS
 int max_text_alloc = 0;
 int cumul_text_alloc = 0;
+#endif
 void codegen_glo_decl(ast decl) {
   int var_init_fixup;
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
@@ -2736,17 +2743,9 @@ void codegen_glo_decl(ast decl) {
   print_glo_decls();
 #endif
 
+#ifdef PRINT_MEMORY_STATS
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
   cumul_text_alloc += text_alloc;
-}
-
-void codegen_end() {
-#ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
-  print_glo_decls();
-#endif
-  epilogue();
-#ifdef PRINT_MEMORY_STATS
-  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
 #endif
 }

@@ -35,8 +35,10 @@ int code_alloc = 0;
 // Total number of bytes emitted
 // code_alloc + code_address_base = address of the next instruction.
 int code_address_base = 0;
+#ifdef PRINT_MEMORY_STATS
 // Maximum size of the code buffer, used for debugging
 int code_alloc_max = 0;
+#endif
 
 /* ONE_PASS_GENERATOR option:
 
@@ -2594,7 +2596,9 @@ void init_forward_jump_table(int binding) {
   // output the code and overwrite the code buffer.
 
   assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
+#ifdef PRINT_MEMORY_STATS
   code_alloc_max = TERNARY(code_alloc > code_alloc_max, code_alloc, code_alloc_max);
+#endif
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   generate_exe();
   reset_code_buffer();

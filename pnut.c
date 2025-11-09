@@ -795,10 +795,6 @@ int end_ident() {
   return probe;
 }
 
-int probe_string(int probe) {
-  return heap[probe+1]; // return the start of the string
-}
-
 #define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
 
 void get_tok();
@@ -2835,23 +2831,25 @@ ast parse_enum() {
         value = parse_assignment_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
 
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-        // Preserve the type of integer literals (dec/hex/oct) by only creating
-        // a new node if the value is not already a literal. We use the last
+        // Avoid recreating integer literal nodes unnecessarily.
+        // Preserve the type of integer literals (dec/hex/oct), we use the last
         // literal type to determine which type to use when creating a new node.
-        if (get_op(value) != INTEGER && get_op(value) != INTEGER_HEX && get_op(value) != INTEGER_OCT) {
-          value = new_ast0(last_literal_type, -eval_constant(value, false));
-        }
-        last_literal_type = get_op(value);
-#else
-        if (get_op(value) != INTEGER
-        && get_op(value) != INTEGER_U && get_op(value) != INTEGER_UL && get_op(value) != INTEGER_ULL
-        && get_op(value) != INTEGER_L && get_op(value) != INTEGER_LL
-           ) {
-          value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
-        }
+        switch (get_op(value)) {
+          case INTEGER:
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+          case INTEGER_HEX: case INTEGER_OCT:
 #endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+          case INTEGER_U:
+          case INTEGER_UL:
+          case INTEGER_ULL:
+          case INTEGER_L:
+          case INTEGER_LL:
+#endif
+            value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+        }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
+        last_literal_type = get_op(value);
       } else {
         value = new_ast0(last_literal_type, next_value);
         next_value -= 1;
@@ -3923,7 +3921,7 @@ ast parse_comma_expression() {
 
 ast parse_call_params() {
   ast result = parse_assignment_expression();
-  result = new_ast2(LIST, result, 0);
+  result = cons(result, 0);
 
   if (tok == ',') {
     get_tok();
@@ -3935,15 +3933,11 @@ ast parse_call_params() {
 
 ast parse_comma_expression_opt() {
 
-  ast result;
-
   if (tok == ':' || tok == ';' || tok == ')') {
-    result = 0;
+    return 0;
   } else {
-    result = parse_comma_expression();
+    return parse_comma_expression();
   }
-
-  return result;
 }
 
 ast parse_expression() {
