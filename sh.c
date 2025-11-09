@@ -38,8 +38,10 @@ int text_alloc = 1; // Start at 1 because 0 is the empty text
 enum TEXT_NODES {
   TEXT_TREE,        // Concatenation of texts
   TEXT_INTEGER,     // Integer to be printed in decimal
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
   TEXT_INTEGER_HEX, // Integer to be printed in hexadecimal
   TEXT_INTEGER_OCT, // Integer to be printed in octal
+#endif
   TEXT_STRING,      // Pointer to immutable string
   TEXT_ESCAPED      // Escaped string, used for printf
 };
@@ -89,6 +91,8 @@ text wrap_int(const int i) {
   return (text_alloc += 2) - 2;
 }
 
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+
 text wrap_int_hex(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_HEX);
@@ -116,6 +120,9 @@ text wrap_integer(const int multiply, const int obj) {
       return 0;
   }
 }
+#else
+#define wrap_integer(multiply, obj) wrap_int(multiply * -get_val_(INTEGER, obj))
+#endif
 
 text escape_text(const text t, const bool for_printf) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
@@ -267,13 +274,17 @@ void print_escaped_text(text t, bool for_printf) {
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
+  }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
     putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
     putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
+  }
+#endif
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     print_escaped_string((char*) text_pool[t + 1],  (char*) text_pool[t + 2], for_printf);
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
@@ -302,13 +313,17 @@ void print_text(text t) {
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
+  }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
     putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
     putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
+  }
+#endif
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     if (TEXT_TO_INT(text_pool[t + 2]) == 0) { // null-terminated string
       putstr((char*) text_pool[t + 1]);
     } else { // string ends at the address in text_pool[t + 2]
@@ -1010,7 +1025,11 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
 
   if (nb_children == 0) {
     if ( op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR
-      || op == CHARACTER  || op == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
+      || op == CHARACTER  || op == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+      || op == INTEGER_HEX || op == INTEGER_OCT
+#endif
+      ) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
@@ -1158,11 +1177,13 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
       case INTEGER:
         args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
         break;
+#ifndef PARSE_NUMERIC_LITERAL_WITH_BASE
       case INTEGER_HEX:
       case INTEGER_OCT:
         // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
         args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
         break;
+#endif
       case CHARACTER:
         // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
         args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
@@ -1263,10 +1284,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
   if (nb_children == 0) {
     if (op == INTEGER) {
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val_(INTEGER, node)));
-    } else if (op == INTEGER_HEX || op == INTEGER_OCT) {
+    }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+    else if (op == INTEGER_HEX || op == INTEGER_OCT) {
       // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
       return wrap_if_needed(false, context, test_side_effects, wrap_integer(1, node), outer_op, op);
     }
+#endif
     else if (op == CHARACTER) {
 #ifdef SH_INLINE_CHAR_LITERAL
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(CHARACTER, node)));
@@ -1296,7 +1320,12 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // +x is equivalent to x
       return comp_rvalue_go(child0, context, test_side_effects, outer_op);
     } else if (op == '-' || op == '~' || op == '!') {
-      if (op == '-' && (get_op(child0) == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT)) {
+      if (op == '-' && (get_op(child0) == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+       || op == INTEGER_HEX || op == INTEGER_OCT
+#endif
+      )
+      ) {
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(-1, child0));
       }
 #ifdef OPTIMIZE_CONSTANT_PARAMS
