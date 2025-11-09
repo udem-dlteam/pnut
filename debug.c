@@ -99,10 +99,12 @@ void print_tok(int tok, int val) {
   else if (tok == SIGNED_KW)    putstr("signed");
   else if (tok == SIZEOF_KW)    putstr("sizeof");
   else if (tok == STATIC_KW)    putstr("static");
+#ifdef SUPPORT_STRUCT_UNION
   else if (tok == STRUCT_KW)    putstr("struct");
+  else if (tok == UNION_KW)     putstr("union");
+#endif
   else if (tok == SWITCH_KW)    putstr("switch");
   else if (tok == TYPEDEF_KW)   putstr("typedef");
-  else if (tok == UNION_KW)     putstr("union");
   else if (tok == UNSIGNED_KW)  putstr("unsigned");
   else if (tok == VOID_KW)      putstr("void");
   else if (tok == VOLATILE_KW)  putstr("volatile");
@@ -110,7 +112,9 @@ void print_tok(int tok, int val) {
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+#ifdef SUPPORT_STRUCT_UNION
   else if (tok == ARROW)        putstr("->");
+#endif
   else if (tok == BAR_BAR)      putstr("||");
 #ifdef GAMBIT_MODE
   else if (tok == BAR_EQ)       putstr("||=");
@@ -224,10 +228,12 @@ void print_tok_type(int tok) {
   else if (tok == SIGNED_KW)    putstr("signed");
   else if (tok == SIZEOF_KW)    putstr("sizeof");
   else if (tok == STATIC_KW)    putstr("static");
+#ifdef SUPPORT_STRUCT_UNION
   else if (tok == STRUCT_KW)    putstr("struct");
+  else if (tok == UNION_KW)     putstr("union");
+#endif
   else if (tok == SWITCH_KW)    putstr("switch");
   else if (tok == TYPEDEF_KW)   putstr("typedef");
-  else if (tok == UNION_KW)     putstr("union");
   else if (tok == UNSIGNED_KW)  putstr("unsigned");
   else if (tok == VOID_KW)      putstr("void");
   else if (tok == VOLATILE_KW)  putstr("volatile");
@@ -235,7 +241,9 @@ void print_tok_type(int tok) {
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+#ifdef SUPPORT_STRUCT_UNION
   else if (tok == ARROW)        putstr("->");
+#endif
   else if (tok == BAR_BAR)      putstr("||");
 #ifdef GAMBIT_MODE
   else if (tok == BAR_EQ)       putstr("||=");
@@ -351,8 +359,10 @@ void type_ast_to_sexp(ast type) {
       print_tok_type(get_op(type));
       break;
 
+#ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW:
     case UNION_KW:
+#endif
     case ENUM_KW:
       printf("(");
       print_tok_type(get_op(type));
@@ -416,9 +426,11 @@ void ast_to_sexp(ast obj) {
       printf(")");
       break;
 
-    case ENUM_KW:
+#ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW:
     case UNION_KW:
+#endif
+    case ENUM_KW:
       type_ast_to_sexp(obj);
       break;
 

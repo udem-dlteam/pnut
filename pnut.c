@@ -20,6 +20,7 @@
 // general pnut features
 #define FULL_PREPROCESSOR_SUPPORT
 #define SUPPORT_COMPLEX_INITIALIZER
+#define SUPPORT_STRUCT_UNION
 // pnut-sh specific features
 #define SH_SUPPORT_SHELL_INCLUDE
 #endif
@@ -342,10 +343,12 @@ enum {
   SIGNED_KW,
   SIZEOF_KW,
   STATIC_KW,
+#ifdef SUPPORT_STRUCT_UNION
   STRUCT_KW,
+  UNION_KW,
+#endif
   SWITCH_KW,
   TYPEDEF_KW,
-  UNION_KW,
   UNSIGNED_KW,
   VOID_KW,
   VOLATILE_KW,
@@ -369,7 +372,9 @@ enum {
 
   AMP_AMP   = 450,
   AMP_EQ,
+#ifdef SUPPORT_STRUCT_UNION
   ARROW,
+#endif
   BAR_BAR,
   BAR_EQ,
   CARET_EQ,
@@ -1753,10 +1758,12 @@ void init_ident_table() {
   init_ident(SIGNED_KW,   "signed");
   init_ident(SIZEOF_KW,   "sizeof");
   init_ident(STATIC_KW,   "static");
+#ifdef SUPPORT_STRUCT_UNION
   init_ident(STRUCT_KW,   "struct");
+  init_ident(UNION_KW,    "union");
+#endif
   init_ident(SWITCH_KW,   "switch");
   init_ident(TYPEDEF_KW,  "typedef");
-  init_ident(UNION_KW,    "union");
   init_ident(UNSIGNED_KW, "unsigned");
   init_ident(VOID_KW,     "void");
   init_ident(VOLATILE_KW, "volatile");
@@ -2512,10 +2519,14 @@ void get_tok() {
           if (ch == '=') {
             get_ch();
             tok = MINUS_EQ;
-          } else if (ch == '>') {
+          }
+#ifdef SUPPORT_STRUCT_UNION
+          else if (ch == '>') {
             get_ch();
             tok = ARROW;
-          } else if (ch == '-') {
+          }
+#endif
+          else if (ch == '-') {
             get_ch();
             tok = MINUS_MINUS;
           }
@@ -2564,7 +2575,9 @@ void get_tok() {
 
           break;
 
-        } else if (ch == '.') {
+        }
+#if defined(SUPPORT_STRUCT_UNION) || defined(SUPPORT_VARIADIC_FUNCTIONS)
+        else if (ch == '.') {
           get_ch();
           if (ch == '.') {
             get_ch();
@@ -2579,7 +2592,9 @@ void get_tok() {
             tok = '.';
           }
           break;
-        } else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
+        }
+#endif
+        else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
 
           tok = ch;
 
@@ -2754,7 +2769,10 @@ bool is_type_starter(int tok) {
     case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
     case TYPE:                                              // User defined types
     case CONST_KW: case VOLATILE_KW:                        // Type attributes
-    case ENUM_KW: case STRUCT_KW: case UNION_KW:            // Enum, struct, union
+    case ENUM_KW:                                           // Enum
+#ifdef SUPPORT_STRUCT_UNION
+    case STRUCT_KW: case UNION_KW:                          // Struct, union
+#endif
     // Storage class specifiers are not always valid type starters in all
     // contexts, but we allow them here
     case TYPEDEF_KW: case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
@@ -2845,6 +2863,8 @@ ast parse_enum() {
   return new_ast3(ENUM_KW, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 ast parse_struct_or_union(int struct_or_union_tok) {
   ast name;
   ast type_specifier, decl;
@@ -2915,6 +2935,8 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
   return new_ast3(struct_or_union_tok, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
+
+#endif // SUPPORT_STRUCT_UNION
 
 ast parse_type_specifier() {
   ast type_specifier = 0;
@@ -3028,11 +3050,13 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier == 0) parse_error("Failed to parse type specifier", tok);
         break;
 
+#ifdef SUPPORT_STRUCT_UNION
       case STRUCT_KW:
       case UNION_KW:
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         type_specifier = parse_struct_or_union(tok);
         break;
+#endif
 
       case ENUM_KW:
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
@@ -3329,7 +3353,7 @@ void add_typedef(ast declarator) {
   int decl_ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, declarator, 0));
   ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
 
-#ifdef sh
+#if defined(SUPPORT_STRUCT_UNION) && defined(sh)
   // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
   // This is not correct, but it's a limitation of the current shell backend where we
   // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
@@ -3372,7 +3396,11 @@ ast parse_declaration(bool local) {
   // > The enum, struct, and union declarations may omit declarators, in which
   // > case they only introduce the enumeration constants and/or tags.
   if (tok == ';') {
-    if (get_op(type_specifier) != ENUM_KW && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW) {
+    if (get_op(type_specifier) != ENUM_KW
+#ifdef SUPPORT_STRUCT_UNION
+    && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW
+#endif
+      ) {
       parse_error("enum/struct/union declaration expected", tok);
     }
     // If the specifier is a typedef, we add the typedef'ed type to the type table
@@ -3512,7 +3540,9 @@ ast parse_postfix_expression(ast result) {
       result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
       get_tok();
 
-    } else if (tok == ARROW) {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (tok == ARROW) {
 
       get_tok();
       if (tok != IDENTIFIER) {
@@ -3521,7 +3551,9 @@ ast parse_postfix_expression(ast result) {
       result = new_ast2(ARROW, result, new_ast0(IDENTIFIER, val));
       get_tok();
 
-    } else if (tok == PLUS_PLUS) {
+    }
+#endif // SUPPORT_STRUCT_UNION
+    else if (tok == PLUS_PLUS) {
 
       get_tok();
       result = new_ast1(PLUS_PLUS_POST, result);

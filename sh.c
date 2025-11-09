@@ -574,6 +574,8 @@ text env_var_with_prefix(ast ident, bool prefixed_with_dollar) {
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 text struct_member_var(ast member_name_ident) {
   return string_concat(wrap_str_lit("__"), wrap_str_pool(get_val_(IDENTIFIER, member_name_ident)));
 }
@@ -581,6 +583,8 @@ text struct_member_var(ast member_name_ident) {
 text struct_sizeof_var(ast struct_name_ident) {
   return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(get_val_(IDENTIFIER, struct_name_ident)));
 }
+
+#endif
 
 text function_name(int ident_tok) {
   return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
@@ -660,7 +664,11 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   if (local) {
     // Local variables don't correspond to memory locations, and can't store
     // more than 1 number/pointer.
-    if (get_op(type) == '[' || get_op(type) == STRUCT_KW) {
+    if (get_op(type) == '['
+#ifdef SUPPORT_STRUCT_UNION
+    || get_op(type) == STRUCT_KW
+#endif
+       ) {
       dump_string("Variable name: ", name);
       fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
@@ -668,9 +676,12 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     // Arrays of structs and struct value types are not supported for now.
     // When we have type information on the local and global variables, we'll
     // be able to generate the correct code for these cases.
-    if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
-      || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
-      || get_op(type) == STRUCT_KW) { // Struct value type
+    if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
+#ifdef SUPPORT_STRUCT_UNION
+      || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
+      || get_op(type) == STRUCT_KW // Struct value type
+#endif
+       ) {
       dump_string("Variable name: ", name);
       fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
     }
@@ -1071,7 +1082,10 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       }
     } else if (op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
       || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == LSHIFT || op == RSHIFT || op == '['
-      || op == '.' || op == ARROW ) {
+#ifdef SUPPORT_STRUCT_UNION
+      || op == '.' || op == ARROW
+    #endif
+       ) {
       sub1 = handle_side_effects_go(child0, executes_conditionally);
       sub2 = handle_side_effects_go(child1, executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
@@ -1362,21 +1376,25 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
-        if ( get_op(child0) == INT_KW
-          || get_op(child0) == SHORT_KW
-          || get_op(child0) == LONG_KW
-          || get_op(child0) == CHAR_KW
-          || get_op(child0) == VOID_KW
-          || get_op(child0) == ENUM_KW
-          || get_op(child0) == '*') { // If it's a pointer
-          return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
-        } else if (get_op(child0) == STRUCT_KW) {
-          return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
-        } else {
-          dump_node(child0);
-          dump_node(get_child(child0, 1));
-          fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
-          return 0;
+        switch (get_op(child0)) {
+          case INT_KW:
+          case SHORT_KW:
+          case LONG_KW:
+          case CHAR_KW:
+          case VOID_KW:
+          case ENUM_KW:
+          case '*': // If it's a pointer
+            return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
+
+#ifdef SUPPORT_STRUCT_UNION
+          case STRUCT_KW:
+            return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+#endif
+          default:
+            dump_node(child0);
+            dump_node(get_child(child0, 1));
+            fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+            return 0;
         }
       } else {
         dump_node(child0);
@@ -1403,11 +1421,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, '+');
       sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, '+');
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
-    } else if (op == ARROW) { // member access is implemented like array access
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (op == ARROW) { // member access is implemented like array access
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = struct_member_var(child1);
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
-    } else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
+    }
+#endif
+    else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
       if (context == RVALUE_CTX_TEST) {
         sub1 = comp_rvalue_go(child0, RVALUE_CTX_BASE, 0, op);
         sub2 = comp_rvalue_go(child1, RVALUE_CTX_BASE, 0, op);
@@ -1551,11 +1573,15 @@ text comp_lvalue_address(ast node) {
     return string_concat3(sub1, wrap_str_lit(" + "), sub2);
   } else if (op == '*') {
     return comp_rvalue(get_child_('*', node, 0), RVALUE_CTX_BASE);
-  } else if (op == ARROW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (op == ARROW) {
     sub1 = comp_rvalue(get_child_(ARROW, node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child_(ARROW, node, 1));
     return string_concat3(sub1, wrap_str_lit(" + "), sub2);
-  } else if (op == CAST) {
+  }
+#endif
+  else if (op == CAST) {
     return comp_lvalue_address(get_child_(CAST, node, 1));
   } else {
     dump_node(node);
@@ -1578,11 +1604,15 @@ text comp_lvalue(ast node) {
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child_('*', node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
-  } else if (op == ARROW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (op == ARROW) {
     sub1 = comp_rvalue(get_child_(ARROW, node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child_(ARROW, node, 1));
     return string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))"));
-  } else if (op == CAST) {
+  }
+#endif
+  else if (op == CAST) {
     return comp_lvalue(get_child_(CAST, node, 1));
   } else {
     dump_node(node);
@@ -1875,7 +1905,11 @@ void comp_fun_call(ast node, ast assign_to) {
 
 void comp_assignment(ast lhs, ast rhs) {
   int lhs_op = get_op(lhs);
-  if (lhs_op == IDENTIFIER || lhs_op == '[' || lhs_op == '*' || lhs_op == ARROW) {
+  if (lhs_op == IDENTIFIER || lhs_op == '[' || lhs_op == '*'
+#ifdef SUPPORT_STRUCT_UNION
+    || lhs_op == ARROW
+#endif
+    ) {
     if (get_op(rhs) == '(') {
       comp_fun_call(rhs, lhs);
     } else {
@@ -2478,6 +2512,8 @@ void comp_enum_cases(ast ident, ast cases) {
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 // Struct member access is implemented like array indexing. Each member is mapped
 // to a readonly variable containing the offset of the member and accessing to
 // s->a is equivalent to *(s + a).
@@ -2536,14 +2572,19 @@ void comp_struct(ast ident, ast members) {
   append_glo_decl(0); // newline
 }
 
+#endif
+
 void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
     comp_enum_cases(get_child_opt_(ENUM_KW, IDENTIFIER, type, 1), get_child_(ENUM_KW, type, 2));
-  } else if (get_op(type) == STRUCT_KW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (get_op(type) == STRUCT_KW) {
     comp_struct(get_child_opt_(STRUCT_KW, IDENTIFIER, type, 1), get_child_(STRUCT_KW, type, 2));
   } else if (get_op(type) == UNION_KW) {
     fatal_error("handle_enum_struct_union_type_decl: union not supported");
   }
+#endif
 
   // If not an enum, struct, or union, do nothing
 }
@@ -2589,7 +2630,11 @@ void comp_glo_decl(ast node) {
     comp_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
+  } else if (op == ENUM_KW
+#ifdef SUPPORT_STRUCT_UNION
+    || op == STRUCT_KW || op == UNION_KW
+#endif
+  ) {
     handle_enum_struct_union_type_decl(node);
   } else {
     dump_node(node);

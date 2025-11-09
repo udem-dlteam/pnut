@@ -288,6 +288,8 @@ void write_mem_location(int base, int offset, int src, int width) {
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int width) {
   int i;
   // move the words
@@ -302,6 +304,9 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
     mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
   }
 }
+
+#endif // SUPPORT_STRUCT_UNION
+
 #ifdef SUPPORT_COMPLEX_INITIALIZER
 
 // Initialize a memory location with a value
@@ -738,15 +743,23 @@ bool is_function_type(ast type) {
   return op == '(';
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 bool is_struct_or_union_type(ast type) {
   int op = get_op(type);
   return op == STRUCT_KW || op == UNION_KW;
 }
 
+#endif // SUPPORT_STRUCT_UNION
+
 // An aggregate type is either an array type or a struct/union type (that's not a reference)
 bool is_aggregate_type(ast type) {
   int op = get_op(type);
+#ifdef SUPPORT_STRUCT_UNION
   return op == '[' || op == STRUCT_KW || op == UNION_KW;
+#else
+  return op == '[';
+#endif // SUPPORT_STRUCT_UNION
 }
 
 bool is_not_pointer_type(ast type) {
@@ -813,10 +826,12 @@ int type_width(ast type, bool array_value, bool word_align) {
       fatal_error("type_width: long type not supported");
       return -1;
 #endif
+#ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW:
     case UNION_KW:
       width = struct_union_size(type);
       break;
+#endif // SUPPORT_STRUCT_UNION
     default:       width = WORD_SIZE; break;
   }
 
@@ -839,11 +854,15 @@ ast canonicalize_type(ast type) {
   ast res = type;
   int binding;
 
+#ifdef SUPPORT_STRUCT_UNION
   if (get_op(type) == STRUCT_KW && get_child_opt_(STRUCT_KW, LIST, type, 2) == 0) { // struct with empty def => reference
     binding = cgc_lookup_struct(get_val_(IDENTIFIER, get_child__(STRUCT_KW, IDENTIFIER, type, 1)), cgc_globals);
-  } else if (get_op(type) == UNION_KW && get_child_opt_(UNION_KW, LIST, type, 2) == 0) { // union with empty def => reference
+  } else
+  if (get_op(type) == UNION_KW && get_child_opt_(UNION_KW, LIST, type, 2) == 0) { // union with empty def => reference
     binding = cgc_lookup_union(get_val_(IDENTIFIER, get_child__(UNION_KW, IDENTIFIER, type, 1)), cgc_globals);
-  } else if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, LIST, type, 2) == 0) { // enum with empty def => reference
+  } else
+#endif // SUPPORT_STRUCT_UNION
+  if (get_op(type) == ENUM_KW && get_child_opt_(ENUM_KW, LIST, type, 2) == 0) { // enum with empty def => reference
     binding = cgc_lookup_enum(get_val_(IDENTIFIER, get_child__(ENUM_KW, IDENTIFIER, type, 1)), cgc_globals);
   } else {
     return res;
@@ -857,6 +876,8 @@ ast canonicalize_type(ast type) {
 
   return res;
 }
+
+#ifdef SUPPORT_STRUCT_UNION
 
 // Size of the largest member of a struct or union, used for alignment
 int struct_union_size_largest_member = 0;
@@ -966,6 +987,8 @@ ast struct_member(ast struct_type, ast member_ident) {
   if (member == -1) fatal_error("struct_member: member not found");
   return member;
 }
+
+#endif // SUPPORT_STRUCT_UNION
 
 int resolve_identifier(int ident_probe) {
   int binding = cgc_lookup_var(ident_probe, cgc_locals);
@@ -1106,7 +1129,9 @@ ast value_type(ast node) {
         fatal_error("value_type: not a function or function pointer");
         return -1;
       }
-    } else if (op == '.') {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (op == '.') {
       left_type = value_type(child0);
       if (is_struct_or_union_type(left_type)) {
         return get_child_(DECL, struct_member(left_type, child1), 1); // child 1 of member is the type
@@ -1123,7 +1148,9 @@ ast value_type(ast node) {
         fatal_error("value_type: -> operator on non-struct pointer type");
         return -1;
       }
-    } else if (op == CAST) {
+    }
+#endif
+    else if (op == CAST) {
       return get_child_(DECL, child0, 1);
     } else {
       fatal_error("value_type: unexpected operator");
@@ -1283,6 +1310,7 @@ int codegen_param(ast param) {
   int type = value_type(param);
   int left_width;
 
+#ifdef SUPPORT_STRUCT_UNION
   if (is_struct_or_union_type(type)) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
@@ -1290,7 +1318,9 @@ int codegen_param(ast param) {
     grow_stack_bytes(word_size_align(left_width));
     grow_fs(word_size_align(left_width) / WORD_SIZE);
     copy_obj(reg_SP, 0, reg_X, 0, left_width);
-  } else {
+  } else
+#endif
+  {
     codegen_rvalue(param);
   }
 
@@ -1483,7 +1513,9 @@ int codegen_lvalue(ast node) {
       codegen_binop('+', child0, child1);
       grow_fs(-2);
       lvalue_width = ref_type_width(type);
-    } else if (op == '.') {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (op == '.') {
       type = value_type(child0);
       if (is_struct_or_union_type(type)) {
         codegen_lvalue(child0);
@@ -1515,7 +1547,9 @@ int codegen_lvalue(ast node) {
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
-    } else if (op == CAST) {
+    }
+#endif // SUPPORT_STRUCT_UNION
+    else if (op == CAST) {
       codegen_lvalue(child1);
       lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
@@ -1611,9 +1645,13 @@ void codegen_rvalue(ast node) {
           add_reg_reg(reg_X, reg_SP);
           // structs/unions are allocated on the stack, so no need to dereference
           // For arrays, we need to dereference the pointer since they are passed as pointers
+#ifdef SUPPORT_STRUCT_UNION
           if (get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
+#else
+          load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+#endif
           push_reg(reg_X);
           break;
 
@@ -1621,7 +1659,11 @@ void codegen_rvalue(ast node) {
           mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // local arrays/structs/unions are allocated on the stack, so no need to dereference
-          if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
+          if (get_op(heap[binding+4]) != '['
+#ifdef SUPPORT_STRUCT_UNION
+           && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW
+#endif
+            ) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
@@ -1630,7 +1672,11 @@ void codegen_rvalue(ast node) {
           mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
           // global arrays/structs/unions are also allocated on the stack, so no need to dereference
-          if (get_op(heap[binding+4]) != '[' && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
+          if (get_op(heap[binding+4]) != '['
+#ifdef SUPPORT_STRUCT_UNION
+           && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW
+#endif
+          ) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
@@ -1754,6 +1800,7 @@ void codegen_rvalue(ast node) {
     } else if (op == '=') {
       type1 = value_type(child0);
       left_width = codegen_lvalue(child0);
+#ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type1)) {
         // Struct assignment, we copy the struct.
         codegen_lvalue(child1);
@@ -1761,7 +1808,9 @@ void codegen_rvalue(ast node) {
         pop_reg(reg_Y);
         grow_fs(-2);
         copy_obj(reg_Y, 0, reg_X, 0, left_width);
-      } else {
+      } else
+#endif // SUPPORT_STRUCT_UNION
+      {
         codegen_rvalue(child1);
         pop_reg(reg_X);
         pop_reg(reg_Y);
@@ -1796,7 +1845,9 @@ void codegen_rvalue(ast node) {
       def_label(lbl1);
     } else if (op == '(') {
       codegen_call(node);
-    } else if (op == '.') {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (op == '.') {
       type1 = value_type(child0);
       if (is_struct_or_union_type(type1)) {
         type2 = get_child_(DECL, struct_member(type1, child1), 1);
@@ -1833,7 +1884,9 @@ void codegen_rvalue(ast node) {
       } else {
         fatal_error("codegen_rvalue: -> operator on non-struct pointer type");
       }
-    } else if (op == CAST) {
+    }
+#endif // SUPPORT_STRUCT_UNION
+    else if (op == CAST) {
       codegen_rvalue(child1);
       // If the cast is to a value narrower than the width of the value, we need
       // to truncate the value. This is done by writing the value to the stack
@@ -1926,11 +1979,15 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
 void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
     codegen_enum(type);
-  } else if (get_op(type) == STRUCT_KW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (get_op(type) == STRUCT_KW) {
     codegen_struct_or_union(type, BINDING_TYPE_STRUCT);
   } else if (get_op(type) == UNION_KW) {
     codegen_struct_or_union(type, BINDING_TYPE_UNION);
-  } else if (get_op(type) == '*') {
+  }
+#endif
+  else if (get_op(type) == '*') {
     handle_enum_struct_union_type_decl(get_child_('*', type, 1));
   } else if (get_op(type) == '[') {
     handle_enum_struct_union_type_decl(get_child_('[', type, 0));
@@ -2010,6 +2067,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           if (local && arr_len > 0) initialize_memory(0, base_reg, offset, inner_type_width * arr_len);
           break;
 
+#ifdef SUPPORT_STRUCT_UNION
         case STRUCT_KW:
           members = get_child_(STRUCT_KW, type, 2);
           while (init != 0 && members != 0) {
@@ -2038,6 +2096,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           }
           codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset);
           break;
+#endif // SUPPORT_STRUCT_UNION
 
         default:
           if (tail(init) != 0 // More than 1 element
@@ -2056,13 +2115,16 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 #endif // SUPPORT_COMPLEX_INITIALIZER
 
     default:
+#ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
         codegen_lvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
         copy_obj(base_reg, offset, reg_X, 0, type_width(type, true, true));
-      } else if (get_op(type) != '[') {
+      } else
+#endif // SUPPORT_STRUCT_UNION
+      if (get_op(type) != '[') {
         codegen_rvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
@@ -2636,7 +2698,11 @@ void codegen_glo_decl(ast node) {
     codegen_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
+  } else if (op == ENUM_KW
+#ifdef SUPPORT_STRUCT_UNION
+    || op == STRUCT_KW || op == UNION_KW
+#endif
+    ) {
     handle_enum_struct_union_type_decl(node);
   } else {
     dump_node(node);
