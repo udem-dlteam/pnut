@@ -35,16 +35,6 @@ enum BINDING {
 
 #define fun_binding_lbl(binding) heap[binding+4]
 
-int cgc_lookup_binding_ident(const int binding_type, const int ident, int binding) {
-  while (binding != 0) {
-    if (binding_kind(binding) == binding_type && binding_ident(binding) == ident) {
-      break;
-    }
-    binding = binding_next(binding);
-  }
-  return binding;
-}
-
 int cgc_lookup_last_binding(const int binding_type, int binding) {
   while (binding != 0) {
     if (binding_kind(binding) == binding_type) {
@@ -65,16 +55,8 @@ int cgc_lookup_var(const int ident, int binding) {
   return binding;
 }
 
-int cgc_lookup_fun(const int ident, const int env) {
-  return cgc_lookup_binding_ident(BINDING_FUN, ident, env);
-}
-
 int cgc_lookup_enclosing_loop(const int env) {
   return cgc_lookup_last_binding(BINDING_LOOP, env);
-}
-
-int cgc_lookup_enclosing_switch(const int env) {
-  return cgc_lookup_last_binding(BINDING_SWITCH, env);
 }
 
 int cgc_lookup_enclosing_loop_or_switch(int binding) {
@@ -85,26 +67,6 @@ int cgc_lookup_enclosing_loop_or_switch(int binding) {
     binding = binding_next(binding);
   }
   return binding;
-}
-
-int cgc_lookup_goto_label(const int ident, const int env) {
-  return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
-}
-
-int cgc_lookup_struct(const int ident, const int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPE_STRUCT, ident, env);
-}
-
-int cgc_lookup_union(const int ident, const int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPE_UNION, ident, env);
-}
-
-int cgc_lookup_enum(const int ident, const int env) {
-  return cgc_lookup_binding_ident(BINDING_TYPE_ENUM, ident, env);
-}
-
-int cgc_lookup_enum_value(const int ident, const int env) {
-  return cgc_lookup_binding_ident(BINDING_ENUM_CST, ident, env);
 }
 
 int cgc_loop_depth(int binding) {
@@ -154,6 +116,45 @@ void cgc_add_enclosing_switch(const bool in_tail_position) {
   cgc_locals = binding;
 }
 #else
+
+int cgc_lookup_binding_ident(const int binding_type, const int ident, int binding) {
+  while (binding != 0) {
+    if (binding_kind(binding) == binding_type && binding_ident(binding) == ident) {
+      break;
+    }
+    binding = binding_next(binding);
+  }
+  return binding;
+}
+
+int cgc_lookup_fun(const int ident, const int env) {
+  return cgc_lookup_binding_ident(BINDING_FUN, ident, env);
+}
+
+int cgc_lookup_enclosing_switch(const int env) {
+  return cgc_lookup_last_binding(BINDING_SWITCH, env);
+}
+
+int cgc_lookup_goto_label(const int ident, const int env) {
+  return cgc_lookup_binding_ident(BINDING_GOTO_LABEL, ident, env);
+}
+
+int cgc_lookup_struct(const int ident, const int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_STRUCT, ident, env);
+}
+
+int cgc_lookup_union(const int ident, const int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_UNION, ident, env);
+}
+
+int cgc_lookup_enum(const int ident, const int env) {
+  return cgc_lookup_binding_ident(BINDING_TYPE_ENUM, ident, env);
+}
+
+int cgc_lookup_enum_value(const int ident, const int env) {
+  return cgc_lookup_binding_ident(BINDING_ENUM_CST, ident, env);
+}
+
 void cgc_add_local_param(const int ident, const int width, const ast type) {
   cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, type, cgc_locals);
   cgc_fs -= width;
