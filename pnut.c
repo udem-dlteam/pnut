@@ -19,6 +19,7 @@
 #else
 // general pnut features
 #define FULL_PREPROCESSOR_SUPPORT
+#define SUPPORT_COMPLEX_INITIALIZER
 // pnut-sh specific features
 #define SH_SUPPORT_SHELL_INCLUDE
 #endif
@@ -395,7 +396,9 @@ enum {
   PLUS_PLUS_POST,
   MINUS_MINUS_POST,
   ELLIPSIS,
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   INITIALIZER_LIST,
+#endif
   DECL,
   DECLS,
   FUN_DECL,
@@ -3249,6 +3252,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   return decl;
 }
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+
 ast parse_initializer_list() {
   ast result = 0;
   ast rest = 0;
@@ -3274,12 +3279,18 @@ ast parse_initializer_list() {
   return new_ast1(INITIALIZER_LIST, result);
 }
 
+#endif // SUPPORT_COMPLEX_INITIALIZER
+
 ast parse_initializer() {
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   if (tok == '{') {
     return parse_initializer_list();
   } else {
     return parse_assignment_expression();
   }
+#else
+  return parse_assignment_expression();
+#endif
 }
 
 ast parse_declarator_and_initializer(bool is_for_typedef, ast type_specifier) {

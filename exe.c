@@ -302,6 +302,7 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
     mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
   }
 }
+#ifdef SUPPORT_COMPLEX_INITIALIZER
 
 // Initialize a memory location with a value
 void initialize_memory(int val, int base, int offset, int width) {
@@ -314,6 +315,8 @@ void initialize_memory(int val, int base, int offset, int width) {
     mov_mem8_reg(base, offset + i, reg_Z);
   }
 }
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
 int is_power_of_2(int n) {
   return n != 0 && (n & (n - 1)) == 0;
@@ -1976,6 +1979,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
       codegen_initializer_string(get_val_(STRING, init), type, base_reg, offset);
       break;
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
     case INITIALIZER_LIST:
       init = get_child_(INITIALIZER_LIST, init, 0);
       // Acceptable types are:
@@ -2049,6 +2053,8 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 
       break;
 
+#endif // SUPPORT_COMPLEX_INITIALIZER
+
     default:
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
@@ -2067,6 +2073,8 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
       break;
   }
 }
+
+#ifdef SUPPORT_COMPLEX_INITIALIZER
 
 // Return size of initializer.
 // If it's an initializer list, return the number of elements
@@ -2101,6 +2109,12 @@ void infer_array_length(ast type, ast init) {
     set_child(type, 1, initializer_size(init));
   }
 }
+
+#else
+
+#define infer_array_length(type, init)  // No-op
+
+#endif
 
 void codegen_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);

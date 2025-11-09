@@ -142,7 +142,9 @@ void print_tok(int tok, int val) {
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   else if (tok == INITIALIZER_LIST) putstr("initializer_list");
+#endif
   else if (tok == DECL)             putstr("decl");
   else if (tok == DECLS)            putstr("decls");
   else if (tok == LIST)             putstr("list");
@@ -265,7 +267,9 @@ void print_tok_type(int tok) {
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   else if (tok == INITIALIZER_LIST) putstr("initializer_list");
+#endif
   else if (tok == DECL)             putstr("decl");
   else if (tok == DECLS)            putstr("decls");
   else if (tok == LIST)             putstr("list");

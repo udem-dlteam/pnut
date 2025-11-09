@@ -341,13 +341,17 @@ void runtime_malloc() {
   putstr("\n");
 }
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+
 bool runtime_use_initialize = DEFAULT_USE;
 bool runtime_initialize_defined = false;
 void runtime_initialize() {
   if (runtime_initialize_defined++) return;
   putstr("# Initialize memory with the list of values.\n");
+#ifndef RT_NO_INIT_GLOBALS
   putstr("# When the expected number of elements is higher than the actual number of\n");
   putstr("# elements, the remaining elements are set to 0\n");
+#endif
   putstr("initialize() { # $1 = var name, $2 = length, $3... = elements\n");
   putstr("  __ptr=$(($1))\n");
   putstr("  __size=$2\n");
@@ -357,14 +361,18 @@ void runtime_initialize() {
   putstr("    : $((__i += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
+#ifdef RT_NO_INIT_GLOBALS
   putstr("\n");
   putstr("  while [ $__i -lt $__size ]; do\n");
   putstr("    : $((_$((__ptr + __i)) = 0))\n");
   putstr("    : $((__i += 1))\n");
   putstr("  done\n");
+#endif // RT_NO_INIT_GLOBALS
   putstr("}\n");
   putstr("\n");
 }
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
 bool runtime_use_defarr = DEFAULT_USE;
 bool runtime_defarr_defined = false;
@@ -372,6 +380,7 @@ void runtime_defarr() {
   if (runtime_defarr_defined++) return;
   runtime_malloc();
 #ifdef RT_NO_INIT_GLOBALS
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   // If some array initializers were used, defarr is extended to support initialization
   if (runtime_use_initialize) {
     runtime_initialize();
@@ -379,12 +388,16 @@ void runtime_defarr() {
     putstr("  _malloc $1 $2;\n");
     putstr("  if [ $# -gt 2 ]; then initialize $@; fi\n");
     putstr("}\n");
-  } else {
+  } else
+#endif // SUPPORT_COMPLEX_INITIALIZER
+  {
     putstr("defarr() { _malloc $1 $2; }\n");
   }
-#else
+#elif defined(SUPPORT_COMPLEX_INITIALIZER)
   runtime_initialize();
-  putstr("defarr() { _malloc $1 $2; initialize_memory $@; }\n");
+  putstr("defarr() { _malloc $1 $2; initialize $@; }\n");
+#else
+  putstr("defarr() { _malloc $1 $2; }\n");
 #endif
   putstr("\n");
 }

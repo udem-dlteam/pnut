@@ -1154,6 +1154,8 @@ void comp_defstr(ast ident, int string_probe, int array_size) {
                                 , array_size_text));
 }
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+
 int initializer_list_len(ast node) {
   int res = 0;
 
@@ -1204,6 +1206,8 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
 
   return args;
 }
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
 enum VALUE_CTX {
   RVALUE_CTX_BASE,            // value is outside of $(( ... ))
@@ -2401,6 +2405,7 @@ void comp_glo_var_decl(ast node) {
       // the list of values to the defarr function. Because the array size is
       // optional, we need to calculate the size of the array from the
       // initializer list if it's not provided.
+#ifdef SUPPORT_COMPLEX_INITIALIZER
       if (init != 0) {
         if (get_op(init) != INITIALIZER_LIST) fatal_error("Array declaration with invalid initializer");
         init = get_child_(INITIALIZER_LIST, init, 0);
@@ -2414,6 +2419,7 @@ void comp_glo_var_decl(ast node) {
           fatal_error("Array type is too small for initializer");
         }
       }
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
       if (arr_len == 0) {
         fatal_error("Array declaration without size or initializer list");
