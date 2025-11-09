@@ -21,6 +21,7 @@
 #define FULL_PREPROCESSOR_SUPPORT
 #define SUPPORT_COMPLEX_INITIALIZER
 #define SUPPORT_STRUCT_UNION
+#define SUPPORT_VARIADIC_FUNCTIONS
 // pnut-sh specific features
 #define SH_SUPPORT_SHELL_INCLUDE
 #endif
@@ -400,7 +401,9 @@ enum {
   MINUS_MINUS_PRE,
   PLUS_PLUS_POST,
   MINUS_MINUS_POST,
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
   ELLIPSIS,
+#endif
 #ifdef SUPPORT_COMPLEX_INITIALIZER
   INITIALIZER_LIST,
 #endif
@@ -2579,6 +2582,7 @@ void get_tok() {
 #if defined(SUPPORT_STRUCT_UNION) || defined(SUPPORT_VARIADIC_FUNCTIONS)
         else if (ch == '.') {
           get_ch();
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
           if (ch == '.') {
             get_ch();
             if (ch == '.') {
@@ -2591,6 +2595,9 @@ void get_tok() {
           } else {
             tok = '.';
           }
+#else
+          tok = '.';
+#endif // SUPPORT_VARIADIC_FUNCTIONS
           break;
         }
 #endif
@@ -2742,10 +2749,14 @@ ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
 }
 
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+
 ast make_variadic_func(ast func_type) {
   set_child(func_type, 2, true); // Set the variadic flag
   return func_type;
 }
+
+#endif
 
 #if defined(sh) && defined(OPTIMIZE_CONSTANT_PARAMS)
 // Used to optimize constant parameters of function
@@ -3093,13 +3104,17 @@ ast parse_declaration_specifiers(bool allow_typedef) {
   return type_specifier;
 }
 
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
 bool parse_param_list_is_variadic = false;
+#endif
 int parse_param_list() {
   ast result = 0;
   ast rest;
   ast decl;
 
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
   parse_param_list_is_variadic = false;
+#endif
 
   expect_tok('(');
 
@@ -3114,13 +3129,17 @@ int parse_param_list() {
       // Support K&R param syntax in function definition
       decl = new_ast3(DECL, new_ast0(IDENTIFIER, val), new_ast0(INT_KW, 0), 0);
       get_tok();
-    } else if (tok == ELLIPSIS) {
+    }
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+    else if (tok == ELLIPSIS) {
       // ignore ELLIPSIS nodes for now, but it should be the last parameter
       if (result == 0) parse_error("Function must have a named parameter before ellipsis parameter", tok);
       get_tok();
       parse_param_list_is_variadic = true;
       break;
-    } else {
+    }
+#endif // SUPPORT_VARIADIC_FUNCTIONS
+    else {
       parse_error("Parameter declaration expected", tok);
     }
 
@@ -3264,7 +3283,9 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       expect_tok(']');
     } else if (tok == '(') {
       result = new_ast3('(', get_inner_type(parent_type_parent), parse_param_list(), false);
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
       if (parse_param_list_is_variadic) result = make_variadic_func(result);
+#endif
       update_inner_type(parent_type_parent, result);
       parent_type_parent = result;
     } else {

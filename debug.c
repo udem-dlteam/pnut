@@ -143,6 +143,9 @@ void print_tok(int tok, int val) {
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+  else if (tok == ELLIPSIS)         putstr("...");
+#endif
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
@@ -272,6 +275,9 @@ void print_tok_type(int tok) {
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+  else if (tok == ELLIPSIS)         putstr("...");
+#endif
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
