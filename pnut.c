@@ -19,6 +19,7 @@
 #else
 // general pnut features
 #define FULL_PREPROCESSOR_SUPPORT
+#define FULL_CLI_OPTIONS
 #define SUPPORT_COMPLEX_INITIALIZER
 #define SUPPORT_STRUCT_UNION
 #define SUPPORT_VARIADIC_FUNCTIONS
@@ -1825,11 +1826,15 @@ int init_builtin_int_macro(char *macro_str, int value) {
   return macro_id;
 }
 
+#ifdef FULL_CLI_OPTIONS
+
 int init_builtin_empty_macro(char *macro_str) {
   int macro_id = init_ident(MACRO, macro_str);
   heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
   return macro_id;
 }
+
+#endif
 
 void init_pnut_macros() {
   init_builtin_int_macro("PNUT_CC", 1);
@@ -4148,7 +4153,8 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
-#ifndef sh
+#ifdef FULL_CLI_OPTIONS
+
 void handle_macro_D(char *opt) {
   char *start = opt;
   char *macro_buf;
@@ -4193,7 +4199,8 @@ void handle_macro_D(char *opt) {
 
   free(macro_buf);
 }
-#endif
+
+#endif // FULL_CLI_OPTIONS
 
 int main(int argc, char **argv) {
   int i;
@@ -4220,7 +4227,9 @@ int main(int argc, char **argv) {
             output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
           }
           break;
+#endif
 
+#ifdef FULL_CLI_OPTIONS
         case 'D':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             i += 1;
@@ -4229,12 +4238,6 @@ int main(int argc, char **argv) {
             handle_macro_D(argv[i] + 2); // skip '-D'
           }
           break;
-#else
-          case 'D':
-            // pnut-sh only needs -D<macro> and no other options
-            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
-            break;
-#endif
         case 'U':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             i += 1;
@@ -4254,7 +4257,12 @@ int main(int argc, char **argv) {
             include_search_path = argv[i] + 2; // skip '-I'
           }
           break;
-
+#else
+          case 'D':
+            // pnut-sh only needs -D<macro> and no other options
+            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+            break;
+#endif // FULL_CLI_OPTIONS
         default:
           putstr("Option "); putstr(argv[i]); putchar('\n');
           fatal_error("unknown option");
