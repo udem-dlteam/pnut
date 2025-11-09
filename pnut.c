@@ -766,17 +766,7 @@ void begin_string() {
 }
 
 // Append the current character (ch) to the string under construction in the pool
-void accum_string() {
-  hash = (ch + (hash ^ HASH_PARAM)) % HASH_PRIME;
-  string_pool[string_pool_alloc] = ch;
-  string_pool_alloc += 1;
-  if (string_pool_alloc >= STRING_POOL_SIZE) {
-    fatal_error("string pool overflow");
-  }
-}
-
-// Append a character to the current string under construction in the pool
-void accum_string_char(char c) {
+void accum_string(const char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
   string_pool_alloc += 1;
@@ -786,11 +776,11 @@ void accum_string_char(char c) {
 }
 
 // Append a string from the string_pool to the string under construction
-void accum_string_string(int string_probe) {
+void accum_string_string(const int string_probe) {
   char *string_start = STRING_BUF(string_probe);
   char *string_end = string_start + STRING_LEN(string_probe);
   while (string_start < string_end) {
-    accum_string_char(*string_start);
+    accum_string(*string_start);
     string_start += 1;
   }
 }
@@ -802,13 +792,13 @@ void accum_string_integer(int n) {
   if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
 #else
   if (n < 0) {
-    accum_string_char('-');
+    accum_string('-');
     accum_string_integer(-n);
   } else
 #endif
   {
     if (n > 9) accum_string_integer(n / 10);
-    accum_string_char('0' + n % 10);
+    accum_string('0' + n % 10);
   }
 }
 
@@ -1306,8 +1296,7 @@ void accum_string_until(char end) {
   while (ch != end && ch != EOF) {
     get_string_char();
     tok = ch;
-    ch = val;
-    accum_string();
+    accum_string(val);
     ch = tok;
   }
 
@@ -1757,7 +1746,7 @@ void get_ident() {
          ('a' <= ch && ch <= 'z') ||
          ('0' <= ch && ch <= '9') ||
          (ch == '_')) {
-    accum_string();
+    accum_string(ch);
     get_ch();
   }
 
@@ -1767,19 +1756,15 @@ void get_ident() {
 
 int intern_str(char* name) {
   int i = 0;
-  int prev_ch = ch; // The character may be important to the calling function, saving it
 
   begin_string();
 
   while (name[i] != 0) {
-    ch = name[i];
-    accum_string();
+    accum_string(name[i]);
     i += 1;
   }
 
   i = end_string();
-
-  ch = prev_ch;
 
   return i;
 }
