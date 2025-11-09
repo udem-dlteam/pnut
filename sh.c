@@ -1834,12 +1834,8 @@ text comp_fun_call_code(ast node, ast assign_to) {
   }
 #endif
 
-       if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
-  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
-  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
-  else if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
+       if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
   else if (name_id == FREE_ID)    { runtime_use_free = true; }
-  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
   else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
   else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
   else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
@@ -1847,6 +1843,16 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == WRITE_ID)   { runtime_use_write = true; }
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
+#ifndef SH_INLINE_PUTCHAR
+  else if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
+#endif
+#ifndef SH_INLINE_EXIT
+  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
+#endif
+#ifndef SH_MINIMAL_RUNTIME
+  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+#endif
 
   if (assign_to) res = comp_lvalue(assign_to);
   else res = wrap_str_lit("__");

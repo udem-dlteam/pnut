@@ -15,7 +15,7 @@ defarr() { _malloc $1 $2; }
 defarr _buf 1024
 : $((c = 0))
 _is_word_separator() { let c $2
-  : $(($1 = (c == __SPACE__) || (c == __NEWLINE__) || (c == __TAB__)))
+  : $(($1 = (c == __SPACE__) || (c == __LF__) || (c == __HT__)))
   endlet $1 c
 }
 
@@ -33,7 +33,7 @@ _wc_fd() { let fd $2; let filename $3
     i=0
     while [ $i -lt $n ]; do
       : $((chars += 1))
-      if [ $((_$((_buf + i)))) = $__NEWLINE__ ] ; then
+      if [ $((_$((_buf + i)))) = $__LF__ ] ; then
         : $((lines += 1))
       fi
       _is_word_separator sep $((_$((_buf + i))))
@@ -83,8 +83,8 @@ _main() { let argc $2; let argv_ $3
 }
 
 # Character constants
-readonly __TAB__=9
-readonly __NEWLINE__=10
+readonly __HT__=9
+readonly __LF__=10
 readonly __SPACE__=32
 # Runtime library
 _put_pstr() {
