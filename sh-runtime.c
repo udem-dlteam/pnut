@@ -51,7 +51,7 @@
 #define extract_first_char(prefix, buf_var, res_var) extract_first_char_fast(prefix, buf_var, res_var)
 #endif
 
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
 #define ANY_STRING_16   "????????????????"
 #define ANY_STRING_256  "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
 #endif
@@ -291,7 +291,7 @@ void runtime_unpack_string() {
   putstr("  __fgetc_buf=$1\n");
   putstr("  __buffer=$2\n");
   putstr("  __ends_with_eof=$3\n");
-#ifndef OPTIMIZE_LONG_LINES
+#ifndef SH_OPTIMIZE_LONG_LINES
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
   extract_first_char("  ", "__fgetc_buf", "_$__buffer")
   putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
@@ -441,7 +441,7 @@ void runtime_make_argv() {
   putstr("\n");
 }
 
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
 #define handle_empty_buffer(prefix, buf_var) putstr(prefix "    if [ -z \"$" buf_var "\" ]; then next_sub_buffer; fi\n");
 #else
 #define handle_empty_buffer(prefix, buf_var)
@@ -485,7 +485,7 @@ void runtime_unpack_escaped_string() {
   if (runtime_unpack_escaped_string_defined++) return;
   runtime_malloc();
   runtime_char_to_int();
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("next_sub_buffer() {\n");
     extract_line_head("  ", "__us_buf256", "__str", ANY_STRING_256, "256", "")
     extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
@@ -497,7 +497,7 @@ void runtime_unpack_escaped_string() {
   putstr("  _malloc __addr $((${2:-${#__str} + 1}))\n");
   putstr("  __ptr=$__addr\n");
   putstr("  __end=$((__ptr + ${2:-${#__str} + 1})) # End of allocated memory\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");
   putstr("  while [ ! -z \"$__str\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
@@ -581,7 +581,7 @@ void runtime_getchar() {
   runtime_char_to_int();
   putstr("__stdin_buf=\n");
   putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("__stdin_buf16=\n");
   putstr("__stdin_buf256=\n");
   putstr("__stdin_end=1\n");
@@ -596,7 +596,7 @@ void runtime_getchar() {
   putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("    __stdin_end=0\n");
 #endif
   putstr("    IFS=                                            # don't split input\n");
@@ -615,7 +615,7 @@ void runtime_getchar() {
   putstr("      fi\n");
   putstr("    fi\n");
   putstr("  fi\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   extract_line_head("  ", "__stdin_buf256", "__stdin_buf", ANY_STRING_256, "256", "")
   extract_line_head("  ", "__stdin_buf16", "__stdin_buf256", ANY_STRING_16, "16", "      __stdin_end=1\n")
   extract_first_char("", "__stdin_buf16", "$1")

@@ -14,7 +14,7 @@ mkdir -p $TEMP_DIR
 : ${PNUT_OPTIONS:=} # Default to empty options
 
 PNUT_EXE_OPTIONS="$PNUT_OPTIONS" # Backend is set by the backend option
-PNUT_SH_OPTIONS="$PNUT_OPTIONS -DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dsh"
 
 # Parse the arguments
 backend="x86_64_linux"  # Default to x86_64_linux

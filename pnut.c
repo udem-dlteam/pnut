@@ -7,29 +7,191 @@
 #include <fcntl.h> // for open
 #include <unistd.h> // for write
 
-#ifdef BOOTSTRAP_TCC
-#define BOOTSTRAP_LONG
-#define NO_BUILTIN_LIBC
-#endif
+// =========================== configuration options ===========================
+//
+// Pnut has many compilation options to change the features supported by pnut-sh
+// and pnut-exe, and the code generation.
+// The reason for so many options is that pnut is really 2 different compilers
+// (pnut-sh and pnut-exe) sharing the same compiler frontend, with each compiler
+// having to accomplish 2 opposite goals:
+//
+//  1. Be as small and simple as possible to bootstrap a C-like language from a
+//     POSIX shell implementation. Importantly, this applies to both the
+//     compiled shell scripts and to the compiler code itself.
+//
+//  2. Compile real world programs, such as TCC, requiring a large subset of C99
+//     language.
+//     Non-bootstrap users of pnut also care about user experience, such as
+//     informative error messages with line numbers, a nice CLI, a fully
+//     featured built-in libc and support for more advanced C features.
+//
+// We resolve this tension by having a shared codebase and preprocessor options
+// to enable or disable features as needed. Fortunately, pnut's reader and
+// tokenizer are fast compared to the rest of the compilation, so having a
+// single codebase with large blocks of inactive code doesn't impact performance
+// all that much.
+//
+// However, the preprocessor directives can make the code slightly harder to
+// read and maintain. To make reviewing the code easier, a simple
+// preprocessor-like tool removing inactive code blocks is provided in the
+// "tools" directory (TODO).
+//
+// Since most options are orthogonal, the number of possible combinations is
+// very large. To avoid combinatorial explosion of testing and maintenance,
+// we define a few "profiles" that cover the common use cases of pnut:
+//
+// - PNUT_BOOTSTRAP:
+//    Profile used to generate pnut-sh.sh and to bootstrap pnut-exe from a
+//    POSIX shell. This profile minimizes the code size and complexity of the
+//    compilers as much as possible, supporting only the features strictly
+//    needed to bootstrap pnut.
+//
+// - (Default):
+//    General purpose profile used to build pnut-exe for real world usage. This
+//    profile strikes a balance between features, usability and code size.
+//
+// - BOOTSTRAP_TCC:
+//    Profile used to bootstrap TCC from pnut-exe. This profile enables partial
+//    support for a few more features needed to compile TCC. These features are
+//    not implemented correctly, and so are not enabled in the general purpose
+//    profile.
+//
+// Additionally, if compilation time and code size are not a concern, or to help
+// debugging, the NICE_UX and SAFE_MODE options can be enabled to turn on extra
+// runtime checks and better error messages.
+//
+// =============================================================================
 
-#ifdef SH_PNUT_BOOTSTRAP_ONLY
-#define SH_MINIMAL_RUNTIME
-#define ALLOW_RECURSIVE_MACROS
-#define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+// Pnut-sh specific options
+#ifdef sh
+
+  // Toggles parsing literals with their base (octal, decimal or hexadecimal).
+  // This is used by the shell code generator to output the literal in the correct base.
+  #define PARSE_NUMERIC_LITERAL_WITH_BASE
+
+  #ifdef PNUT_BOOTSTRAP
+    #define ALLOW_RECURSIVE_MACROS
+    #define SH_MINIMAL_RUNTIME
+    #define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+  #else
+    // Enable all C features for general pnut usage
+    #define SUPPORT_ALL_C_FEATURES
+    // Pnut-sh specific features
+    #define SH_SUPPORT_SHELL_INCLUDE
+    #define SH_SUPPORT_ADDRESS_OF
+    #define SH_OPTIMIZE_LONG_LINES
+  #endif
+
+  // Shell code generation options
+  #ifndef SH_INLINE_PRINTF_NOT
+  // Inline printf calls with literal string for smaller and faster code
+  #define SH_INLINE_PRINTF
+  #endif
+  #ifndef SH_INLINE_PUTCHAR_NOT
+  // Inline putchar calls for smaller and faster code
+  #define SH_INLINE_PUTCHAR
+  #endif
+  // Inline exit calls for smaller code
+  #define SH_INLINE_EXIT
+
+  #ifndef SH_SAVE_VARS_WITH_SET
+  // Pick calling convention implementation. By default, use let/endlet
+  #define SH_INITIALIZE_PARAMS_WITH_LET
+  #endif
+
+  #ifndef SH_OPTIMIZE_CONSTANT_PARAMS_NOT
+  // Use positional parameter directly for function parameters that are constants
+  #define SH_OPTIMIZE_CONSTANT_PARAMS
+  #endif
+
+  // Built-in runtime library options
+  #ifndef RT_FREE_UNSETS_VARS_NOT
+  // Make free unset all variables associated with the freed object
+  #define RT_FREE_UNSETS_VARS
+  #endif
+
+  #ifndef RT_NO_INIT_GLOBALS_NOT
+  // Do not initialize global variables to zero at program startup, makes startup faster
+  #define RT_NO_INIT_GLOBALS
+  #endif
+
+  #ifndef RT_USE_LOOKUP_TABLE_NOT
+  // Use a lookup table for char->int for a faster conversion
+  #define RT_USE_LOOKUP_TABLE
+  #endif
+
+  // Disabled options:
+  // Include the C code as comment along with the generated shell code
+  // #define SH_INCLUDE_C_CODE
+
+  // Inline ascii code of character literal instead of using character variables
+  // for smaller and faster code.
+  // #define SH_INLINE_CHAR_LITERAL
+
+  // Use a more compact but slower implementation of the runtime library
+  // #define RT_COMPACT
+
+  // Make sure we don't use the long line optimization when RT_COMPACT is on
+  #ifdef RT_COMPACT
+  #undef SH_OPTIMIZE_LONG_LINES
+  #undef RT_USE_LOOKUP_TABLE
+  #endif
+
+#elif defined(target_i386_linux) || defined (target_x86_64_linux) || defined (target_x86_64_mac)
+
+  #define PARSE_NUMERIC_LITERAL_SUFFIX
+  // Varargs functions are always supported because the built-in libc uses them.
+  #define SUPPORT_VARIADIC_FUNCTIONS
+
+  #ifdef PNUT_BOOTSTRAP
+    #define ALLOW_RECURSIVE_MACROS
+  #else
+    // Enable all C features for general pnut usage
+    #define SUPPORT_ALL_C_FEATURES
+    // Support 64 bit literals on 64 bit platforms
+    #define SUPPORT_64_BIT_LITERALS
+  #endif
+
+  #ifdef BOOTSTRAP_TCC
+    #define BOOTSTRAP_LONG
+    #define NO_BUILTIN_LIBC
+  #endif
+
 #else
-// general pnut features
-#define FULL_PREPROCESSOR_SUPPORT
-#define FULL_CLI_OPTIONS
-#define SUPPORT_COMPLEX_INITIALIZER
-#define SUPPORT_STRUCT_UNION
-#define SUPPORT_VARIADIC_FUNCTIONS
-// pnut-sh specific features
-#define SH_SUPPORT_SHELL_INCLUDE
-#define SH_SUPPORT_ADDRESS_OF
+  // Frontend-only variants of pnut (e.g. for running reader, tokenizer or parser)
+  // Options that turns Pnut into a C preprocessor or some variant of it
+  // DEBUG_GETCHAR: Read and print the input character by character.
+  // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
+  // DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
+  // DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
+
+  // Enable all C features in the frontend
+  #define SUPPORT_ALL_C_FEATURES
 #endif
 
-// M2-Planet doesn't support ternary operator.
+#ifdef SUPPORT_ALL_C_FEATURES
+  #define FULL_CLI_OPTIONS
+  #define FULL_PREPROCESSOR_SUPPORT
+  #define SUPPORT_COMPLEX_INITIALIZER
+  #define SUPPORT_STRUCT_UNION
+  #define SUPPORT_VARIADIC_FUNCTIONS
+#endif
+
+#if defined(NICE_UX) || defined(SAFE_MODE)
+  #define INCLUDE_LINE_NUMBER_ON_ERROR
+  #define NICE_ERR_MSG
+#endif
+
+// Disabled options:
+// Add pnut source location in parse_error()
+//#define DEBUG_SHOW_ERR_ORIGIN
+
+// Support skip line continuations
+// #define SUPPORT_LINE_CONTINUATION
+
+// ===================== Compatibility macros and typedefs =====================
 #ifdef NO_TERNARY_SUPPORT
+// M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
 // Note that unlike the standard ternary operator, both sides are always
 // evaluated, and the condition expression is evaluated twice.
@@ -61,106 +223,12 @@ typedef int intptr_t;
 #endif
 #endif
 
+// =============================================================================
+
 #define ast int
 #define true 1
 #define false 0
 #define EOF (-1)
-
-#ifdef SAFE_MODE
-#define INCLUDE_LINE_NUMBER_ON_ERROR
-#define NICE_ERR_MSG
-#endif
-
-#ifdef RELEASE_PNUT_SH
-#define sh
-#define RT_NO_INIT_GLOBALS
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT_i386_linux
-#define target_i386_linux
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT_x86_64_linux
-#define target_x86_64_linux
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT_x86_64_mac
-#define target_x86_64_mac
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT
-#define INCLUDE_LINE_NUMBER_ON_ERROR
-#define NICE_ERR_MSG
-#define OPTIMIZE_LONG_LINES
-#endif
-
-// Uncomment to cause parse_error() to print which pnut function emitted the error
-//#define DEBUG_SHOW_ERR_ORIGIN
-
-// Make get_ch() use a length-1 character buffer to lookahead and skip line continuations
-#define SUPPORT_LINE_CONTINUATION_not
-
-// Shell backend codegen options
-#ifndef SH_AVOID_PRINTF_USE_NOT
-#define SH_AVOID_PRINTF_USE
-#endif
-#define SH_INLINE_PUTCHAR
-#define SH_INLINE_EXIT
-// Specifies if we include the C code along with the generated shell code
-#define SH_INCLUDE_C_CODE_not
-// Have let commands initialize function parameters
-#ifndef SH_SAVE_VARS_WITH_SET
-#define SH_INITIALIZE_PARAMS_WITH_LET
-#endif
-// If we use the `set` command and positional parameters to simulate local vars
-#if !defined(SH_SAVE_VARS_WITH_SET) && !defined(SH_INITIALIZE_PARAMS_WITH_LET)
-#define SH_SAVE_VARS_WITH_SET
-#endif
-#ifndef OPTIMIZE_CONSTANT_PARAMS_NOT
-#define OPTIMIZE_CONSTANT_PARAMS
-#endif
-// Inline ascii code of character literal
-#define SH_INLINE_CHAR_LITERAL_not
-
-// Options to parameterize the shell runtime library
-#ifndef RT_FREE_UNSETS_VARS_NOT
-#define RT_FREE_UNSETS_VARS
-#endif
-#define RT_NO_INIT_GLOBALS_not
-#define RT_COMPACT_not
-#define RT_INLINE_PUTCHAR
-#define RT_USE_LOOKUP_TABLE
-
-// Make sure we don't use the long line optimization when RT_COMPACT is on
-#ifdef RT_COMPACT
-#undef OPTIMIZE_LONG_LINES
-#endif
-
-// Toggles parsing literals with their base (octal, decimal or hexadecimal).
-// This is used by the shell code generator to output the literal in the correct base.
-#ifdef sh
-#define PARSE_NUMERIC_LITERAL_WITH_BASE
-#endif
-
-// Shell codegen doesn't support suffixes for numeric literals, but other backends do
-#ifndef sh
-#define PARSE_NUMERIC_LITERAL_SUFFIX
-#endif
-
-// 64 bit literals are only supported on 64 bit platforms for now
-#if defined(target_x86_64_linux) || defined(target_x86_64_mac)
-#define SUPPORT_64_BIT_LITERALS
-#endif
-
-// Options that turns Pnut into a C preprocessor or some variant of it
-// DEBUG_GETCHAR: Read and print the input character by character.
-// DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
-// DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
-// DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
 
 typedef int bool;
 
@@ -2757,7 +2825,7 @@ ast make_variadic_func(ast func_type) {
 
 #endif
 
-#if defined(sh) && defined(OPTIMIZE_CONSTANT_PARAMS)
+#if defined(SH_OPTIMIZE_CONSTANT_PARAMS)
 // Used to optimize constant parameters of function
 bool is_constant_type(ast type) {
   switch (get_op(type)) {

@@ -2,12 +2,12 @@
 
 BUILD_DIR = build
 
-BUILD_OPT_SH = -DRELEASE_PNUT_SH $(BUILD_OPT)
+BUILD_OPT_SH = -Dsh -DNICE_UX $(BUILD_OPT)
 
-BUILD_OPT_EXE.Linux.i386 = -DRELEASE_PNUT_i386_linux $(BUILD_OPT)
-BUILD_OPT_EXE.Linux.x86_64 = -DRELEASE_PNUT_x86_64_linux $(BUILD_OPT)
-BUILD_OPT_EXE.Darwin.x86_64 = -DRELEASE_PNUT_x86_64_mac $(BUILD_OPT)
-BUILD_OPT_EXE.Darwin.arm64 = -DRELEASE_PNUT_x86_64_mac $(BUILD_OPT) # no arm64 backend yet, x86 is emulated on ARM Macs
+BUILD_OPT_EXE.Linux.i386 = -Dtarget_i386_linux -DNICE_UX $(BUILD_OPT)
+BUILD_OPT_EXE.Linux.x86_64 = -Dtarget_x86_64_linux -DNICE_UX $(BUILD_OPT)
+BUILD_OPT_EXE.Darwin.x86_64 = -Dtarget_x86_64_mac -DNICE_UX $(BUILD_OPT)
+BUILD_OPT_EXE.Darwin.arm64 = -Dtarget_x86_64_mac -DNICE_UX $(BUILD_OPT) # no arm64 backend yet, x86 is emulated on ARM Macs
 
 # Detect the operating system and architecture
 UNAME_S := $(shell uname -s)

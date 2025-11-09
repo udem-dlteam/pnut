@@ -131,7 +131,7 @@ Or you can invoke pnut directly:
 # Compile pnut-sh to a shell script using GCC
 make pnut-sh.sh
 # Compile pnut-sh to a shell script with pnut-sh.sh
-bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_SH \
+bash ./build/pnut-sh.sh pnut.c -Dsh -DNICE_UX \
   > build/pnut-sh-twice-bootstrapped.sh
 sha256sum build/pnut-sh.sh build/pnut-sh-twice-bootstrapped.sh
 ```
@@ -154,17 +154,17 @@ Or manually:
 ```shell
 make pnut-sh.sh
 # First we compile pnut-exe to pnut-exe.sh using pnut-sh.sh
-bash ./build/pnut-sh.sh pnut.c -DRELEASE_PNUT_x86_64_linux \
+bash ./build/pnut-sh.sh pnut.c -Dtarget_x86_64_linux -DNICE_UX \
   > build/pnut-exe.sh
 chmod +x build/pnut-exe.sh
 
 # We then use pnut-exe.sh to compile pnut-exe again, this time creating a binary
-bash ./build/pnut-exe.sh pnut.c -DRELEASE_PNUT_x86_64_linux \
+bash ./build/pnut-exe.sh pnut.c -Dtarget_x86_64_linux -DNICE_UX \
   > build/pnut-exe.exe
 chmod +x build/pnut-exe.exe
 
 # Finally, we use pnut-exe to compile pnut-exe to make sure it works
-./build/pnut-exe.exe pnut.c -DRELEASE_PNUT_x86_64_linux \
+./build/pnut-exe.exe pnut.c -Dtarget_x86_64_linux -DNICE_UX \
   > build/pnut-exe-twice-bootstrapped.exe
 
 # And we check that the binaries are identical

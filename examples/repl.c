@@ -1,4 +1,4 @@
-// pnut-options: -DSH_SAVE_VARS_WITH_SET -DALLOW_RECURSIVE_MACROS -URT_COMPACT
+// pnut-options: -DSH_SAVE_VARS_WITH_SET -DALLOW_RECURSIVE_MACROS -URT_COMPACT -DSH_OPTIMIZE_LONG_LINES
 /*
  * A R4RS repl compiled with the Ribbit Scheme Compiler. This C file includes
  * a bytecode interpreter for the Ribbit Virtual Machine (RVM) and a garbage collector.
@@ -13,7 +13,7 @@
 
 // To run the repl efficiently using pnut compile it using :
 //
-//  $ gcc -Dsh -DSUPPORT_INCLUDE -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_LONG_LINES pnut.c -o pnut-sh.exe
+//  $ gcc -Dsh -DSUPPORT_INCLUDE -DSH_SAVE_VARS_WITH_SET -DSH_OPTIMIZE_LONG_LINES pnut.c -o pnut-sh.exe
 //
 // Then compile this file using pnut :
 //

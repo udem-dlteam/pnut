@@ -1,7 +1,7 @@
 #! /bin/sh
 
 TEMP_DIR="build"
-PNUT_SH_OPTIONS="-DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_SH_OPTIONS="-Dsh"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 

@@ -820,7 +820,7 @@ text save_local_vars() {
   while (env != 0) {
 #if defined(SH_INITIALIZE_PARAMS_WITH_LET)
     if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
-#elif defined(OPTIMIZE_CONSTANT_PARAMS)
+#elif defined(SH_OPTIMIZE_CONSTANT_PARAMS)
     if (binding_kind(env) != BINDING_PARAM_LOCAL || is_constant_type(heap[env + 4])) { // Skip constant params
 #else
     {
@@ -1350,7 +1350,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       ) {
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(-1, child0));
       }
-#ifdef OPTIMIZE_CONSTANT_PARAMS
+#ifdef SH_OPTIMIZE_CONSTANT_PARAMS
       // The expansion of negative constant params prefixed with - result in
       // --<number> which is parsed as pre-decrement. Add a space between the
       // operator and the variable (constant param or not for consistency).
@@ -1640,7 +1640,7 @@ text fun_call_params(ast params) {
   return code_params;
 }
 
-#if defined(SH_INLINE_PUTCHAR) || defined(SH_AVOID_PRINTF_USE)
+#if defined(SH_INLINE_PUTCHAR) || defined(SH_INLINE_PRINTF)
 text comp_putchar_inline(ast param) {
   text res;
   ast ident;
@@ -1673,7 +1673,7 @@ text comp_putchar_inline(ast param) {
 }
 #endif
 
-#ifdef SH_AVOID_PRINTF_USE
+#ifdef SH_INLINE_PRINTF
 // format_str is from the string pool so immutable
 text printf_call(char *format_str, char *format_str_end, text params_text, bool escape) {
   if (format_str == format_str_end) {
@@ -1850,7 +1850,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast param;
   text res;
 
-#ifdef SH_AVOID_PRINTF_USE
+#ifdef SH_INLINE_PRINTF
   if (assign_to == 0) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && (param = list_singleton(params)) != 0

@@ -12,7 +12,7 @@ mkdir -p build
 
 echo "Compiling examples"
 
-PNUT_SH_OPTIONS="-DRELEASE_PNUT_SH -DRT_COMPACT -DSAFE_MODE"
+PNUT_SH_OPTIONS="-Dsh -DRT_COMPACT -DSAFE_MODE"
 
 # Compile pnut.exe
 gcc -o build/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c 2> /dev/null || fail "Error: Failed to compile pnut"
