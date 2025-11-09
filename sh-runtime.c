@@ -402,17 +402,6 @@ void runtime_defarr() {
   putstr("\n");
 }
 
-#ifdef SUPPORT_ADDRESS_OF_OP
-bool runtime_use_defglo = DEFAULT_USE;
-bool runtime_defglo_defined = false;
-void runtime_defglo() {
-  if (runtime_defglo_defined++) return;
-  runtime_malloc();
-  putstr("defglo() { _malloc $1 1 ; }\n");
-  putstr("\n");
-}
-#endif
-
 bool runtime_use_free = DEFAULT_USE;
 bool runtime_free_defined = false;
 void runtime_free() {

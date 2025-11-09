@@ -59,7 +59,9 @@ typedef enum STMT_CTX {
   STMT_CTX_SWITCH       = 2,
 } STMT_CTX;
 
+#ifdef SH_SUPPORT_ADDRESS_OF
 text comp_lvalue_address(ast node);
+#endif
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
@@ -1401,8 +1403,10 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
+#ifdef SH_SUPPORT_ADDRESS_OF
     } else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
+#endif
     } else {
       dump_node(node);
       fatal_error("comp_rvalue_go: unexpected operator");
@@ -1542,6 +1546,8 @@ text comp_rvalue(ast node, int context) {
   return result;
 }
 
+#ifdef SH_SUPPORT_ADDRESS_OF
+
 // Unlike in the native backend, there are 2 ways to compile a lvalue.
 //
 // The first (comp_lvalue) returns the variable that represent the memory
@@ -1557,8 +1563,6 @@ text comp_lvalue_address(ast node) {
   text sub2;
 
   if (op == IDENTIFIER) {
-    // TODO: Support global variables when SUPPORT_ADDRESS_OF_OP
-    //
     // This is currently not supported because we treat as globals the enums
     // and other hardcoded constants which is not what we want.
     //
@@ -1589,6 +1593,8 @@ text comp_lvalue_address(ast node) {
     return 0;
   }
 }
+
+#endif
 
 text comp_lvalue(ast node) {
   int op = get_op(node);
@@ -2473,20 +2479,8 @@ void comp_glo_var_decl(ast node) {
         );
     }
   } else {
-#ifdef SUPPORT_ADDRESS_OF_OP
-    runtime_defglo();
-    append_glo_decl(
-      string_concat4(
-        wrap_str_lit("defglo "),
-        global_var(get_val_(IDENTIFIER, name)),
-        wrap_char(' '),
-        comp_rvalue(init, VALUE_CTX_BASE)
-      )
-    );
-#else
     if (init == 0) init = new_ast0(INTEGER, 0);
     comp_assignment(name, init);
-#endif
   }
 }
 

@@ -25,6 +25,7 @@
 #define SUPPORT_VARIADIC_FUNCTIONS
 // pnut-sh specific features
 #define SH_SUPPORT_SHELL_INCLUDE
+#define SH_SUPPORT_ADDRESS_OF
 #endif
 
 // M2-Planet doesn't support ternary operator.
@@ -99,9 +100,6 @@ typedef int intptr_t;
 
 // Uncomment to cause parse_error() to print which pnut function emitted the error
 //#define DEBUG_SHOW_ERR_ORIGIN
-
-// Use positional parameter directly for function parameters that are constants
-#define SUPPORT_ADDRESS_OF_OP_not
 
 // Make get_ch() use a length-1 character buffer to lookahead and skip line continuations
 #define SUPPORT_LINE_CONTINUATION_not
