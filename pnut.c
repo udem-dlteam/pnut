@@ -149,7 +149,9 @@
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
     // Support 64 bit literals on 64 bit platforms
+    #if defined (target_x86_64_linux) || defined (target_x86_64_mac)
     #define SUPPORT_64_BIT_LITERALS
+    #endif
   #endif
 
   #ifdef BOOTSTRAP_TCC
