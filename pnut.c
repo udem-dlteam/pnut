@@ -3021,6 +3021,9 @@ ast parse_enum() {
           case INTEGER_L:
           case INTEGER_LL:
 #endif
+            break;
+          default:
+            // Evaluate the constant expression to get its integer value
             value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
         }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
