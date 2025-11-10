@@ -26,16 +26,27 @@ jobs:
       - name: Build with warnings
         run: |
           set -e
-          # Testing with gcc clang in case they have different warnings
-          gcc -Wall -Werror pnut.c -Dsh
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_mac
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_linux
-          gcc -Wall -Werror pnut.c -Dtarget_i386_linux
-          # With clang
-          clang-14 -Wall -Werror pnut.c -Dsh
-          clang-14 -Wall -Werror pnut.c -Dtarget_x86_64_mac
-          clang-14 -Wall -Werror pnut.c -Dtarget_x86_64_linux
-          clang-14 -Wall -Werror pnut.c -Dtarget_i386_linux
+          VARIANTS="sh x86_64_mac x86_64_linux i386_linux"
+          GENERAL_VARIANT_OPTIONS="PNUT_BOOTSTRAP SAFE_MODE NICE_UX"
+          EXE_VARIANT_OPTIONS="ONE_PASS_GENERATOR"
+
+          compile_variant_with_options() {
+            gcc -Wall -Werror pnut.c $@
+            clang-14 -Wall -Werror pnut.c $@
+          }
+
+          for variant in $VARIANTS; do
+            if [ "$variant" == "sh" ]; then
+              for option in $GENERAL_VARIANT_OPTIONS; do
+                compile_variant_with_options "-Dtarget_$variant" -D$option
+              done
+            else
+              options="$GENERAL_VARIANT_OPTIONS $EXE_VARIANT_OPTIONS"
+              for option in $options; do
+                compile_variant_with_options "-Dtarget_$variant" -D$option
+              done
+            fi
+          done
 
   catch-bad-whitespace:
     runs-on: ubuntu-latest
