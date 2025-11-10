@@ -107,12 +107,12 @@ gcc -o "$TEMP_DIR/pnut-sh.exe" pnut.c -Dsh
 
 # Measuring for pnut-sh
 measure_size "pnut-sh" "-Dsh"
-measure_size "pnut-sh" "-Dsh -DPNUT_BOOTSTRAP"
+measure_size "pnut-minimal-sh" "-Dsh -DPNUT_BOOTSTRAP"
 
 # ...and for the other targets
 measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
-measure_size "pnut-i386_linux" "-Dtarget_i386_linux -DPNUT_BOOTSTRAP"
+measure_size "pnut-minimal-i386_linux" "-Dtarget_i386_linux -DPNUT_BOOTSTRAP"
 measure_size "pnut-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
-measure_size "pnut-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
+measure_size "pnut-minimal-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
 # measure_size "pnut-x86_64_linux" "-Dtarget_x86_64_linux"
 # measure_size "pnut-x86_64_mac" "-Dtarget_x86_64_mac"
