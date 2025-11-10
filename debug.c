@@ -42,8 +42,6 @@ void print_tok_indent() {
 }
 
 void print_tok(int tok, int val) {
-  int i;
-
   // print_tok treats '{', '}' and '\n' specially:
   // - '{' increases the indent level by 2
   // - '}' decreases the indent level by 2
@@ -89,7 +87,9 @@ void print_tok(int tok, int val) {
   else if (tok == EXTERN_KW)    putstr("extern");
   else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
+#ifdef SUPPORT_GOTO
   else if (tok == GOTO_KW)      putstr("goto");
+#endif
   else if (tok == IF_KW)        putstr("if");
   else if (tok == INT_KW)       putstr("int");
   else if (tok == LONG_KW)      putstr("long");
@@ -221,7 +221,9 @@ void print_tok_type(int tok) {
   else if (tok == EXTERN_KW)    putstr("extern");
   else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
+#ifdef SUPPORT_GOTO
   else if (tok == GOTO_KW)      putstr("goto");
+#endif
   else if (tok == IF_KW)        putstr("if");
   else if (tok == INT_KW)       putstr("int");
   else if (tok == LONG_KW)      putstr("long");
@@ -548,7 +550,6 @@ void print_tokens(int tokens) {
 }
 
 void print_macro_args(int args) {
-  int arg;
   if (args != 0) {
     print_macro_args(cdr(args));
     print_tokens(car(args));
@@ -557,7 +558,6 @@ void print_macro_args(int args) {
 }
 
 void print_macro_ctx(int ix, int ident, int tokens, int args) {
-  int arg;
   if (ident == 0) {
     printf("# %-3d: <unnamed>", ix);
   } else {

@@ -550,6 +550,8 @@ int alloc_label_() {
 }
 #endif
 
+#ifdef SUPPORT_GOTO
+
 int alloc_goto_label() {
   int lbl = alloc_obj(3);
   heap[lbl] = GOTO_LABEL;
@@ -558,6 +560,8 @@ int alloc_goto_label() {
   add_label(lbl);
   return lbl;
 }
+
+#endif // SUPPORT_GOTO
 
 bool is_label_defined(int lbl) {
   return heap[lbl + 1] < 0;
@@ -635,6 +639,8 @@ void def_label(int lbl) {
   }
 }
 
+#ifdef SUPPORT_GOTO
+
 // Similar to use_label, but for gotos.
 // The main difference is that it adjusts the stack and jumps, as opposed to
 // simply emitting the address.
@@ -700,6 +706,8 @@ void def_goto_label(int lbl) {
     code_alloc = label_addr;
   }
 }
+
+#endif // SUPPORT_GOTO
 
 ast int_type;
 ast uint_type;
@@ -1434,6 +1442,8 @@ void codegen_call(ast node) {
   push_reg(reg_X);
 }
 
+#ifdef SUPPORT_GOTO
+
 void codegen_goto(ast node) {
   ast label_ident = get_val_(IDENTIFIER, get_child__(GOTO_KW, IDENTIFIER, node, 0));
 
@@ -1448,6 +1458,8 @@ void codegen_goto(ast node) {
 
   jump_to_goto_label(heap[binding + 3]); // Label
 }
+
+#endif // SUPPORT_GOTO
 
 // Return the width of the lvalue
 int codegen_lvalue(ast node) {
@@ -2537,6 +2549,7 @@ void codegen_statement(ast node) {
 
     codegen_body(node);
 
+#ifdef SUPPORT_GOTO
   } else if (op == ':') {
 
     binding = cgc_lookup_goto_label(get_val_(IDENTIFIER, get_child_(':', node, 0)), cgc_locals_fun);
@@ -2552,7 +2565,7 @@ void codegen_statement(ast node) {
   } else if (op == GOTO_KW) {
 
     codegen_goto(node);
-
+#endif
   } else {
 
     codegen_rvalue(node);

@@ -2293,6 +2293,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == '=') { // six.x=y
     comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
     return false;
+#ifdef SUPPORT_GOTO
   } else if (op == ':') {
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
@@ -2301,6 +2302,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
     return false;
+#endif
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;

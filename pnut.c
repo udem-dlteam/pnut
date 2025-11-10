@@ -173,6 +173,7 @@
   #define FULL_CLI_OPTIONS
   #define FULL_PREPROCESSOR_SUPPORT
   #define SUPPORT_COMPLEX_INITIALIZER
+  #define SUPPORT_GOTO
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_VARIADIC_FUNCTIONS
 #endif
@@ -400,7 +401,9 @@ enum {
   EXTERN_KW,
   FLOAT_KW,
   FOR_KW,
+#ifdef SUPPORT_GOTO
   GOTO_KW,
+#endif
   IF_KW,
   INLINE_KW,
   INT_KW,
@@ -1798,7 +1801,9 @@ void init_ident_table() {
   init_ident(EXTERN_KW,   "extern");
   init_ident(FLOAT_KW,    "float");
   init_ident(FOR_KW,      "for");
+#ifdef SUPPORT_GOTO
   init_ident(GOTO_KW,     "goto");
+#endif
   init_ident(IF_KW,       "if");
   init_ident(INLINE_KW,   "inline");
   init_ident(INT_KW,      "int");
@@ -4079,12 +4084,15 @@ ast parse_statement() {
 
     result = new_ast4(FOR_KW, result, child1, child2, child3);
 
+#ifdef SUPPORT_GOTO
   } else if (tok == GOTO_KW) {
 
     get_tok();
     expect_tok(IDENTIFIER);
     result = new_ast1(GOTO_KW, new_ast0(IDENTIFIER, val));
     expect_tok(';');
+
+#endif // SUPPORT_GOTO
 
   } else if (tok == CONTINUE_KW) {
 
