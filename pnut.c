@@ -2329,6 +2329,30 @@ void paste_tokens(int left_tok, int left_val) {
 
 #endif // FULL_PREPROCESSOR_SUPPORT
 
+void skip_to_end_of_line() {
+  while (ch != '\n' && ch != EOF) {
+    get_ch();
+  }
+}
+
+bool skip_inactive_line() {
+  // If the line starts with whitespace followed by a #, it's potentially a preprocessor
+  // directive that we need to process even in inactive #if blocks, return true in that case.
+
+  // Skip whitespace
+  while (ch <= ' ' && ch != EOF) {
+    get_ch();
+  }
+
+  if (ch == '#') {
+    return true;
+  } else {
+    // Skip to the end of the line
+    skip_to_end_of_line();
+    return false;
+  }
+}
+
 void get_tok() {
 
 #ifdef SH_INCLUDE_C_CODE
@@ -2344,452 +2368,453 @@ void get_tok() {
   int prev_tok_column_number = column_number;
 #endif
 
-  // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  do {
 #ifdef SH_INCLUDE_C_CODE
     code_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
 #endif
 
-    while (1) {
-      // Check if there are any tokens to replay. Macros are just identifiers that
-      // have been marked as macros. In terms of how we get into that state, a
-      // macro token is first returned by the get_ident call a few lines below.
-      if (macro_tok_lst != 0) {
-        tok = car(car(macro_tok_lst));
-        val = cdr(car(macro_tok_lst));
-        macro_tok_lst = cdr(macro_tok_lst);
-        // Tokens that are identifiers and up are tokens whose kind can change
-        // between the moment the macro is defined and where it is used.
-        // So we reload the kind from the ident table.
-        if (tok >= IDENTIFIER) tok = heap[val + 2];
+  while (1) {
+    // When if_macro_mask is false, skip all tokens until we reach a preprocessor directive.
+    if (!if_macro_mask) {
+      while (!skip_inactive_line());
+      tok = '\n'; // Return a newline token to end the current directive
+    }
+
+    // Check if there are any tokens to replay. Macros are just identifiers that
+    // have been marked as macros. In terms of how we get into that state, a
+    // macro token is first returned by the get_ident call a few lines below.
+    if (macro_tok_lst != 0) {
+      tok = car(car(macro_tok_lst));
+      val = cdr(car(macro_tok_lst));
+      macro_tok_lst = cdr(macro_tok_lst);
+      // Tokens that are identifiers and up are tokens whose kind can change
+      // between the moment the macro is defined and where it is used.
+      // So we reload the kind from the ident table.
+      if (tok >= IDENTIFIER) tok = heap[val + 2];
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
-        // Check if the next token is ## for token pasting
-        if (macro_tok_lst != 0 && car(car(macro_tok_lst)) == HASH_HASH) {
-          if (tok == MACRO || tok == MACRO_ARG) {
-            // If the token is a macro or macro arg, it must be expanded before pasting
-            macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
-            paste_last_token = true;
-          } else {
-            // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
-            macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
-            paste_tokens(tok, val);
-          }
-        } else if (macro_tok_lst == 0 && paste_last_token) { // We finished expanding the left-hand side of ##
-          if (macro_stack_ix == 0) {
-            // If we are not in a macro expansion, we can't paste the last token
-            // This should not happen if the macro is well-formed, which is
-            // checked by read_macro_tokens.
-            syntax_error("## cannot appear at the end of a macro expansion");
-          }
-          return_to_parent_macro();
-          paste_last_token = false; // We are done pasting
+      // Check if the next token is ## for token pasting
+      if (macro_tok_lst != 0 && car(car(macro_tok_lst)) == HASH_HASH) {
+        if (tok == MACRO || tok == MACRO_ARG) {
+          // If the token is a macro or macro arg, it must be expanded before pasting
+          macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
+          paste_last_token = true;
+        } else {
+          // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
+          macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
           paste_tokens(tok, val);
         }
+      } else if (macro_tok_lst == 0 && paste_last_token) { // We finished expanding the left-hand side of ##
+        if (macro_stack_ix == 0) {
+          // If we are not in a macro expansion, we can't paste the last token
+          // This should not happen if the macro is well-formed, which is
+          // checked by read_macro_tokens.
+          syntax_error("## cannot appear at the end of a macro expansion");
+        }
+        return_to_parent_macro();
+        paste_last_token = false; // We are done pasting
+        paste_tokens(tok, val);
+      }
 #endif // FULL_PREPROCESSOR_SUPPORT
 
-        if (tok == MACRO) { // Nested macro expansion!
+      if (tok == MACRO) { // Nested macro expansion!
+        if (attempt_macro_expansion(val)) {
+          continue;
+        }
+        break;
+      } else if (tok == MACRO_ARG && expand_macro_arg) {
+        begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
+        continue;
+      }
+#ifdef FULL_PREPROCESSOR_SUPPORT
+      else if (tok == '#') { // Stringizing!
+        stringify();
+        break;
+      }
+#endif // FULL_PREPROCESSOR_SUPPORT
+      break;
+    } else if (macro_stack_ix != 0) {
+      return_to_parent_macro();
+      continue;
+    } else if (ch <= ' ') {
+
+      if (ch == EOF) {
+        tok = EOF;
+        break;
+      }
+
+      // skip whitespace, detecting when it is at start of line.
+      // When skip_newlines is false, produces a '\n' token whenever it
+      // encounters whitespace containing at least a newline.
+      // This condenses multiple newlines into a single '\n' token and serves
+      // to end the current preprocessor directive.
+
+      tok = 0; // Reset the token
+      while (0 <= ch && ch <= ' ') {
+        if (ch == '\n') tok = ch;
+        get_ch();
+      }
+
+      if (tok == '\n' && !skip_newlines) {
+        // If the newline is followed by a #, the preprocessor directive is
+        // handled in the next iteration of the loop.
+        break;
+      }
+
+      // will continue while (1) loop
+    }
+
+    // detect '#' at start of line, possibly preceded by whitespace
+    else if (tok == '\n' && ch == '#') {
+      tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
+      handle_preprocessor_directive();
+      // will continue while (1) loop
+    }
+
+    else if (('a' <= ch && ch <= 'z') ||
+              ('A' <= ch && ch <= 'Z') ||
+              (ch == '_')) {
+
+      get_ident();
+
+      if (tok == MACRO) {
+        // We only expand in ifdef true blocks and if the expander is enabled.
+        // Since this is the "base case" of the macro expansion, we don't need
+        // to disable the other places where macro expansion is done.
+        if (if_macro_mask && expand_macro) {
           if (attempt_macro_expansion(val)) {
             continue;
           }
           break;
-        } else if (tok == MACRO_ARG && expand_macro_arg) {
-          begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
-          continue;
         }
-#ifdef FULL_PREPROCESSOR_SUPPORT
-        else if (tok == '#') { // Stringizing!
-          stringify();
-          break;
-        }
-#endif // FULL_PREPROCESSOR_SUPPORT
-        break;
-      } else if (macro_stack_ix != 0) {
-        return_to_parent_macro();
-        continue;
-      } else if (ch <= ' ') {
-
-        if (ch == EOF) {
-          tok = EOF;
-          break;
-        }
-
-        // skip whitespace, detecting when it is at start of line.
-        // When skip_newlines is false, produces a '\n' token whenever it
-        // encounters whitespace containing at least a newline.
-        // This condenses multiple newlines into a single '\n' token and serves
-        // to end the current preprocessor directive.
-
-        tok = 0; // Reset the token
-        while (0 <= ch && ch <= ' ') {
-          if (ch == '\n') tok = ch;
-          get_ch();
-        }
-
-        if (tok == '\n' && !skip_newlines) {
-          // If the newline is followed by a #, the preprocessor directive is
-          // handled in the next iteration of the loop.
-          break;
-        }
-
-        // will continue while (1) loop
       }
+      break;
+    } else if ('0' <= ch && ch <= '9') {
 
-      // detect '#' at start of line, possibly preceded by whitespace
-      else if (tok == '\n' && ch == '#') {
-        tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
-        handle_preprocessor_directive();
-        // will continue while (1) loop
-      }
+      INIT_ACCUM_DIGIT();
 
-      else if (('a' <= ch && ch <= 'z') ||
-               ('A' <= ch && ch <= 'Z') ||
-               (ch == '_')) {
-
-        get_ident();
-
-        if (tok == MACRO) {
-          // We only expand in ifdef true blocks and if the expander is enabled.
-          // Since this is the "base case" of the macro expansion, we don't need
-          // to disable the other places where macro expansion is done.
-          if (if_macro_mask && expand_macro) {
-            if (attempt_macro_expansion(val)) {
-              continue;
-            }
-            break;
-          }
-        }
-        break;
-      } else if ('0' <= ch && ch <= '9') {
-
-        INIT_ACCUM_DIGIT();
-
-        tok = INTEGER;
-        if (ch == '0') { // val == 0 <=> ch == '0'
-          get_ch();
-          if (ch == 'x' || ch == 'X') {
+      tok = INTEGER;
+      if (ch == '0') { // val == 0 <=> ch == '0'
+        get_ch();
+        if (ch == 'x' || ch == 'X') {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-            tok = INTEGER_HEX;
+          tok = INTEGER_HEX;
 #endif
-            get_ch();
-            if (accum_digit(16)) {
-              while (accum_digit(16));
-            } else {
-              syntax_error("invalid hex integer -- it must have at least one digit");
-            }
+          get_ch();
+          if (accum_digit(16)) {
+            while (accum_digit(16));
           } else {
-            while (accum_digit(8));
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-            // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
-#ifdef SUPPORT_64_BIT_LITERALS
-            tok = TERNARY(val_32[0] == 0 && val_32[1] == 0, INTEGER, INTEGER_OCT);
-#else
-            tok = TERNARY(val == 0, INTEGER, INTEGER_OCT);
-#endif
-#endif
+            syntax_error("invalid hex integer -- it must have at least one digit");
           }
         } else {
-          while (accum_digit(10));
+          while (accum_digit(8));
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+          // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
+#ifdef SUPPORT_64_BIT_LITERALS
+          tok = TERNARY(val_32[0] == 0 && val_32[1] == 0, INTEGER, INTEGER_OCT);
+#else
+          tok = TERNARY(val == 0, INTEGER, INTEGER_OCT);
+#endif
+#endif
         }
+      } else {
+        while (accum_digit(10));
+      }
 
 #ifdef SUPPORT_64_BIT_LITERALS
-        u64_to_obj(val_32);
+      u64_to_obj(val_32);
 #endif
 
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-        // If this is enabled with PARSE_NUMERIC_LITERAL_WITH_BASE, using a
-        // suffix replaces INTEGER_OCT and INTEGER_HEX with base 10 INTEGER.
+      // If this is enabled with PARSE_NUMERIC_LITERAL_WITH_BASE, using a
+      // suffix replaces INTEGER_OCT and INTEGER_HEX with base 10 INTEGER.
+      if (ch == 'u' || ch == 'U') {
+        // Note: allows suffixes with mixed case, such as lL for simplicity
+        tok = INTEGER_U;
+        get_ch();
+        if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_UL;
+          get_ch();
+          if (ch == 'l' || ch == 'L') {
+            tok = INTEGER_ULL;
+            get_ch();
+          }
+        }
+      } else if (ch == 'l' || ch == 'L') {
+        tok = INTEGER_L;
+        get_ch();
+        if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_LL;
+          get_ch();
+        }
         if (ch == 'u' || ch == 'U') {
-          // Note: allows suffixes with mixed case, such as lL for simplicity
-          tok = INTEGER_U;
+          tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
           get_ch();
-          if (ch == 'l' || ch == 'L') {
-            tok = INTEGER_UL;
-            get_ch();
-            if (ch == 'l' || ch == 'L') {
-              tok = INTEGER_ULL;
-              get_ch();
-            }
-          }
-        } else if (ch == 'l' || ch == 'L') {
-          tok = INTEGER_L;
-          get_ch();
-          if (ch == 'l' || ch == 'L') {
-            tok = INTEGER_LL;
-            get_ch();
-          }
-          if (ch == 'u' || ch == 'U') {
-            tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
-            get_ch();
-          }
-        }
-#endif
-
-        break;
-
-      } else if (ch == '\'') {
-
-        get_ch();
-        get_string_char();
-
-        if (ch != '\'') {
-          syntax_error("unterminated character literal");
-        }
-
-        get_ch();
-
-        tok = CHARACTER;
-
-        break;
-
-      } else if (ch == '\"') {
-
-        get_ch();
-
-        begin_string();
-        accum_string_until('\"');
-
-        val = end_string();
-        tok = STRING;
-
-        break;
-
-      } else {
-
-        tok = ch; // fallback for single char tokens
-
-        if (ch == '/') {
-
-          get_ch();
-          if (ch == '*') {
-            get_ch();
-            tok = ch; // remember previous char, except first one
-            while ((tok != '*' || ch != '/') && ch != EOF) {
-              tok = ch;
-              get_ch();
-            }
-            if (ch == EOF) {
-              syntax_error("unterminated comment");
-            }
-            get_ch();
-            // will continue while (1) loop
-          } else if (ch == '/') {
-            while (ch != '\n' && ch != EOF) {
-              get_ch();
-            }
-            // will continue while (1) loop
-          } else {
-            if (ch == '=') {
-              get_ch();
-              tok = SLASH_EQ;
-            }
-            break;
-          }
-
-        } else if (ch == '&') {
-
-          get_ch();
-          if (ch == '&') {
-            get_ch();
-            tok = AMP_AMP;
-          } else if (ch == '=') {
-            get_ch();
-            tok = AMP_EQ;
-          }
-
-          break;
-
-        } else if (ch == '|') {
-
-          get_ch();
-          if (ch == '|') {
-            get_ch();
-            tok = BAR_BAR;
-          } else if (ch == '=') {
-            get_ch();
-            tok = BAR_EQ;
-          }
-
-          break;
-
-        } else if (ch == '<') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = LT_EQ;
-          } else if (ch == '<') {
-            get_ch();
-            if (ch == '=') {
-              get_ch();
-              tok = LSHIFT_EQ;
-            } else {
-              tok = LSHIFT;
-            }
-          }
-
-          break;
-
-        } else if (ch == '>') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = GT_EQ;
-          } else if (ch == '>') {
-            get_ch();
-            if (ch == '=') {
-              get_ch();
-              tok = RSHIFT_EQ;
-            } else {
-              tok = RSHIFT;
-            }
-          }
-
-          break;
-
-        } else if (ch == '=') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = EQ_EQ;
-          }
-
-          break;
-
-        } else if (ch == '!') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = EXCL_EQ;
-          }
-
-          break;
-
-        } else if (ch == '+') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = PLUS_EQ;
-          } else if (ch == '+') {
-            get_ch();
-            tok = PLUS_PLUS;
-          }
-
-          break;
-
-        } else if (ch == '-') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = MINUS_EQ;
-          }
-#ifdef SUPPORT_STRUCT_UNION
-          else if (ch == '>') {
-            get_ch();
-            tok = ARROW;
-          }
-#endif
-          else if (ch == '-') {
-            get_ch();
-            tok = MINUS_MINUS;
-          }
-
-          break;
-
-        } else if (ch == '*') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = STAR_EQ;
-          }
-
-          break;
-
-        } else if (ch == '%') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = PERCENT_EQ;
-          }
-
-          break;
-
-        } else if (ch == '^') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = CARET_EQ;
-          }
-
-          break;
-
-        } else if (ch == '#') {
-
-          get_ch();
-#ifdef FULL_PREPROCESSOR_SUPPORT
-          if (ch == '#') {
-            get_ch();
-            tok = HASH_HASH;
-          }
-#endif // FULL_PREPROCESSOR_SUPPORT
-
-          break;
-
-        }
-#if defined(SUPPORT_STRUCT_UNION) || defined(SUPPORT_VARIADIC_FUNCTIONS)
-        else if (ch == '.') {
-          get_ch();
-#ifdef SUPPORT_VARIADIC_FUNCTIONS
-          if (ch == '.') {
-            get_ch();
-            if (ch == '.') {
-              get_ch();
-              tok = ELLIPSIS;
-            } else {
-              dump_char(ch);
-              syntax_error("invalid token");
-            }
-          } else {
-            tok = '.';
-          }
-#else
-          tok = '.';
-#endif // SUPPORT_VARIADIC_FUNCTIONS
-          break;
-        }
-#endif
-        else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
-
-          tok = ch;
-
-          get_ch();
-
-          break;
-
-        } else if (ch == '\\') {
-          get_ch();
-
-          if (ch == '\n') { // Continues with next token
-            get_ch();
-          } else {
-            dump_char(ch);
-            syntax_error("unexpected character after backslash");
-          }
-        } else {
-          dump_char(ch);
-          syntax_error("invalid token");
         }
       }
+#endif
+
+      break;
+
+    } else if (ch == '\'') {
+
+      get_ch();
+      get_string_char();
+
+      if (ch != '\'') {
+        syntax_error("unterminated character literal");
+      }
+
+      get_ch();
+
+      tok = CHARACTER;
+
+      break;
+
+    } else if (ch == '\"') {
+
+      get_ch();
+
+      begin_string();
+      accum_string_until('\"');
+
+      val = end_string();
+      tok = STRING;
+
+      break;
+
+    } else {
+
+      tok = ch; // fallback for single char tokens
+
+      if (ch == '/') {
+
+        get_ch();
+        if (ch == '*') {
+          get_ch();
+          tok = ch; // remember previous char, except first one
+          while ((tok != '*' || ch != '/') && ch != EOF) {
+            tok = ch;
+            get_ch();
+          }
+          if (ch == EOF) {
+            syntax_error("unterminated comment");
+          }
+          get_ch();
+          // will continue while (1) loop
+        } else if (ch == '/') {
+          skip_to_end_of_line();
+          // will continue while (1) loop
+        } else {
+          if (ch == '=') {
+            get_ch();
+            tok = SLASH_EQ;
+          }
+          break;
+        }
+
+      } else if (ch == '&') {
+
+        get_ch();
+        if (ch == '&') {
+          get_ch();
+          tok = AMP_AMP;
+        } else if (ch == '=') {
+          get_ch();
+          tok = AMP_EQ;
+        }
+
+        break;
+
+      } else if (ch == '|') {
+
+        get_ch();
+        if (ch == '|') {
+          get_ch();
+          tok = BAR_BAR;
+        } else if (ch == '=') {
+          get_ch();
+          tok = BAR_EQ;
+        }
+
+        break;
+
+      } else if (ch == '<') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = LT_EQ;
+        } else if (ch == '<') {
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = LSHIFT_EQ;
+          } else {
+            tok = LSHIFT;
+          }
+        }
+
+        break;
+
+      } else if (ch == '>') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = GT_EQ;
+        } else if (ch == '>') {
+          get_ch();
+          if (ch == '=') {
+            get_ch();
+            tok = RSHIFT_EQ;
+          } else {
+            tok = RSHIFT;
+          }
+        }
+
+        break;
+
+      } else if (ch == '=') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = EQ_EQ;
+        }
+
+        break;
+
+      } else if (ch == '!') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = EXCL_EQ;
+        }
+
+        break;
+
+      } else if (ch == '+') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = PLUS_EQ;
+        } else if (ch == '+') {
+          get_ch();
+          tok = PLUS_PLUS;
+        }
+
+        break;
+
+      } else if (ch == '-') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = MINUS_EQ;
+        }
+#ifdef SUPPORT_STRUCT_UNION
+        else if (ch == '>') {
+          get_ch();
+          tok = ARROW;
+        }
+#endif
+        else if (ch == '-') {
+          get_ch();
+          tok = MINUS_MINUS;
+        }
+
+        break;
+
+      } else if (ch == '*') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = STAR_EQ;
+        }
+
+        break;
+
+      } else if (ch == '%') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = PERCENT_EQ;
+        }
+
+        break;
+
+      } else if (ch == '^') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = CARET_EQ;
+        }
+
+        break;
+
+      } else if (ch == '#') {
+
+        get_ch();
+#ifdef FULL_PREPROCESSOR_SUPPORT
+        if (ch == '#') {
+          get_ch();
+          tok = HASH_HASH;
+        }
+#endif // FULL_PREPROCESSOR_SUPPORT
+
+        break;
+
+      }
+#if defined(SUPPORT_STRUCT_UNION) || defined(SUPPORT_VARIADIC_FUNCTIONS)
+      else if (ch == '.') {
+        get_ch();
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+        if (ch == '.') {
+          get_ch();
+          if (ch == '.') {
+            get_ch();
+            tok = ELLIPSIS;
+          } else {
+            dump_char(ch);
+            syntax_error("invalid token");
+          }
+        } else {
+          tok = '.';
+        }
+#else
+        tok = '.';
+#endif // SUPPORT_VARIADIC_FUNCTIONS
+        break;
+      }
+#endif
+      else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
+
+        tok = ch;
+
+        get_ch();
+
+        break;
+
+      } else if (ch == '\\') {
+        get_ch();
+
+        if (ch == '\n') { // Continues with next token
+          get_ch();
+        } else {
+          dump_char(ch);
+          syntax_error("unexpected character after backslash");
+        }
+      } else {
+        dump_char(ch);
+        syntax_error("invalid token");
+      }
     }
-  } while (!if_macro_mask);
+  }
 
 #ifdef SH_INCLUDE_C_CODE
   last_tok_code_buf_ix = prev_last_tok_char_buf_ix - 1;

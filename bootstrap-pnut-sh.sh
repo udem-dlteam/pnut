@@ -22,13 +22,16 @@ bootstrap_with_shell() {
 # Parse the arguments
 shell="$SHELL" # Use current shell as the default. "all" to test all shells.
 safe=0
+fast=0
+minimal_pnut=0 # Enable PNUT_BOOTSTRAP for bootstrapping
 compile_only=0
 
 while [ $# -gt 0 ]; do
   case $1 in
     --shell) shell="$2";                              shift 2 ;;
-    --fast)  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
+    --fast)  fast=1;                                  shift 1 ;;
     --safe)  safe=1;                                  shift 1 ;;
+    --minimal-pnut) minimal_pnut=1;                   shift 1 ;;
     --compile-only) compile_only=1;                   shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
@@ -36,7 +39,9 @@ done
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
+if [ $fast -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; fi
 if [ $safe -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DSAFE_MODE"; fi
+if [ $minimal_pnut -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DPNUT_BOOTSTRAP"; fi
 
 gcc -o "$TEMP_DIR/pnut.exe" $PNUT_SH_OPTIONS pnut.c
 

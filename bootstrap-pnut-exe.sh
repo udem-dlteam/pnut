@@ -10,13 +10,17 @@ PNUT_EXE_OPTIONS="$PNUT_OPTIONS" # Backend is set by the backend option
 PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dsh"
 PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET"
 
+add_exe_option() {
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -D$1"
+}
+
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
 printf_timing() {
   msg=$1
   cmd=$2
   real_time=`env time -p sh -c "$cmd" 2>&1 | grep '^real ' | sed 's/.* //'`
-  printf "%ss %s\n" $real_time "$msg"
+  printf "%s %s\n" $real_time "$msg"
 }
 
 bootstrap_with_gcc() {
@@ -131,17 +135,20 @@ bootstrap_with_shell() {
 backend="x86_64_linux"  # Default to x86_64_linux
 shell=                  # Defined if doing the full bootstrap using pnut.sh on Posix shell. "all" to test with all shells (slow).
 safe=0                  # Whether to use safe mode when compiling pnut (adds checks at run time)
+fast=0                  # Whether to use fast mode when compiling pnut (uses SH_SAVE_VARS_WITH_SET)
+minimal_pnut=0          # Enable PNUT_BOOTSTRAP for bootstrapping
 skip_pnut_sh=0          # Whether to skip the pnut.sh bootstrap (if set, we only compile with gcc)
 
 while [ $# -gt 0 ]; do
   case $1 in
-    --backend) backend="$2";                            shift 2 ;;
-    --shell)   shell="$2";                              shift 2 ;;
-    --fast)    PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
-    --one-pass-generator) PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DONE_PASS_GENERATOR"; shift 1 ;;
-    --stats)  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DPRINT_MEMORY_STATS"; shift 1 ;;
-    --no-pnut-sh-bootstrap) skip_pnut_sh=1;           shift 1 ;;
-    --safe)    safe=1;                                  shift 1 ;;
+    --backend)              backend="$2";                        shift 2 ;;
+    --shell)                shell="$2";                          shift 2 ;;
+    --fast)                 fast=1;                              shift 1 ;;
+    --no-pnut-sh-bootstrap) skip_pnut_sh=1;                      shift 1 ;;
+    --safe)                 safe=1;                              shift 1 ;;
+    --minimal-pnut)         minimal_pnut=1;                      shift 1 ;;
+    --one-pass-generator)   add_exe_option "ONE_PASS_GENERATOR"; shift 1 ;;
+    --stats)                add_exe_option "PRINT_MEMORY_STATS"; shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -156,8 +163,13 @@ case $backend in
     ;;
 esac
 
-# Add safe mode if requested
+if [ $fast -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST";          fi
 if [ $safe -eq 1 ]; then PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE"; fi
+if [ $minimal_pnut -eq 1 ]; then
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP";
+  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DPNUT_BOOTSTRAP";
+  PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS_FAST -DPNUT_BOOTSTRAP";
+fi
 
 if [ -z "$shell" ]; then
   bootstrap_with_gcc
