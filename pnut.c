@@ -129,6 +129,11 @@
   #define RT_USE_LOOKUP_TABLE
   #endif
 
+  #ifdef SH_OPTIMIZE_LONG_LINES_NOT
+  // Disable long line optimization
+  #undef SH_OPTIMIZE_LONG_LINES
+  #endif
+
   // Disabled options:
   // Include the C code as comment along with the generated shell code
   // #define SH_INCLUDE_C_CODE

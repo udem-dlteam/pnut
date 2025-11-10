@@ -335,33 +335,32 @@ jobs:
           sudo chroot woody /bin/bash -c "mkdir pnut && tar -xvzf pnut.tar.gz -C pnut" # Extract the pnut repo into the woody environment
           sudo chroot woody /bin/bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential time timeout" # Install gcc and time utils
 
-      - name: Run tests with bash 2.05a
+      - name: Run tests and bootstraps with bash 2.05a
         run: |
-          sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./run-tests.sh sh --shell bash"
+          set -e
+          # Unset of undeclared variables is not supported in bash 2.05a
+          COMPATIBILITY_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT"
+          # The following snippet produces a different result in bash 2.05a
+          # __us_buf256="Garfield hates Mondays\n"
+          # __temp="${__us_buf256#????????????????}"
+          # __us_buf16="${__us_buf256%"$__temp"}"
+          # __us_buf256="$__temp"
+          COMPATIBILITY_OPTIONS="$COMPATIBILITY_OPTIONS -DSH_OPTIMIZE_LONG_LINES_NOT"
 
-      - name: Bootstrap pnut-sh.sh with bash 2.05a
-        run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-sh.sh --shell bash --fast"
+          sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./run-tests.sh sh --shell bash"
 
-      - name: Bootstrap pnut-exe with bash 2.05a (no shell)
-        run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --no-pnut-sh-bootstrap --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-sh.sh --shell bash --fast"
 
-      - name: Bootstrap pnut-exe with bash 2.05a
-        run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --no-pnut-sh-bootstrap --fast"
 
-      - name: Bootstrap pnut-exe with bash 2.05a (one-pass generator)
-        run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --one-pass-generator"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap"
 
-      - name: Bootstrap pnut-exe with bash 2.05a (fast)
-        run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --fast"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --one-pass-generator"
 
-      - name: Bootstrap pnut-exe with bash 2.05a (fast) (one-pass generator)
-        run: |
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --no-pnut-sh-bootstrap --one-pass-generator"
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --fast"
+
+          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --no-pnut-sh-bootstrap --one-pass-generator"
+
 
   pnut-variants-run:
     runs-on: ubuntu-latest
