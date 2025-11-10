@@ -78,7 +78,9 @@ void print_tok(int tok, int val) {
   else if (tok == CASE_KW)      putstr("case");
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
+#ifdef SUPPORT_DO_WHILE
   else if (tok == DO_KW)        putstr("do");
+#endif
   else if (tok == ELSE_KW)      putstr("else");
   else if (tok == FOR_KW)       putstr("for");
   else if (tok == IF_KW)        putstr("if");
@@ -218,7 +220,9 @@ void print_tok_type(int tok) {
   else if (tok == CASE_KW)      putstr("case");
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
+#ifdef SUPPORT_DO_WHILE
   else if (tok == DO_KW)        putstr("do");
+#endif
   else if (tok == ELSE_KW)      putstr("else");
   else if (tok == FOR_KW)       putstr("for");
   else if (tok == IF_KW)        putstr("if");

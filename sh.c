@@ -2258,6 +2258,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
                      0, // No last line
                      stmt_ctx
                      );
+#ifdef SUPPORT_DO_WHILE
   } else if (op == DO_KW) {
     return comp_loop(wrap_str_lit(":"),
                      get_child_(DO_KW, node, 0),
@@ -2265,6 +2266,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
                      string_concat(comp_rvalue(get_child_(DO_KW, node, 1), RVALUE_CTX_TEST), wrap_str_lit(" || break")),
                      stmt_ctx
                      );
+#endif
   } else if (op == FOR_KW) {
     comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT); // Assuming this statement never returns...
 

@@ -231,6 +231,7 @@
   #define FULL_CLI_OPTIONS
   #define FULL_PREPROCESSOR_SUPPORT
   #define SUPPORT_COMPLEX_INITIALIZER
+  #define SUPPORT_DO_WHILE
   #define SUPPORT_GOTO
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_TYPE_SPECIFIERS
@@ -455,7 +456,9 @@ enum {
   CASE_KW,
   CONTINUE_KW,
   DEFAULT_KW,
+#ifdef SUPPORT_DO_WHILE
   DO_KW,
+#endif
   ELSE_KW,
   FOR_KW,
   IF_KW,
@@ -1881,7 +1884,9 @@ void init_ident_table() {
   init_ident(CASE_KW,     "case");
   init_ident(CONTINUE_KW, "continue");
   init_ident(DEFAULT_KW,  "default");
+#ifdef SUPPORT_DO_WHILE
   init_ident(DO_KW,       "do");
+#endif
   init_ident(ELSE_KW,     "else");
   init_ident(FOR_KW,      "for");
   init_ident(IF_KW,       "if");
@@ -4213,6 +4218,7 @@ ast parse_statement() {
 
     result = new_ast2(WHILE_KW, result, child1);
 
+#ifdef SUPPORT_DO_WHILE
   } else if (tok == DO_KW) {
 
     get_tok();
@@ -4222,6 +4228,7 @@ ast parse_statement() {
     expect_tok(';');
 
     result = new_ast2(DO_KW, result, child1);
+#endif // SUPPORT_DO_WHILE
 
   } else if (tok == FOR_KW) {
 

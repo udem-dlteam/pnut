@@ -2420,6 +2420,8 @@ void codegen_statement(ast node) {
     cgc_fs = save_fs;
     cgc_locals = save_locals;
 
+#ifdef SUPPORT_DO_WHILE
+
   } else if (op == DO_KW) {
 
     lbl1 = alloc_label(0); // do statement start
@@ -2441,6 +2443,8 @@ void codegen_statement(ast node) {
 
     cgc_fs = save_fs;
     cgc_locals = save_locals;
+
+#endif // SUPPORT_DO_WHILE
 
   } else if (op == SWITCH_KW) {
 
