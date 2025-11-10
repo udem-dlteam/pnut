@@ -1338,13 +1338,16 @@ int WARNING_ID;
 int ERROR_ID;
 int INCLUDE_SHELL_ID;
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
 int NOT_SUPPORTED_ID;
+#endif
 
 // We want to recognize certain identifers without having to do expensive string comparisons
+int MAIN_ID;
+#ifdef sh
 int ARGV__ID;
 int ARGV_ID;
 int IFS_ID;
-int MAIN_ID;
 
 int PUTCHAR_ID;
 int GETCHAR_ID;
@@ -1361,6 +1364,7 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
+#endif
 
 // Macros that are defined by the preprocessor
 int FILE__ID;
@@ -1856,12 +1860,16 @@ void init_ident_table() {
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
   DEFINED_ID = init_ident(IDENTIFIER, "defined");
+#ifdef SH_SUPPORT_SHELL_INCLUDE
   INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
+#endif
 
+  MAIN_ID = init_ident(IDENTIFIER, "main");
+
+#ifdef sh
   ARGV_ID = init_ident(IDENTIFIER, "argv");
   ARGV__ID = init_ident(IDENTIFIER, "argv_");
   IFS_ID  = init_ident(IDENTIFIER, "IFS");
-  MAIN_ID = init_ident(IDENTIFIER, "main");
 
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
   GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
@@ -1878,10 +1886,13 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+#endif
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
+#endif
 }
 
 int init_builtin_string_macro(char *macro_str, char* value) {
