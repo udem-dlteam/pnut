@@ -355,7 +355,6 @@ int max_gensym_ix = 0;          // Maximum value of gensym_ix for all functions
 int string_counter = 0;         // Counter for string literals
 ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a function
 bool main_defined = false;      // If the main function is defined
-bool top_level_stmt = true;     // If the current statement is at the top level
 
 #define CHARACTERS_BITFIELD_SIZE 16
 int characters_useds[16];        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
@@ -1154,9 +1153,13 @@ void comp_defstr(ast ident, int string_probe, int array_size) {
     array_size_text = string_concat(wrap_char(' '), wrap_int(array_size));
   }
 
-  if (top_level_stmt) {
-    // If defstr is used at the top level, it needs to be included beforehand
+  if (nest_level == 0) {
+#ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+    fatal_error("String literals are not supported in top-level statements.");
+#else
+    // If defstr is used at the top level, it needs to be defined before any code that uses it.
     runtime_defstr();
+#endif
   } else {
     runtime_use_defstr = true;
   }
@@ -2337,8 +2340,6 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == -1) return; // ignore forward declarations
 
-  top_level_stmt = false;
-
   handle_function_params(params);
 
   // If the function is main
@@ -2611,8 +2612,6 @@ void comp_glo_decl(ast node) {
   ast declarations;
   int op = get_op(node);
   fun_gensym_ix = 0;
-
-  top_level_stmt = true;
 
   if (op == '=') { // Assignments
    comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
