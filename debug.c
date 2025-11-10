@@ -73,42 +73,49 @@ void print_tok(int tok, int val) {
     print_tok_preceding_nl_count = 0;
   }
 
-  if      (tok == AUTO_KW)      putstr("auto");
-  else if (tok == BREAK_KW)     putstr("break");
+
+  if      (tok == BREAK_KW)     putstr("break");
   else if (tok == CASE_KW)      putstr("case");
-  else if (tok == CHAR_KW)      putstr("char");
-  else if (tok == CONST_KW)     putstr("const");
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
   else if (tok == DO_KW)        putstr("do");
-  else if (tok == DOUBLE_KW)    putstr("double");
   else if (tok == ELSE_KW)      putstr("else");
-  else if (tok == ENUM_KW)      putstr("enum");
-  else if (tok == EXTERN_KW)    putstr("extern");
-  else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
+  else if (tok == IF_KW)        putstr("if");
+  else if (tok == RETURN_KW)    putstr("return");
+  else if (tok == SIZEOF_KW)    putstr("sizeof");
+  else if (tok == SWITCH_KW)    putstr("switch");
+  else if (tok == TYPEDEF_KW)   putstr("typedef");
+  else if (tok == WHILE_KW)     putstr("while");
+  else if (tok == CHAR_KW)      putstr("char");
+  else if (tok == DOUBLE_KW)    putstr("double");
+  else if (tok == ENUM_KW)      putstr("enum");
+  else if (tok == FLOAT_KW)     putstr("float");
+  else if (tok == INT_KW)       putstr("int");
+  else if (tok == LONG_KW)      putstr("long");
+  else if (tok == SHORT_KW)     putstr("short");
+  else if (tok == SIGNED_KW)    putstr("signed");
+  else if (tok == UNSIGNED_KW)  putstr("unsigned");
+  else if (tok == VOID_KW)      putstr("void");
+
+// Type qualifiers and storage class specifiers
+  else if (tok == CONST_KW)     putstr("const");
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (tok == AUTO_KW)      putstr("auto");
+  else if (tok == EXTERN_KW)    putstr("extern");
+  else if (tok == REGISTER_KW)  putstr("register");
+  else if (tok == STATIC_KW)    putstr("static");
+  else if (tok == VOLATILE_KW)  putstr("volatile");
+  else if (tok == INLINE_KW)    putstr("inline");
+#endif
+
 #ifdef SUPPORT_GOTO
   else if (tok == GOTO_KW)      putstr("goto");
 #endif
-  else if (tok == IF_KW)        putstr("if");
-  else if (tok == INT_KW)       putstr("int");
-  else if (tok == LONG_KW)      putstr("long");
-  else if (tok == REGISTER_KW)  putstr("register");
-  else if (tok == RETURN_KW)    putstr("return");
-  else if (tok == SHORT_KW)     putstr("short");
-  else if (tok == SIGNED_KW)    putstr("signed");
-  else if (tok == SIZEOF_KW)    putstr("sizeof");
-  else if (tok == STATIC_KW)    putstr("static");
 #ifdef SUPPORT_STRUCT_UNION
   else if (tok == STRUCT_KW)    putstr("struct");
   else if (tok == UNION_KW)     putstr("union");
 #endif
-  else if (tok == SWITCH_KW)    putstr("switch");
-  else if (tok == TYPEDEF_KW)   putstr("typedef");
-  else if (tok == UNSIGNED_KW)  putstr("unsigned");
-  else if (tok == VOID_KW)      putstr("void");
-  else if (tok == VOLATILE_KW)  putstr("volatile");
-  else if (tok == WHILE_KW)     putstr("while");
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
@@ -207,42 +214,48 @@ void print_tok(int tok, int val) {
 // This is used for showing more helpful error messages.
 void print_tok_type(int tok) {
 
-  if      (tok == AUTO_KW)      putstr("auto");
-  else if (tok == BREAK_KW)     putstr("break");
+  if      (tok == BREAK_KW)     putstr("break");
   else if (tok == CASE_KW)      putstr("case");
-  else if (tok == CHAR_KW)      putstr("char");
-  else if (tok == CONST_KW)     putstr("const");
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
   else if (tok == DO_KW)        putstr("do");
-  else if (tok == DOUBLE_KW)    putstr("double");
   else if (tok == ELSE_KW)      putstr("else");
-  else if (tok == ENUM_KW)      putstr("enum");
-  else if (tok == EXTERN_KW)    putstr("extern");
-  else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
+  else if (tok == IF_KW)        putstr("if");
+  else if (tok == RETURN_KW)    putstr("return");
+  else if (tok == SIZEOF_KW)    putstr("sizeof");
+  else if (tok == SWITCH_KW)    putstr("switch");
+  else if (tok == TYPEDEF_KW)   putstr("typedef");
+  else if (tok == WHILE_KW)     putstr("while");
+  else if (tok == CHAR_KW)      putstr("char");
+  else if (tok == DOUBLE_KW)    putstr("double");
+  else if (tok == ENUM_KW)      putstr("enum");
+  else if (tok == FLOAT_KW)     putstr("float");
+  else if (tok == INT_KW)       putstr("int");
+  else if (tok == LONG_KW)      putstr("long");
+  else if (tok == SHORT_KW)     putstr("short");
+  else if (tok == SIGNED_KW)    putstr("signed");
+  else if (tok == UNSIGNED_KW)  putstr("unsigned");
+  else if (tok == VOID_KW)      putstr("void");
+
+// Type qualifiers and storage class specifiers
+  else if (tok == CONST_KW)     putstr("const");
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (tok == AUTO_KW)      putstr("auto");
+  else if (tok == EXTERN_KW)    putstr("extern");
+  else if (tok == REGISTER_KW)  putstr("register");
+  else if (tok == STATIC_KW)    putstr("static");
+  else if (tok == VOLATILE_KW)  putstr("volatile");
+  else if (tok == INLINE_KW)    putstr("inline");
+#endif
+
 #ifdef SUPPORT_GOTO
   else if (tok == GOTO_KW)      putstr("goto");
 #endif
-  else if (tok == IF_KW)        putstr("if");
-  else if (tok == INT_KW)       putstr("int");
-  else if (tok == LONG_KW)      putstr("long");
-  else if (tok == REGISTER_KW)  putstr("register");
-  else if (tok == RETURN_KW)    putstr("return");
-  else if (tok == SHORT_KW)     putstr("short");
-  else if (tok == SIGNED_KW)    putstr("signed");
-  else if (tok == SIZEOF_KW)    putstr("sizeof");
-  else if (tok == STATIC_KW)    putstr("static");
 #ifdef SUPPORT_STRUCT_UNION
   else if (tok == STRUCT_KW)    putstr("struct");
   else if (tok == UNION_KW)     putstr("union");
 #endif
-  else if (tok == SWITCH_KW)    putstr("switch");
-  else if (tok == TYPEDEF_KW)   putstr("typedef");
-  else if (tok == UNSIGNED_KW)  putstr("unsigned");
-  else if (tok == VOID_KW)      putstr("void");
-  else if (tok == VOLATILE_KW)  putstr("volatile");
-  else if (tok == WHILE_KW)     putstr("while");
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");

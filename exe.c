@@ -2252,6 +2252,8 @@ void codegen_local_var_decl(ast node) {
   }
 }
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
+
 void codegen_static_local_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
@@ -2272,7 +2274,10 @@ void codegen_static_local_var_decl(ast node) {
   }
 }
 
+#endif // SUPPORT_TYPE_SPECIFIERS
+
 void codegen_local_var_decls(ast node) {
+#ifdef SUPPORT_TYPE_SPECIFIERS
   bool is_static = false;
 
   switch (get_child_(DECLS, node, 1)) {
@@ -2284,14 +2289,19 @@ void codegen_local_var_decls(ast node) {
       fatal_error("Extern class specifier not supported");
       break;
   }
+#endif // SUPPORT_TYPE_SPECIFIERS
 
   node = get_child__(DECLS, LIST, node, 0);
   while (node != 0) { // Multiple variable declarations
+#ifdef SUPPORT_TYPE_SPECIFIERS
     if (is_static) {
       codegen_static_local_var_decl(car_(DECL, node));
     } else {
       codegen_local_var_decl(car_(DECL, node));
     }
+#else
+    codegen_local_var_decl(car_(DECL, node));
+#endif // SUPPORT_TYPE_SPECIFIERS
     node = tail(node);
   }
 }
@@ -2708,7 +2718,9 @@ void codegen_glo_decl(ast node) {
     // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
     // storage class for global variables since pnut-sh only supports 1
     // translation unit.
+#ifdef SUPPORT_TYPE_SPECIFIERS
     if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
+#endif
 
     decls = get_child__(DECLS, LIST, node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations

@@ -175,6 +175,7 @@
   #define SUPPORT_COMPLEX_INITIALIZER
   #define SUPPORT_GOTO
   #define SUPPORT_STRUCT_UNION
+  #define SUPPORT_TYPE_SPECIFIERS
   #define SUPPORT_VARIADIC_FUNCTIONS
 #endif
 
@@ -387,43 +388,54 @@ void restore_include_context() {
 // Tokens and AST nodes
 enum {
   // Keywords
-  AUTO_KW = 300,
+
+  KEYWORDS_START = 300,
   BREAK_KW,
   CASE_KW,
-  CHAR_KW,
-  CONST_KW,
   CONTINUE_KW,
   DEFAULT_KW,
   DO_KW,
-  DOUBLE_KW,
   ELSE_KW,
-  ENUM_KW,
-  EXTERN_KW,
-  FLOAT_KW,
   FOR_KW,
+  IF_KW,
+  RETURN_KW,
+  SIZEOF_KW,
+  SWITCH_KW,
+  TYPEDEF_KW,
+  WHILE_KW,
+
+// Type qualifiers and storage class specifiers
+  CONST_KW,
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  AUTO_KW,
+  EXTERN_KW,
+  REGISTER_KW,
+  STATIC_KW,
+  VOLATILE_KW,
+  INLINE_KW,
+#endif
+
+  // Type specifiers
+  // Must be below storage class specifiers for MK_TYPE_SPECIFIER to work correctly
+  CHAR_KW,
+  DOUBLE_KW,
+  ENUM_KW,
+  FLOAT_KW,
+  INT_KW,
+  LONG_KW,
+  SHORT_KW,
+  SIGNED_KW,
+  UNSIGNED_KW,
+  VOID_KW,
+
 #ifdef SUPPORT_GOTO
   GOTO_KW,
 #endif
-  IF_KW,
-  INLINE_KW,
-  INT_KW,
-  LONG_KW,
-  REGISTER_KW,
-  RETURN_KW,
-  SHORT_KW,
-  SIGNED_KW,
-  SIZEOF_KW,
-  STATIC_KW,
 #ifdef SUPPORT_STRUCT_UNION
   STRUCT_KW,
   UNION_KW,
 #endif
-  SWITCH_KW,
-  TYPEDEF_KW,
-  UNSIGNED_KW,
-  VOID_KW,
-  VOLATILE_KW,
-  WHILE_KW,
+  KEYWORDS_END,
 
   // Non-character operands
   INTEGER     = 401, // Integer written in decimal
@@ -1436,7 +1448,7 @@ void handle_define() {
   int args = 0; // List of arguments for a function-like macro
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
-  if (tok != IDENTIFIER && tok != MACRO && (tok < AUTO_KW || tok > WHILE_KW)) {
+  if (tok != IDENTIFIER && tok != MACRO && (tok < KEYWORDS_START || tok > KEYWORDS_END)) {
     dump_tok(tok);
     syntax_error("#define directive can only be followed by a identifier");
   }
@@ -1787,43 +1799,50 @@ void init_ident_table() {
     i += 1;
   }
 
-  init_ident(AUTO_KW,     "auto");
   init_ident(BREAK_KW,    "break");
   init_ident(CASE_KW,     "case");
-  init_ident(CHAR_KW,     "char");
-  init_ident(CONST_KW,    "const");
   init_ident(CONTINUE_KW, "continue");
   init_ident(DEFAULT_KW,  "default");
   init_ident(DO_KW,       "do");
-  init_ident(DOUBLE_KW,   "double");
   init_ident(ELSE_KW,     "else");
-  init_ident(ENUM_KW,     "enum");
-  init_ident(EXTERN_KW,   "extern");
-  init_ident(FLOAT_KW,    "float");
   init_ident(FOR_KW,      "for");
+  init_ident(IF_KW,       "if");
+  init_ident(RETURN_KW,   "return");
+  init_ident(SIZEOF_KW,   "sizeof");
+  init_ident(SWITCH_KW,   "switch");
+  init_ident(TYPEDEF_KW,  "typedef");
+  init_ident(WHILE_KW,    "while");
+
+  // Type specifiers
+  init_ident(CHAR_KW,     "char");
+  init_ident(DOUBLE_KW,   "double");
+  init_ident(ENUM_KW,     "enum");
+  init_ident(FLOAT_KW,    "float");
+  init_ident(INT_KW,      "int");
+  init_ident(LONG_KW,     "long");
+  init_ident(SHORT_KW,    "short");
+  init_ident(SIGNED_KW,   "signed");
+  init_ident(UNSIGNED_KW, "unsigned");
+  init_ident(VOID_KW,     "void");
+
+// Type qualifiers and storage class specifiers
+  init_ident(CONST_KW,    "const");
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  init_ident(AUTO_KW,     "auto");
+  init_ident(EXTERN_KW,   "extern");
+  init_ident(REGISTER_KW, "register");
+  init_ident(STATIC_KW,   "static");
+  init_ident(VOLATILE_KW, "volatile");
+  init_ident(INLINE_KW,   "inline");
+#endif
+
 #ifdef SUPPORT_GOTO
   init_ident(GOTO_KW,     "goto");
 #endif
-  init_ident(IF_KW,       "if");
-  init_ident(INLINE_KW,   "inline");
-  init_ident(INT_KW,      "int");
-  init_ident(LONG_KW,     "long");
-  init_ident(REGISTER_KW, "register");
-  init_ident(RETURN_KW,   "return");
-  init_ident(SHORT_KW,    "short");
-  init_ident(SIGNED_KW,   "signed");
-  init_ident(SIZEOF_KW,   "sizeof");
-  init_ident(STATIC_KW,   "static");
 #ifdef SUPPORT_STRUCT_UNION
   init_ident(STRUCT_KW,   "struct");
   init_ident(UNION_KW,    "union");
 #endif
-  init_ident(SWITCH_KW,   "switch");
-  init_ident(TYPEDEF_KW,  "typedef");
-  init_ident(UNSIGNED_KW, "unsigned");
-  init_ident(VOID_KW,     "void");
-  init_ident(VOLATILE_KW, "volatile");
-  init_ident(WHILE_KW,    "while");
 
   // Preprocessor keywords. These are not tagged as keyword since they can be
   // used as identifiers after the preprocessor stage.
@@ -2114,13 +2133,14 @@ void stringify() {
     syntax_error("expected macro argument after #");
   }
   arg = get_macro_arg(val);
-  tok = STRING;
+  tok = car(car(arg));
   // Support the case where the argument is a single identifier/macro/keyword token
-  if ((car(car(arg)) == IDENTIFIER || car(car(arg)) == MACRO || (AUTO_KW <= car(car(arg)) && car(car(arg)) <= WHILE_KW)) && cdr(arg) == 0) {
+  if ((tok == IDENTIFIER || tok == MACRO || (KEYWORDS_START <= tok && tok <= KEYWORDS_END)) && cdr(arg) == 0) {
     val = cdr(car(arg)); // Use the identifier probe
   } else {
     val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
   }
+  tok = STRING;
 }
 
 // Concatenates two non-negative integers into a single integer
@@ -2159,12 +2179,14 @@ void paste_tokens(int left_tok, int left_val) {
   }
   right_tok = tok;
   right_val = val;
-  if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO || left_tok <= WHILE_KW) {
+  if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO
+    || (KEYWORDS_START <= left_tok && left_tok <= KEYWORDS_END)) {
     // Something that starts with an identifier can only be an identifier
     begin_string();
     accum_string_string(left_val);
 
-    if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO || right_tok <= WHILE_KW) {
+    if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO
+     || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
       accum_string_string(right_val);
     } else if (right_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
@@ -2200,7 +2222,8 @@ void paste_tokens(int left_tok, int left_val) {
 #endif
        ) {
       val = -paste_integers(-left_val, -right_val);
-    } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
+    } else if (right_tok == IDENTIFIER || right_tok == MACRO
+            || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
       begin_string();
       accum_string_integer(-left_val);
       accum_string_string(right_val);
@@ -2776,9 +2799,10 @@ ast parse_declaration_specifiers(bool allow_typedef);
 ast parse_initializer_list();
 ast parse_initializer();
 
-// The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
-#define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
-#define TEST_TYPE_SPECIFIER(specifier, tok) ((specifier) & (1 << (tok - AUTO_KW)))
+// The storage class specifier and type qualifier tokens are all together
+// following the CONST_KW keyword.
+#define MK_TYPE_SPECIFIER(tok) (1 << (tok - CONST_KW))
+#define TEST_TYPE_SPECIFIER(specifier, tok) ((specifier) & (1 << (tok - CONST_KW)))
 
 ast get_type_specifier(ast type_or_decl) {
   while (1) {
@@ -2836,15 +2860,21 @@ bool is_type_starter(int tok) {
     case VOID_KW: case FLOAT_KW: case DOUBLE_KW:            // Void and floating point types
     case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
     case TYPE:                                              // User defined types
-    case CONST_KW: case VOLATILE_KW:                        // Type attributes
+    case CONST_KW:
+#ifdef SUPPORT_TYPE_SPECIFIERS
+    case VOLATILE_KW:                                       // Type attributes
+#endif
     case ENUM_KW:                                           // Enum
 #ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW: case UNION_KW:                          // Struct, union
 #endif
     // Storage class specifiers are not always valid type starters in all
     // contexts, but we allow them here
-    case TYPEDEF_KW: case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
+    case TYPEDEF_KW:
+#ifdef SUPPORT_TYPE_SPECIFIERS
+    case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
     case INLINE_KW:
+#endif
       return true;
     default:
       return false;
@@ -3085,10 +3115,12 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 
   while (loop) {
     switch (tok) {
+#ifdef SUPPORT_TYPE_SPECIFIERS
       case AUTO_KW:
       case REGISTER_KW:
       case STATIC_KW:
       case EXTERN_KW:
+#endif
       case TYPEDEF_KW:
         if (specifier_storage_class != 0) fatal_error("Multiple storage classes not supported");
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
@@ -3096,12 +3128,16 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         get_tok();
         break;
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
       case INLINE_KW:
         get_tok(); // Ignore inline
         break;
+#endif
 
       case CONST_KW:
+#ifdef SUPPORT_TYPE_SPECIFIERS
       case VOLATILE_KW:
+#endif
         type_qualifier |= MK_TYPE_SPECIFIER(tok);
         get_tok();
         break;

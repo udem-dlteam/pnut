@@ -2215,6 +2215,7 @@ bool comp_return(ast return_value) {
 void comp_var_decls(ast node) {
   ast var_decl;
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
   switch (get_child_(DECLS, node, 1)) {
     // AUTO_KW and REGISTER_KW can simply be ignored.
     case EXTERN_KW:
@@ -2222,6 +2223,7 @@ void comp_var_decls(ast node) {
       fatal_error("Extern and static storage class specifier not supported on local variables");
       break;
   }
+#endif
   node = get_child_opt_(DECLS, LIST, node, 0);
   while (node != 0) {
     // Add to local env and cummulative env, then initialize
@@ -2616,7 +2618,9 @@ void comp_glo_decl(ast node) {
     // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
     // storage class for global variables since pnut-sh only supports 1
     // translation unit.
+#ifdef SUPPORT_TYPE_SPECIFIERS
     if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
+#endif
     declarations = get_child__(DECLS, LIST, node, 0);
     while (declarations != 0) { // Multiple variable declarations
       comp_glo_var_decl(car_(DECL, declarations));
