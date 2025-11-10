@@ -132,11 +132,13 @@ void emit_i32_le(const int n) {
   emit_4_i8(n, n >> 8, n >> 16, n >> 24);
 }
 
+#if WORD_SIZE == 8
 void emit_i64_le(const int n) {
   emit_i32_le(n);
   // Sign extend to 64 bits. Arithmetic shift by 31 gives -1 for negative numbers and 0 for positive numbers.
   emit_i32_le(n >> 31);
 }
+#endif
 
 #ifdef SUPPORT_64_BIT_LITERALS
 void emit_i32_le_large_imm(const int imm_obj) {
@@ -149,6 +151,7 @@ void emit_i32_le_large_imm(const int imm_obj) {
   }
 }
 
+#if WORD_SIZE == 8
 void emit_i64_le_large_imm(const int imm_obj) {
   if (imm_obj <= 0) {
     emit_i64_le(-imm_obj);
@@ -157,6 +160,7 @@ void emit_i64_le_large_imm(const int imm_obj) {
     emit_i32_le(heap[imm_obj + 1]);
   }
 }
+#endif
 #endif
 
 char write_buf[1];
