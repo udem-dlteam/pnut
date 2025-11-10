@@ -751,15 +751,23 @@ ast clone_ast(const ast orig) {
 ast cons(const int child0, const int child1)    { return new_ast2(LIST, child0, child1); }
 ast car(const int pair)                         { return get_child_(LIST, pair, 0); }
 ast cdr(const int pair)                         { return get_child_(LIST, pair, 1); }
+#ifdef SAFE_MODE
 ast car_(const int expected_op, const int pair) { return get_child__(LIST, expected_op, pair, 0); }
 ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
-void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
+#else
+#define car_(expected_op, pair)                 car(pair)
+#define cdr_(expected_op, pair)                 cdr(pair)
+#endif
+// void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
 void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
+#ifndef sh
 ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
 ast list2(const int child0, const int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
 ast list3(const int child0, const int child1, const int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
+#endif
 #define tail(x) cdr_(LIST, x)
 
+#ifdef sh
 // Returns the only element of a singleton list, if it is a singleton list.
 // Otherwise, returns 0.
 ast list_singleton(const ast list) {
@@ -769,6 +777,7 @@ ast list_singleton(const ast list) {
     return 0;
   }
 }
+#endif
 
 // Simple accessor to get the string from the string pool
 #define STRING_BUF(probe) (string_pool + heap[probe+1])
@@ -2837,9 +2846,13 @@ ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
 }
 
+#ifndef sh
+
 ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
 }
+
+#endif
 
 #ifdef SUPPORT_VARIADIC_FUNCTIONS
 

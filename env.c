@@ -71,16 +71,6 @@ int cgc_lookup_enclosing_loop_or_switch(int binding) {
   return binding;
 }
 
-int cgc_loop_depth(int binding) {
-  int loop_depth = 0;
-  binding = cgc_lookup_enclosing_loop(binding); // Find the first loop
-  while (binding != 0) {
-    binding = cgc_lookup_enclosing_loop(binding_next(binding));
-    loop_depth += 1;
-  }
-  return loop_depth;
-}
-
 int cgc_add_local(const enum BINDING binding_type, const int ident, const ast type, int env) {
   int binding = alloc_obj(5);
   heap[binding+0] = env;
@@ -116,6 +106,16 @@ void cgc_add_enclosing_switch(const bool in_tail_position) {
   heap[binding+1] = BINDING_SWITCH;
   heap[binding+2] = in_tail_position;
   cgc_locals = binding;
+}
+
+int cgc_loop_depth(int binding) {
+  int loop_depth = 0;
+  binding = cgc_lookup_enclosing_loop(binding); // Find the first loop
+  while (binding != 0) {
+    binding = cgc_lookup_enclosing_loop(binding_next(binding));
+    loop_depth += 1;
+  }
+  return loop_depth;
 }
 #else
 
