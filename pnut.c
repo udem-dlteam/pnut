@@ -4338,6 +4338,7 @@ int main(int argc, char **argv) {
         case 'o':
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
             i += 1;
             output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
           } else {
@@ -4349,14 +4350,17 @@ int main(int argc, char **argv) {
 #ifdef FULL_CLI_OPTIONS
         case 'D':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
             i += 1;
             handle_macro_D(argv[i]);
           } else {
             handle_macro_D(argv[i] + 2); // skip '-D'
           }
           break;
+
         case 'U':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
             i += 1;
             init_ident(IDENTIFIER, argv[i]);
           } else {
@@ -4368,6 +4372,7 @@ int main(int argc, char **argv) {
           if (include_search_path != 0) fatal_error("only one include path allowed");
 
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing path for -I option");
             i += 1;
             include_search_path = argv[i];
           } else {
