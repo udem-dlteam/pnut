@@ -95,12 +95,19 @@
   #define SH_INLINE_EXIT
 
   #ifndef SH_SAVE_VARS_WITH_SET
-  // Pick calling convention implementation. By default, use let/endlet
+  // Pick calling convention implementation. By default, use let/endlet.
+  // When SH_SAVE_VARS_WITH_SET is set, local variables are saved using "set"
+  // builtin, which results in faster code but makes the calling convention
+  // implementation much harder to read.
   #define SH_INITIALIZE_PARAMS_WITH_LET
   #endif
 
   #ifndef SH_OPTIMIZE_CONSTANT_PARAMS_NOT
-  // Use positional parameter directly for function parameters that are constants
+  // Use positional parameter for const function parameters.
+  // Results in smaller and faster code (as it completely removes the cost of
+  // constant function parameters), but can make it harder to track variable
+  // usage in the generated code.
+  // This optimization is preferable to SH_SAVE_VARS_WITH_SET.
   #define SH_OPTIMIZE_CONSTANT_PARAMS
   #endif
 
@@ -111,7 +118,9 @@
   #endif
 
   #ifndef RT_NO_INIT_GLOBALS_NOT
-  // Do not initialize global variables to zero at program startup, makes startup faster
+  // Skips the zero-initialization of memory allocated values.
+  // Prevents the shell environment from being polluted with a large number of
+  // variables when allocating large data structures.
   #define RT_NO_INIT_GLOBALS
   #endif
 
@@ -124,12 +133,32 @@
   // Include the C code as comment along with the generated shell code
   // #define SH_INCLUDE_C_CODE
 
-  // Inline ascii code of character literal instead of using character variables
-  // for smaller and faster code.
+  // Replace character literal with character code instead of character variables.
+  // Results in smaller and faster code, but with magic numbers in the output.
   // #define SH_INLINE_CHAR_LITERAL
 
-  // Use a more compact but slower implementation of the runtime library
+  // Remove the `set -u` directive in the generated shell code.
+  // This can be useful for programs that must allocate large amounts of
+  // zero-initialized memory, with incurring the overhead of actually
+  // initializing it to zero.
+  // This option is generally used together with RT_NO_INIT_GLOBALS, which skips
+  // the zero-initialization of memory. RT_UNSAFE_HEAP then allows access to
+  // this uninitialized memory without triggering unbound variable errors. This
+  // is made possible by the fact that uninitialized variables are always
+  // treated as zero in arithmetic expansions.
+  // #define RT_UNSAFE_HEAP
+
+  // Use a more compact but slower implementation of the runtime library.
   // #define RT_COMPACT
+
+  // Include the complete runtime library in the generated shell code,
+  // regardless of whether features are used or not.
+  // #define INCLUDE_ALL_RUNTIME
+
+  // Only emit shell code output at the end of the compilation.
+  // This is used to evaluate the negative performance impact of allocating
+  // There is no practical reason to enable this option.
+  // #define ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
 
   // Make sure we don't use the long line optimization when RT_COMPACT is on
   #ifdef RT_COMPACT
@@ -139,7 +168,9 @@
 
 #elif defined(target_i386_linux) || defined (target_x86_64_linux) || defined (target_x86_64_mac)
 
+  // Parse numeric literals with their suffix (U, L, UL, etc).
   #define PARSE_NUMERIC_LITERAL_SUFFIX
+
   // Varargs functions are always supported because the built-in libc uses them.
   #define SUPPORT_VARIADIC_FUNCTIONS
 
@@ -159,6 +190,30 @@
     #define NO_BUILTIN_LIBC
   #endif
 
+  // Disabled options:
+
+  // Output machine code as soon as possible, typically after each top level
+  // declaration, reducing memory usage significantly, but generating slightly
+  // worse code.
+  // #define ONE_PASS_GENERATOR
+
+  // Use brk syscall for memory allocation instead of mmap.
+  // #define USE_BRK_SYSCALL
+
+  // Add the PNUT_INLINE_INTERRUPT() special function that inserts an interrupt
+  // check at the call site, useful for debugging.
+  // #define ENABLE_PNUT_INLINE_INTERRUPT
+
+  // Poor man's debug info: adds the name of functions before their entry points.
+  // #define ADD_DEBUG_INFO
+
+  // Treats undefined labels as runtime errors instead of compile-time errors.
+  // This catches functions that are declared but not defined.
+  // #define UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+
+  // Use stack allocation for global variables instead of heap allocation.
+  // #define USE_STACK_FOR_GLOBALS
+
 #else
   // Frontend-only variants of pnut (e.g. for running reader, tokenizer or parser)
   // Options that turns Pnut into a C preprocessor or some variant of it
@@ -170,6 +225,7 @@
   // Enable all C features in the frontend
   #define SUPPORT_ALL_C_FEATURES
 #endif
+
 
 #ifdef SUPPORT_ALL_C_FEATURES
   #define FULL_CLI_OPTIONS
@@ -188,10 +244,13 @@
 
 // Disabled options:
 // Add pnut source location in parse_error()
-//#define DEBUG_SHOW_ERR_ORIGIN
+// #define DEBUG_SHOW_ERR_ORIGIN
 
 // Support skip line continuations
 // #define SUPPORT_LINE_CONTINUATION
+
+// Print memory usage statistics at the end of the program.
+// #define PRINT_MEMORY_STATS
 
 // ===================== Compatibility macros and typedefs =====================
 #ifdef NO_TERNARY_SUPPORT
