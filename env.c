@@ -23,8 +23,10 @@ enum BINDING {
 #ifdef SUPPORT_GOTO
   BINDING_GOTO_LABEL,
 #endif
+#ifdef SUPPORT_STRUCT_UNION
   BINDING_TYPE_STRUCT,
   BINDING_TYPE_UNION,
+#endif
   BINDING_TYPE_ENUM,
 };
 
@@ -145,6 +147,8 @@ int cgc_lookup_goto_label(const int ident, const int env) {
 
 #endif
 
+#ifdef SUPPORT_STRUCT_UNION
+
 int cgc_lookup_struct(const int ident, const int env) {
   return cgc_lookup_binding_ident(BINDING_TYPE_STRUCT, ident, env);
 }
@@ -152,6 +156,8 @@ int cgc_lookup_struct(const int ident, const int env) {
 int cgc_lookup_union(const int ident, const int env) {
   return cgc_lookup_binding_ident(BINDING_TYPE_UNION, ident, env);
 }
+
+#endif
 
 int cgc_lookup_enum(const int ident, const int env) {
   return cgc_lookup_binding_ident(BINDING_TYPE_ENUM, ident, env);

@@ -809,6 +809,8 @@ void accum_string_string(const int string_probe) {
   }
 }
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
+
 // Similar to accum_string_string, but writes an integer to the string pool
 // Note that this function only supports small integers, represented as positive number.
 void accum_string_integer(int n) {
@@ -825,6 +827,8 @@ void accum_string_integer(int n) {
     accum_string('0' + n % 10);
   }
 }
+
+#endif
 
 int probe;
 int probe_start;

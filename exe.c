@@ -714,7 +714,9 @@ void def_goto_label(int lbl) {
 #endif // SUPPORT_GOTO
 
 ast int_type;
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
 ast uint_type;
+#endif
 ast char_type;
 ast string_type;
 ast void_type;
@@ -1322,9 +1324,10 @@ int codegen_lvalue(ast node);
 
 int codegen_param(ast param) {
   int type = value_type(param);
-  int left_width;
 
 #ifdef SUPPORT_STRUCT_UNION
+  int left_width;
+
   if (is_struct_or_union_type(type)) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
@@ -1634,7 +1637,10 @@ void codegen_rvalue(ast node) {
   int binding;
   int lbl1, lbl2;
   int left_width;
-  ast type1, type2;
+  ast type1;
+#ifdef SUPPORT_STRUCT_UNION
+  ast type2;
+#endif
   ast child0, child1;
 
   if (nb_children >= 1) child0 = get_child(node, 0);
@@ -1971,6 +1977,8 @@ void codegen_enum(ast node) {
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 void codegen_struct_or_union(ast node, enum BINDING kind) {
   ast name = get_child(node, 1);
   ast members = get_child(node, 2);
@@ -1993,6 +2001,8 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
     members = tail(members);
   }
 }
+
+#endif // SUPPORT_STRUCT_UNION
 
 void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
@@ -2042,10 +2052,12 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
 
 // Initialize a variable with an initializer
 void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset) {
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   ast members;
   ast inner_type;
   int arr_len;
   int inner_type_width;
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
   type = canonicalize_type(type);
 
@@ -3031,7 +3043,9 @@ void codegen_begin() {
   cgc_global_alloc += 2 * WORD_SIZE;
 
   int_type = new_ast0(INT_KW, 0);
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+#endif
   char_type = new_ast0(CHAR_KW, 0);
   string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
   void_type = new_ast0(VOID_KW, 0);
