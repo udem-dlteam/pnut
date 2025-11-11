@@ -1029,6 +1029,7 @@ void u64_mul_u32(int *x, int y) {
   int m3 = (m1 & 0xffff) + (m2 & 0xffff); /* 0 .. 0x1fffe */
   int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); /* 0 .. 0xfffffffe */
   x[0] = ((m3 & 0xffff) << 16) + (lo & 0xffff);
+  // FIXME: Does that work with sizeof(int) > 4?
   x[1] = x[1] * y + hi;
 }
 
@@ -1036,6 +1037,7 @@ void u64_mul_u32(int *x, int y) {
 void u64_add_u32(int *x, int y) {
   int lo = x[0] + y;
   // Carry (using signed integers)
+  // FIXME: Does that work with sizeof(int) > 4?
   x[1] += ((x[0] < 0) != (lo < 0));
   x[0] = lo;
 }
@@ -1046,7 +1048,7 @@ void u64_add_u32(int *x, int y) {
 // store it as a regular integer. The sign bit is used to distinguish between
 // large ints (positive) and regular ints (negative).
 void u64_to_obj(int *x) {
-  if (x[0] >= 0 && x[1] == 0) { // "small int"
+  if ((x[0] & 0x80000000) == 0 && x[1] == 0) { // "small int"
     val = -x[0];
   } else {
     val = alloc_obj(2);
@@ -1056,7 +1058,7 @@ void u64_to_obj(int *x) {
 }
 
 #define DIGIT_BYTE (val_32[0] % 256)
-#define INIT_ACCUM_DIGIT() val_32[0] = 0; val_32[1] = 0;
+#define INIT_ACCUM_DIGIT() val_32[0] = val_32[1] = 0;
 #else
 #define DIGIT_BYTE (-val % 256)
 #define INIT_ACCUM_DIGIT() val = 0;
@@ -1075,17 +1077,29 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; // character is not a digit in that base
   } else {
-    int limit = MININT / base;
-    if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
+
+#ifdef SUPPORT_64_BIT_LITERALS
+    int limit_hi = MININT / base;
+    int limit_lo = (MININT % base + base) % base; // make it positive
+    if (base == 10 && if_macro_mask
+     && ((val_32[1] < limit_hi)
+      || ((val_32[1] == limit_hi) && (val_32[0] < limit_lo))
+      || ((val_32[1] == limit_hi) && (val_32[0] == limit_lo) && (digit > limit_lo)))) {
       fatal_error("literal integer overflow");
     }
 
-#ifdef SUPPORT_64_BIT_LITERALS
     u64_mul_u32(val_32, base);
     u64_add_u32(val_32, digit);
 #else
+    int limit = MININT / base;
+    if (base == 10 && if_macro_mask
+      && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
+      fatal_error("literal integer overflow");
+    }
+
     val = val * base - digit;
 #endif
+
     get_ch();
     return 1;
   }
