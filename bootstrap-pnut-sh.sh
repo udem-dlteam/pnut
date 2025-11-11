@@ -43,6 +43,14 @@ if [ $fast -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; fi
 if [ $safe -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DSAFE_MODE"; fi
 if [ $minimal_pnut -eq 1 ]; then PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DPNUT_BOOTSTRAP"; fi
 
+# Clean temporary directory to start fresh
+# For some reason, on MacOS, certain executables act differently if they
+# existed before being recompiled, as if the operating system cached some
+# information about them and didn't invalidate the cache when they were
+# recompiled, or initialized the memory differently if the executable existed
+# before being recompiled.
+rm -rf $TEMP_DIR/*
+
 gcc -o "$TEMP_DIR/pnut.exe" $PNUT_SH_OPTIONS pnut.c
 
 ./$TEMP_DIR/pnut.exe $PNUT_SH_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-sh.sh" || {
