@@ -353,9 +353,6 @@ jobs:
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --no-pnut-sh-bootstrap --one-pass-generator"
 
   pnut-variants-run:
-    strategy:
-      matrix:
-        variant: ["reader", "tokenizer", "parser"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -365,11 +362,17 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y coreutils time ksh
+          sudo apt-get install -y coreutils time ksh dash bash
 
       - name: Build with warnings
         run: |
           set -e
+          variants="reader tokenizer parser"
+          for variant in $variants; do
+            bash ./run-pnut-variant.sh --${variant} --shell ksh
+            bash ./run-pnut-variant.sh --${variant} --shell dash
+            bash ./run-pnut-variant.sh --${variant} --shell bash
+          done
 
   compile-with-M2-Planet:
     runs-on: ubuntu-latest
