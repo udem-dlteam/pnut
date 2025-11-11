@@ -353,9 +353,6 @@ jobs:
           sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --fast --no-pnut-sh-bootstrap --one-pass-generator"
 
   pnut-variants-run:
-    strategy:
-      matrix:
-        variant: ["reader", "tokenizer", "parser"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -365,16 +362,103 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y coreutils time ksh
+          sudo apt-get install -y coreutils time ksh dash bash
 
       - name: Build with warnings
         run: |
           set -e
-          bash ./run-pnut-variant.sh --${{ matrix.variant }} --shell ksh
+          variants="reader tokenizer parser"
+          for variant in $variants; do
+            bash ./run-pnut-variant.sh --${variant} --shell ksh
+            bash ./run-pnut-variant.sh --${variant} --shell dash
+            bash ./run-pnut-variant.sh --${variant} --shell bash
+          done
+
+  compile-with-M2-Planet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install gcc
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Install M2-Planet
+        run: |
+          set -e
+          git clone https://github.com/oriansj/M2-Planet.git M2-Planet --depth 1 --recursive
+          # cee2359694740a7c1b5a85a16b0f96f5aa74e1ac is from Nov 5th 2025
+          cd M2-Planet
+          git checkout cee2359694740a7c1b5a85a16b0f96f5aa74e1ac
+          # Build M2-Planet
+          make
+          # Sanity check
+          ./bin/M2-Planet --version
+
+      - name: Install mescc-tools
+        run: |
+          set -e
+          git clone https://github.com/oriansj/mescc-tools.git mescc-tools --depth 1 --recursive
+          cd mescc-tools
+          # 9b1375115f9175d876c360dbbfd7e231dd9f2a2f is from Oct 9th 2025
+          git checkout 9b1375115f9175d876c360dbbfd7e231dd9f2a2f
+          # Build mescc-tools
+          make
+          # Sanity checks
+          ./bin/M1 --version
+          ./bin/hex2 --version
+          ./bin/blood-elf --version
+          ./bin/get_machine --version
+
+      - name: Compile pnut-exe with M2-Planet
+        run: |
+          set -e
+
+          echo "pwd: $(pwd)"
+
+          # Use the M2libc from mescc-tools and not the one from M2-Planet
+          M2LIB="./M2-Planet/M2libc"
+
+          # Compile to M1 using M2-Planet
+          ./M2-Planet/bin/M2-Planet --architecture x86 -D target_i386_linux -D NO_TERNARY_SUPPORT -D ONE_PASS_GENERATOR -D SMALL_HEAP -I $M2LIB --expand-includes --debug pnut.c > pnut.M1
+
+          # Generate basic DWARF debug info
+          ./mescc-tools/bin/blood-elf -f pnut.M1 --little-endian --entry _start -o pnut-footer.M1
+
+          # Compile to hex2 (for debug: -f pnut-footer.M1)
+          ./mescc-tools/bin/M1 -f $M2LIB/x86/x86_defs.M1 -f $M2LIB/x86/libc-full.M1 -f pnut.M1 -f pnut-footer.M1 --architecture x86 --little-endian -o pnut.hex2
+
+          # Assemble
+          ./mescc-tools/bin/hex2 --architecture x86 --little-endian --file $M2LIB/x86/ELF-x86-debug.hex2 --file pnut.hex2 --base-address 0x8048000 --output pnut
+
+          # Recompile pnut with itself
+          ./pnut pnut.c -Dtarget_i386_linux -D ONE_PASS_GENERATOR -o pnut-exe-by-pnut-exe
+
+          # Recompile pnut-exe-by-pnut-exe with itself
+          ./pnut-exe-by-pnut-exe pnut.c -Dtarget_i386_linux -D ONE_PASS_GENERATOR -o pnut-exe-by-pnut-exe-by-pnut-exe
+
+          # Fixed point?
+          wc pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe
+          sha256sum pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe
+          diff pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe 2>&1 > /dev/null \
+            || { echo "Binaries differ after recompilation" ; exit 1; }
 
   success-message:
     runs-on: ubuntu-latest
-    needs: [build-without-warnings, tests-exe, tests-shell, bootstrap-pnut-sh, bootstrap-pnut-exe, bootstrap-pnut-sh-with-pnut-exe, bootstrap-bash-2_05a]
+    needs: [ build-without-warnings
+           , catch-bad-whitespace
+           , tests-exe
+           , tests-shell
+           , bootstrap-pnut-sh
+           , bootstrap-pnut-exe
+           , bootstrap-pnut-sh-with-pnut-exe
+           , bootstrap-bash-2_05a
+           , pnut-variants-run
+           ]
+
     steps:
       - name: Tests finished
         run: |
