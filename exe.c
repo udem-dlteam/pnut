@@ -132,8 +132,9 @@ void emit_i32_le(int n) {
 
 void emit_i64_le(int n) {
   emit_i32_le(n);
-  // Sign extend to 64 bits. Arithmetic shift by 31 gives -1 for negative numbers and 0 for positive numbers.
-  emit_i32_le(n >> 31);
+  // Sign extend to 64 bits. Because int is not guaranteed to be exactly 32
+  // bits, we check the 32th bit (sign bit) and fill with 0xff... if set.
+  emit_i32_le(TERNARY(n & 0x80000000, -1, 0));
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
