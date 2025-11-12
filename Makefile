@@ -1,5 +1,3 @@
-.PHONY: pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh pnut-exe pnut-exe.sh pnut-exe-bootstrapped install uninstall clean test-sh test-i386-linux test-x86_64-linux test-x86_64-mac
-
 BUILD_DIR = build
 
 BUILD_OPT_SH = -Dsh -DNICE_UX $(BUILD_OPT)
@@ -8,6 +6,9 @@ BUILD_OPT_EXE.Linux.i386 = -Dtarget_i386_linux -DNICE_UX $(BUILD_OPT)
 BUILD_OPT_EXE.Linux.x86_64 = -Dtarget_x86_64_linux -DNICE_UX $(BUILD_OPT)
 BUILD_OPT_EXE.Darwin.x86_64 = -Dtarget_x86_64_mac -DNICE_UX $(BUILD_OPT)
 BUILD_OPT_EXE.Darwin.arm64 = -Dtarget_x86_64_mac -DNICE_UX $(BUILD_OPT) # no arm64 backend yet, x86 is emulated on ARM Macs
+
+# Shell for building
+BUILD_SHELL=sh
 
 # Detect the operating system and architecture
 UNAME_S := $(shell uname -s)
@@ -20,36 +21,53 @@ $(info !!!!! Defaulting to Linux x86_64 build options !!!!!)
 BUILD_OPT_EXE = $(BUILD_OPT_EXE.Linux.x86_64)
 endif
 
-pnut-sh: pnut.c sh.c sh-runtime.c
-	mkdir -p $(BUILD_DIR)
-	gcc $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
+.PHONY: default install uninstall clean test-sh test-i386-linux test-x86_64-linux test-x86_64-mac
 
-pnut-sh.sh: pnut-sh
+default: $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut-exe
+
+all: $(BUILD_DIR)/pnut-sh \
+	$(BUILD_DIR)/pnut-sh.sh \
+	$(BUILD_DIR)/pnut-sh-bootstrapped.sh \
+	$(BUILD_DIR)/pnut-exe \
+	$(BUILD_DIR)/pnut-exe.sh \
+	$(BUILD_DIR)/pnut-exe-bootstrapped
+
+$(BUILD_DIR)/config.mk:
+	./configure
+
+include $(BUILD_DIR)/config.mk
+
+PNUT_SH_DEPS=pnut.c debug.c sh.c sh-runtime.c env.c
+PNUT_EXE_DEPS= pnut.c debug.c x86.c exe.c env.c elf.c mach-o.c
+
+$(BUILD_DIR)/pnut-sh: $(PNUT_SH_DEPS)
+	$(CC) $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
+
+$(BUILD_DIR)/pnut-sh.sh: $(BUILD_DIR)/pnut-sh $(PNUT_SH_DEPS)
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
 	chmod +x $(BUILD_DIR)/pnut-sh.sh
 
-pnut-sh-bootstrapped.sh: pnut-sh
-	$$SHELL $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
+$(BUILD_DIR)/pnut-sh-bootstrapped.sh: $(BUILD_DIR)/pnut-sh.sh $(PNUT_SH_DEPS)
+	$(BUILD_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 
-pnut-exe: pnut.c x86.c exe.c elf.c mach-o.c
-	mkdir -p $(BUILD_DIR)
-	gcc $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
+$(BUILD_DIR)/pnut-exe: $(PNUT_EXE_DEPS)
+	$(CC) $(CFLAGS) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
 
-pnut-exe.sh: pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
-	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.sh
+$(BUILD_DIR)/pnut-exe.sh: $(BUILD_DIR)/pnut-sh $(PNUT_EXE_DEPS)
+	$(BUILD_DIR)/pnut-sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.sh
 	chmod +x $(BUILD_DIR)/pnut-exe.sh
 
-pnut-exe-bootstrapped: pnut-exe
+$(BUILD_DIR)/pnut-exe-bootstrapped: $(BUILD_DIR)/pnut-exe $(PNUT_EXE_DEPS)
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped
 
-install: pnut-sh pnut-sh.sh
-	sudo cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
-	sudo cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
+install: $(BUILD_DIR)/pnut-sh $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/config.mk
+	install -D $(BUILD_DIR)/pnut-sh $(DESTDIR)$(prefix)/bin/pnut
+	install -D $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(prefix)/bin/pnut.sh
 
 uninstall:
-	sudo $(RM) /usr/local/bin/pnut
-	sudo $(RM) /usr/local/bin/pnut.sh
+	$(RM) $(DESTDIR)$(prefix)/bin/pnut
+	$(RM) $(DESTDIR)$(prefix)/bin/pnut.sh
 
 clean:
 	$(RM) -r $(BUILD_DIR)
