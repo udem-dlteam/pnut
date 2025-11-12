@@ -8,7 +8,7 @@ _main() {
   _malloc name 100
   i=0
   printf "What is your name?\n"
-  while { _getchar _$((name + i)); [ $((_$((name + i)))) != -1 ]; } && [ $((_$((name + i)))) != $__NEWLINE__ ]; do
+  while { _getchar _$((name + i)); [ $((_$((name + i)))) != -1 ]; } && [ $((_$((name + i)))) != $__LF__ ]; do
     : $((i += 1))
   done
   : $((_$((name + i)) = __NUL__))
@@ -20,39 +20,8 @@ _main() {
 
 # Character constants
 readonly __NUL__=0
-readonly __NEWLINE__=10
+readonly __LF__=10
 # Runtime library
-
-__stdin_buf=
-__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
-_getchar() {
-  if [ -z "$__stdin_buf" ]; then          # need to get next line when buffer empty
-    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending
-      : $(($1 = __stdin_line_ending))
-      __stdin_line_ending=0                  # Reset line ending for next getchar call
-      return
-    fi
-    IFS=                                            # don't split input
-    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
-      if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
-        : $(($1 = 10))                              # next getchar call will read next line
-        return
-      fi
-      __stdin_line_ending=10
-    else
-      if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
-        : $(($1 = -1))
-        return
-      else
-        __stdin_line_ending=-1
-      fi
-    fi
-  fi
-  __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-  : $(($1 = __c))
-    __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
-}
-
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 _malloc() { # $2 = object size
@@ -86,6 +55,37 @@ endlet() { # $1: return variable
     shift;
   done
   : $(($__ret=__tmp))   # Restore return value
+}
+
+
+__stdin_buf=
+__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
+_getchar() {
+  if [ -z "$__stdin_buf" ]; then          # need to get next line when buffer empty
+    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending
+      : $(($1 = __stdin_line_ending))
+      __stdin_line_ending=0                  # Reset line ending for next getchar call
+      return
+    fi
+    IFS=                                            # don't split input
+    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
+      if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
+        : $(($1 = 10))                              # next getchar call will read next line
+        return
+      fi
+      __stdin_line_ending=10
+    else
+      if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
+        : $(($1 = -1))
+        return
+      else
+        __stdin_line_ending=-1
+      fi
+    fi
+  fi
+  __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+  : $(($1 = __c))
+    __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
 }
 
 __code=0; # Exit code

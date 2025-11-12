@@ -66,7 +66,7 @@ void rex_prefix(int reg1, int reg2) {
 #define rex_prefix(reg1, reg2) ((void)0)
 #endif
 
-void mod_rm(int reg1, int reg2) {
+void mod_rm(const int reg1, const int reg2) {
   // ModR/M byte
   //
   // It is used to encode the operand(s) to an instruction.
@@ -98,7 +98,7 @@ void mod_rm(int reg1, int reg2) {
 #define mod_rm_slash_digit(digit, reg1) mod_rm(digit, reg1)
 
 // For instructions with 2 register operands
-void op_reg_reg(int opcode, int dst, int src, int reg_width) {
+void op_reg_reg(const int opcode, const int dst, const int src, const int reg_width) {
   // 16-bit operand size override prefix
   // See section on Legacy Prefixes: https://web.archive.org/web/20250210181519/https://wiki.osdev.org/X86-64_Instruction_Encoding#ModR/M
   if (reg_width == 2) emit_i8(0x66);
@@ -108,7 +108,7 @@ void op_reg_reg(int opcode, int dst, int src, int reg_width) {
 }
 
 // For instructions with 1 register operand and /digit opcode extension
-void op_reg_slash_digit(int opcode, int digit, int reg) {
+void op_reg_slash_digit(const int opcode, const int digit, const int reg) {
   rex_prefix(0, reg);
   emit_i8(opcode);
   mod_rm_slash_digit(digit, reg);
@@ -118,15 +118,15 @@ void op_reg_slash_digit(int opcode, int digit, int reg) {
 
 // deprecated... kept here in case it might be useful in the future
 
-void inc_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xff, 0xc0 + (dst & 7)); }
-void dec_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xff, 0xc8 + (dst & 7)); }
-void xchg_reg_reg(int dst, int src) { op_reg_reg(0x87, dst, src); }
-void not_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xf7, 0xd0 + (dst & 7)); }
-void neg_reg(int dst) { rex_prefix(dst, 0); emit_2_i8(0xf7, 0xd8 + (dst & 7)); }
-void shr_reg_cl(int dst) { rex_prefix(dst, 0); emit_2_i8(0xd3, 0xe8 + (dst & 7)); }
-void jump_cond_short(int cond, int n) { emit_2_i8(0x70 + cond, n); }
+void inc_reg(const int dst) { rex_prefix(dst, 0); emit_2_i8(0xff, 0xc0 + (dst & 7)); }
+void dec_reg(const int dst) { rex_prefix(dst, 0); emit_2_i8(0xff, 0xc8 + (dst & 7)); }
+void xchg_reg_reg(const int dst, const int src) { op_reg_reg(0x87, dst, src); }
+void not_reg(const int dst) { rex_prefix(dst, 0); emit_2_i8(0xf7, 0xd0 + (dst & 7)); }
+void neg_reg(const int dst) { rex_prefix(dst, 0); emit_2_i8(0xf7, 0xd8 + (dst & 7)); }
+void shr_reg_cl(const int dst) { rex_prefix(dst, 0); emit_2_i8(0xd3, 0xe8 + (dst & 7)); }
+void jump_cond_short(const int cond, const int n) { emit_2_i8(0x70 + cond, n); }
 
-void test_reg_reg(int dst, int src) {
+void test_reg_reg(const int dst, const int src) {
 
   // TEST dst_reg, src_reg ;; set Z condition flag based on result of dst_reg&src_reg
   // See: https://web.archive.org/web/20231004142335/https://www.felixcloutier.com/x86/test
@@ -136,7 +136,7 @@ void test_reg_reg(int dst, int src) {
 
 #endif
 
-void add_reg_reg(int dst, int src) {
+void add_reg_reg(const int dst, const int src) {
 
   // ADD dst_reg, src_reg ;; dst_reg = dst_reg + src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
@@ -144,7 +144,7 @@ void add_reg_reg(int dst, int src) {
   op_reg_reg(0x01, dst, src, WORD_SIZE);
 }
 
-void or_reg_reg (int dst, int src) {
+void or_reg_reg (const int dst, const int src) {
 
   // OR dst_reg, src_reg ;; dst_reg = dst_reg | src_reg
   // See: https://web.archive.org/web/20231002205127/https://www.felixcloutier.com/x86/or
@@ -152,7 +152,7 @@ void or_reg_reg (int dst, int src) {
   op_reg_reg(0x09, dst, src, WORD_SIZE);
 }
 
-void and_reg_reg(int dst, int src) {
+void and_reg_reg(const int dst, const int src) {
 
   // AND dst_reg, src_reg ;; dst_reg = dst_reg & src_reg
   // See: https://web.archive.org/web/20240228122102/https://www.felixcloutier.com/x86/and
@@ -160,7 +160,7 @@ void and_reg_reg(int dst, int src) {
   op_reg_reg(0x21, dst, src, WORD_SIZE);
 }
 
-void sub_reg_reg(int dst, int src) {
+void sub_reg_reg(const int dst, const int src) {
 
   // SUB dst_reg, src_reg ;; dst_reg = dst_reg - src_reg
   // See: https://web.archive.org/web/20240118202232/https://www.felixcloutier.com/x86/sub
@@ -168,7 +168,7 @@ void sub_reg_reg(int dst, int src) {
   op_reg_reg(0x29, dst, src, WORD_SIZE);
 }
 
-void xor_reg_reg(int dst, int src) {
+void xor_reg_reg(const int dst, const int src) {
 
   // XOR dst_reg, src_reg ;; dst_reg = dst_reg ^ src_reg
   // See: https://web.archive.org/web/20240323052259/https://www.felixcloutier.com/x86/xor
@@ -176,7 +176,7 @@ void xor_reg_reg(int dst, int src) {
   op_reg_reg(0x31, dst, src, WORD_SIZE);
 }
 
-void cmp_reg_reg(int dst, int src) {
+void cmp_reg_reg(const int dst, const int src) {
 
   // CMP dst_reg, src_reg  ;; Set condition flags according to dst_reg-src_reg
   // See: https://web.archive.org/web/20240407051947/https://www.felixcloutier.com/x86/cmp
@@ -185,7 +185,7 @@ void cmp_reg_reg(int dst, int src) {
   op_reg_reg(0x39, dst, src, WORD_SIZE);
 }
 
-void mov_reg_reg(int dst, int src) {
+void mov_reg_reg(const int dst, const int src) {
 
   // MOV dst_reg, src_reg  ;; dst_reg = src_reg
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -193,7 +193,7 @@ void mov_reg_reg(int dst, int src) {
   op_reg_reg(0x89, dst, src, WORD_SIZE);
 }
 
-void mov_reg_imm(int dst, int imm) {
+void mov_reg_imm(const int dst, const int imm) {
 
   // MOV dst_reg, imm  ;; Move 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -210,7 +210,7 @@ void mov_reg_imm(int dst, int imm) {
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
-void mov_reg_large_imm(int dst, int large_imm) {
+void mov_reg_large_imm(const int dst, const int large_imm) {
 
   // MOV dst_reg, large_imm  ;; Move 32 bit or 64 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -228,7 +228,7 @@ void mov_reg_large_imm(int dst, int large_imm) {
 }
 #endif
 
-void add_reg_imm(int dst, int imm) {
+void add_reg_imm(const int dst, const int imm) {
 
   // ADD dst_reg, imm  ;; Add 32 bit immediate value to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
@@ -239,7 +239,7 @@ void add_reg_imm(int dst, int imm) {
   emit_i32_le(imm);
 }
 
-void add_reg_lbl(int dst, int lbl) {
+void add_reg_lbl(const int dst, const int lbl) {
 
   // ADD dst_reg, rel addr  ;; Add 32 bit displacement between next instruction and label to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/add
@@ -250,7 +250,7 @@ void add_reg_lbl(int dst, int lbl) {
   use_label(lbl); // 32 bit placeholder for distance
 }
 
-void mov_memory(int op, int reg, int base, int offset, int reg_width) {
+void mov_memory(const int op, const int reg, const int base, const int offset, const int reg_width) {
 
   // Move word between register and memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -265,7 +265,7 @@ void mov_memory(int op, int reg, int base, int offset, int reg_width) {
   emit_i32_le(offset);
 }
 
-void mov_memory_extend(int op, int reg, int base, int offset, bool include_0f) {
+void mov_memory_extend(const int op, const int reg, const int base, const int offset, const bool include_0f) {
 
   // Move word between register and memory with sign extension
   // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
@@ -282,7 +282,7 @@ void mov_memory_extend(int op, int reg, int base, int offset, bool include_0f) {
   emit_i32_le(offset);
 }
 
-void mov_mem8_reg(int base, int offset, int src) {
+void mov_mem8_reg(const int base, const int offset, const int src) {
 
   // MOVB [base_reg + offset], src_reg  ;; Move byte from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -297,7 +297,7 @@ void mov_mem8_reg(int base, int offset, int src) {
   mov_memory(0x88, src, base, offset, 1);
 }
 
-void mov_mem16_reg(int base, int offset, int src) {
+void mov_mem16_reg(const int base, const int offset, const int src) {
 
   // MOVB [base_reg + offset], src_reg  ;; Move word (2 bytes) from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -305,7 +305,7 @@ void mov_mem16_reg(int base, int offset, int src) {
   mov_memory(0x89, src, base, offset, 2);
 }
 
-void mov_mem32_reg(int base, int offset, int src) {
+void mov_mem32_reg(const int base, const int offset, const int src) {
 
   // MOVB [base_reg + offset], src_reg  ;; Move dword (4 bytes) from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -313,7 +313,7 @@ void mov_mem32_reg(int base, int offset, int src) {
   mov_memory(0x89, src, base, offset, 4);
 }
 
-void mov_mem64_reg(int base, int offset, int src) {
+void mov_mem64_reg(const int base, const int offset, const int src) {
 
   // MOVB [base_reg + offset], src_reg  ;; Move qword (8 bytes) from register to memory
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -321,7 +321,7 @@ void mov_mem64_reg(int base, int offset, int src) {
   mov_memory(0x89, src, base, offset, 8);
 }
 
-void mov_reg_mem8(int dst, int base, int offset) {
+void mov_reg_mem8(const int dst, const int base, const int offset) {
 
   // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register, zero-extended
   // See: https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
@@ -329,7 +329,7 @@ void mov_reg_mem8(int dst, int base, int offset) {
   mov_memory_extend(0xb6, dst, base, offset, true);
 }
 
-void mov_reg_mem16(int dst, int base, int offset) {
+void mov_reg_mem16(const int dst, const int base, const int offset) {
 
   // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register, zero-extended
   // See: https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
@@ -337,7 +337,7 @@ void mov_reg_mem16(int dst, int base, int offset) {
   mov_memory_extend(0xb7, dst, base, offset, true);
 }
 
-void mov_reg_mem32(int dst, int base, int offset) {
+void mov_reg_mem32(const int dst, const int base, const int offset) {
 
   // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register, zero-extended
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -347,7 +347,7 @@ void mov_reg_mem32(int dst, int base, int offset) {
   mov_memory(0x8b, dst, base, offset, 4);
 }
 
-void mov_reg_mem8_sign_ext(int dst, int base, int offset) {
+void mov_reg_mem8_sign_ext(const int dst, const int base, const int offset) {
 
   // MOVB dst_reg, [base_reg + offset]  ;; Move byte from memory to register, sign-extended
   // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
@@ -355,7 +355,7 @@ void mov_reg_mem8_sign_ext(int dst, int base, int offset) {
   mov_memory_extend(0xbe, dst, base, offset, true);
 }
 
-void mov_reg_mem16_sign_ext(int dst, int base, int offset) {
+void mov_reg_mem16_sign_ext(const int dst, const int base, const int offset) {
 
   // MOVB dst_reg, [base_reg + offset]  ;; Move word (2 bytes) from memory to register, sign-extended
   // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
@@ -363,7 +363,7 @@ void mov_reg_mem16_sign_ext(int dst, int base, int offset) {
   mov_memory_extend(0xbf, dst, base, offset, true);
 }
 
-void mov_reg_mem32_sign_ext(int dst, int base, int offset) {
+void mov_reg_mem32_sign_ext(const int dst, const int base, const int offset) {
 
   // MOV dst_reg, [base_reg + offset]  ;; Move dword (4 bytes) from memory to register, sign-extended
   // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
@@ -371,7 +371,7 @@ void mov_reg_mem32_sign_ext(int dst, int base, int offset) {
   mov_memory_extend(0x63, dst, base, offset, false);
 }
 
-void mov_reg_mem64(int dst, int base, int offset) {
+void mov_reg_mem64(const int dst, const int base, const int offset) {
 
   // MOV dst_reg, [base_reg + offset]  ;; Move qword (8 bytes) from memory to register
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/mov
@@ -379,7 +379,7 @@ void mov_reg_mem64(int dst, int base, int offset) {
   mov_memory(0x8b, dst, base, offset, 8);
 }
 
-void imul_reg_reg(int dst, int src) {
+void imul_reg_reg(const int dst, const int src) {
 
   // IMUL dst_reg, src_reg ;; dst_reg = dst_reg * src_reg
   // See: https://web.archive.org/web/20240228122220/https://www.felixcloutier.com/x86/imul
@@ -389,7 +389,7 @@ void imul_reg_reg(int dst, int src) {
   mod_rm(dst, src);
 }
 
-void mul_reg_reg(int dst, int src) {
+void mul_reg_reg(const int dst, const int src) {
 
   // For our purposes, this is the same as imul_reg_reg.
   // https://web.archive.org/web/20240914145321/https://stackoverflow.com/questions/42587607/why-is-imul-used-for-multiplying-unsigned-numbers
@@ -397,7 +397,7 @@ void mul_reg_reg(int dst, int src) {
   imul_reg_reg(dst, src);
 }
 
-void idiv_reg(int src) {
+void idiv_reg(const int src) {
 
   // IDIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
   // See: https://web.archive.org/web/20240407195950/https://www.felixcloutier.com/x86/idiv
@@ -405,7 +405,7 @@ void idiv_reg(int src) {
   op_reg_slash_digit(0xf7, 7, src);
 }
 
-void div_reg(int src) {
+void div_reg(const int src) {
 
   // DIV src_reg ;; AX = DX:AX / src_reg ; DX = DX:AX % src_reg
   // See: https://web.archive.org/web/20250202075400/https://www.felixcloutier.com/x86/div
@@ -423,7 +423,7 @@ void cdq_cqo() {
   emit_i8(0x99);
 }
 
-void idiv_reg_reg(int dst, int src) {
+void idiv_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg / src_reg
   // This is not an actual instruction on x86. The operation
@@ -436,7 +436,7 @@ void idiv_reg_reg(int dst, int src) {
   mov_reg_reg(dst, AX);
 }
 
-void irem_reg_reg(int dst, int src) {
+void irem_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg % src_reg
   // This is not an actual instruction on x86. The operation
@@ -449,7 +449,7 @@ void irem_reg_reg(int dst, int src) {
   mov_reg_reg(dst, DX);
 }
 
-void div_reg_reg(int dst, int src) {
+void div_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg / src_reg
   // This is not an actual instruction on x86. The operation
@@ -466,7 +466,7 @@ void div_reg_reg(int dst, int src) {
   mov_reg_reg(dst, AX);
 }
 
-void rem_reg_reg(int dst, int src) {
+void rem_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg % src_reg
   // This is not an actual instruction on x86. The operation
@@ -479,7 +479,7 @@ void rem_reg_reg(int dst, int src) {
   mov_reg_reg(dst, DX);
 }
 
-void s_l_reg_cl(int dst) {
+void s_l_reg_cl(const int dst) {
 
   // SHL dst_reg, cl ;; dst_reg = dst_reg << cl (arithmetic or logical shift, they are the same)
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
@@ -487,7 +487,7 @@ void s_l_reg_cl(int dst) {
   op_reg_slash_digit(0xd3, 4, dst);
 }
 
-void s_l_reg_reg(int dst, int src) {
+void s_l_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg << src_reg (arithmetic or logical shift, they are the same)
   // This is not an actual instruction on x86. The operation
@@ -502,7 +502,7 @@ void s_l_reg_reg(int dst, int src) {
   s_l_reg_cl(dst);
 }
 
-void sar_reg_cl(int dst) {
+void sar_reg_cl(const int dst) {
 
   // SAR dst_reg, cl ;; dst_reg = dst_reg >> cl (arithmetic shift)
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
@@ -510,7 +510,7 @@ void sar_reg_cl(int dst) {
   op_reg_slash_digit(0xd3, 7, dst);
 }
 
-void sar_reg_reg(int dst, int src) {
+void sar_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg >> src_reg (arithmetic shift)
   // This is not an actual instruction on x86. The operation
@@ -521,7 +521,7 @@ void sar_reg_reg(int dst, int src) {
   sar_reg_cl(dst);
 }
 
-void shr_reg_cl(int dst) {
+void shr_reg_cl(const int dst) {
 
   // SHR dst_reg, cl ;; dst_reg = dst_reg >> cl (logical shift)
   // See: https://web.archive.org/web/20240405194323/https://www.felixcloutier.com/x86/sal:sar:shl:shr
@@ -529,7 +529,7 @@ void shr_reg_cl(int dst) {
   op_reg_slash_digit(0xd3, 5, dst);
 }
 
-void shr_reg_reg(int dst, int src) {
+void shr_reg_reg(const int dst, const int src) {
 
   // Computes dst_reg = dst_reg >> src_reg (logical shift)
   // This is not an actual instruction on x86. The operation
@@ -540,7 +540,7 @@ void shr_reg_reg(int dst, int src) {
   shr_reg_cl(dst);
 }
 
-void push_reg(int src) {
+void push_reg(const int src) {
 
   // PUSH src_reg  ;; Push word from register to stack
   // See: https://web.archive.org/web/20240407051929/https://www.felixcloutier.com/x86/push
@@ -548,7 +548,7 @@ void push_reg(int src) {
   emit_i8(0x50 + src);
 }
 
-void pop_reg (int dst) {
+void pop_reg (const int dst) {
 
   // POP dst_reg  ;; Pop word from stack to register
   // See: https://web.archive.org/web/20240204122208/https://www.felixcloutier.com/x86/pop
@@ -556,7 +556,7 @@ void pop_reg (int dst) {
   emit_i8(0x58 + dst);
 }
 
-void jump(int lbl) {
+void jump(const int lbl) {
 
   // JMP rel32  ;; Jump to 32 bit displacement relative to next instruction
   // See: https://web.archive.org/web/20240407051904/https://www.felixcloutier.com/x86/jmp
@@ -565,7 +565,7 @@ void jump(int lbl) {
   use_label(lbl);
 }
 
-void jump_rel(int offset) {
+void jump_rel(const int offset) {
 
   // JMP rel32  ;; Jump to 32 bit displacement relative to next instruction
   // See: https://web.archive.org/web/20240407051904/https://www.felixcloutier.com/x86/jmp
@@ -574,7 +574,7 @@ void jump_rel(int offset) {
   emit_i32_le(offset);
 }
 
-void call(int lbl) {
+void call(const int lbl) {
 
   // CALL rel32  ;; Call to 32 bit displacement relative to next instruction
   // See: https://web.archive.org/web/20240323052931/https://www.felixcloutier.com/x86/call
@@ -583,7 +583,7 @@ void call(int lbl) {
   use_label(lbl);
 }
 
-void call_reg(int reg) {
+void call_reg(const int reg) {
 
   // CALL reg  ;; Indirect call to address in register
   // See: https://web.archive.org/web/20240323052931/https://www.felixcloutier.com/x86/call
@@ -621,7 +621,7 @@ const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
 const int GT   = 0xf; // x > y
 const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
 
-void jump_cond(int cond, int lbl) {
+void jump_cond(const int cond, const int lbl) {
 
   // JE rel32, JNE rel32, JL rel32, JLE rel32, JG rel32, JGE rel32, ...
   // Jump conditionally to 32 bit displacement relative to next instruction
@@ -631,12 +631,12 @@ void jump_cond(int cond, int lbl) {
   use_label(lbl);
 }
 
-void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2) {
+void jump_cond_reg_reg(const int cond, const int lbl, const int reg1, const int reg2) {
   cmp_reg_reg(reg1, reg2);
   jump_cond(cond, lbl);
 }
 
-void int_i8(int n) {
+void int_i8(const int n) {
 
   // INT imm8 ;; Software interrupt with vector specified by immediate byte
   // See: https://web.archive.org/web/20240407051903/https://www.felixcloutier.com/x86/intn:into:int3:int1
@@ -644,7 +644,7 @@ void int_i8(int n) {
   emit_2_i8(0xcd, n);
 }
 
-void setup_proc_args(int global_vars_size) {
+void setup_proc_args(const int global_vars_size) {
   // See page 54 of Intel386 System V ABI document:
   // https://web.archive.org/web/20240107061436/https://www.sco.com/developers/devspecs/abi386-4.pdf
   // See page 29 of AMD64 System V ABI document:
@@ -702,7 +702,7 @@ void mov_reg_lbl(int reg, int lbl) {
 // be clobberred in the order of the mov instructions.
 // i.e. syscall_3(SYS_READ, ..., ebx, ...) is not valid because ebx is clobberred by the first mov instructions.
 // For syscalls that use less than 3 parameters, the extra register params are set to -1.
-void syscall_3(int syscall_code, int bx_reg, int cx_reg, int dx_reg) {
+void syscall_3(const int syscall_code, const int bx_reg, const int cx_reg, const int dx_reg) {
   push_reg(BX);                  // save address of global variables table
   if (bx_reg >= 0) mov_reg_reg(BX, bx_reg);
   if (cx_reg >= 0) mov_reg_reg(CX, cx_reg);
@@ -715,7 +715,7 @@ void syscall_3(int syscall_code, int bx_reg, int cx_reg, int dx_reg) {
 #ifdef USE_BRK_SYSCALL
 // Use brk/sbrk syscalls instead of mmap for memory allocation
 // This is needed for environments like builder-hex0 that don't support mmap
-void os_allocate_memory(int size) {
+void os_allocate_memory(const int size) {
   mov_reg_imm(reg_X, 0);
   syscall_3(45, reg_X, -1, -1);   // brk(0) to get current break address, SYS_BRK = 45
 
@@ -727,7 +727,7 @@ void os_allocate_memory(int size) {
 }
 #else
 // Use mmap syscall for memory allocation (original implementation)
-void os_allocate_memory(int size) {
+void os_allocate_memory(const int size) {
   push_reg(BX);           // save address of global variables table
   mov_reg_imm(AX, 192);   // mov  eax, 192 == SYS_MMAP2
   mov_reg_imm(BX, 0);     // mov  ebx, 0 | NULL
@@ -844,7 +844,7 @@ void syscall_() {
 // be clobberred in the order of the mov instructions.
 // i.e. syscall_3(SYS_READ, ..., rdi, ...) is not valid because rdi is clobberred by the first mov instructions.
 // For syscalls that use less than 3 parameters, the extra register params are set to -1.
-void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
+void syscall_3(const int syscall_code, const int di_reg, const int si_reg, const int dx_reg) {
   if (di_reg >= 0) mov_reg_reg(DI, di_reg);
   if (si_reg >= 0) mov_reg_reg(SI, si_reg);
   if (dx_reg >= 0) mov_reg_reg(DX, dx_reg);
@@ -855,7 +855,7 @@ void syscall_3(int syscall_code, int di_reg, int si_reg, int dx_reg) {
 #if defined(USE_BRK_SYSCALL) && defined(SYS_BRK)
 // Use brk/sbrk syscalls instead of mmap for memory allocation
 // This is needed for environments like builder-hex0 that don't support mmap
-void os_allocate_memory(int size) {
+void os_allocate_memory(const int size) {
   mov_reg_imm(reg_X, 0);
   syscall_3(SYS_BRK, reg_X, -1, -1);  // brk(0) to get current break address
 
@@ -867,7 +867,7 @@ void os_allocate_memory(int size) {
 }
 #else
 // Use mmap syscall for memory allocation (original implementation)
-void os_allocate_memory(int size) {
+void os_allocate_memory(const int size) {
   mov_reg_imm(DI, 0);                  // mov rdi, 0 | NULL
   mov_reg_imm(SI, size);               // mov rsi, size | size
   mov_reg_imm(DX, 0x3);                // mov rdx, 0x3 | PROT_READ (0x1) | PROT_WRITE (0x2)

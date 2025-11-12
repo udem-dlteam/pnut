@@ -145,7 +145,7 @@ _next() {
   set $@ $pp $__t1
   while [ $((_tk = _$_p)) != 0 ]; do
     : $((_p += 1))
-    if [ $_tk = $__NEWLINE__ ] ; then
+    if [ $_tk = $__LF__ ] ; then
       if [ $_src != 0 ] ; then
         printf "%d: (%d - %d = %d) %.*s" $_line $_p $_lp $((_p - _lp)) $((_p - _lp)) "$(_put_pstr __ $_lp)"
         _lp=$_p
@@ -160,8 +160,8 @@ _next() {
         done
       fi
       : $((_line += 1))
-    elif [ $_tk = $__SHARP__ ] ; then
-      while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__NEWLINE__ ]; do
+    elif [ $_tk = $__HASH__ ] ; then
+      while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__LF__ ]; do
         : $((_p += 1))
       done
     elif { [ $_tk -ge $__a__ ] && [ $_tk -le $__z__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__Z__ ]; } || [ $_tk = $__UNDERSCORE__ ] ; then
@@ -202,7 +202,7 @@ _next() {
     elif [ $_tk = $__SLASH__ ] ; then
       if [ $((_$_p)) = $__SLASH__ ] ; then
         : $((_p += 1))
-        while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__NEWLINE__ ]; do
+        while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $__LF__ ]; do
           : $((_p += 1))
         done
       else
@@ -214,7 +214,7 @@ _next() {
       while [ $((_$_p)) != 0 ] && [ $((_$_p)) != $_tk ]; do
         if [ $((_ival = _$(((_p += 1) - 1)))) = $__BACKSLASH__ ] ; then
           if [ $((_ival = _$(((_p += 1) - 1)))) = $__n__ ] ; then
-            _ival=$__NEWLINE__
+            _ival=$__LF__
           fi
         fi
         if [ $_tk = $__DQUOTE__ ] ; then
@@ -1197,10 +1197,10 @@ _main() { # argc: $2, argv: $3
 }
 
 # Character constants
-readonly __NEWLINE__=10
+readonly __LF__=10
 readonly __EXCL__=33
 readonly __DQUOTE__=34
-readonly __SHARP__=35
+readonly __HASH__=35
 readonly __PERCENT__=37
 readonly __AMP__=38
 readonly __QUOTE__=39
@@ -1451,113 +1451,6 @@ _put_pstr() {
   done
 }
 
-read_int() {
-  __int=
-  while [ $((__c = _$__fmt_ptr)) != 0 ] && [ $__c -ge 48 ] && [ $__c -le 57 ]; do
-    __int="$__int$((__c - 48))"
-    : $((__fmt_ptr += 1))
-  done
-}
-
-pad() {
-  if [ $(($1 - 1)) -ge 1 ]; then
-    printf "%$(($1 - 1))s" ""
-  fi
-}
-
-printf_invalid_format_error() {
-  printf "Invalid format specifier. %%"
-  : $((_$__fmt_ptr = 0)) # Terminate string after %...
-  _put_pstr __ $__mod_start
-  printf "\n"
-  exit 1
-}
-
-printf_reset() {
-  __mod=0
-  __flags=
-  __width=
-  __precision=
-}
-
-_printf() { # $1 = printf format string, $2... = printf args
-  : $(($1 = 0)); shift # Return 0
-  __fmt_ptr=$1; shift
-  __mod_start=0
-  printf_reset
-  while [ "$((__head = _$__fmt_ptr))" != 0 ] ; do
-    __fmt_ptr=$((__fmt_ptr + 1))
-    if [ $__mod -eq 1 ] ; then
-      __char=$(printf "\\$(($__head/64))$(($__head/8%8))$(($__head%8))")
-      __head_char=$__char
-      case $__head_char in
-        '%')
-          if [ -n "${__flags}${__width}${__precision}" ]; then printf_invalid_format_error; fi
-          printf "%%"
-          printf_reset
-          ;;
-        'd'|'i'|'o'|'u'|'x'|'X')
-          printf "%${__flags}${__width}${__precision}${__head_char}" $1
-          shift
-          printf_reset
-          ;;
-        'c')
-          case "$__flags" in
-            *'-'*)
-              printf \\$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;
-            *) pad ${__width:-0}; printf \\$(($1/64))$(($1/8%8))$(($1%8)) ;;
-          esac
-          shift
-          printf_reset
-          ;;
-        's')
-          # We only want to use the shell's native printf (and _put_pstr subshell) if %s has sub-specifiers
-          if [ -z "{__flags}${__width}{__precision}" ]; then
-            _put_pstr __ $1
-          else
-            printf "%${__flags}${__width}${__precision}s" "$(_put_pstr __ $1)"
-          fi
-          shift
-          printf_reset
-          ;;
-        '-'|'+'|' '|'#'|'0')
-          if [ -n "${__width}${__precision}" ]; then printf_invalid_format_error; fi
-          __flags="$__flags$__head_char"
-          ;;
-        [0-9])
-          if [ -n "${__width}${__precision}" ]; then printf_invalid_format_error; fi
-          read_int
-          __width="$__head_char$__int"
-          ;;
-        '*')
-          if [ -n "${__width}${__precision}" ]; then printf_invalid_format_error; fi
-          __width=$1
-          shift
-          ;;
-        '.')
-          __head=$((_$__fmt_ptr))
-          if [ $__head = 42 ]; then # 42 = '*'
-            __fmt_ptr=$((__fmt_ptr + 1))
-            __precision=".$1"
-            shift
-          elif [ $__head -ge 48 ] && [ $__head -le 57 ]; then
-            read_int
-            __precision=".$__int"
-          else
-            printf_invalid_format_error
-          fi
-          ;;
-        *)
-          echo "4: Unknown format specifier %$__head_char"; exit 1
-      esac
-    elif [ $__head = 37 ]; then # 37 == '%'
-      __mod=1; __mod_start=$__fmt_ptr
-    else
-      printf \\$(($__head/64))$(($__head/8%8))$(($__head%8))
-    fi
-  done
-}
-
 # Unpack a Shell string into an appropriately sized buffer
 unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
@@ -1772,6 +1665,113 @@ make_argv() {
 
 # Local variables
 __=0
+
+read_int() {
+  __int=
+  while [ $((__c = _$__fmt_ptr)) != 0 ] && [ $__c -ge 48 ] && [ $__c -le 57 ]; do
+    __int="$__int$((__c - 48))"
+    : $((__fmt_ptr += 1))
+  done
+}
+
+pad() {
+  if [ $(($1 - 1)) -ge 1 ]; then
+    printf "%$(($1 - 1))s" ""
+  fi
+}
+
+printf_invalid_format_error() {
+  printf "Invalid format specifier. %%"
+  : $((_$__fmt_ptr = 0)) # Terminate string after %...
+  _put_pstr __ $__mod_start
+  printf "\n"
+  exit 1
+}
+
+printf_reset() {
+  __mod=0
+  __flags=
+  __width=
+  __precision=
+}
+
+_printf() { # $1 = printf format string, $2... = printf args
+  : $(($1 = 0)); shift # Return 0
+  __fmt_ptr=$1; shift
+  __mod_start=0
+  printf_reset
+  while [ "$((__head = _$__fmt_ptr))" != 0 ] ; do
+    __fmt_ptr=$((__fmt_ptr + 1))
+    if [ $__mod -eq 1 ] ; then
+      __char=$(printf "\\$(($__head/64))$(($__head/8%8))$(($__head%8))")
+      __head_char=$__char
+      case $__head_char in
+        '%')
+          if [ -n "${__flags}${__width}${__precision}" ]; then printf_invalid_format_error; fi
+          printf "%%"
+          printf_reset
+          ;;
+        'd'|'i'|'o'|'u'|'x'|'X')
+          printf "%${__flags}${__width}${__precision}${__head_char}" $1
+          shift
+          printf_reset
+          ;;
+        'c')
+          case "$__flags" in
+            *'-'*)
+              printf \\$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;
+            *) pad ${__width:-0}; printf \\$(($1/64))$(($1/8%8))$(($1%8)) ;;
+          esac
+          shift
+          printf_reset
+          ;;
+        's')
+          # We only want to use the shell's native printf (and _put_pstr subshell) if %s has sub-specifiers
+          if [ -z "{__flags}${__width}{__precision}" ]; then
+            _put_pstr __ $1
+          else
+            printf "%${__flags}${__width}${__precision}s" "$(_put_pstr __ $1)"
+          fi
+          shift
+          printf_reset
+          ;;
+        '-'|'+'|' '|'#'|'0')
+          if [ -n "${__width}${__precision}" ]; then printf_invalid_format_error; fi
+          __flags="$__flags$__head_char"
+          ;;
+        [0-9])
+          if [ -n "${__width}${__precision}" ]; then printf_invalid_format_error; fi
+          read_int
+          __width="$__head_char$__int"
+          ;;
+        '*')
+          if [ -n "${__width}${__precision}" ]; then printf_invalid_format_error; fi
+          __width=$1
+          shift
+          ;;
+        '.')
+          __head=$((_$__fmt_ptr))
+          if [ $__head = 42 ]; then # 42 = '*'
+            __fmt_ptr=$((__fmt_ptr + 1))
+            __precision=".$1"
+            shift
+          elif [ $__head -ge 48 ] && [ $__head -le 57 ]; then
+            read_int
+            __precision=".$__int"
+          else
+            printf_invalid_format_error
+          fi
+          ;;
+        *)
+          echo "4: Unknown format specifier %$__head_char"; exit 1
+      esac
+    elif [ $__head = 37 ]; then # 37 == '%'
+      __mod=1; __mod_start=$__fmt_ptr
+    else
+      printf \\$(($__head/64))$(($__head/8%8))$(($__head%8))
+    fi
+  done
+}
 
 __code=0; # Exit code
 make_argv $(($# + 1)) "$0" "$@" # Setup argc/argv

@@ -42,8 +42,6 @@ void print_tok_indent() {
 }
 
 void print_tok(int tok, int val) {
-  int i;
-
   // print_tok treats '{', '}' and '\n' specially:
   // - '{' increases the indent level by 2
   // - '}' decreases the indent level by 2
@@ -75,42 +73,57 @@ void print_tok(int tok, int val) {
     print_tok_preceding_nl_count = 0;
   }
 
-  if      (tok == AUTO_KW)      putstr("auto");
-  else if (tok == BREAK_KW)     putstr("break");
+
+  if      (tok == BREAK_KW)     putstr("break");
   else if (tok == CASE_KW)      putstr("case");
-  else if (tok == CHAR_KW)      putstr("char");
-  else if (tok == CONST_KW)     putstr("const");
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
+#ifdef SUPPORT_DO_WHILE
   else if (tok == DO_KW)        putstr("do");
-  else if (tok == DOUBLE_KW)    putstr("double");
+#endif
   else if (tok == ELSE_KW)      putstr("else");
-  else if (tok == ENUM_KW)      putstr("enum");
-  else if (tok == EXTERN_KW)    putstr("extern");
-  else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
-  else if (tok == GOTO_KW)      putstr("goto");
   else if (tok == IF_KW)        putstr("if");
-  else if (tok == INT_KW)       putstr("int");
-  else if (tok == LONG_KW)      putstr("long");
-  else if (tok == REGISTER_KW)  putstr("register");
   else if (tok == RETURN_KW)    putstr("return");
-  else if (tok == SHORT_KW)     putstr("short");
-  else if (tok == SIGNED_KW)    putstr("signed");
   else if (tok == SIZEOF_KW)    putstr("sizeof");
-  else if (tok == STATIC_KW)    putstr("static");
-  else if (tok == STRUCT_KW)    putstr("struct");
   else if (tok == SWITCH_KW)    putstr("switch");
   else if (tok == TYPEDEF_KW)   putstr("typedef");
-  else if (tok == UNION_KW)     putstr("union");
+  else if (tok == WHILE_KW)     putstr("while");
+  else if (tok == CHAR_KW)      putstr("char");
+  else if (tok == DOUBLE_KW)    putstr("double");
+  else if (tok == ENUM_KW)      putstr("enum");
+  else if (tok == FLOAT_KW)     putstr("float");
+  else if (tok == INT_KW)       putstr("int");
+  else if (tok == LONG_KW)      putstr("long");
+  else if (tok == SHORT_KW)     putstr("short");
+  else if (tok == SIGNED_KW)    putstr("signed");
   else if (tok == UNSIGNED_KW)  putstr("unsigned");
   else if (tok == VOID_KW)      putstr("void");
+
+// Type qualifiers and storage class specifiers
+  else if (tok == CONST_KW)     putstr("const");
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (tok == AUTO_KW)      putstr("auto");
+  else if (tok == EXTERN_KW)    putstr("extern");
+  else if (tok == REGISTER_KW)  putstr("register");
+  else if (tok == STATIC_KW)    putstr("static");
   else if (tok == VOLATILE_KW)  putstr("volatile");
-  else if (tok == WHILE_KW)     putstr("while");
+  else if (tok == INLINE_KW)    putstr("inline");
+#endif
+
+#ifdef SUPPORT_GOTO
+  else if (tok == GOTO_KW)      putstr("goto");
+#endif
+#ifdef SUPPORT_STRUCT_UNION
+  else if (tok == STRUCT_KW)    putstr("struct");
+  else if (tok == UNION_KW)     putstr("union");
+#endif
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+#ifdef SUPPORT_STRUCT_UNION
   else if (tok == ARROW)        putstr("->");
+#endif
   else if (tok == BAR_BAR)      putstr("||");
 #ifdef GAMBIT_MODE
   else if (tok == BAR_EQ)       putstr("||=");
@@ -132,15 +145,22 @@ void print_tok(int tok, int val) {
   else if (tok == RSHIFT)       putstr(">>");
   else if (tok == SLASH_EQ)     putstr("/=");
   else if (tok == STAR_EQ)      putstr("*=");
+#ifdef FULL_PREPROCESSOR_SUPPORT
   else if (tok == HASH_HASH)    putstr("##");
+#endif
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+  else if (tok == ELLIPSIS)         putstr("...");
+#endif
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   else if (tok == INITIALIZER_LIST) putstr("initializer_list");
+#endif
   else if (tok == DECL)             putstr("decl");
   else if (tok == DECLS)            putstr("decls");
   else if (tok == LIST)             putstr("list");
@@ -196,42 +216,56 @@ void print_tok(int tok, int val) {
 // This is used for showing more helpful error messages.
 void print_tok_type(int tok) {
 
-  if      (tok == AUTO_KW)      putstr("auto");
-  else if (tok == BREAK_KW)     putstr("break");
+  if      (tok == BREAK_KW)     putstr("break");
   else if (tok == CASE_KW)      putstr("case");
-  else if (tok == CHAR_KW)      putstr("char");
-  else if (tok == CONST_KW)     putstr("const");
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
+#ifdef SUPPORT_DO_WHILE
   else if (tok == DO_KW)        putstr("do");
-  else if (tok == DOUBLE_KW)    putstr("double");
+#endif
   else if (tok == ELSE_KW)      putstr("else");
-  else if (tok == ENUM_KW)      putstr("enum");
-  else if (tok == EXTERN_KW)    putstr("extern");
-  else if (tok == FLOAT_KW)     putstr("float");
   else if (tok == FOR_KW)       putstr("for");
-  else if (tok == GOTO_KW)      putstr("goto");
   else if (tok == IF_KW)        putstr("if");
-  else if (tok == INT_KW)       putstr("int");
-  else if (tok == LONG_KW)      putstr("long");
-  else if (tok == REGISTER_KW)  putstr("register");
   else if (tok == RETURN_KW)    putstr("return");
-  else if (tok == SHORT_KW)     putstr("short");
-  else if (tok == SIGNED_KW)    putstr("signed");
   else if (tok == SIZEOF_KW)    putstr("sizeof");
-  else if (tok == STATIC_KW)    putstr("static");
-  else if (tok == STRUCT_KW)    putstr("struct");
   else if (tok == SWITCH_KW)    putstr("switch");
   else if (tok == TYPEDEF_KW)   putstr("typedef");
-  else if (tok == UNION_KW)     putstr("union");
+  else if (tok == WHILE_KW)     putstr("while");
+  else if (tok == CHAR_KW)      putstr("char");
+  else if (tok == DOUBLE_KW)    putstr("double");
+  else if (tok == ENUM_KW)      putstr("enum");
+  else if (tok == FLOAT_KW)     putstr("float");
+  else if (tok == INT_KW)       putstr("int");
+  else if (tok == LONG_KW)      putstr("long");
+  else if (tok == SHORT_KW)     putstr("short");
+  else if (tok == SIGNED_KW)    putstr("signed");
   else if (tok == UNSIGNED_KW)  putstr("unsigned");
   else if (tok == VOID_KW)      putstr("void");
+
+// Type qualifiers and storage class specifiers
+  else if (tok == CONST_KW)     putstr("const");
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (tok == AUTO_KW)      putstr("auto");
+  else if (tok == EXTERN_KW)    putstr("extern");
+  else if (tok == REGISTER_KW)  putstr("register");
+  else if (tok == STATIC_KW)    putstr("static");
   else if (tok == VOLATILE_KW)  putstr("volatile");
-  else if (tok == WHILE_KW)     putstr("while");
+  else if (tok == INLINE_KW)    putstr("inline");
+#endif
+
+#ifdef SUPPORT_GOTO
+  else if (tok == GOTO_KW)      putstr("goto");
+#endif
+#ifdef SUPPORT_STRUCT_UNION
+  else if (tok == STRUCT_KW)    putstr("struct");
+  else if (tok == UNION_KW)     putstr("union");
+#endif
 
   else if (tok == AMP_AMP)      putstr("&&");
   else if (tok == AMP_EQ)       putstr("&=");
+#ifdef SUPPORT_STRUCT_UNION
   else if (tok == ARROW)        putstr("->");
+#endif
   else if (tok == BAR_BAR)      putstr("||");
 #ifdef GAMBIT_MODE
   else if (tok == BAR_EQ)       putstr("||=");
@@ -253,15 +287,22 @@ void print_tok_type(int tok) {
   else if (tok == RSHIFT)       putstr(">>");
   else if (tok == SLASH_EQ)     putstr("/=");
   else if (tok == STAR_EQ)      putstr("*=");
+#ifdef FULL_PREPROCESSOR_SUPPORT
   else if (tok == HASH_HASH)    putstr("##");
+#endif
   else if (tok == PLUS_PLUS_PRE)    putstr("++");
   else if (tok == MINUS_MINUS_PRE)  putstr("--");
   else if (tok == PLUS_PLUS_POST)   putstr("++");
   else if (tok == MINUS_MINUS_POST) putstr("--");
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+  else if (tok == ELLIPSIS)         putstr("...");
+#endif
 
   else if (tok == FUN_DECL)         putstr("fun_decl");
   else if (tok == CAST)             putstr("cast");
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   else if (tok == INITIALIZER_LIST) putstr("initializer_list");
+#endif
   else if (tok == DECL)             putstr("decl");
   else if (tok == DECLS)            putstr("decls");
   else if (tok == LIST)             putstr("list");
@@ -343,8 +384,10 @@ void type_ast_to_sexp(ast type) {
       print_tok_type(get_op(type));
       break;
 
+#ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW:
     case UNION_KW:
+#endif
     case ENUM_KW:
       printf("(");
       print_tok_type(get_op(type));
@@ -408,9 +451,11 @@ void ast_to_sexp(ast obj) {
       printf(")");
       break;
 
-    case ENUM_KW:
+#ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW:
     case UNION_KW:
+#endif
+    case ENUM_KW:
       type_ast_to_sexp(obj);
       break;
 
@@ -522,7 +567,6 @@ void print_tokens(int tokens) {
 }
 
 void print_macro_args(int args) {
-  int arg;
   if (args != 0) {
     print_macro_args(cdr(args));
     print_tokens(car(args));
@@ -531,7 +575,6 @@ void print_macro_args(int args) {
 }
 
 void print_macro_ctx(int ix, int ident, int tokens, int args) {
-  int arg;
   if (ident == 0) {
     printf("# %-3d: <unnamed>", ix);
   } else {

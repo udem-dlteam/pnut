@@ -2,6 +2,8 @@
 
 #include "sh-runtime.c"
 
+#ifdef SH_SUPPORT_SHELL_INCLUDE
+
 void handle_shell_include() {
   int c;
   if (tok == STRING) {
@@ -18,10 +20,12 @@ void handle_shell_include() {
     restore_include_context();
     get_tok_macro(); // Skip the string
   } else {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("expected string to #include_shell directive");
   }
 }
+
+#endif // SH_SUPPORT_SHELL_INCLUDE
 
 // codegen
 
@@ -32,12 +36,14 @@ int text_alloc = 1; // Start at 1 because 0 is the empty text
 
 // Text pool nodes
 enum TEXT_NODES {
-  TEXT_TREE,
-  TEXT_INTEGER,
-  TEXT_INTEGER_HEX,
-  TEXT_INTEGER_OCT,
-  TEXT_STRING,
-  TEXT_ESCAPED
+  TEXT_TREE,        // Concatenation of texts
+  TEXT_INTEGER,     // Integer to be printed in decimal
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+  TEXT_INTEGER_HEX, // Integer to be printed in hexadecimal
+  TEXT_INTEGER_OCT, // Integer to be printed in octal
+#endif
+  TEXT_STRING,      // Pointer to immutable string
+  TEXT_ESCAPED      // Escaped string, used for printf
 };
 
 // Place prototype of mutually recursive functions here
@@ -53,7 +59,9 @@ typedef enum STMT_CTX {
   STMT_CTX_SWITCH       = 2,
 } STMT_CTX;
 
+#ifdef SH_SUPPORT_ADDRESS_OF
 text comp_lvalue_address(ast node);
+#endif
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
@@ -78,28 +86,30 @@ ast handle_side_effects_go(ast node, int executes_conditionally);
 
 #define wrap_char(c) (-c)
 
-text wrap_int(int i) {
+text wrap_int(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
-text wrap_int_hex(int i) {
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+
+text wrap_int_hex(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_HEX);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
-text wrap_int_oct(int i) {
+text wrap_int_oct(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_OCT);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
   return (text_alloc += 2) - 2;
 }
 
-text wrap_integer(int multiply, int obj) {
+text wrap_integer(const int multiply, const int obj) {
   switch (get_op(obj)) {
     case INTEGER:
       return wrap_int(multiply * -get_val_(INTEGER, obj));
@@ -112,8 +122,11 @@ text wrap_integer(int multiply, int obj) {
       return 0;
   }
 }
+#else
+#define wrap_integer(multiply, obj) wrap_int(multiply * -get_val_(INTEGER, obj))
+#endif
 
-text escape_text(text t, bool for_printf) {
+text escape_text(const text t, const bool for_printf) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
 
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_ESCAPED);
@@ -122,7 +135,7 @@ text escape_text(text t, bool for_printf) {
   return (text_alloc += 3) - 3;
 }
 
-text string_concat(text t1, text t2) {
+text string_concat(const text t1, const text t2) {
   if (text_alloc + 4 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(2);
@@ -131,7 +144,7 @@ text string_concat(text t1, text t2) {
   return (text_alloc += 4) - 4;
 }
 
-text string_concat3(text t1, text t2, text t3) {
+text string_concat3(const text t1, const text t2, const text t3) {
   if (text_alloc + 5 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(3);
@@ -141,7 +154,7 @@ text string_concat3(text t1, text t2, text t3) {
   return (text_alloc += 5) - 5;
 }
 
-text string_concat4(text t1, text t2, text t3, text t4) {
+text string_concat4(const text t1, const text t2, const text t3, const text t4) {
   if (text_alloc + 6 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(4);
@@ -152,7 +165,7 @@ text string_concat4(text t1, text t2, text t3, text t4) {
   return (text_alloc += 6) - 6;
 }
 
-text string_concat5(text t1, text t2, text t3, text t4, text t5) {
+text string_concat5(const text t1, const text t2, const text t3, const text t4, const text t5) {
   if (text_alloc + 7 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(5);
@@ -165,7 +178,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 }
 
 // Dead code but keeping it around in case we need to wrap mutable strings
-// text wrap_str(char *s) {
+// text wrap_str(char * const s) {
 //   int i = 0;
 //   int result = text_alloc;
 //
@@ -183,7 +196,7 @@ text string_concat5(text t1, text t2, text t3, text t4, text t5) {
 // }
 
 // Like wrap_str, but assumes that the string is immutable and doesn't need to be copied
-text wrap_str_imm(char *s, char *end) {
+text wrap_str_imm(char * const s, char * const end) {
   if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_STRING);
   text_pool[text_alloc + 1] = TEXT_FROM_PTR(s);
@@ -191,37 +204,19 @@ text wrap_str_imm(char *s, char *end) {
   return (text_alloc += 3) - 3;
 }
 
-text wrap_str_lit(char *s) {
+text wrap_str_lit(char * const s) {
   return wrap_str_imm(s, 0);
 }
 
-text wrap_str_pool(int ident_probe) {
+text wrap_str_pool(const int ident_probe) {
   return wrap_str_imm(STRING_BUF(ident_probe), 0);
 }
 
-text concatenate_strings_with(text t1, text t2, text sep) {
+text concatenate_strings_with(const text t1, const text t2, const text sep) {
   if (t1 == 0) return t2;
   if (t2 == 0) return t1;
   return string_concat3(t1, sep, t2);
 }
-
-#ifdef PNUT_SH
-#define puthex_unsigned(n) printf("%x", n)
-#define putoct_unsigned(n) printf("%o", n)
-#else
-// Output unsigned integer in hex
-void puthex_unsigned(int n) {
-  // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if ((n >> 4) & 0x0fffffff) puthex_unsigned((n >> 4) & 0x0fffffff);
-  putchar("0123456789abcdef"[n & 15]);
-}
-
-void putoct_unsigned(int n) {
-  // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
-  putchar('0' + (n & 7));
-}
-#endif
 
 void print_escaped_char(char c, int for_printf) {
   // C escape sequences
@@ -281,13 +276,17 @@ void print_escaped_text(text t, bool for_printf) {
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
+  }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
     putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
     putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
+  }
+#endif
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     print_escaped_string((char*) text_pool[t + 1],  (char*) text_pool[t + 2], for_printf);
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
     fatal_error("Cannot escape a string that is already escaped");
@@ -316,13 +315,17 @@ void print_text(text t) {
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
+  }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
     putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
     putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
+  }
+#endif
+  else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
     if (TEXT_TO_INT(text_pool[t + 2]) == 0) { // null-terminated string
       putstr((char*) text_pool[t + 1]);
     } else { // string ends at the address in text_pool[t + 2]
@@ -350,12 +353,12 @@ int gensym_ix = 0;              // Counter for fresh_ident
 int fun_gensym_ix = 0;          // Maximum value of gensym_ix for the current function
 int max_gensym_ix = 0;          // Maximum value of gensym_ix for all functions
 int string_counter = 0;         // Counter for string literals
-#define CHARACTERS_BITFIELD_SIZE 16
-int characters_useds[16];       // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
-bool any_character_used = false; // If any character is used
 ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a function
 bool main_defined = false;      // If the main function is defined
-bool top_level_stmt = true;     // If the current statement is at the top level
+
+#define CHARACTERS_BITFIELD_SIZE 16
+int characters_useds[16];        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
+bool any_character_used = false; // If any character is used
 
 // Internal identifier node types used by the compiler
 enum IDENTIFIER_TYPE {
@@ -378,6 +381,16 @@ void init_comp_context() {
     characters_useds[i] = 0;
     i += 1;
   }
+
+#ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+  // Mark all alphanum characters as used: A-Z, a-z, 0-9
+  any_character_used = true;
+  characters_useds[3] = 0x03FF; // 0-9 (bit 48 to 57)
+  characters_useds[4] = 0xFFFE; // A-O (bit 65 to 79)
+  characters_useds[5] = 0x07FF; // Q-Z (bit 80 to 90)
+  characters_useds[6] = 0xFFFE; // A-O (bit 65 to 79)
+  characters_useds[7] = 0x07FF; // Q-Z (bit 80 to 90)
+#endif
 
   // Initialize preallocated_fresh_idents
   i = 0;
@@ -562,6 +575,8 @@ text env_var_with_prefix(ast ident, bool prefixed_with_dollar) {
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
 text struct_member_var(ast member_name_ident) {
   return string_concat(wrap_str_lit("__"), wrap_str_pool(get_val_(IDENTIFIER, member_name_ident)));
 }
@@ -569,6 +584,8 @@ text struct_member_var(ast member_name_ident) {
 text struct_sizeof_var(ast struct_name_ident) {
   return string_concat(wrap_str_lit("__sizeof__"), wrap_str_pool(get_val_(IDENTIFIER, struct_name_ident)));
 }
+
+#endif
 
 text function_name(int ident_tok) {
   return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
@@ -592,12 +609,8 @@ ast new_fresh_ident(int ix) {
 
 ast fresh_ident() {
   gensym_ix += 1;
-  if (gensym_ix > fun_gensym_ix) {
-    fun_gensym_ix = gensym_ix;
-  }
-  if (gensym_ix > max_gensym_ix) {
-    max_gensym_ix = gensym_ix;
-  }
+  fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
+  max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
 
   return new_fresh_ident(gensym_ix);
 }
@@ -618,19 +631,12 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 
   // Make sure we're not shadowing an existing local variable
   if (cgc_lookup_var(ident_probe, cgc_locals)) {
-    putstr("var="); putstr(STRING_BUF(ident_probe)); putchar('\n');
+    dump_ident(ident_probe);
     fatal_error("Variable is already in local environment");
   }
 
   // The var is not part of the environment, so we add it.
   cgc_add_local_var(kind, ident_probe, get_child_(DECL, decl, 1));
-}
-
-void add_fun_params_to_local_env(ast lst) {
-  while (lst != 0) {
-    add_var_to_local_env(car_(DECL, lst), BINDING_PARAM_LOCAL);
-    lst = tail(lst);
-  }
 }
 
 // Since global and internal variables are prefixed with _, we restrict the name
@@ -644,7 +650,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   ast type = get_child_(DECL, variable, 1);
   if (name[0] == '_'
   || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
-    printf("%s ", name);
+    dump_string("Variable name: ", name);
     fatal_error("variable name is invalid. It can't start or end with '_'.");
   }
 
@@ -652,33 +658,42 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
   // This check only applies to local variables because globals are prefixed with _.
   if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
-    printf("\"%s\" ", name);
+    dump_string("Variable name: ", name);
     fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
   }
 
   if (local) {
     // Local variables don't correspond to memory locations, and can't store
     // more than 1 number/pointer.
-    if (get_op(type) == '[' || get_op(type) == STRUCT_KW) {
-      printf("\"%s\" variable: ", name);
+    if (get_op(type) == '['
+#ifdef SUPPORT_STRUCT_UNION
+    || get_op(type) == STRUCT_KW
+#endif
+       ) {
+      dump_string("Variable name: ", name);
       fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
   } else {
     // Arrays of structs and struct value types are not supported for now.
     // When we have type information on the local and global variables, we'll
     // be able to generate the correct code for these cases.
-    if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
-      || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
-      || get_op(type) == STRUCT_KW) { // Struct value type
-      printf("\"%s\" variable: ", name);
+    if ( (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == '[') // Array of arrays
+#ifdef SUPPORT_STRUCT_UNION
+      || (get_op(type) == '[' && get_op(get_child_('[', type, 0)) == STRUCT_KW) // Array of structs
+      || get_op(type) == STRUCT_KW // Struct value type
+#endif
+       ) {
+      dump_string("Variable name: ", name);
       fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
     }
   }
 }
 
-void check_decls(ast lst) {
+void handle_function_params(ast lst) {
   while (lst != 0) {
-    assert_var_decl_is_safe(car_(DECL, lst), true);
+    ast decl = car_(DECL, lst);
+    assert_var_decl_is_safe(decl, true);
+    add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = tail(lst);
   }
 }
@@ -804,7 +819,7 @@ text save_local_vars() {
   while (env != 0) {
 #if defined(SH_INITIALIZE_PARAMS_WITH_LET)
     if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
-#elif defined(OPTIMIZE_CONSTANT_PARAMS)
+#elif defined(SH_OPTIMIZE_CONSTANT_PARAMS)
     if (binding_kind(env) != BINDING_PARAM_LOCAL || is_constant_type(heap[env + 4])) { // Skip constant params
 #else
     {
@@ -875,7 +890,7 @@ text op_to_str(int op) {
   else if (op == SLASH_EQ)   return wrap_str_lit(" /= ");
   else if (op == STAR_EQ)    return wrap_str_lit(" *= ");
   else {
-    printf("op=%d %c\n", op, op);
+    dump_op(op);
     fatal_error("op_to_str: unexpected operator");
     return 0;
   }
@@ -893,7 +908,7 @@ text test_op_to_str(int op) {
   else if (op == LT_EQ)      return wrap_str_lit(" -le ");
   else if (op == GT_EQ)      return wrap_str_lit(" -ge ");
   else {
-    printf("op=%d %c\n", op, op);
+    dump_op(op);
     fatal_error("test_op_to_str: unexpected operator");
     return 0;
   }
@@ -906,49 +921,54 @@ text character_ident(int c) {
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
     return string_concat5(wrap_char('_'), wrap_char('_'), wrap_char(c), wrap_char('_'), wrap_char('_'));
+  } else if (c < 32) {
+    // First 32 characters are control characters.
+    char* control_character_identifiers =
+      "__NUL__\0"     "__SOH__\0"     "__STX__\0"     "__ETX__\0"
+      "__EOT__\0"     "__ENQ__\0"     "__ACK__\0"     "__BEL__\0"
+      "__BS__\0\0"    "__HT__\0\0"    "__LF__\0\0"    "__VT__\0\0"
+      "__FF__\0\0"    "__CR__\0\0"    "__SO__\0\0"    "__SI__\0\0"
+      "__DLE__\0"     "__DC1__\0"     "__DC2__\0"     "__DC3__\0"
+      "__DC4__\0"     "__NAK__\0"     "__SYN__\0"     "__ETB__\0"
+      "__CAN__\0"     "__EM__\0\0"    "__SUB__\0"     "__ESC__\0"
+      "__FS__\0\0"    "__GS__\0\0"    "__RS__\0\0"    "__US__\0\0"
+    ;
+    // Control characters
+    return wrap_str_lit(control_character_identifiers + (c * 8)); // Each string has length 7 + null terminator
+  } else if (c < '0') {
+    // Symbols from space to /
+    char* printable_character_identifiers1 =
+      "__SPACE__\0\0\0\0\0\0"     "__EXCL__\0\0\0\0\0\0\0"    "__DQUOTE__\0\0\0\0\0"        "__HASH__\0\0\0\0\0\0\0"
+      "__DOLLAR__\0\0\0\0\0"      "__PERCENT__\0\0\0\0"       "__AMP__\0\0\0\0\0\0\0\0"     "__QUOTE__\0\0\0\0\0\0"
+      "__LPAREN__\0\0\0\0\0"      "__RPAREN__\0\0\0\0\0"      "__STAR__\0\0\0\0\0\0\0"      "__PLUS__\0\0\0\0\0\0\0"
+      "__COMMA__\0\0\0\0\0\0"     "__MINUS__\0\0\0\0\0\0"     "__PERIOD__\0\0\0\0\0"        "__SLASH__\0\0\0\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 15); // Each string has length 14 + null terminator
+  } else if (c <= 'A') {
+    // Symbols from : to @
+    char* printable_character_identifiers2 =
+      "__COLON__\0\0\0\0\0\0"     "__SEMICOLON__\0\0"         "__LT__\0\0\0\0\0\0\0\0\0"    "__EQ__\0\0\0\0\0\0\0\0\0"
+      "__GT__\0\0\0\0\0\0\0\0\0"  "__QUESTION__\0\0\0"        "__AT__\0\0\0\0\0\0\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers2 + (c - ':') * 15); // Each string has length 14 + null terminator
+  } else if (c <= 'a') {
+    // Symbols from [ to `
+    char* printable_character_identifiers3 =
+      "__LBRACK__\0\0\0\0\0"      "__BACKSLASH__\0\0"         "__RBRACK__\0\0\0\0\0"        "__CARET__\0\0\0\0\0\0"
+      "__UNDERSCORE__\0"          "__BACKTICK__\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers3 + (c - '[') * 15); // Each string has length 14 + null terminator
+  } else if (c <= 127) {
+    // Symbols from { to ~ and DEL (127)
+    char* printable_character_identifiers4 =
+      "__LBRACE__\0\0\0\0\0"      "__BAR__\0\0\0\0\0\0\0\0"   "__RBRACE__\0\0\0\0\0"        "__TILDE__\0\0\0\0\0\0"
+      "__DEL__\0\0\0\0\0\0\0\0"
+    ;
+    return wrap_str_lit(printable_character_identifiers4 + (c - '{') * 15); // Each string has length 14 + null terminator
   } else {
-    if      (c == '\0') return wrap_str_lit("__NUL__");
-    else if (c == '\n') return wrap_str_lit("__NEWLINE__");
-    else if (c == ' ')  return wrap_str_lit("__SPACE__");
-    else if (c == '!')  return wrap_str_lit("__EXCL__");
-    else if (c == '"')  return wrap_str_lit("__DQUOTE__");
-    else if (c == '#')  return wrap_str_lit("__SHARP__");
-    else if (c == '$')  return wrap_str_lit("__DOLLAR__");
-    else if (c == '%')  return wrap_str_lit("__PERCENT__");
-    else if (c == '&')  return wrap_str_lit("__AMP__");
-    else if (c == '\'') return wrap_str_lit("__QUOTE__");
-    else if (c == '(')  return wrap_str_lit("__LPAREN__");
-    else if (c == ')')  return wrap_str_lit("__RPAREN__");
-    else if (c == '*')  return wrap_str_lit("__STAR__");
-    else if (c == '+')  return wrap_str_lit("__PLUS__");
-    else if (c == ',')  return wrap_str_lit("__COMMA__");
-    else if (c == '-')  return wrap_str_lit("__MINUS__");
-    else if (c == '.')  return wrap_str_lit("__PERIOD__");
-    else if (c == '/')  return wrap_str_lit("__SLASH__");
-    else if (c == ':')  return wrap_str_lit("__COLON__");
-    else if (c == ';')  return wrap_str_lit("__SEMICOLON__");
-    else if (c == '<')  return wrap_str_lit("__LT__");
-    else if (c == '=')  return wrap_str_lit("__EQ__");
-    else if (c == '>')  return wrap_str_lit("__GT__");
-    else if (c == '?')  return wrap_str_lit("__QUESTION__");
-    else if (c == '@')  return wrap_str_lit("__AT__");
-    else if (c == '^')  return wrap_str_lit("__CARET__");
-    else if (c == '[')  return wrap_str_lit("__LBRACK__");
-    else if (c == '\\') return wrap_str_lit("__BACKSLASH__");
-    else if (c == ']')  return wrap_str_lit("__RBRACK__");
-    else if (c == '_')  return wrap_str_lit("__UNDERSCORE__");
-    else if (c == '`')  return wrap_str_lit("__BACKTICK__");
-    else if (c == '{')  return wrap_str_lit("__LBRACE__");
-    else if (c == '|')  return wrap_str_lit("__BAR__");
-    else if (c == '}')  return wrap_str_lit("__RBRACE__");
-    else if (c == '~')  return wrap_str_lit("__TILDE__");
-    else if (c == '\a') return wrap_str_lit("__ALARM__");
-    else if (c == '\b') return wrap_str_lit("__BACKSPACE__");
-    else if (c == '\f') return wrap_str_lit("__PAGE__");
-    else if (c == '\r') return wrap_str_lit("__RET__");
-    else if (c == '\t') return wrap_str_lit("__TAB__");
-    else if (c == '\v') return wrap_str_lit("__VTAB__");
-    else { fatal_error("Unknown character"); return 0; }
+    dump_char(c);
+    fatal_error("character_ident: invalid character");
+    return 0;
   }
 }
 
@@ -1019,7 +1039,11 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
 
   if (nb_children == 0) {
     if ( op == IDENTIFIER || op == IDENTIFIER_INTERNAL || op == IDENTIFIER_STRING || op == IDENTIFIER_DOLLAR
-      || op == CHARACTER  || op == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT) {
+      || op == CHARACTER  || op == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+      || op == INTEGER_HEX || op == INTEGER_OCT
+#endif
+      ) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
@@ -1027,7 +1051,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       literals_inits = cons(new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
       return sub1;
     } else {
-      printf("op=%d %c", op, op);
+      dump_node(node);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -1041,7 +1065,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
     } else {
-      printf("op=%d %c", op, op);
+      dump_node(node);
       fatal_error("unexpected operator");
       return 0;
     }
@@ -1059,7 +1083,10 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       }
     } else if (op == '&' || op == '|' || op == '<' || op == '>' || op == '+' || op == '-' || op == '*' || op == '/'
       || op == '%' || op == '^' || op == ',' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == LSHIFT || op == RSHIFT || op == '['
-      || op == '.' || op == ARROW ) {
+#ifdef SUPPORT_STRUCT_UNION
+      || op == '.' || op == ARROW
+    #endif
+       ) {
       sub1 = handle_side_effects_go(child0, executes_conditionally);
       sub2 = handle_side_effects_go(child1, executes_conditionally); // We could inline that one since the assignment to the global variable is done after the last handle_side_effects_go call
       return new_ast2(op, sub1, sub2);
@@ -1103,7 +1130,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
 
     return new_ast3('?', handle_side_effects_go(child0, executes_conditionally), sub1, sub2);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    dump_node(node);
     fatal_error("unexpected operator");
     return 0;
   }
@@ -1126,9 +1153,13 @@ void comp_defstr(ast ident, int string_probe, int array_size) {
     array_size_text = string_concat(wrap_char(' '), wrap_int(array_size));
   }
 
-  if (top_level_stmt) {
-    // If defstr is used at the top level, it needs to be included beforehand
+  if (nest_level == 0) {
+#ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+    fatal_error("String literals are not supported in top-level statements.");
+#else
+    // If defstr is used at the top level, it needs to be defined before any code that uses it.
     runtime_defstr();
+#endif
   } else {
     runtime_use_defstr = true;
   }
@@ -1141,6 +1172,8 @@ void comp_defstr(ast ident, int string_probe, int array_size) {
                                                 )
                                 , array_size_text));
 }
+
+#ifdef SUPPORT_COMPLEX_INITIALIZER
 
 int initializer_list_len(ast node) {
   int res = 0;
@@ -1167,11 +1200,13 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
       case INTEGER:
         args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
         break;
+#ifndef PARSE_NUMERIC_LITERAL_WITH_BASE
       case INTEGER_HEX:
       case INTEGER_OCT:
         // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
         args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
         break;
+#endif
       case CHARACTER:
         // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
         args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
@@ -1190,6 +1225,8 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
 
   return args;
 }
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
 enum VALUE_CTX {
   RVALUE_CTX_BASE,            // value is outside of $(( ... ))
@@ -1272,10 +1309,13 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
   if (nb_children == 0) {
     if (op == INTEGER) {
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(-get_val_(INTEGER, node)));
-    } else if (op == INTEGER_HEX || op == INTEGER_OCT) {
+    }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+    else if (op == INTEGER_HEX || op == INTEGER_OCT) {
       // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
       return wrap_if_needed(false, context, test_side_effects, wrap_integer(1, node), outer_op, op);
     }
+#endif
     else if (op == CHARACTER) {
 #ifdef SH_INLINE_CHAR_LITERAL
       return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(get_val_(CHARACTER, node)));
@@ -1290,8 +1330,8 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       if (context == RVALUE_CTX_ARITH_EXPANSION) { return env_var_with_prefix(node, false); }
       else { return wrap_in_condition_if_needed(context, test_side_effects, string_concat(wrap_char('$'), env_var_with_prefix(node, true))); }
     } else {
-      printf("op=%d %c", op, op);
-      fatal_error("comp_rvalue_go: unknown rvalue with nb_children == 0");
+      dump_node(node);
+      fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
     }
   } else if (nb_children == 1) {
@@ -1305,10 +1345,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // +x is equivalent to x
       return comp_rvalue_go(child0, context, test_side_effects, outer_op);
     } else if (op == '-' || op == '~' || op == '!') {
-      if (op == '-' && (get_op(child0) == INTEGER || op == INTEGER_HEX || op == INTEGER_OCT)) {
+      if (op == '-' && (get_op(child0) == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+       || op == INTEGER_HEX || op == INTEGER_OCT
+#endif
+      )
+      ) {
         return wrap_in_condition_if_needed(context, test_side_effects, wrap_integer(-1, child0));
       }
-#ifdef OPTIMIZE_CONSTANT_PARAMS
+#ifdef SH_OPTIMIZE_CONSTANT_PARAMS
       // The expansion of negative constant params prefixed with - result in
       // --<number> which is parsed as pre-decrement. Add a space between the
       // operator and the variable (constant param or not for consistency).
@@ -1336,31 +1381,37 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
-        if ( get_op(child0) == INT_KW
-          || get_op(child0) == SHORT_KW
-          || get_op(child0) == LONG_KW
-          || get_op(child0) == CHAR_KW
-          || get_op(child0) == VOID_KW
-          || get_op(child0) == ENUM_KW
-          || get_op(child0) == '*') { // If it's a pointer
-          return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
-        } else if (get_op(child0) == STRUCT_KW) {
-          return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
-        } else {
-          printf("op=%d %c\n", get_op(child0), get_op(child0));
-          printf("op=%d %c\n", get_op(get_child(child0, 1)), get_op(get_child(child0, 1)));
-          fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
-          return 0;
+        switch (get_op(child0)) {
+          case INT_KW:
+          case SHORT_KW:
+          case LONG_KW:
+          case CHAR_KW:
+          case VOID_KW:
+          case ENUM_KW:
+          case '*': // If it's a pointer
+            return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
+
+#ifdef SUPPORT_STRUCT_UNION
+          case STRUCT_KW:
+            return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+#endif
+          default:
+            dump_node(child0);
+            dump_node(get_child(child0, 1));
+            fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+            return 0;
         }
       } else {
-        printf("op=%d %c\n", get_op(child0), get_op(child0));
+        dump_node(child0);
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
+#ifdef SH_SUPPORT_ADDRESS_OF
     } else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
+#endif
     } else {
-      printf("op=%d %c", op, op);
+      dump_node(node);
       fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
     }
@@ -1377,11 +1428,15 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, '+');
       sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, '+');
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
-    } else if (op == ARROW) { // member access is implemented like array access
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (op == ARROW) { // member access is implemented like array access
       sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
       sub2 = struct_member_var(child1);
       return wrap_if_needed(false, context, test_side_effects, string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))")), outer_op, op);
-    } else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
+    }
+#endif
+    else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
       if (context == RVALUE_CTX_TEST) {
         sub1 = comp_rvalue_go(child0, RVALUE_CTX_BASE, 0, op);
         sub2 = comp_rvalue_go(child1, RVALUE_CTX_BASE, 0, op);
@@ -1394,7 +1449,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(child1, context, 0, op);
     } else {
-      fatal_error("comp_rvalue_go: unknown rvalue with 2 children");
+      fatal_error("comp_rvalue_go: unknown rvalue");
       return 0;
     }
   } else if (nb_children == 3 && op == '?') {
@@ -1443,7 +1498,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return wrap_if_needed(true, context, test_side_effects, string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
     }
   } else {
-    printf("op=%d %c\n", op, op);
+    dump_node(node);
     fatal_error("comp_rvalue_go: unknown rvalue");
     return 0;
   }
@@ -1494,6 +1549,8 @@ text comp_rvalue(ast node, int context) {
   return result;
 }
 
+#ifdef SH_SUPPORT_ADDRESS_OF
+
 // Unlike in the native backend, there are 2 ways to compile a lvalue.
 //
 // The first (comp_lvalue) returns the variable that represent the memory
@@ -1509,8 +1566,6 @@ text comp_lvalue_address(ast node) {
   text sub2;
 
   if (op == IDENTIFIER) {
-    // TODO: Support global variables when SUPPORT_ADDRESS_OF_OP
-    //
     // This is currently not supported because we treat as globals the enums
     // and other hardcoded constants which is not what we want.
     //
@@ -1525,18 +1580,24 @@ text comp_lvalue_address(ast node) {
     return string_concat3(sub1, wrap_str_lit(" + "), sub2);
   } else if (op == '*') {
     return comp_rvalue(get_child_('*', node, 0), RVALUE_CTX_BASE);
-  } else if (op == ARROW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (op == ARROW) {
     sub1 = comp_rvalue(get_child_(ARROW, node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child_(ARROW, node, 1));
     return string_concat3(sub1, wrap_str_lit(" + "), sub2);
-  } else if (op == CAST) {
+  }
+#endif
+  else if (op == CAST) {
     return comp_lvalue_address(get_child_(CAST, node, 1));
   } else {
-    printf("op=%d %c\n", op, op);
+    dump_node(node);
     fatal_error("comp_lvalue_address: unknown lvalue");
     return 0;
   }
 }
+
+#endif
 
 text comp_lvalue(ast node) {
   int op = get_op(node);
@@ -1552,14 +1613,18 @@ text comp_lvalue(ast node) {
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child_('*', node, 0), RVALUE_CTX_BASE);
     return string_concat(wrap_char('_'), sub1);
-  } else if (op == ARROW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (op == ARROW) {
     sub1 = comp_rvalue(get_child_(ARROW, node, 0), RVALUE_CTX_ARITH_EXPANSION);
     sub2 = struct_member_var(get_child_(ARROW, node, 1));
     return string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))"));
-  } else if (op == CAST) {
+  }
+#endif
+  else if (op == CAST) {
     return comp_lvalue(get_child_(CAST, node, 1));
   } else {
-    printf("op=%d %c\n", op, op);
+    dump_node(node);
     fatal_error("comp_lvalue: unknown lvalue");
     return 0;
   }
@@ -1578,16 +1643,7 @@ text fun_call_params(ast params) {
   return code_params;
 }
 
-// Workaround because #if defined(SH_AVOID_PRINTF_USE) || defined(SH_INLINE_PUTCHAR) doesn't work
-#ifdef SH_AVOID_PRINTF_USE
-#define INCLUDE_COMP_PUTCHAR_INLINE
-#endif
-
-#ifdef SH_INLINE_PUTCHAR
-#define INCLUDE_COMP_PUTCHAR_INLINE
-#endif
-
-#ifdef INCLUDE_COMP_PUTCHAR_INLINE
+#if defined(SH_INLINE_PUTCHAR) || defined(SH_INLINE_PRINTF)
 text comp_putchar_inline(ast param) {
   text res;
   ast ident;
@@ -1620,7 +1676,7 @@ text comp_putchar_inline(ast param) {
 }
 #endif
 
-#ifdef SH_AVOID_PRINTF_USE
+#ifdef SH_INLINE_PRINTF
 // format_str is from the string pool so immutable
 text printf_call(char *format_str, char *format_str_end, text params_text, bool escape) {
   if (format_str == format_str_end) {
@@ -1670,14 +1726,14 @@ void handle_printf_call(char *format_str, ast params) {
         case ' ': case '#': case '+': case '-': case '0': // Flags
           // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
           // 16 bits meaning we can easily convert char -> bit if we wanted to.
-          if (state != PRINTF_STATE_FLAGS) fatal_error("Invalid printf format: Flags must come before width and precision");
+          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
           break;
 
         // Width or precision literal
         case '1': case '2': case '3':
         case '4': case '5': case '6':
         case '7': case '8': case '9':
-          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("Invalid printf format: Width or precision already specified by a number");
+          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
           while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
           has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
           has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
@@ -1687,12 +1743,12 @@ void handle_printf_call(char *format_str, ast params) {
 
         // Precision
         case '.':
-          if (state >= PRINTF_STATE_PRECISION) fatal_error("Invalid printf format: precision already specified");
+          if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
           state = PRINTF_STATE_PRECISION;
           break;
 
         case '*':
-          if (param == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           if (state == PRINTF_STATE_FLAGS) {
             width_text = comp_rvalue(param, RVALUE_CTX_BASE);
             has_width = true;
@@ -1700,13 +1756,13 @@ void handle_printf_call(char *format_str, ast params) {
             precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
             has_precision = true;
           } else {
-            fatal_error("Width or precision already specified by a number");
+            fatal_error("printf: width or precision already specified");
           }
           param = 0;
           break;
 
         case '%':
-          if (state != PRINTF_STATE_FLAGS) fatal_error("Cannot use flags, width or precision with %%");
+          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
           mod = false;
           break;
 
@@ -1715,12 +1771,12 @@ void handle_printf_call(char *format_str, ast params) {
           if (*format_str == 'l') {
             while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
             if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
-              printf("*format_str=%c%c\n", *(format_str - 1), *format_str);
-              fatal_error("Invalid printf format: Unsupported long specifier");
+              dump_string("format_str = ", specifier_start);
+              fatal_error("printf: unsupported format specifier");
             }
           }
 
-          if (param == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
           params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
           params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
@@ -1733,9 +1789,9 @@ void handle_printf_call(char *format_str, ast params) {
         // shells, so we make a separate printf call using the \\ooo format.
         // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
         case 'c':
-          if (param == 0) fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           // TODO: Find way to support width that's not too verbose
-          if (has_width)   fatal_error("Width not supported for %c");
+          if (has_width) fatal_error("printf: width not supported for %c");
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
           // New format string starts after the %
@@ -1749,7 +1805,7 @@ void handle_printf_call(char *format_str, ast params) {
 
         // We can't a string to printf directly, it needs to be unpacked first.
         case 's':
-          if (param == 0)       fatal_error("Not enough parameters for printf");
+          if (param == 0) fatal_error("printf: not enough parameters");
           runtime_use_put_pstr = true;
           // If the format specifier has width or precision, we have to pack the string and call then printf.
           // Otherwise, we can call _put_pstr directly and avoid the subshell.
@@ -1770,9 +1826,8 @@ void handle_printf_call(char *format_str, ast params) {
           break;
 
         default:
-          printf("specifier=%s\n", specifier_start);
-          printf("format char='%c'\n", *format_str);
-          fatal_error("Unsupported format specifier");
+          dump_string("format_str = ", specifier_start);
+          fatal_error("printf: unsupported format specifier");
       }
     } else if (*format_str == '%') {
       mod = true;
@@ -1798,7 +1853,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
   ast param;
   text res;
 
-#ifdef SH_AVOID_PRINTF_USE
+#ifdef SH_INLINE_PRINTF
   if (assign_to == 0) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && (param = list_singleton(params)) != 0
@@ -1822,12 +1877,8 @@ text comp_fun_call_code(ast node, ast assign_to) {
   }
 #endif
 
-       if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
-  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
-  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
-  else if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
+       if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
   else if (name_id == FREE_ID)    { runtime_use_free = true; }
-  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
   else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
   else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
   else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
@@ -1835,6 +1886,16 @@ text comp_fun_call_code(ast node, ast assign_to) {
   else if (name_id == WRITE_ID)   { runtime_use_write = true; }
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
   else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
+#ifndef SH_INLINE_PUTCHAR
+  else if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
+#endif
+#ifndef SH_INLINE_EXIT
+  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
+#endif
+#ifndef SH_MINIMAL_RUNTIME
+  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+  else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+#endif
 
   if (assign_to) res = comp_lvalue(assign_to);
   else res = wrap_str_lit("__");
@@ -1853,7 +1914,11 @@ void comp_fun_call(ast node, ast assign_to) {
 
 void comp_assignment(ast lhs, ast rhs) {
   int lhs_op = get_op(lhs);
-  if (lhs_op == IDENTIFIER || lhs_op == '[' || lhs_op == '*' || lhs_op == ARROW) {
+  if (lhs_op == IDENTIFIER || lhs_op == '[' || lhs_op == '*'
+#ifdef SUPPORT_STRUCT_UNION
+    || lhs_op == ARROW
+#endif
+    ) {
     if (get_op(rhs) == '(') {
       comp_fun_call(rhs, lhs);
     } else {
@@ -1871,8 +1936,8 @@ void comp_assignment(ast lhs, ast rhs) {
       }
     }
   } else {
-    printf("lhs_op=%d %c\n", lhs_op, lhs_op);
-    fatal_error("unknown lhs");
+    dump_node(lhs);
+    fatal_error("comp_assignment: unknown lhs");
   }
 }
 
@@ -2153,6 +2218,7 @@ bool comp_return(ast return_value) {
 void comp_var_decls(ast node) {
   ast var_decl;
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
   switch (get_child_(DECLS, node, 1)) {
     // AUTO_KW and REGISTER_KW can simply be ignored.
     case EXTERN_KW:
@@ -2160,6 +2226,7 @@ void comp_var_decls(ast node) {
       fatal_error("Extern and static storage class specifier not supported on local variables");
       break;
   }
+#endif
   node = get_child_opt_(DECLS, LIST, node, 0);
   while (node != 0) {
     // Add to local env and cummulative env, then initialize
@@ -2194,6 +2261,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
                      0, // No last line
                      stmt_ctx
                      );
+#ifdef SUPPORT_DO_WHILE
   } else if (op == DO_KW) {
     return comp_loop(wrap_str_lit(":"),
                      get_child_(DO_KW, node, 0),
@@ -2201,6 +2269,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
                      string_concat(comp_rvalue(get_child_(DO_KW, node, 1), RVALUE_CTX_TEST), wrap_str_lit(" || break")),
                      stmt_ctx
                      );
+#endif
   } else if (op == FOR_KW) {
     comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT); // Assuming this statement never returns...
 
@@ -2231,6 +2300,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == '=') { // six.x=y
     comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
     return false;
+#ifdef SUPPORT_GOTO
   } else if (op == ':') {
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
@@ -2239,6 +2309,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
     return false;
+#endif
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;
@@ -2269,10 +2340,7 @@ void comp_glo_fun_decl(ast node) {
 
   if (body == -1) return; // ignore forward declarations
 
-  top_level_stmt = false;
-
-  check_decls(params);
-  add_fun_params_to_local_env(params);
+  handle_function_params(params);
 
   // If the function is main
   if (name_probe == MAIN_ID) {
@@ -2384,6 +2452,7 @@ void comp_glo_var_decl(ast node) {
       // the list of values to the defarr function. Because the array size is
       // optional, we need to calculate the size of the array from the
       // initializer list if it's not provided.
+#ifdef SUPPORT_COMPLEX_INITIALIZER
       if (init != 0) {
         if (get_op(init) != INITIALIZER_LIST) fatal_error("Array declaration with invalid initializer");
         init = get_child_(INITIALIZER_LIST, init, 0);
@@ -2397,6 +2466,7 @@ void comp_glo_var_decl(ast node) {
           fatal_error("Array type is too small for initializer");
         }
       }
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
       if (arr_len == 0) {
         fatal_error("Array declaration without size or initializer list");
@@ -2416,20 +2486,8 @@ void comp_glo_var_decl(ast node) {
         );
     }
   } else {
-#ifdef SUPPORT_ADDRESS_OF_OP
-    runtime_defglo();
-    append_glo_decl(
-      string_concat4(
-        wrap_str_lit("defglo "),
-        global_var(get_val_(IDENTIFIER, name)),
-        wrap_char(' '),
-        comp_rvalue(init, VALUE_CTX_BASE)
-      )
-    );
-#else
     if (init == 0) init = new_ast0(INTEGER, 0);
     comp_assignment(name, init);
-#endif
   }
 }
 
@@ -2454,6 +2512,8 @@ void comp_enum_cases(ast ident, ast cases) {
     cases = tail(cases);
   }
 }
+
+#ifdef SUPPORT_STRUCT_UNION
 
 // Struct member access is implemented like array indexing. Each member is mapped
 // to a readonly variable containing the offset of the member and accessing to
@@ -2513,14 +2573,19 @@ void comp_struct(ast ident, ast members) {
   append_glo_decl(0); // newline
 }
 
+#endif
+
 void handle_enum_struct_union_type_decl(ast type) {
   if (get_op(type) == ENUM_KW) {
     comp_enum_cases(get_child_opt_(ENUM_KW, IDENTIFIER, type, 1), get_child_(ENUM_KW, type, 2));
-  } else if (get_op(type) == STRUCT_KW) {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (get_op(type) == STRUCT_KW) {
     comp_struct(get_child_opt_(STRUCT_KW, IDENTIFIER, type, 1), get_child_(STRUCT_KW, type, 2));
   } else if (get_op(type) == UNION_KW) {
     fatal_error("handle_enum_struct_union_type_decl: union not supported");
   }
+#endif
 
   // If not an enum, struct, or union, do nothing
 }
@@ -2548,15 +2613,15 @@ void comp_glo_decl(ast node) {
   int op = get_op(node);
   fun_gensym_ix = 0;
 
-  top_level_stmt = true;
-
   if (op == '=') { // Assignments
    comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
   } else if (op == DECLS) { // Variable declarations
     // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
     // storage class for global variables since pnut-sh only supports 1
     // translation unit.
+#ifdef SUPPORT_TYPE_SPECIFIERS
     if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
+#endif
     declarations = get_child__(DECLS, LIST, node, 0);
     while (declarations != 0) { // Multiple variable declarations
       comp_glo_var_decl(car_(DECL, declarations));
@@ -2566,26 +2631,24 @@ void comp_glo_decl(ast node) {
     comp_glo_fun_decl(node);
   } else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW || op == STRUCT_KW || op == UNION_KW) {
+  } else if (op == ENUM_KW
+#ifdef SUPPORT_STRUCT_UNION
+    || op == STRUCT_KW || op == UNION_KW
+#endif
+  ) {
     handle_enum_struct_union_type_decl(node);
   } else {
-    printf("op=%d %c with %d children\n", op, op, get_nb_children(node));
+    dump_node(node);
     fatal_error("comp_glo_decl: unexpected declaration");
   }
 }
 
-void prologue() {
-  putstr("#!/bin/sh\n");
-#ifdef RT_UNSAFE_HEAP
-  putstr("set -e -f\n");
-#else
-  putstr("set -e -u -f\n");
-#endif
-  putstr("LC_ALL=C\n\n");
-}
-
-void epilogue() {
+void codegen_end() {
   int c;
+
+#ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
+  print_glo_decls();
+#endif
 
   if (any_character_used) {
     putstr("# Character constants\n");
@@ -2611,6 +2674,10 @@ void epilogue() {
     }
     putstr("\nexit $__code\n");
   }
+
+#ifdef PRINT_MEMORY_STATS
+  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
+#endif
 }
 
 // Initialize local and synthetic variables used by function
@@ -2644,11 +2711,20 @@ text initialize_function_variables() {
 
 void codegen_begin() {
   init_comp_context();
-  prologue();
+
+  putstr("#!/bin/sh\n");
+#ifdef RT_UNSAFE_HEAP
+  putstr("set -e -f\n");
+#else
+  putstr("set -e -u -f\n");
+#endif
+  putstr("LC_ALL=C\n\n");
 }
 
+#ifdef PRINT_MEMORY_STATS
 int max_text_alloc = 0;
 int cumul_text_alloc = 0;
+#endif
 void codegen_glo_decl(ast decl) {
   int var_init_fixup;
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
@@ -2668,17 +2744,9 @@ void codegen_glo_decl(ast decl) {
   print_glo_decls();
 #endif
 
+#ifdef PRINT_MEMORY_STATS
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
   cumul_text_alloc += text_alloc;
-}
-
-void codegen_end() {
-#ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
-  print_glo_decls();
-#endif
-  epilogue();
-#ifdef PRINT_MEMORY_STATS
-  printf("\n# string_pool_alloc=%d heap_alloc=%d max_text_alloc=%d cumul_text_alloc=%d\n", string_pool_alloc, heap_alloc, max_text_alloc, cumul_text_alloc);
 #endif
 }

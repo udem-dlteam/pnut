@@ -44,7 +44,7 @@ done
 case "$backend" in
   sh)
     ext="exe" # The extension doesn't matter for sh
-    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dsh -DRT_NO_INIT_GLOBALS"
+    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dsh"
     ;;
   i386_linux | x86_64_linux | x86_64_mac)
     ext="exe"

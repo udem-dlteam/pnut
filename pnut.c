@@ -7,13 +7,261 @@
 #include <fcntl.h> // for open
 #include <unistd.h> // for write
 
-#ifdef BOOTSTRAP_TCC
-#define BOOTSTRAP_LONG
-#define NO_BUILTIN_LIBC
+// =========================== configuration options ===========================
+//
+// Pnut has many compilation options to change the features supported by pnut-sh
+// and pnut-exe, and the code generation.
+// The reason for so many options is that pnut is really 2 different compilers
+// (pnut-sh and pnut-exe) sharing the same compiler frontend, with each compiler
+// having to accomplish 2 opposite goals:
+//
+//  1. Be as small and simple as possible to bootstrap a C-like language from a
+//     POSIX shell implementation. Importantly, this applies to both the
+//     compiled shell scripts and to the compiler code itself.
+//
+//  2. Compile real world programs, such as TCC, requiring a large subset of C99
+//     language.
+//     Non-bootstrap users of pnut also care about user experience, such as
+//     informative error messages with line numbers, a nice CLI, a fully
+//     featured built-in libc and support for more advanced C features.
+//
+// We resolve this tension by having a shared codebase and preprocessor options
+// to enable or disable features as needed. Fortunately, pnut's reader and
+// tokenizer are fast compared to the rest of the compilation, so having a
+// single codebase with large blocks of inactive code doesn't impact performance
+// all that much.
+//
+// However, the preprocessor directives can make the code slightly harder to
+// read and maintain. To make reviewing the code easier, a simple
+// preprocessor-like tool removing inactive code blocks is provided in the
+// "tools" directory (TODO).
+//
+// Since most options are orthogonal, the number of possible combinations is
+// very large. To avoid combinatorial explosion of testing and maintenance,
+// we define a few "profiles" that cover the common use cases of pnut:
+//
+// - PNUT_BOOTSTRAP:
+//    Profile used to generate pnut-sh.sh and to bootstrap pnut-exe from a
+//    POSIX shell. This profile minimizes the code size and complexity of the
+//    compilers as much as possible, supporting only the features strictly
+//    needed to bootstrap pnut.
+//
+// - (Default):
+//    General purpose profile used to build pnut-exe for real world usage. This
+//    profile strikes a balance between features, usability and code size.
+//
+// - BOOTSTRAP_TCC:
+//    Profile used to bootstrap TCC from pnut-exe. This profile enables partial
+//    support for a few more features needed to compile TCC. These features are
+//    not implemented correctly, and so are not enabled in the general purpose
+//    profile.
+//
+// Additionally, if compilation time and code size are not a concern, or to help
+// debugging, the NICE_UX and SAFE_MODE options can be enabled to turn on extra
+// runtime checks and better error messages.
+//
+// =============================================================================
+
+// Pnut-sh specific options
+#ifdef sh
+
+  // Toggles parsing literals with their base (octal, decimal or hexadecimal).
+  // This is used by the shell code generator to output the literal in the correct base.
+  #define PARSE_NUMERIC_LITERAL_WITH_BASE
+
+  #ifdef PNUT_BOOTSTRAP
+    #define ALLOW_RECURSIVE_MACROS
+    #define SH_MINIMAL_RUNTIME
+    #define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+  #else
+    // Enable all C features for general pnut usage
+    #define SUPPORT_ALL_C_FEATURES
+    // Pnut-sh specific features
+    #define SH_SUPPORT_SHELL_INCLUDE
+    #define SH_SUPPORT_ADDRESS_OF
+    #define SH_OPTIMIZE_LONG_LINES
+  #endif
+
+  // Shell code generation options
+  #ifndef SH_INLINE_PRINTF_NOT
+  // Inline printf calls with literal string for smaller and faster code
+  #define SH_INLINE_PRINTF
+  #endif
+  #ifndef SH_INLINE_PUTCHAR_NOT
+  // Inline putchar calls for smaller and faster code
+  #define SH_INLINE_PUTCHAR
+  #endif
+  // Inline exit calls for smaller code
+  #define SH_INLINE_EXIT
+
+  #ifndef SH_SAVE_VARS_WITH_SET
+  // Pick calling convention implementation. By default, use let/endlet.
+  // When SH_SAVE_VARS_WITH_SET is set, local variables are saved using "set"
+  // builtin, which results in faster code but makes the calling convention
+  // implementation much harder to read.
+  #define SH_INITIALIZE_PARAMS_WITH_LET
+  #endif
+
+  #ifndef SH_OPTIMIZE_CONSTANT_PARAMS_NOT
+  // Use positional parameter for const function parameters.
+  // Results in smaller and faster code (as it completely removes the cost of
+  // constant function parameters), but can make it harder to track variable
+  // usage in the generated code.
+  // This optimization is preferable to SH_SAVE_VARS_WITH_SET.
+  #define SH_OPTIMIZE_CONSTANT_PARAMS
+  #endif
+
+  // Built-in runtime library options
+  #ifndef RT_FREE_UNSETS_VARS_NOT
+  // Make free unset all variables associated with the freed object
+  #define RT_FREE_UNSETS_VARS
+  #endif
+
+  #ifndef RT_NO_INIT_GLOBALS_NOT
+  // Skips the zero-initialization of memory allocated values.
+  // Prevents the shell environment from being polluted with a large number of
+  // variables when allocating large data structures.
+  #define RT_NO_INIT_GLOBALS
+  #endif
+
+  #ifndef RT_USE_LOOKUP_TABLE_NOT
+  // Use a lookup table for char->int for a faster conversion
+  #define RT_USE_LOOKUP_TABLE
+  #endif
+
+  #ifdef SH_OPTIMIZE_LONG_LINES_NOT
+  // Disable long line optimization
+  #undef SH_OPTIMIZE_LONG_LINES
+  #endif
+
+  // Disabled options:
+  // Include the C code as comment along with the generated shell code
+  // #define SH_INCLUDE_C_CODE
+
+  // Replace character literal with character code instead of character variables.
+  // Results in smaller and faster code, but with magic numbers in the output.
+  // #define SH_INLINE_CHAR_LITERAL
+
+  // Remove the `set -u` directive in the generated shell code.
+  // This can be useful for programs that must allocate large amounts of
+  // zero-initialized memory, with incurring the overhead of actually
+  // initializing it to zero.
+  // This option is generally used together with RT_NO_INIT_GLOBALS, which skips
+  // the zero-initialization of memory. RT_UNSAFE_HEAP then allows access to
+  // this uninitialized memory without triggering unbound variable errors. This
+  // is made possible by the fact that uninitialized variables are always
+  // treated as zero in arithmetic expansions.
+  // #define RT_UNSAFE_HEAP
+
+  // Use a more compact but slower implementation of the runtime library.
+  // #define RT_COMPACT
+
+  // Include the complete runtime library in the generated shell code,
+  // regardless of whether features are used or not.
+  // #define INCLUDE_ALL_RUNTIME
+
+  // Only emit shell code output at the end of the compilation.
+  // This is used to evaluate the negative performance impact of allocating
+  // There is no practical reason to enable this option.
+  // #define ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
+
+  // Make sure we don't use the long line optimization when RT_COMPACT is on
+  #ifdef RT_COMPACT
+  #undef SH_OPTIMIZE_LONG_LINES
+  #undef RT_USE_LOOKUP_TABLE
+  #endif
+
+#elif defined(target_i386_linux) || defined (target_x86_64_linux) || defined (target_x86_64_mac)
+
+  // Parse numeric literals with their suffix (U, L, UL, etc).
+  #define PARSE_NUMERIC_LITERAL_SUFFIX
+
+  // Varargs functions are always supported because the built-in libc uses them.
+  #define SUPPORT_VARIADIC_FUNCTIONS
+
+  // Support 64 bit literals on 64 bit platforms
+  #if defined (target_x86_64_linux) || defined (target_x86_64_mac)
+    #define SUPPORT_64_BIT_LITERALS
+  #endif
+
+  #ifdef PNUT_BOOTSTRAP
+    #define ALLOW_RECURSIVE_MACROS
+  #else
+    // Enable all C features for general pnut usage
+    #define SUPPORT_ALL_C_FEATURES
+  #endif
+
+  #ifdef BOOTSTRAP_TCC
+    #define BOOTSTRAP_LONG
+    #define NO_BUILTIN_LIBC
+  #endif
+
+  // Disabled options:
+
+  // Output machine code as soon as possible, typically after each top level
+  // declaration, reducing memory usage significantly, but generating slightly
+  // worse code.
+  // #define ONE_PASS_GENERATOR
+
+  // Use brk syscall for memory allocation instead of mmap.
+  // #define USE_BRK_SYSCALL
+
+  // Add the PNUT_INLINE_INTERRUPT() special function that inserts an interrupt
+  // check at the call site, useful for debugging.
+  // #define ENABLE_PNUT_INLINE_INTERRUPT
+
+  // Poor man's debug info: adds the name of functions before their entry points.
+  // #define ADD_DEBUG_INFO
+
+  // Treats undefined labels as runtime errors instead of compile-time errors.
+  // This catches functions that are declared but not defined.
+  // #define UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
+
+  // Use stack allocation for global variables instead of heap allocation.
+  // #define USE_STACK_FOR_GLOBALS
+
+#else
+  // Frontend-only variants of pnut (e.g. for running reader, tokenizer or parser)
+  // Options that turns Pnut into a C preprocessor or some variant of it
+  // DEBUG_GETCHAR: Read and print the input character by character.
+  // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
+  // DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
+  // DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
+
+  // Enable all C features in the frontend
+  #define SUPPORT_ALL_C_FEATURES
 #endif
 
-// M2-Planet doesn't support ternary operator.
+
+#ifdef SUPPORT_ALL_C_FEATURES
+  #define FULL_CLI_OPTIONS
+  #define FULL_PREPROCESSOR_SUPPORT
+  #define SUPPORT_COMPLEX_INITIALIZER
+  #define SUPPORT_DO_WHILE
+  #define SUPPORT_GOTO
+  #define SUPPORT_STRUCT_UNION
+  #define SUPPORT_TYPE_SPECIFIERS
+  #define SUPPORT_VARIADIC_FUNCTIONS
+#endif
+
+#if defined(NICE_UX) || defined(SAFE_MODE)
+  #define INCLUDE_LINE_NUMBER_ON_ERROR
+  #define NICE_ERR_MSG
+#endif
+
+// Disabled options:
+// Add pnut source location in parse_error()
+// #define DEBUG_SHOW_ERR_ORIGIN
+
+// Support skip line continuations
+// #define SUPPORT_LINE_CONTINUATION
+
+// Print memory usage statistics at the end of the program.
+// #define PRINT_MEMORY_STATS
+
+// ===================== Compatibility macros and typedefs =====================
 #ifdef NO_TERNARY_SUPPORT
+// M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
 // Note that unlike the standard ternary operator, both sides are always
 // evaluated, and the condition expression is evaluated twice.
@@ -45,109 +293,12 @@ typedef int intptr_t;
 #endif
 #endif
 
+// =============================================================================
+
 #define ast int
 #define true 1
 #define false 0
 #define EOF (-1)
-
-#ifdef SAFE_MODE
-#define INCLUDE_LINE_NUMBER_ON_ERROR
-#define NICE_ERR_MSG
-#endif
-
-#ifdef RELEASE_PNUT_SH
-#define sh
-#define RT_NO_INIT_GLOBALS
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT_i386_linux
-#define target_i386_linux
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT_x86_64_linux
-#define target_x86_64_linux
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT_x86_64_mac
-#define target_x86_64_mac
-#define RELEASE_PNUT
-#endif
-
-#ifdef RELEASE_PNUT
-#define INCLUDE_LINE_NUMBER_ON_ERROR
-#define NICE_ERR_MSG
-#define OPTIMIZE_LONG_LINES
-#endif
-
-// Uncomment to cause parse_error() to print which pnut function emitted the error
-//#define DEBUG_SHOW_ERR_ORIGIN
-
-// Use positional parameter directly for function parameters that are constants
-#define SUPPORT_ADDRESS_OF_OP_not
-
-// Make get_ch() use a length-1 character buffer to lookahead and skip line continuations
-#define SUPPORT_LINE_CONTINUATION_not
-
-// Shell backend codegen options
-#ifndef SH_AVOID_PRINTF_USE_NOT
-#define SH_AVOID_PRINTF_USE
-#endif
-#define SH_INLINE_PUTCHAR
-#define SH_INLINE_EXIT
-// Specifies if we include the C code along with the generated shell code
-#define SH_INCLUDE_C_CODE_not
-// Have let commands initialize function parameters
-#ifndef SH_SAVE_VARS_WITH_SET
-#define SH_INITIALIZE_PARAMS_WITH_LET
-#endif
-// If we use the `set` command and positional parameters to simulate local vars
-#if !defined(SH_SAVE_VARS_WITH_SET) && !defined(SH_INITIALIZE_PARAMS_WITH_LET)
-#define SH_SAVE_VARS_WITH_SET
-#endif
-#ifndef OPTIMIZE_CONSTANT_PARAMS_NOT
-#define OPTIMIZE_CONSTANT_PARAMS
-#endif
-// Inline ascii code of character literal
-#define SH_INLINE_CHAR_LITERAL_not
-
-// Options to parameterize the shell runtime library
-#ifndef RT_FREE_UNSETS_VARS_NOT
-#define RT_FREE_UNSETS_VARS
-#endif
-#define RT_NO_INIT_GLOBALS_not
-#define RT_COMPACT_not
-#define RT_INLINE_PUTCHAR
-#define RT_USE_LOOKUP_TABLE
-
-// Make sure we don't use the long line optimization when RT_COMPACT is on
-#ifdef RT_COMPACT
-#undef OPTIMIZE_LONG_LINES
-#endif
-
-// Toggles parsing literals with their base (octal, decimal or hexadecimal).
-// This is used by the shell code generator to output the literal in the correct base.
-#ifdef sh
-#define PARSE_NUMERIC_LITERAL_WITH_BASE
-#endif
-
-// Shell codegen doesn't support suffixes for numeric literals, but other backends do
-#ifndef sh
-#define PARSE_NUMERIC_LITERAL_SUFFIX
-#endif
-
-// 64 bit literals are only supported on 64 bit platforms for now
-#if defined(target_x86_64_linux) || defined(target_x86_64_mac)
-#define SUPPORT_64_BIT_LITERALS
-#endif
-
-// Options that turns Pnut into a C preprocessor or some variant of it
-// DEBUG_GETCHAR: Read and print the input character by character.
-// DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
-// DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
-// DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
 
 typedef int bool;
 
@@ -199,12 +350,15 @@ void putstr(char *str) {
 
 #ifdef PNUT_SH
 #define putint(n) printf("%d", n)
+#define puthex_unsigned(n) printf("%x", n)
+#define putoct_unsigned(n) printf("%o", n)
 #else
 void putint_aux(int n) {
   if (n <= -10) putint_aux(n / 10);
   putchar('0' - (n % 10));
 }
 
+// Output signed integer
 void putint(int n) {
   if (n < 0) {
     putchar('-');
@@ -213,6 +367,24 @@ void putint(int n) {
     putint_aux(-n);
   }
 }
+
+#ifdef sh
+
+// Output unsigned integer in hex
+void puthex_unsigned(int n) {
+  // Because n is signed, we clear the upper bits after shifting in case n was negative
+  if ((n >> 4) & 0x0fffffff) puthex_unsigned((n >> 4) & 0x0fffffff);
+  putchar("0123456789abcdef"[n & 15]);
+}
+
+// Output unsigned integer in octal
+void putoct_unsigned(int n) {
+  // Because n is signed, we clear the upper bits after shifting in case n was negative
+  if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
+  putchar('0' + (n & 7));
+}
+#endif
+
 #endif
 
 void fatal_error(char *msg) {
@@ -284,39 +456,56 @@ void restore_include_context() {
 // Tokens and AST nodes
 enum {
   // Keywords
-  AUTO_KW = 300,
+
+  KEYWORDS_START = 300,
   BREAK_KW,
   CASE_KW,
-  CHAR_KW,
-  CONST_KW,
   CONTINUE_KW,
   DEFAULT_KW,
+#ifdef SUPPORT_DO_WHILE
   DO_KW,
-  DOUBLE_KW,
+#endif
   ELSE_KW,
-  ENUM_KW,
-  EXTERN_KW,
-  FLOAT_KW,
   FOR_KW,
-  GOTO_KW,
   IF_KW,
-  INLINE_KW,
-  INT_KW,
-  LONG_KW,
-  REGISTER_KW,
   RETURN_KW,
-  SHORT_KW,
-  SIGNED_KW,
   SIZEOF_KW,
-  STATIC_KW,
-  STRUCT_KW,
   SWITCH_KW,
   TYPEDEF_KW,
-  UNION_KW,
+  WHILE_KW,
+
+// Type qualifiers and storage class specifiers
+  CONST_KW,
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  AUTO_KW,
+  EXTERN_KW,
+  REGISTER_KW,
+  STATIC_KW,
+  VOLATILE_KW,
+  INLINE_KW,
+#endif
+
+  // Type specifiers
+  // Must be below storage class specifiers for MK_TYPE_SPECIFIER to work correctly
+  CHAR_KW,
+  DOUBLE_KW,
+  ENUM_KW,
+  FLOAT_KW,
+  INT_KW,
+  LONG_KW,
+  SHORT_KW,
+  SIGNED_KW,
   UNSIGNED_KW,
   VOID_KW,
-  VOLATILE_KW,
-  WHILE_KW,
+
+#ifdef SUPPORT_GOTO
+  GOTO_KW,
+#endif
+#ifdef SUPPORT_STRUCT_UNION
+  STRUCT_KW,
+  UNION_KW,
+#endif
+  KEYWORDS_END,
 
   // Non-character operands
   INTEGER     = 401, // Integer written in decimal
@@ -336,7 +525,9 @@ enum {
 
   AMP_AMP   = 450,
   AMP_EQ,
+#ifdef SUPPORT_STRUCT_UNION
   ARROW,
+#endif
   BAR_BAR,
   BAR_EQ,
   CARET_EQ,
@@ -355,13 +546,19 @@ enum {
   RSHIFT,
   SLASH_EQ,
   STAR_EQ,
+#ifdef FULL_PREPROCESSOR_SUPPORT
   HASH_HASH,
+#endif
   PLUS_PLUS_PRE,
   MINUS_MINUS_PRE,
   PLUS_PLUS_POST,
   MINUS_MINUS_POST,
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
   ELLIPSIS,
+#endif
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   INITIALIZER_LIST,
+#endif
   DECL,
   DECLS,
   FUN_DECL,
@@ -624,15 +821,23 @@ ast clone_ast(const ast orig) {
 ast cons(const int child0, const int child1)    { return new_ast2(LIST, child0, child1); }
 ast car(const int pair)                         { return get_child_(LIST, pair, 0); }
 ast cdr(const int pair)                         { return get_child_(LIST, pair, 1); }
+#ifdef SAFE_MODE
 ast car_(const int expected_op, const int pair) { return get_child__(LIST, expected_op, pair, 0); }
 ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, expected_op, pair, 1); }
-void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
+#else
+#define car_(expected_op, pair)                 car(pair)
+#define cdr_(expected_op, pair)                 cdr(pair)
+#endif
+// void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
 void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
+#ifndef sh
 ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
 ast list2(const int child0, const int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
 ast list3(const int child0, const int child1, const int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
+#endif
 #define tail(x) cdr_(LIST, x)
 
+#ifdef sh
 // Returns the only element of a singleton list, if it is a singleton list.
 // Otherwise, returns 0.
 ast list_singleton(const ast list) {
@@ -642,6 +847,7 @@ ast list_singleton(const ast list) {
     return 0;
   }
 }
+#endif
 
 // Simple accessor to get the string from the string pool
 #define STRING_BUF(probe) (string_pool + heap[probe+1])
@@ -654,17 +860,7 @@ void begin_string() {
 }
 
 // Append the current character (ch) to the string under construction in the pool
-void accum_string() {
-  hash = (ch + (hash ^ HASH_PARAM)) % HASH_PRIME;
-  string_pool[string_pool_alloc] = ch;
-  string_pool_alloc += 1;
-  if (string_pool_alloc >= STRING_POOL_SIZE) {
-    fatal_error("string pool overflow");
-  }
-}
-
-// Append a character to the current string under construction in the pool
-void accum_string_char(char c) {
+void accum_string(const char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
   string_pool_alloc += 1;
@@ -674,14 +870,16 @@ void accum_string_char(char c) {
 }
 
 // Append a string from the string_pool to the string under construction
-void accum_string_string(int string_probe) {
+void accum_string_string(const int string_probe) {
   char *string_start = STRING_BUF(string_probe);
   char *string_end = string_start + STRING_LEN(string_probe);
   while (string_start < string_end) {
-    accum_string_char(*string_start);
+    accum_string(*string_start);
     string_start += 1;
   }
 }
+
+#ifdef FULL_PREPROCESSOR_SUPPORT
 
 // Similar to accum_string_string, but writes an integer to the string pool
 // Note that this function only supports small integers, represented as positive number.
@@ -690,15 +888,17 @@ void accum_string_integer(int n) {
   if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
 #else
   if (n < 0) {
-    accum_string_char('-');
+    accum_string('-');
     accum_string_integer(-n);
   } else
 #endif
   {
     if (n > 9) accum_string_integer(n / 10);
-    accum_string_char('0' + n % 10);
+    accum_string('0' + n % 10);
   }
 }
+
+#endif
 
 int probe;
 int probe_start;
@@ -749,15 +949,64 @@ int end_ident() {
   return probe;
 }
 
-int probe_string(int probe) {
-  return heap[probe+1]; // return the start of the string
-}
-
 #define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
 
 void get_tok();
 void get_ident();
 void expect_tok_(int expected_tok, char* file, int line);
+
+#ifdef SAFE_MODE
+
+// Debugging functions
+// When bootstrapping, the debugging functions are disabled to reduce code size.
+
+void dump_string(char *prefix, char *str) {
+  putstr(prefix);
+  putchar('"');
+  putstr(str);
+  putchar('"');
+  putchar('\n');
+}
+
+void dump_int(char *prefix, int n) {
+  putstr(prefix);
+  putint(n);
+  putchar('\n');
+}
+
+void dump_char(int c) {
+  dump_int("char = ", c);
+}
+
+void dump_tok(int tok) {
+  dump_int("tok = ", tok);
+}
+
+void dump_ident(int probe) {
+  dump_string("ident = ", STRING_BUF(probe));
+}
+
+void dump_node(ast node) {
+  putstr("op=");
+  putint(get_op(node));
+  putstr(" with #children =");
+  putint(get_nb_children(node));
+  putchar('\n');
+}
+
+void dump_op(int op) {
+  dump_int("op = ", op);
+}
+
+#else
+#define dump_string(prefix, str)
+#define dump_int(prefix, n)
+#define dump_char(c)
+#define dump_tok(tok)
+#define dump_ident(probe)
+#define dump_node(node)
+#define dump_op(op)
+#endif
 
 #define IFDEF_DEPTH_MAX 20
 bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
@@ -997,7 +1246,7 @@ void include_file(char *file_name, char *relative_to) {
   }
   fp = fopen(fp_filepath, "r");
   if (fp == 0) {
-    putstr(fp_filepath); putchar('\n');
+    dump_string("#include ", fp_filepath);
     fatal_error("Could not open file");
   }
 
@@ -1145,8 +1394,7 @@ void accum_string_until(char end) {
   while (ch != end && ch != EOF) {
     get_string_char();
     tok = ch;
-    ch = val;
-    accum_string();
+    accum_string(val);
     ch = tok;
   }
 
@@ -1173,13 +1421,16 @@ int WARNING_ID;
 int ERROR_ID;
 int INCLUDE_SHELL_ID;
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
 int NOT_SUPPORTED_ID;
+#endif
 
 // We want to recognize certain identifers without having to do expensive string comparisons
+int MAIN_ID;
+#ifdef sh
 int ARGV__ID;
 int ARGV_ID;
 int IFS_ID;
-int MAIN_ID;
 
 int PUTCHAR_ID;
 int GETCHAR_ID;
@@ -1196,6 +1447,7 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
+#endif
 
 // Macros that are defined by the preprocessor
 int FILE__ID;
@@ -1263,10 +1515,12 @@ int read_macro_tokens(int args) {
       get_tok_macro();
     }
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
     // Check that there are no leading or trailing ##
     if (car(car(toks)) == HASH_HASH || car(car(rest)) == HASH_HASH) {
       syntax_error("'##' cannot appear at either end of a macro expansion");
     }
+#endif
   }
 
   return toks;
@@ -1281,8 +1535,8 @@ void handle_define() {
   int args = 0; // List of arguments for a function-like macro
   int args_count = -1; // Number of arguments for a function-like macro. -1 means it's an object-like macro
 
-  if (tok != IDENTIFIER && tok != MACRO && (tok < AUTO_KW || tok > WHILE_KW)) {
-    putstr("tok="); putint(tok); putchar('\n');
+  if (tok != IDENTIFIER && tok != MACRO && (tok < KEYWORDS_START || tok > KEYWORDS_END)) {
+    dump_tok(tok);
     syntax_error("#define directive can only be followed by a identifier");
   }
 
@@ -1428,7 +1682,7 @@ int eval_constant(ast expr, bool if_macro) {
       }
 
     default:
-      putstr("op="); putint(op); putchar('\n');
+      dump_op(op);
       fatal_error("unsupported operator in constant expression");
       return 0;
   }
@@ -1473,12 +1727,12 @@ void handle_include() {
     }
     get_tok_macro(); // Skip the string
   } else {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("expected string to #include directive");
   }
 }
 
-#ifdef sh
+#ifdef SH_SUPPORT_SHELL_INCLUDE
 void handle_shell_include();
 #endif
 
@@ -1522,7 +1776,7 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the STRING token
       handle_include();
     }
-#ifdef sh
+#ifdef SH_SUPPORT_SHELL_INCLUDE
     // Not standard C, but serves to mix existing shell code with compiled C code
     else if (tok == IDENTIFIER && val == INCLUDE_SHELL_ID) {
       get_tok_macro(); // Get the STRING token
@@ -1536,7 +1790,7 @@ void handle_preprocessor_directive() {
         heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
         get_tok_macro(); // Skip the macro name
       } else {
-        putstr("tok="); putint(tok); putchar('\n');
+        dump_tok(tok);
         syntax_error("#undef directive can only be followed by a identifier");
       }
     } else if (tok == IDENTIFIER && val == DEFINE_ID) {
@@ -1557,7 +1811,8 @@ void handle_preprocessor_directive() {
       tok = '\n';
 #endif
     } else {
-      putstr("tok="); putint(tok); putstr(": "); putstr(STRING_BUF(val)); putchar('\n');
+      dump_tok(tok);
+      dump_string("directive = ", STRING_BUF(val));
       syntax_error("unsupported preprocessor directive");
     }
   } else {
@@ -1566,12 +1821,9 @@ void handle_preprocessor_directive() {
   }
 
   if (tok != '\n' && tok != EOF) {
-    putstr("tok="); putint(tok); putchar('\n');
-    putstr("directive="); putint(tok); putchar('\n');
+    dump_tok(tok);
     if (tok == IDENTIFIER || tok == MACRO) {
-      putstr("string = ");
-      putstr(STRING_BUF(val));
-      putchar('\n');
+      dump_string("directive = ", STRING_BUF(val));
     }
     syntax_error("preprocessor expected end of line");
   }
@@ -1596,7 +1848,7 @@ void get_ident() {
          ('a' <= ch && ch <= 'z') ||
          ('0' <= ch && ch <= '9') ||
          (ch == '_')) {
-    accum_string();
+    accum_string(ch);
     get_ch();
   }
 
@@ -1606,19 +1858,15 @@ void get_ident() {
 
 int intern_str(char* name) {
   int i = 0;
-  int prev_ch = ch; // The character may be important to the calling function, saving it
 
   begin_string();
 
   while (name[i] != 0) {
-    ch = name[i];
-    accum_string();
+    accum_string(name[i]);
     i += 1;
   }
 
   i = end_string();
-
-  ch = prev_ch;
 
   return i;
 }
@@ -1638,39 +1886,52 @@ void init_ident_table() {
     i += 1;
   }
 
-  init_ident(AUTO_KW,     "auto");
   init_ident(BREAK_KW,    "break");
   init_ident(CASE_KW,     "case");
-  init_ident(CHAR_KW,     "char");
-  init_ident(CONST_KW,    "const");
   init_ident(CONTINUE_KW, "continue");
   init_ident(DEFAULT_KW,  "default");
+#ifdef SUPPORT_DO_WHILE
   init_ident(DO_KW,       "do");
-  init_ident(DOUBLE_KW,   "double");
+#endif
   init_ident(ELSE_KW,     "else");
-  init_ident(ENUM_KW,     "enum");
-  init_ident(EXTERN_KW,   "extern");
-  init_ident(FLOAT_KW,    "float");
   init_ident(FOR_KW,      "for");
-  init_ident(GOTO_KW,     "goto");
   init_ident(IF_KW,       "if");
-  init_ident(INLINE_KW,   "inline");
-  init_ident(INT_KW,      "int");
-  init_ident(LONG_KW,     "long");
-  init_ident(REGISTER_KW, "register");
   init_ident(RETURN_KW,   "return");
-  init_ident(SHORT_KW,    "short");
-  init_ident(SIGNED_KW,   "signed");
   init_ident(SIZEOF_KW,   "sizeof");
-  init_ident(STATIC_KW,   "static");
-  init_ident(STRUCT_KW,   "struct");
   init_ident(SWITCH_KW,   "switch");
   init_ident(TYPEDEF_KW,  "typedef");
-  init_ident(UNION_KW,    "union");
+  init_ident(WHILE_KW,    "while");
+
+  // Type specifiers
+  init_ident(CHAR_KW,     "char");
+  init_ident(DOUBLE_KW,   "double");
+  init_ident(ENUM_KW,     "enum");
+  init_ident(FLOAT_KW,    "float");
+  init_ident(INT_KW,      "int");
+  init_ident(LONG_KW,     "long");
+  init_ident(SHORT_KW,    "short");
+  init_ident(SIGNED_KW,   "signed");
   init_ident(UNSIGNED_KW, "unsigned");
   init_ident(VOID_KW,     "void");
+
+// Type qualifiers and storage class specifiers
+  init_ident(CONST_KW,    "const");
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  init_ident(AUTO_KW,     "auto");
+  init_ident(EXTERN_KW,   "extern");
+  init_ident(REGISTER_KW, "register");
+  init_ident(STATIC_KW,   "static");
   init_ident(VOLATILE_KW, "volatile");
-  init_ident(WHILE_KW,    "while");
+  init_ident(INLINE_KW,   "inline");
+#endif
+
+#ifdef SUPPORT_GOTO
+  init_ident(GOTO_KW,     "goto");
+#endif
+#ifdef SUPPORT_STRUCT_UNION
+  init_ident(STRUCT_KW,   "struct");
+  init_ident(UNION_KW,    "union");
+#endif
 
   // Preprocessor keywords. These are not tagged as keyword since they can be
   // used as identifiers after the preprocessor stage.
@@ -1684,12 +1945,16 @@ void init_ident_table() {
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
   DEFINED_ID = init_ident(IDENTIFIER, "defined");
+#ifdef SH_SUPPORT_SHELL_INCLUDE
   INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
+#endif
 
+  MAIN_ID = init_ident(IDENTIFIER, "main");
+
+#ifdef sh
   ARGV_ID = init_ident(IDENTIFIER, "argv");
   ARGV__ID = init_ident(IDENTIFIER, "argv_");
   IFS_ID  = init_ident(IDENTIFIER, "IFS");
-  MAIN_ID = init_ident(IDENTIFIER, "main");
 
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
   GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
@@ -1706,10 +1971,13 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+#endif
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
+#endif
 }
 
 int init_builtin_string_macro(char *macro_str, char* value) {
@@ -1725,11 +1993,15 @@ int init_builtin_int_macro(char *macro_str, int value) {
   return macro_id;
 }
 
+#ifdef FULL_CLI_OPTIONS
+
 int init_builtin_empty_macro(char *macro_str) {
   int macro_id = init_ident(MACRO, macro_str);
   heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
   return macro_id;
 }
+
+#endif
 
 void init_pnut_macros() {
   init_builtin_int_macro("PNUT_CC", 1);
@@ -1795,10 +2067,9 @@ int macro_parse_argument() {
 void check_macro_arity(int macro_args_count, int macro) {
   int expected_argc = cdr(heap[macro + 3]);
   if (macro_args_count != expected_argc) {
-    putstr("expected_argc="); putint(expected_argc);
-    putstr(" != macro_args_count="); putint(macro_args_count);
-    putchar('\n');
-    putstr("macro="); putstr(STRING_BUF(macro)); putchar('\n');
+    dump_int("expected_argc = ", expected_argc);
+    dump_int("macro_args_count = ", macro_args_count);
+    dump_string("macro = ", STRING_BUF(macro));
     syntax_error("macro argument count mismatch");
   }
 }
@@ -1945,6 +2216,8 @@ bool attempt_macro_expansion(int macro) {
   }
 }
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
+
 // https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html
 void stringify() {
   int arg;
@@ -1952,17 +2225,18 @@ void stringify() {
   get_tok_macro();
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
-    putstr("tok="); putint(tok); putchar('\n');
+    dump_tok(tok);
     syntax_error("expected macro argument after #");
   }
   arg = get_macro_arg(val);
-  tok = STRING;
+  tok = car(car(arg));
   // Support the case where the argument is a single identifier/macro/keyword token
-  if ((car(car(arg)) == IDENTIFIER || car(car(arg)) == MACRO || (AUTO_KW <= car(car(arg)) && car(car(arg)) <= WHILE_KW)) && cdr(arg) == 0) {
+  if ((tok == IDENTIFIER || tok == MACRO || (KEYWORDS_START <= tok && tok <= KEYWORDS_END)) && cdr(arg) == 0) {
     val = cdr(car(arg)); // Use the identifier probe
   } else {
     val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
   }
+  tok = STRING;
 }
 
 // Concatenates two non-negative integers into a single integer
@@ -2001,12 +2275,14 @@ void paste_tokens(int left_tok, int left_val) {
   }
   right_tok = tok;
   right_val = val;
-  if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO || left_tok <= WHILE_KW) {
+  if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO
+    || (KEYWORDS_START <= left_tok && left_tok <= KEYWORDS_END)) {
     // Something that starts with an identifier can only be an identifier
     begin_string();
     accum_string_string(left_val);
 
-    if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO || right_tok <= WHILE_KW) {
+    if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO
+     || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
       accum_string_string(right_val);
     } else if (right_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
@@ -2018,9 +2294,8 @@ void paste_tokens(int left_tok, int left_val) {
               ) {
       accum_string_integer(-right_val);
     } else {
-      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
-      // show identifier/macro string
-      putstr("left="); putstr(STRING_BUF(left_val)); putchar('\n');
+      dump_ident(left_val);
+      dump_tok(right_tok);
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
@@ -2043,7 +2318,8 @@ void paste_tokens(int left_tok, int left_val) {
 #endif
        ) {
       val = -paste_integers(-left_val, -right_val);
-    } else if (right_tok == IDENTIFIER || right_tok == MACRO || right_tok <= WHILE_KW) {
+    } else if (right_tok == IDENTIFIER || right_tok == MACRO
+            || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
       begin_string();
       accum_string_integer(-left_val);
       accum_string_string(right_val);
@@ -2051,12 +2327,40 @@ void paste_tokens(int left_tok, int left_val) {
       val = end_ident();
       tok = heap[val+2]; // The kind of the identifier
     } else {
-      putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
+      dump_tok(left_tok);
+      dump_tok(right_tok);
       syntax_error("cannot paste an integer with a non-integer");
     }
   } else {
-    putstr("left_tok="); putint(left_tok); putstr(", right_tok="); putint(right_tok); putchar('\n');
+    dump_tok(left_tok);
+    dump_tok(right_tok);
     syntax_error("cannot paste a non-identifier or non-integer");
+  }
+}
+
+#endif // FULL_PREPROCESSOR_SUPPORT
+
+void skip_to_end_of_line() {
+  while (ch != '\n' && ch != EOF) {
+    get_ch();
+  }
+}
+
+bool skip_inactive_line() {
+  // If the line starts with whitespace followed by a #, it's potentially a preprocessor
+  // directive that we need to process even in inactive #if blocks, return true in that case.
+
+  // Skip whitespace
+  while (ch <= ' ' && ch != EOF) {
+    get_ch();
+  }
+
+  if (ch == '#') {
+    return true;
+  } else {
+    // Skip to the end of the line
+    skip_to_end_of_line();
+    return false;
   }
 }
 
@@ -2075,432 +2379,453 @@ void get_tok() {
   int prev_tok_column_number = column_number;
 #endif
 
-  // This outer loop is used to skip over tokens removed by #ifdef/#ifndef/#else
-  do {
 #ifdef SH_INCLUDE_C_CODE
     code_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
 #endif
 
-    while (1) {
-      // Check if there are any tokens to replay. Macros are just identifiers that
-      // have been marked as macros. In terms of how we get into that state, a
-      // macro token is first returned by the get_ident call a few lines below.
-      if (macro_tok_lst != 0) {
-        tok = car(car(macro_tok_lst));
-        val = cdr(car(macro_tok_lst));
-        macro_tok_lst = cdr(macro_tok_lst);
-        // Tokens that are identifiers and up are tokens whose kind can change
-        // between the moment the macro is defined and where it is used.
-        // So we reload the kind from the ident table.
-        if (tok >= IDENTIFIER) tok = heap[val + 2];
+  while (1) {
+    // When if_macro_mask is false, skip all tokens until we reach a preprocessor directive.
+    if (!if_macro_mask) {
+      while (!skip_inactive_line());
+      tok = '\n'; // Return a newline token to end the current directive
+    }
 
-        // Check if the next token is ## for token pasting
-        if (macro_tok_lst != 0 && car(car(macro_tok_lst)) == HASH_HASH) {
-          if (tok == MACRO || tok == MACRO_ARG) {
-            // If the token is a macro or macro arg, it must be expanded before pasting
-            macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
-            paste_last_token = true;
-          } else {
-            // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
-            macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
-            paste_tokens(tok, val);
-          }
-        } else if (macro_tok_lst == 0 && paste_last_token) { // We finished expanding the left-hand side of ##
-          if (macro_stack_ix == 0) {
-            // If we are not in a macro expansion, we can't paste the last token
-            // This should not happen if the macro is well-formed, which is
-            // checked by read_macro_tokens.
-            syntax_error("## cannot appear at the end of a macro expansion");
-          }
-          return_to_parent_macro();
-          paste_last_token = false; // We are done pasting
+    // Check if there are any tokens to replay. Macros are just identifiers that
+    // have been marked as macros. In terms of how we get into that state, a
+    // macro token is first returned by the get_ident call a few lines below.
+    if (macro_tok_lst != 0) {
+      tok = car(car(macro_tok_lst));
+      val = cdr(car(macro_tok_lst));
+      macro_tok_lst = cdr(macro_tok_lst);
+      // Tokens that are identifiers and up are tokens whose kind can change
+      // between the moment the macro is defined and where it is used.
+      // So we reload the kind from the ident table.
+      if (tok >= IDENTIFIER) tok = heap[val + 2];
+
+#ifdef FULL_PREPROCESSOR_SUPPORT
+      // Check if the next token is ## for token pasting
+      if (macro_tok_lst != 0 && car(car(macro_tok_lst)) == HASH_HASH) {
+        if (tok == MACRO || tok == MACRO_ARG) {
+          // If the token is a macro or macro arg, it must be expanded before pasting
+          macro_tok_lst = cdr(macro_tok_lst); // We consume the ## token
+          paste_last_token = true;
+        } else {
+          // macro_tok_lst is not empty because read_macro_tokens checked for trailing ##
+          macro_tok_lst = cdr(macro_tok_lst); // Skip the ##
           paste_tokens(tok, val);
         }
+      } else if (macro_tok_lst == 0 && paste_last_token) { // We finished expanding the left-hand side of ##
+        if (macro_stack_ix == 0) {
+          // If we are not in a macro expansion, we can't paste the last token
+          // This should not happen if the macro is well-formed, which is
+          // checked by read_macro_tokens.
+          syntax_error("## cannot appear at the end of a macro expansion");
+        }
+        return_to_parent_macro();
+        paste_last_token = false; // We are done pasting
+        paste_tokens(tok, val);
+      }
+#endif // FULL_PREPROCESSOR_SUPPORT
 
-        if (tok == MACRO) { // Nested macro expansion!
+      if (tok == MACRO) { // Nested macro expansion!
+        if (attempt_macro_expansion(val)) {
+          continue;
+        }
+        break;
+      } else if (tok == MACRO_ARG && expand_macro_arg) {
+        begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
+        continue;
+      }
+#ifdef FULL_PREPROCESSOR_SUPPORT
+      else if (tok == '#') { // Stringizing!
+        stringify();
+        break;
+      }
+#endif // FULL_PREPROCESSOR_SUPPORT
+      break;
+    } else if (macro_stack_ix != 0) {
+      return_to_parent_macro();
+      continue;
+    } else if (ch <= ' ') {
+
+      if (ch == EOF) {
+        tok = EOF;
+        break;
+      }
+
+      // skip whitespace, detecting when it is at start of line.
+      // When skip_newlines is false, produces a '\n' token whenever it
+      // encounters whitespace containing at least a newline.
+      // This condenses multiple newlines into a single '\n' token and serves
+      // to end the current preprocessor directive.
+
+      tok = 0; // Reset the token
+      while (0 <= ch && ch <= ' ') {
+        if (ch == '\n') tok = ch;
+        get_ch();
+      }
+
+      if (tok == '\n' && !skip_newlines) {
+        // If the newline is followed by a #, the preprocessor directive is
+        // handled in the next iteration of the loop.
+        break;
+      }
+
+      // will continue while (1) loop
+    }
+
+    // detect '#' at start of line, possibly preceded by whitespace
+    else if (tok == '\n' && ch == '#') {
+      tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
+      handle_preprocessor_directive();
+      // will continue while (1) loop
+    }
+
+    else if (('a' <= ch && ch <= 'z') ||
+              ('A' <= ch && ch <= 'Z') ||
+              (ch == '_')) {
+
+      get_ident();
+
+      if (tok == MACRO) {
+        // We only expand in ifdef true blocks and if the expander is enabled.
+        // Since this is the "base case" of the macro expansion, we don't need
+        // to disable the other places where macro expansion is done.
+        if (if_macro_mask && expand_macro) {
           if (attempt_macro_expansion(val)) {
             continue;
           }
           break;
-        } else if (tok == MACRO_ARG && expand_macro_arg) {
-          begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
-          continue;
-        } else if (tok == '#') { // Stringizing!
-          stringify();
-          break;
         }
-        break;
-      } else if (macro_stack_ix != 0) {
-        return_to_parent_macro();
-        continue;
-      } else if (ch <= ' ') {
-
-        if (ch == EOF) {
-          tok = EOF;
-          break;
-        }
-
-        // skip whitespace, detecting when it is at start of line.
-        // When skip_newlines is false, produces a '\n' token whenever it
-        // encounters whitespace containing at least a newline.
-        // This condenses multiple newlines into a single '\n' token and serves
-        // to end the current preprocessor directive.
-
-        tok = 0; // Reset the token
-        while (0 <= ch && ch <= ' ') {
-          if (ch == '\n') tok = ch;
-          get_ch();
-        }
-
-        if (tok == '\n' && !skip_newlines) {
-          // If the newline is followed by a #, the preprocessor directive is
-          // handled in the next iteration of the loop.
-          break;
-        }
-
-        // will continue while (1) loop
       }
+      break;
+    } else if ('0' <= ch && ch <= '9') {
 
-      // detect '#' at start of line, possibly preceded by whitespace
-      else if (tok == '\n' && ch == '#') {
-        tok = 0; // Consume the newline so handle_preprocessor_directive's get_tok doesn't re-enter this case
-        handle_preprocessor_directive();
-        // will continue while (1) loop
-      }
+      INIT_ACCUM_DIGIT();
 
-      else if (('a' <= ch && ch <= 'z') ||
-               ('A' <= ch && ch <= 'Z') ||
-               (ch == '_')) {
-
-        get_ident();
-
-        if (tok == MACRO) {
-          // We only expand in ifdef true blocks and if the expander is enabled.
-          // Since this is the "base case" of the macro expansion, we don't need
-          // to disable the other places where macro expansion is done.
-          if (if_macro_mask && expand_macro) {
-            if (attempt_macro_expansion(val)) {
-              continue;
-            }
-            break;
-          }
-        }
-        break;
-      } else if ('0' <= ch && ch <= '9') {
-
-        INIT_ACCUM_DIGIT();
-
-        tok = INTEGER;
-        if (ch == '0') { // val == 0 <=> ch == '0'
-          get_ch();
-          if (ch == 'x' || ch == 'X') {
+      tok = INTEGER;
+      if (ch == '0') { // val == 0 <=> ch == '0'
+        get_ch();
+        if (ch == 'x' || ch == 'X') {
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-            tok = INTEGER_HEX;
+          tok = INTEGER_HEX;
 #endif
-            get_ch();
-            if (accum_digit(16)) {
-              while (accum_digit(16));
-            } else {
-              syntax_error("invalid hex integer -- it must have at least one digit");
-            }
+          get_ch();
+          if (accum_digit(16)) {
+            while (accum_digit(16));
           } else {
-            while (accum_digit(8));
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-            // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
-#ifdef SUPPORT_64_BIT_LITERALS
-            tok = TERNARY(val_32[0] == 0 && val_32[1] == 0, INTEGER, INTEGER_OCT);
-#else
-            tok = TERNARY(val == 0, INTEGER, INTEGER_OCT);
-#endif
-#endif
+            syntax_error("invalid hex integer -- it must have at least one digit");
           }
         } else {
-          while (accum_digit(10));
+          while (accum_digit(8));
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+          // 0 is a valid octal number, but we don't want to mark it as octal since it's so common
+#ifdef SUPPORT_64_BIT_LITERALS
+          tok = TERNARY(val_32[0] == 0 && val_32[1] == 0, INTEGER, INTEGER_OCT);
+#else
+          tok = TERNARY(val == 0, INTEGER, INTEGER_OCT);
+#endif
+#endif
         }
+      } else {
+        while (accum_digit(10));
+      }
 
 #ifdef SUPPORT_64_BIT_LITERALS
-        u64_to_obj(val_32);
+      u64_to_obj(val_32);
 #endif
 
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-        // If this is enabled with PARSE_NUMERIC_LITERAL_WITH_BASE, using a
-        // suffix replaces INTEGER_OCT and INTEGER_HEX with base 10 INTEGER.
-        if (ch == 'u' || ch == 'U') {
-          // Note: allows suffixes with mixed case, such as lL for simplicity
-          tok = INTEGER_U;
+      // If this is enabled with PARSE_NUMERIC_LITERAL_WITH_BASE, using a
+      // suffix replaces INTEGER_OCT and INTEGER_HEX with base 10 INTEGER.
+      if (ch == 'u' || ch == 'U') {
+        // Note: allows suffixes with mixed case, such as lL for simplicity
+        tok = INTEGER_U;
+        get_ch();
+        if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_UL;
           get_ch();
           if (ch == 'l' || ch == 'L') {
-            tok = INTEGER_UL;
-            get_ch();
-            if (ch == 'l' || ch == 'L') {
-              tok = INTEGER_ULL;
-              get_ch();
-            }
-          }
-        } else if (ch == 'l' || ch == 'L') {
-          tok = INTEGER_L;
-          get_ch();
-          if (ch == 'l' || ch == 'L') {
-            tok = INTEGER_LL;
-            get_ch();
-          }
-          if (ch == 'u' || ch == 'U') {
-            tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
+            tok = INTEGER_ULL;
             get_ch();
           }
         }
+      } else if (ch == 'l' || ch == 'L') {
+        tok = INTEGER_L;
+        get_ch();
+        if (ch == 'l' || ch == 'L') {
+          tok = INTEGER_LL;
+          get_ch();
+        }
+        if (ch == 'u' || ch == 'U') {
+          tok = TERNARY(tok == INTEGER_LL, INTEGER_ULL, INTEGER_UL);
+          get_ch();
+        }
+      }
 #endif
 
-        break;
+      break;
 
-      } else if (ch == '\'') {
+    } else if (ch == '\'') {
+
+      get_ch();
+      get_string_char();
+
+      if (ch != '\'') {
+        syntax_error("unterminated character literal");
+      }
+
+      get_ch();
+
+      tok = CHARACTER;
+
+      break;
+
+    } else if (ch == '\"') {
+
+      get_ch();
+
+      begin_string();
+      accum_string_until('\"');
+
+      val = end_string();
+      tok = STRING;
+
+      break;
+
+    } else {
+
+      tok = ch; // fallback for single char tokens
+
+      if (ch == '/') {
 
         get_ch();
-        get_string_char();
-
-        if (ch != '\'') {
-          syntax_error("unterminated character literal");
+        if (ch == '*') {
+          get_ch();
+          tok = ch; // remember previous char, except first one
+          while ((tok != '*' || ch != '/') && ch != EOF) {
+            tok = ch;
+            get_ch();
+          }
+          if (ch == EOF) {
+            syntax_error("unterminated comment");
+          }
+          get_ch();
+          // will continue while (1) loop
+        } else if (ch == '/') {
+          skip_to_end_of_line();
+          // will continue while (1) loop
+        } else {
+          if (ch == '=') {
+            get_ch();
+            tok = SLASH_EQ;
+          }
+          break;
         }
 
-        get_ch();
-
-        tok = CHARACTER;
-
-        break;
-
-      } else if (ch == '\"') {
+      } else if (ch == '&') {
 
         get_ch();
-
-        begin_string();
-        accum_string_until('\"');
-
-        val = end_string();
-        tok = STRING;
-
-        break;
-
-      } else {
-
-        tok = ch; // fallback for single char tokens
-
-        if (ch == '/') {
-
+        if (ch == '&') {
           get_ch();
-          if (ch == '*') {
-            get_ch();
-            tok = ch; // remember previous char, except first one
-            while ((tok != '*' || ch != '/') && ch != EOF) {
-              tok = ch;
-              get_ch();
-            }
-            if (ch == EOF) {
-              syntax_error("unterminated comment");
-            }
-            get_ch();
-            // will continue while (1) loop
-          } else if (ch == '/') {
-            while (ch != '\n' && ch != EOF) {
-              get_ch();
-            }
-            // will continue while (1) loop
-          } else {
-            if (ch == '=') {
-              get_ch();
-              tok = SLASH_EQ;
-            }
-            break;
-          }
-
-        } else if (ch == '&') {
-
-          get_ch();
-          if (ch == '&') {
-            get_ch();
-            tok = AMP_AMP;
-          } else if (ch == '=') {
-            get_ch();
-            tok = AMP_EQ;
-          }
-
-          break;
-
-        } else if (ch == '|') {
-
-          get_ch();
-          if (ch == '|') {
-            get_ch();
-            tok = BAR_BAR;
-          } else if (ch == '=') {
-            get_ch();
-            tok = BAR_EQ;
-          }
-
-          break;
-
-        } else if (ch == '<') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = LT_EQ;
-          } else if (ch == '<') {
-            get_ch();
-            if (ch == '=') {
-              get_ch();
-              tok = LSHIFT_EQ;
-            } else {
-              tok = LSHIFT;
-            }
-          }
-
-          break;
-
-        } else if (ch == '>') {
-
-          get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = GT_EQ;
-          } else if (ch == '>') {
-            get_ch();
-            if (ch == '=') {
-              get_ch();
-              tok = RSHIFT_EQ;
-            } else {
-              tok = RSHIFT;
-            }
-          }
-
-          break;
-
+          tok = AMP_AMP;
         } else if (ch == '=') {
+          get_ch();
+          tok = AMP_EQ;
+        }
 
+        break;
+
+      } else if (ch == '|') {
+
+        get_ch();
+        if (ch == '|') {
+          get_ch();
+          tok = BAR_BAR;
+        } else if (ch == '=') {
+          get_ch();
+          tok = BAR_EQ;
+        }
+
+        break;
+
+      } else if (ch == '<') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = LT_EQ;
+        } else if (ch == '<') {
           get_ch();
           if (ch == '=') {
             get_ch();
-            tok = EQ_EQ;
+            tok = LSHIFT_EQ;
+          } else {
+            tok = LSHIFT;
           }
+        }
 
-          break;
+        break;
 
-        } else if (ch == '!') {
+      } else if (ch == '>') {
 
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = GT_EQ;
+        } else if (ch == '>') {
           get_ch();
           if (ch == '=') {
             get_ch();
-            tok = EXCL_EQ;
+            tok = RSHIFT_EQ;
+          } else {
+            tok = RSHIFT;
           }
+        }
 
-          break;
+        break;
 
+      } else if (ch == '=') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = EQ_EQ;
+        }
+
+        break;
+
+      } else if (ch == '!') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = EXCL_EQ;
+        }
+
+        break;
+
+      } else if (ch == '+') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = PLUS_EQ;
         } else if (ch == '+') {
-
           get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = PLUS_EQ;
-          } else if (ch == '+') {
-            get_ch();
-            tok = PLUS_PLUS;
-          }
+          tok = PLUS_PLUS;
+        }
 
-          break;
+        break;
 
-        } else if (ch == '-') {
+      } else if (ch == '-') {
 
+        get_ch();
+        if (ch == '=') {
           get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = MINUS_EQ;
-          } else if (ch == '>') {
-            get_ch();
-            tok = ARROW;
-          } else if (ch == '-') {
-            get_ch();
-            tok = MINUS_MINUS;
-          }
-
-          break;
-
-        } else if (ch == '*') {
-
+          tok = MINUS_EQ;
+        }
+#ifdef SUPPORT_STRUCT_UNION
+        else if (ch == '>') {
           get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = STAR_EQ;
-          }
-
-          break;
-
-        } else if (ch == '%') {
-
+          tok = ARROW;
+        }
+#endif
+        else if (ch == '-') {
           get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = PERCENT_EQ;
-          }
+          tok = MINUS_MINUS;
+        }
 
-          break;
+        break;
 
-        } else if (ch == '^') {
+      } else if (ch == '*') {
 
+        get_ch();
+        if (ch == '=') {
           get_ch();
-          if (ch == '=') {
-            get_ch();
-            tok = CARET_EQ;
-          }
+          tok = STAR_EQ;
+        }
 
-          break;
+        break;
 
-        } else if (ch == '#') {
+      } else if (ch == '%') {
 
+        get_ch();
+        if (ch == '=') {
           get_ch();
-          if (ch == '#') {
-            get_ch();
-            tok = HASH_HASH;
-          }
+          tok = PERCENT_EQ;
+        }
 
-          break;
+        break;
 
-        } else if (ch == '.') {
+      } else if (ch == '^') {
+
+        get_ch();
+        if (ch == '=') {
+          get_ch();
+          tok = CARET_EQ;
+        }
+
+        break;
+
+      } else if (ch == '#') {
+
+        get_ch();
+#ifdef FULL_PREPROCESSOR_SUPPORT
+        if (ch == '#') {
+          get_ch();
+          tok = HASH_HASH;
+        }
+#endif // FULL_PREPROCESSOR_SUPPORT
+
+        break;
+
+      }
+#if defined(SUPPORT_STRUCT_UNION) || defined(SUPPORT_VARIADIC_FUNCTIONS)
+      else if (ch == '.') {
+        get_ch();
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+        if (ch == '.') {
           get_ch();
           if (ch == '.') {
             get_ch();
-            if (ch == '.') {
-              get_ch();
-              tok = ELLIPSIS;
-            } else {
-              syntax_error("invalid token");
-            }
+            tok = ELLIPSIS;
           } else {
-            tok = '.';
-          }
-          break;
-        } else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
-
-          tok = ch;
-
-          get_ch();
-
-          break;
-
-        } else if (ch == '\\') {
-          get_ch();
-
-          if (ch == '\n') { // Continues with next token
-            get_ch();
-          } else {
-            putstr("ch="); putint(ch); putchar('\n');
-            syntax_error("unexpected character after backslash");
+            dump_char(ch);
+            syntax_error("invalid token");
           }
         } else {
-          putstr("ch="); putint(ch); putchar('\n');
-          syntax_error("invalid token");
+          tok = '.';
         }
+#else
+        tok = '.';
+#endif // SUPPORT_VARIADIC_FUNCTIONS
+        break;
+      }
+#endif
+      else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
+
+        tok = ch;
+
+        get_ch();
+
+        break;
+
+      } else if (ch == '\\') {
+        get_ch();
+
+        if (ch == '\n') { // Continues with next token
+          get_ch();
+        } else {
+          dump_char(ch);
+          syntax_error("unexpected character after backslash");
+        }
+      } else {
+        dump_char(ch);
+        syntax_error("invalid token");
       }
     }
-  } while (!if_macro_mask);
+  }
 
 #ifdef SH_INCLUDE_C_CODE
   last_tok_code_buf_ix = prev_last_tok_char_buf_ix - 1;
@@ -2575,8 +2900,8 @@ void expect_tok_(int expected_tok, char* file, int line) {
     putstr("expected tok="); print_tok_type(expected_tok);
     putstr("\ncurrent tok="); print_tok_type(tok); putchar('\n');
 #else
-    putstr("expected tok="); putint(expected_tok);
-    putstr("\ncurrent tok="); putint(tok); putchar('\n');
+    dump_int("expected tok = ", expected_tok);
+    dump_int("current tok = ", tok);
 #endif
     parse_error_internal("unexpected token", tok, file, line);
   }
@@ -2595,9 +2920,10 @@ ast parse_declaration_specifiers(bool allow_typedef);
 ast parse_initializer_list();
 ast parse_initializer();
 
-// The storage class specifier and type qualifier tokens are all between 300 (AUTO_KW) and 326 (VOLATILE_KW) so we store them as bits in an int.
-#define MK_TYPE_SPECIFIER(tok) (1 << (tok - AUTO_KW))
-#define TEST_TYPE_SPECIFIER(specifier, tok) ((specifier) & (1 << (tok - AUTO_KW)))
+// The storage class specifier and type qualifier tokens are all together
+// following the CONST_KW keyword.
+#define MK_TYPE_SPECIFIER(tok) (1 << (tok - CONST_KW))
+#define TEST_TYPE_SPECIFIER(specifier, tok) ((specifier) & (1 << (tok - CONST_KW)))
 
 ast get_type_specifier(ast type_or_decl) {
   while (1) {
@@ -2621,16 +2947,24 @@ ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
 }
 
+#ifndef sh
+
 ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
 }
+
+#endif
+
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
 
 ast make_variadic_func(ast func_type) {
   set_child(func_type, 2, true); // Set the variadic flag
   return func_type;
 }
 
-#if defined(sh) && defined(OPTIMIZE_CONSTANT_PARAMS)
+#endif
+
+#if defined(SH_OPTIMIZE_CONSTANT_PARAMS)
 // Used to optimize constant parameters of function
 bool is_constant_type(ast type) {
   switch (get_op(type)) {
@@ -2651,12 +2985,21 @@ bool is_type_starter(int tok) {
     case VOID_KW: case FLOAT_KW: case DOUBLE_KW:            // Void and floating point types
     case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
     case TYPE:                                              // User defined types
-    case CONST_KW: case VOLATILE_KW:                        // Type attributes
-    case ENUM_KW: case STRUCT_KW: case UNION_KW:            // Enum, struct, union
+    case CONST_KW:
+#ifdef SUPPORT_TYPE_SPECIFIERS
+    case VOLATILE_KW:                                       // Type attributes
+#endif
+    case ENUM_KW:                                           // Enum
+#ifdef SUPPORT_STRUCT_UNION
+    case STRUCT_KW: case UNION_KW:                          // Struct, union
+#endif
     // Storage class specifiers are not always valid type starters in all
     // contexts, but we allow them here
-    case TYPEDEF_KW: case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
+    case TYPEDEF_KW:
+#ifdef SUPPORT_TYPE_SPECIFIERS
+    case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
     case INLINE_KW:
+#endif
       return true;
     default:
       return false;
@@ -2699,23 +3042,28 @@ ast parse_enum() {
         value = parse_assignment_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
 
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-        // Preserve the type of integer literals (dec/hex/oct) by only creating
-        // a new node if the value is not already a literal. We use the last
+        // Avoid recreating integer literal nodes unnecessarily.
+        // Preserve the type of integer literals (dec/hex/oct), we use the last
         // literal type to determine which type to use when creating a new node.
-        if (get_op(value) != INTEGER && get_op(value) != INTEGER_HEX && get_op(value) != INTEGER_OCT) {
-          value = new_ast0(last_literal_type, -eval_constant(value, false));
-        }
-        last_literal_type = get_op(value);
-#else
-        if (get_op(value) != INTEGER
-        && get_op(value) != INTEGER_U && get_op(value) != INTEGER_UL && get_op(value) != INTEGER_ULL
-        && get_op(value) != INTEGER_L && get_op(value) != INTEGER_LL
-           ) {
-          value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
-        }
+        switch (get_op(value)) {
+          case INTEGER:
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+          case INTEGER_HEX: case INTEGER_OCT:
 #endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+          case INTEGER_U:
+          case INTEGER_UL:
+          case INTEGER_ULL:
+          case INTEGER_L:
+          case INTEGER_LL:
+#endif
+            break;
+          default:
+            // Evaluate the constant expression to get its integer value
+            value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+        }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
+        last_literal_type = get_op(value);
       } else {
         value = new_ast0(last_literal_type, next_value);
         next_value -= 1;
@@ -2742,6 +3090,8 @@ ast parse_enum() {
 
   return new_ast3(ENUM_KW, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
+
+#ifdef SUPPORT_STRUCT_UNION
 
 ast parse_struct_or_union(int struct_or_union_tok) {
   ast name;
@@ -2813,6 +3163,8 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
   return new_ast3(struct_or_union_tok, 0, name, result); // child#0 is the storage-class specifiers and type qualifiers
 }
+
+#endif // SUPPORT_STRUCT_UNION
 
 ast parse_type_specifier() {
   ast type_specifier = 0;
@@ -2891,10 +3243,12 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 
   while (loop) {
     switch (tok) {
+#ifdef SUPPORT_TYPE_SPECIFIERS
       case AUTO_KW:
       case REGISTER_KW:
       case STATIC_KW:
       case EXTERN_KW:
+#endif
       case TYPEDEF_KW:
         if (specifier_storage_class != 0) fatal_error("Multiple storage classes not supported");
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
@@ -2902,12 +3256,16 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         get_tok();
         break;
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
       case INLINE_KW:
         get_tok(); // Ignore inline
         break;
+#endif
 
       case CONST_KW:
+#ifdef SUPPORT_TYPE_SPECIFIERS
       case VOLATILE_KW:
+#endif
         type_qualifier |= MK_TYPE_SPECIFIER(tok);
         get_tok();
         break;
@@ -2926,11 +3284,13 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier == 0) parse_error("Failed to parse type specifier", tok);
         break;
 
+#ifdef SUPPORT_STRUCT_UNION
       case STRUCT_KW:
       case UNION_KW:
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         type_specifier = parse_struct_or_union(tok);
         break;
+#endif
 
       case ENUM_KW:
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
@@ -2967,13 +3327,17 @@ ast parse_declaration_specifiers(bool allow_typedef) {
   return type_specifier;
 }
 
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
 bool parse_param_list_is_variadic = false;
+#endif
 int parse_param_list() {
   ast result = 0;
   ast rest;
   ast decl;
 
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
   parse_param_list_is_variadic = false;
+#endif
 
   expect_tok('(');
 
@@ -2988,13 +3352,17 @@ int parse_param_list() {
       // Support K&R param syntax in function definition
       decl = new_ast3(DECL, new_ast0(IDENTIFIER, val), new_ast0(INT_KW, 0), 0);
       get_tok();
-    } else if (tok == ELLIPSIS) {
+    }
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
+    else if (tok == ELLIPSIS) {
       // ignore ELLIPSIS nodes for now, but it should be the last parameter
       if (result == 0) parse_error("Function must have a named parameter before ellipsis parameter", tok);
       get_tok();
       parse_param_list_is_variadic = true;
       break;
-    } else {
+    }
+#endif // SUPPORT_VARIADIC_FUNCTIONS
+    else {
       parse_error("Parameter declaration expected", tok);
     }
 
@@ -3138,7 +3506,9 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       expect_tok(']');
     } else if (tok == '(') {
       result = new_ast3('(', get_inner_type(parent_type_parent), parse_param_list(), false);
+#ifdef SUPPORT_VARIADIC_FUNCTIONS
       if (parse_param_list_is_variadic) result = make_variadic_func(result);
+#endif
       update_inner_type(parent_type_parent, result);
       parent_type_parent = result;
     } else {
@@ -3149,6 +3519,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   parse_declarator_parent_type_parent = parent_type_parent;
   return decl;
 }
+
+#ifdef SUPPORT_COMPLEX_INITIALIZER
 
 ast parse_initializer_list() {
   ast result = 0;
@@ -3175,12 +3547,18 @@ ast parse_initializer_list() {
   return new_ast1(INITIALIZER_LIST, result);
 }
 
+#endif // SUPPORT_COMPLEX_INITIALIZER
+
 ast parse_initializer() {
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   if (tok == '{') {
     return parse_initializer_list();
   } else {
     return parse_assignment_expression();
   }
+#else
+  return parse_assignment_expression();
+#endif
 }
 
 ast parse_declarator_and_initializer(bool is_for_typedef, ast type_specifier) {
@@ -3219,7 +3597,7 @@ void add_typedef(ast declarator) {
   int decl_ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, declarator, 0));
   ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
 
-#ifdef sh
+#if defined(SUPPORT_STRUCT_UNION) && defined(sh)
   // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
   // This is not correct, but it's a limitation of the current shell backend where we
   // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
@@ -3262,7 +3640,11 @@ ast parse_declaration(bool local) {
   // > The enum, struct, and union declarations may omit declarators, in which
   // > case they only introduce the enumeration constants and/or tags.
   if (tok == ';') {
-    if (get_op(type_specifier) != ENUM_KW && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW) {
+    if (get_op(type_specifier) != ENUM_KW
+#ifdef SUPPORT_STRUCT_UNION
+    && get_op(type_specifier) != STRUCT_KW && get_op(type_specifier) != UNION_KW
+#endif
+      ) {
       parse_error("enum/struct/union declaration expected", tok);
     }
     // If the specifier is a typedef, we add the typedef'ed type to the type table
@@ -3402,7 +3784,9 @@ ast parse_postfix_expression(ast result) {
       result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
       get_tok();
 
-    } else if (tok == ARROW) {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (tok == ARROW) {
 
       get_tok();
       if (tok != IDENTIFIER) {
@@ -3411,7 +3795,9 @@ ast parse_postfix_expression(ast result) {
       result = new_ast2(ARROW, result, new_ast0(IDENTIFIER, val));
       get_tok();
 
-    } else if (tok == PLUS_PLUS) {
+    }
+#endif // SUPPORT_STRUCT_UNION
+    else if (tok == PLUS_PLUS) {
 
       get_tok();
       result = new_ast1(PLUS_PLUS_POST, result);
@@ -3755,7 +4141,7 @@ ast parse_comma_expression() {
 
 ast parse_call_params() {
   ast result = parse_assignment_expression();
-  result = new_ast2(LIST, result, 0);
+  result = cons(result, 0);
 
   if (tok == ',') {
     get_tok();
@@ -3767,15 +4153,11 @@ ast parse_call_params() {
 
 ast parse_comma_expression_opt() {
 
-  ast result;
-
   if (tok == ':' || tok == ';' || tok == ')') {
-    result = 0;
+    return 0;
   } else {
-    result = parse_comma_expression();
+    return parse_comma_expression();
   }
-
-  return result;
 }
 
 ast parse_expression() {
@@ -3842,6 +4224,7 @@ ast parse_statement() {
 
     result = new_ast2(WHILE_KW, result, child1);
 
+#ifdef SUPPORT_DO_WHILE
   } else if (tok == DO_KW) {
 
     get_tok();
@@ -3851,6 +4234,7 @@ ast parse_statement() {
     expect_tok(';');
 
     result = new_ast2(DO_KW, result, child1);
+#endif // SUPPORT_DO_WHILE
 
   } else if (tok == FOR_KW) {
 
@@ -3866,12 +4250,15 @@ ast parse_statement() {
 
     result = new_ast4(FOR_KW, result, child1, child2, child3);
 
+#ifdef SUPPORT_GOTO
   } else if (tok == GOTO_KW) {
 
     get_tok();
     expect_tok(IDENTIFIER);
     result = new_ast1(GOTO_KW, new_ast0(IDENTIFIER, val));
     expect_tok(';');
+
+#endif // SUPPORT_GOTO
 
   } else if (tok == CONTINUE_KW) {
 
@@ -3985,7 +4372,8 @@ ast parse_compound_statement() {
 
 //-----------------------------------------------------------------------------
 
-#ifndef sh
+#ifdef FULL_CLI_OPTIONS
+
 void handle_macro_D(char *opt) {
   char *start = opt;
   char *macro_buf;
@@ -4030,7 +4418,8 @@ void handle_macro_D(char *opt) {
 
   free(macro_buf);
 }
-#endif
+
+#endif // FULL_CLI_OPTIONS
 
 int main(int argc, char **argv) {
   int i;
@@ -4051,29 +4440,29 @@ int main(int argc, char **argv) {
         case 'o':
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
             i += 1;
             output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
           } else {
             output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
           }
           break;
+#endif
 
+#ifdef FULL_CLI_OPTIONS
         case 'D':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
             i += 1;
             handle_macro_D(argv[i]);
           } else {
             handle_macro_D(argv[i] + 2); // skip '-D'
           }
           break;
-#else
-          case 'D':
-            // pnut-sh only needs -D<macro> and no other options
-            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
-            break;
-#endif
+
         case 'U':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
             i += 1;
             init_ident(IDENTIFIER, argv[i]);
           } else {
@@ -4085,13 +4474,19 @@ int main(int argc, char **argv) {
           if (include_search_path != 0) fatal_error("only one include path allowed");
 
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing path for -I option");
             i += 1;
             include_search_path = argv[i];
           } else {
             include_search_path = argv[i] + 2; // skip '-I'
           }
           break;
-
+#else
+          case 'D':
+            // pnut-sh only needs -D<macro> and no other options
+            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+            break;
+#endif // FULL_CLI_OPTIONS
         default:
           putstr("Option "); putstr(argv[i]); putchar('\n');
           fatal_error("unknown option");

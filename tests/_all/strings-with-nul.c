@@ -1,4 +1,4 @@
-// comp_pnut_opt: -DOPTIMIZE_LONG_LINES
+// comp_pnut_opt: -DSH_OPTIMIZE_LONG_LINES=
 
 #include <stdio.h>
 

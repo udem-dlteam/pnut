@@ -14,6 +14,11 @@
 
 #define call_int_to_char(prefix, int_var) putstr(prefix "__char=$(printf \"\\\\$((" int_var "/64))$((" int_var "/8%8))$((" int_var "%8))\")\n");
 
+#ifdef RT_COMPACT
+#define extract_first_char(prefix, buf_var, res_var) \
+  call_char_to_int(prefix "  ", "${" buf_var "%\"${" buf_var "#?}\"}") \
+  putstr(prefix "  : $((" res_var " = __c))\n");
+#else
 // The following cases are ordered by frequency in the C source code and correspond to the letters with more than 1000
 // occurrences See analyze-big-c.py to see the frequency of each character in big.c.
 // Note that adding cases here speeds up all shells except ksh, so the set of optimized characters should be kept small.
@@ -43,18 +48,13 @@
   putstr(prefix "      ;;\n"); \
   putstr(prefix "  esac\n");
 
-#define extract_first_char_compact(prefix, buf_var, res_var) \
-  call_char_to_int(prefix "  ", "${" buf_var "%\"${" buf_var "#?}\"}") \
-  putstr(prefix "  : $((" res_var " = __c))\n");
-
-#ifdef RT_COMPACT
-#define extract_first_char(prefix, buf_var, res_var) extract_first_char_compact(prefix, buf_var, res_var)
-#else
 #define extract_first_char(prefix, buf_var, res_var) extract_first_char_fast(prefix, buf_var, res_var)
 #endif
 
+#ifdef SH_OPTIMIZE_LONG_LINES
 #define ANY_STRING_16   "????????????????"
 #define ANY_STRING_256  "????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????"
+#endif
 
 #define extract_line_head(prefix, small_buf, big_buf, pattern, len, when_empty) \
   putstr(prefix "if [ -z \"$" small_buf "\" ]; then\n"); \
@@ -109,6 +109,11 @@ void runtime_char_to_int() {
   if (runtime_char_to_int_defined++) return;
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
+#ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+  putstr("char_to_int() {\n");
+  putstr("  case $1 in\n");
+  putstr("    [[:alnum:]]) __c=$((__$1__)) ;;\n");
+#else
   putstr("__c2i_0=48\n");
   putstr("__c2i_1=49\n");
   putstr("__c2i_2=50\n");
@@ -175,6 +180,7 @@ void runtime_char_to_int() {
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
   putstr("    [[:alnum:]]) __c=$((__c2i_$1)) ;;\n");
+#endif
 #else
   putstr("char_to_int() {\n");
   putstr("  case $1 in\n");
@@ -285,7 +291,7 @@ void runtime_unpack_string() {
   putstr("  __fgetc_buf=$1\n");
   putstr("  __buffer=$2\n");
   putstr("  __ends_with_eof=$3\n");
-#ifndef OPTIMIZE_LONG_LINES
+#ifndef SH_OPTIMIZE_LONG_LINES
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
   extract_first_char("  ", "__fgetc_buf", "_$__buffer")
   putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
@@ -335,13 +341,17 @@ void runtime_malloc() {
   putstr("\n");
 }
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+
 bool runtime_use_initialize = DEFAULT_USE;
 bool runtime_initialize_defined = false;
 void runtime_initialize() {
   if (runtime_initialize_defined++) return;
   putstr("# Initialize memory with the list of values.\n");
+#ifndef RT_NO_INIT_GLOBALS
   putstr("# When the expected number of elements is higher than the actual number of\n");
   putstr("# elements, the remaining elements are set to 0\n");
+#endif
   putstr("initialize() { # $1 = var name, $2 = length, $3... = elements\n");
   putstr("  __ptr=$(($1))\n");
   putstr("  __size=$2\n");
@@ -351,14 +361,18 @@ void runtime_initialize() {
   putstr("    : $((__i += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
+#ifdef RT_NO_INIT_GLOBALS
   putstr("\n");
   putstr("  while [ $__i -lt $__size ]; do\n");
   putstr("    : $((_$((__ptr + __i)) = 0))\n");
   putstr("    : $((__i += 1))\n");
   putstr("  done\n");
+#endif // RT_NO_INIT_GLOBALS
   putstr("}\n");
   putstr("\n");
 }
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
 bool runtime_use_defarr = DEFAULT_USE;
 bool runtime_defarr_defined = false;
@@ -366,6 +380,7 @@ void runtime_defarr() {
   if (runtime_defarr_defined++) return;
   runtime_malloc();
 #ifdef RT_NO_INIT_GLOBALS
+#ifdef SUPPORT_COMPLEX_INITIALIZER
   // If some array initializers were used, defarr is extended to support initialization
   if (runtime_use_initialize) {
     runtime_initialize();
@@ -373,26 +388,19 @@ void runtime_defarr() {
     putstr("  _malloc $1 $2;\n");
     putstr("  if [ $# -gt 2 ]; then initialize $@; fi\n");
     putstr("}\n");
-  } else {
+  } else
+#endif // SUPPORT_COMPLEX_INITIALIZER
+  {
     putstr("defarr() { _malloc $1 $2; }\n");
   }
-#else
+#elif defined(SUPPORT_COMPLEX_INITIALIZER)
   runtime_initialize();
-  putstr("defarr() { _malloc $1 $2; initialize_memory $@; }\n");
+  putstr("defarr() { _malloc $1 $2; initialize $@; }\n");
+#else
+  putstr("defarr() { _malloc $1 $2; }\n");
 #endif
   putstr("\n");
 }
-
-#ifdef SUPPORT_ADDRESS_OF_OP
-bool runtime_use_defglo = DEFAULT_USE;
-bool runtime_defglo_defined = false;
-void runtime_defglo() {
-  if (runtime_defglo_defined++) return;
-  runtime_malloc();
-  putstr("defglo() { _malloc $1 1 ; }\n");
-  putstr("\n");
-}
-#endif
 
 bool runtime_use_free = DEFAULT_USE;
 bool runtime_free_defined = false;
@@ -433,7 +441,7 @@ void runtime_make_argv() {
   putstr("\n");
 }
 
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
 #define handle_empty_buffer(prefix, buf_var) putstr(prefix "    if [ -z \"$" buf_var "\" ]; then next_sub_buffer; fi\n");
 #else
 #define handle_empty_buffer(prefix, buf_var)
@@ -477,7 +485,7 @@ void runtime_unpack_escaped_string() {
   if (runtime_unpack_escaped_string_defined++) return;
   runtime_malloc();
   runtime_char_to_int();
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("next_sub_buffer() {\n");
     extract_line_head("  ", "__us_buf256", "__str", ANY_STRING_256, "256", "")
     extract_line_head("  ", "__us_buf16", "__us_buf256", ANY_STRING_16, "16", "")
@@ -489,7 +497,7 @@ void runtime_unpack_escaped_string() {
   putstr("  _malloc __addr $((${2:-${#__str} + 1}))\n");
   putstr("  __ptr=$__addr\n");
   putstr("  __end=$((__ptr + ${2:-${#__str} + 1})) # End of allocated memory\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("  __us_buf16=\n");
   putstr("  __us_buf256=\n");
   putstr("  while [ ! -z \"$__str\" ] || [ ! -z \"$__us_buf256\" ] ; do\n");
@@ -538,6 +546,7 @@ void runtime_defstr() {
   putstr("\n");
 }
 
+#ifndef SH_INLINE_EXIT
 bool runtime_use_exit = DEFAULT_USE;
 bool runtime_exit_defined = false;
 void runtime_exit() {
@@ -547,8 +556,10 @@ void runtime_exit() {
   putstr("}\n");
   putstr("\n");
 }
+#endif // SH_INLINE_EXIT
 
 // Input / output
+#ifndef SH_INLINE_PUTCHAR
 bool runtime_use_putchar = DEFAULT_USE;
 bool runtime_putchar_defined = false;
 void runtime_putchar() {
@@ -559,6 +570,9 @@ void runtime_putchar() {
   putstr("}\n");
   putstr("\n");
 }
+#endif // SH_INLINE_PUTCHAR
+
+#ifndef SH_MINIMAL_RUNTIME
 
 bool runtime_use_getchar = DEFAULT_USE;
 bool runtime_getchar_defined = false;
@@ -567,7 +581,7 @@ void runtime_getchar() {
   runtime_char_to_int();
   putstr("__stdin_buf=\n");
   putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("__stdin_buf16=\n");
   putstr("__stdin_buf256=\n");
   putstr("__stdin_end=1\n");
@@ -582,7 +596,7 @@ void runtime_getchar() {
   putstr("      __stdin_line_ending=0                  # Reset line ending for next getchar call\n");
   putstr("      return\n");
   putstr("    fi\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   putstr("    __stdin_end=0\n");
 #endif
   putstr("    IFS=                                            # don't split input\n");
@@ -601,7 +615,7 @@ void runtime_getchar() {
   putstr("      fi\n");
   putstr("    fi\n");
   putstr("  fi\n");
-#ifdef OPTIMIZE_LONG_LINES
+#ifdef SH_OPTIMIZE_LONG_LINES
   extract_line_head("  ", "__stdin_buf256", "__stdin_buf", ANY_STRING_256, "256", "")
   extract_line_head("  ", "__stdin_buf16", "__stdin_buf256", ANY_STRING_16, "16", "      __stdin_end=1\n")
   extract_first_char("", "__stdin_buf16", "$1")
@@ -614,28 +628,25 @@ void runtime_getchar() {
   putstr("\n");
 }
 
+#endif // SH_MINIMAL_RUNTIME
+
 // An implementation of puts, used to replace printf("%s", ...) calls.
 bool runtime_use_put_pstr = DEFAULT_USE;
 bool runtime_put_pstr_defined = false;
 void runtime_put_pstr() {
   if (runtime_put_pstr_defined++) return;
-#ifndef RT_INLINE_PUTCHAR
-  runtime_putchar();
-#endif
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
   putstr("  while [ $((__c = _$__addr)) != 0 ]; do\n");
-#ifdef RT_INLINE_PUTCHAR
   putstr("    printf \\\\$((__c/64))$((__c/8%8))$((__c%8))\n");
-#else
-  putstr("    _putchar __ $__c\n");
-#endif
   putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
   putstr("\n");
 }
+
+#ifndef SH_MINIMAL_RUNTIME
 
 // POSIX shell printf documentation: https://web.archive.org/web/20240829022722/https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
 // C printf documentation: ISO/IEC 9899:1999 - 7.19.6 Formatted input/output functions (page 273)
@@ -756,6 +767,8 @@ void runtime_printf() {
   putstr("}\n");
   putstr("\n");
 }
+
+#endif // SH_MINIMAL_RUNTIME
 
 bool runtime_use_open = DEFAULT_USE;
 bool runtime_open_defined = false;
@@ -989,13 +1002,9 @@ void runtime_fgetc() {
 
 void produce_runtime() {
   if (runtime_use_defstr)     runtime_defstr();
-  if (runtime_use_putchar)    runtime_putchar();
-  if (runtime_use_getchar)    runtime_getchar();
-  if (runtime_use_exit)       runtime_exit();
   if (runtime_use_malloc)     runtime_malloc();
   if (runtime_use_free)       runtime_free();
   if (runtime_use_put_pstr)   runtime_put_pstr();
-  if (runtime_use_printf)     runtime_printf();
   if (runtime_use_fopen)      runtime_fopen();
   if (runtime_use_fclose)     runtime_fclose();
   if (runtime_use_fgetc)      runtime_fgetc();
@@ -1006,4 +1015,16 @@ void produce_runtime() {
   if (runtime_use_make_argv)  runtime_make_argv();
   if (runtime_use_local_vars) runtime_local_vars();
   if (runtime_use_unpack_string) runtime_unpack_string();
+
+#ifndef SH_INLINE_PUTCHAR
+  if (runtime_use_putchar)    runtime_putchar();
+#endif
+#ifndef SH_INLINE_EXIT
+  if (runtime_use_exit)       runtime_exit();
+#endif
+
+#ifndef SH_MINIMAL_RUNTIME
+  if (runtime_use_getchar)    runtime_getchar();
+  if (runtime_use_printf)     runtime_printf();
+#endif
 }

@@ -17,4 +17,4 @@ with_options
 with_options "-DSH_SAVE_VARS_WITH_SET"
 with_options "-DSH_INCLUDE_C_CODE"
 with_options "-DSH_INLINE_CHAR_LITERAL"
-with_options "-DOPTIMIZE_LONG_LINES"
+with_options "-DSH_OPTIMIZE_LONG_LINES"

@@ -212,6 +212,52 @@ _main() {
 readonly __0__=48
 readonly __9__=57
 # Runtime library
+_put_pstr() {
+  : $(($1 = 0)); shift # Return 0
+  __addr=$1; shift
+  while [ $((__c = _$__addr)) != 0 ]; do
+    printf \\$((__c/64))$((__c/8%8))$((__c%8))
+    : $((__addr += 1))
+  done
+}
+
+# Local variables
+__=0
+__SP=0
+let() { # $1: variable name, $2: value (optional)
+  : $((__$((__SP += 1))=$1)) # Push
+  : $(($1=${2-0}))           # Init
+}
+endlet() { # $1: return variable
+           # $2...: function local variables
+  __ret=$1 # Don't overwrite return value
+  : $((__tmp = $__ret))
+  while [ $# -ge 2 ]; do
+    : $(($2 = __$(((__SP -= 1) + 1)))) # Pop
+    shift;
+  done
+  : $(($__ret=__tmp))   # Restore return value
+}
+
+
+# Unpack a Shell string into an appropriately sized buffer
+unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+  __fgetc_buf=$1
+  __buffer=$2
+  __ends_with_eof=$3
+  while [ ! -z "$__fgetc_buf" ]; do
+    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+    : $((_$__buffer = __c))
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buffer += 1))              # Move to the next buffer position
+  done
+
+  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
+    : $((_$__buffer = 10))            # Line ends with newline
+    : $((__buffer += 1))
+  fi
+  : $((_$__buffer = 0))               # Then \0
+}
 
 __stdin_buf=
 __stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
@@ -241,52 +287,6 @@ _getchar() {
   __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
   : $(($1 = __c))
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
-}
-
-_put_pstr() {
-  : $(($1 = 0)); shift # Return 0
-  __addr=$1; shift
-  while [ $((__c = _$__addr)) != 0 ]; do
-    printf \\$((__c/64))$((__c/8%8))$((__c%8))
-    : $((__addr += 1))
-  done
-}
-
-# Local variables
-__=0
-__SP=0
-let() { # $1: variable name, $2: value (optional)
-  : $((__$((__SP += 1))=$1)) # Push
-  : $(($1=${2-0}))           # Init
-}
-endlet() { # $1: return variable
-           # $2...: function local variables
-  __ret=$1 # Don't overwrite return value
-  : $((__tmp = $__ret))
-  while [ $# -ge 2 ]; do
-    : $(($2 = __$(((__SP -= 1) + 1)))) # Pop
-    shift;
-  done
-  : $(($__ret=__tmp))   # Restore return value
-}
-
-# Unpack a Shell string into an appropriately sized buffer
-unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
-  __buffer=$2
-  __ends_with_eof=$3
-  while [ ! -z "$__fgetc_buf" ]; do
-    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-    : $((_$__buffer = __c))
-    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
-    : $((__buffer += 1))              # Move to the next buffer position
-  done
-
-  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
-    : $((_$__buffer = 10))            # Line ends with newline
-    : $((__buffer += 1))
-  fi
-  : $((_$__buffer = 0))               # Then \0
 }
 
 __code=0; # Exit code

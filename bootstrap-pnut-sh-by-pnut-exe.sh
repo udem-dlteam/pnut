@@ -14,14 +14,16 @@ mkdir -p $TEMP_DIR
 : ${PNUT_OPTIONS:=} # Default to empty options
 
 PNUT_EXE_OPTIONS="$PNUT_OPTIONS" # Backend is set by the backend option
-PNUT_SH_OPTIONS="$PNUT_OPTIONS -DRT_NO_INIT_GLOBALS -Dsh"
+PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dsh"
 
 # Parse the arguments
 backend="x86_64_linux"  # Default to x86_64_linux
+minimal_pnut=0 # Enable PNUT_BOOTSTRAP for bootstrapping
 
 while [ $# -gt 0 ]; do
   case $1 in
-    --backend) backend="$2";                            shift 2 ;;
+    --backend)      backend="$2";            shift 2 ;;
+    --minimal-pnut) minimal_pnut=1;          shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -35,6 +37,19 @@ case $backend in
     exit 1
     ;;
 esac
+
+if [ $minimal_pnut -eq 1 ]; then
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP"
+  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DPNUT_BOOTSTRAP"
+fi
+
+# Clean temporary directory to start fresh
+# For some reason, on MacOS, certain executables act differently if they
+# existed before being recompiled, as if the operating system cached some
+# information about them and didn't invalidate the cache when they were
+# recompiled, or initialized the memory differently if the executable existed
+# before being recompiled.
+rm -rf $TEMP_DIR/*
 
 # Compile pnut with gcc
 gcc -o $TEMP_DIR/pnut-exe-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c

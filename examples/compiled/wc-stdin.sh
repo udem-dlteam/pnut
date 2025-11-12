@@ -4,7 +4,7 @@ LC_ALL=C
 
 : $((c = 0))
 _is_word_separator() { let c $2
-  : $(($1 = (c == __SPACE__) || (c == __NEWLINE__) || (c == __TAB__)))
+  : $(($1 = (c == __SPACE__) || (c == __LF__) || (c == __HT__)))
   endlet $1 c
 }
 
@@ -18,7 +18,7 @@ _main() {
   last_sep=0
   while _getchar c; [ $c != -1 ]; do
     : $((chars += 1))
-    if [ $c = $__NEWLINE__ ] ; then
+    if [ $c = $__LF__ ] ; then
       : $((lines += 1))
     fi
     _is_word_separator sep $c
@@ -32,10 +32,28 @@ _main() {
 }
 
 # Character constants
-readonly __TAB__=9
-readonly __NEWLINE__=10
+readonly __HT__=9
+readonly __LF__=10
 readonly __SPACE__=32
 # Runtime library
+# Local variables
+__=0
+__SP=0
+let() { # $1: variable name, $2: value (optional)
+  : $((__$((__SP += 1))=$1)) # Push
+  : $(($1=${2-0}))           # Init
+}
+endlet() { # $1: return variable
+           # $2...: function local variables
+  __ret=$1 # Don't overwrite return value
+  : $((__tmp = $__ret))
+  while [ $# -ge 2 ]; do
+    : $(($2 = __$(((__SP -= 1) + 1)))) # Pop
+    shift;
+  done
+  : $(($__ret=__tmp))   # Restore return value
+}
+
 
 __stdin_buf=
 __stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
@@ -65,24 +83,6 @@ _getchar() {
   __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
   : $(($1 = __c))
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
-}
-
-# Local variables
-__=0
-__SP=0
-let() { # $1: variable name, $2: value (optional)
-  : $((__$((__SP += 1))=$1)) # Push
-  : $(($1=${2-0}))           # Init
-}
-endlet() { # $1: return variable
-           # $2...: function local variables
-  __ret=$1 # Don't overwrite return value
-  : $((__tmp = $__ret))
-  while [ $# -ge 2 ]; do
-    : $(($2 = __$(((__SP -= 1) + 1)))) # Pop
-    shift;
-  done
-  : $(($__ret=__tmp))   # Restore return value
 }
 
 __code=0; # Exit code
