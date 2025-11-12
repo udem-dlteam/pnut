@@ -1,1 +1,1 @@
-tests/_sh/checks/address_of_global.c:7:0  comp_rvalue_go: can't take the address of a local variable
+tests/_sh/checks/address_of_global.c:7:0  comp_rvalue_go: can't take the address of variable
