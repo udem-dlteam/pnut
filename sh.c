@@ -1572,7 +1572,7 @@ text comp_lvalue_address(ast node) {
     // We need to integrate the bindings local used in the exe backend here so
     // we can know more about variables other than "it's local" and "it's not
     // local so it must be global".
-    fatal_error("comp_rvalue_go: can't take the address of a local variable");
+    fatal_error("comp_rvalue_go: can't take the address of variable");
     return 0;
   } else if (op == '[') {
     sub1 = comp_rvalue(get_child_('[', node, 0), RVALUE_CTX_ARITH_EXPANSION);
