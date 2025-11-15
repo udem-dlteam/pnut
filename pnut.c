@@ -4318,21 +4318,20 @@ ast parse_compound_statement() {
 
   expect_tok('{');
 
-  // TODO: Simplify this
-  if (tok != '}' && tok != EOF) {
+  while (tok != '}' && tok != EOF) {
     if (is_type_starter(tok)) {
       child1 = parse_declaration(true);
     } else {
       child1 = parse_statement();
     }
-    result = new_ast2('{', child1, 0);
-    rest = result;
-    while (tok != '}' && tok != EOF) {
-      if (is_type_starter(tok)) {
-        child1 = parse_declaration(true);
-      } else {
-        child1 = parse_statement();
-      }
+
+    // Skip empty statements (semicolon)
+    if (child1 == 0) continue;
+
+    if (result == 0) {
+      result = new_ast2('{', child1, 0);
+      rest = result;
+    } else {
       child1 = new_ast2('{', child1, 0);
       set_child(rest, 1, child1);
       rest = child1;
