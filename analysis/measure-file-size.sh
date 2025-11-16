@@ -24,17 +24,23 @@ TEMP_DIR="build/measure"
 mkdir -p "$TEMP_DIR"
 
 expand_includes() { # $1 = output-name, $2 = options
-  ./$TEMP_DIR/pnut-includes.exe pnut.c $2 | \
+  ./$TEMP_DIR/pnut-includes pnut.c $2 | \
     # Filter lines ending with "// INCLUDED"
     # Those lines correspond to #include directives that have been expanded
     sed "/\/\/ INCLUDED$/d" > "$TEMP_DIR/$1.c"
 
   # As a sanity check, we make sure that the expanded file still compiles with gcc
-  gcc -o "$TEMP_DIR/$1.exe" "$TEMP_DIR/$1.c" $2 -Wall -Werror
+  gcc -o "$TEMP_DIR/$1" "$TEMP_DIR/$1.c" $2 -Wall -Werror
 
   # and that the result of pnut on the expanded file is the same as the result of pnut on the original file
-  ./$TEMP_DIR/pnut-sh.exe pnut.c $2 > "$TEMP_DIR/$1.sh"
-  ./$TEMP_DIR/pnut-sh.exe "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"
+  # If the options contain -DBOOTSTRAP_PNUT, use pnut-sh-bootstrap instead
+  if echo "$2" | grep -q "\-DPNUT_BOOTSTRAP"; then
+    ./$TEMP_DIR/pnut-sh-bootstrap pnut.c $2 > "$TEMP_DIR/$1.sh"
+    ./$TEMP_DIR/pnut-sh-bootstrap "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"
+  else
+    ./$TEMP_DIR/pnut-sh pnut.c $2 > "$TEMP_DIR/$1.sh"
+    ./$TEMP_DIR/pnut-sh "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"
+  fi
 
   # Because we use the __FILE__ macro in pnut, the preincluded.sh file will have
   # a different path than the original file. We need to replace the path in the
@@ -47,7 +53,7 @@ expand_includes() { # $1 = output-name, $2 = options
 }
 
 included_files() {
-  ./$TEMP_DIR/pnut-includes.exe pnut.c $2 | \
+  ./$TEMP_DIR/pnut-includes pnut.c $2 | \
     # Filter lines ending with "// INCLUDED"
     # Those lines correspond to #include directives that have been expanded
     sed -n "/\/\/ INCLUDED$/p" | \
@@ -92,8 +98,7 @@ measure_size() { # $1 = output-name, $2 = options
   printf "By file (without comments or blank lines):\n"
   wc $cleaned_files
   printf "Expanded includes:\n"
-  wc "$TEMP_DIR/$1.c"
-  wc "$TEMP_DIR/$1.sh"
+  wc "$TEMP_DIR/$1.c" "$TEMP_DIR/$1.sh"
   printf "Ratio (Original): "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l < $TEMP_DIR/$1.c)"
   printf "Ratio (Cleaned):  "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')"
 
@@ -101,9 +106,11 @@ measure_size() { # $1 = output-name, $2 = options
 }
 
 # Compile pnut in a mode that tokenizes the input and expands active #include directives
-gcc -o "$TEMP_DIR/pnut-includes.exe" pnut.c -DDEBUG_EXPAND_INCLUDES
+gcc -o "$TEMP_DIR/pnut-includes" pnut.c -DDEBUG_EXPAND_INCLUDES
 # Compile pnut-sh
-gcc -o "$TEMP_DIR/pnut-sh.exe" pnut.c -Dsh
+gcc -o "$TEMP_DIR/pnut-sh" pnut.c -Dsh
+# Compile pnut-sh-bootstrap
+gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dsh -DPNUT_BOOTSTRAP
 
 # Measuring for pnut-sh
 measure_size "pnut-sh" "-Dsh"
