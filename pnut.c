@@ -250,9 +250,6 @@
 #endif
 
 // Disabled options:
-// Add pnut source location in parse_error()
-// #define DEBUG_SHOW_ERR_ORIGIN
-
 // Support skip line continuations
 // #define SUPPORT_LINE_CONTINUATION
 
@@ -387,32 +384,57 @@ void putoct_unsigned(int n) {
 
 #endif
 
-void fatal_error(char *msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+void print_tok_type(int tok); // Imported from debug.c later in this file
+
+void stop_compiler(char *error_prefix, char *error_msg, bool show_token_info, int token) {
+#ifdef NICE_ERR_MSG
+  #define ANSI_RED     "\x1b[31m"
+  #define ANSI_GREEN   "\x1b[32m"
+  #define ANSI_YELLOW  "\x1b[33m"
+  #define ANSI_BLUE    "\x1b[34m"
+  #define ANSI_MAGENTA "\x1b[35m"
+  #define ANSI_CYAN    "\x1b[36m"
+  #define ANSI_RESET   "\x1b[0m"
+
+  // Error header
+  printf(ANSI_RED"%s", error_prefix);
+  printf(ANSI_GREEN"%s\n"ANSI_RESET, fp_filepath);
+  printf("  Reason: "ANSI_YELLOW"%s"ANSI_RESET"\n", error_msg);
+  if (show_token_info) {
+    printf("  Offending token: "ANSI_YELLOW);
+    print_tok_type(token);
+    printf(ANSI_RESET"\n");
+  }
   if (fp_filepath != 0) {
-    putstr(fp_filepath); putchar(':');
-    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-    putstr("  "); putstr(msg); putchar('\n');
-  } else {
-    putstr(msg); putchar('\n');
+    printf("  Location: "ANSI_GREEN"%s:%d:%d"ANSI_RESET"\n", fp_filepath, last_tok_line_number, last_tok_column_number);
   }
 #else
-  putstr(msg); putchar('\n');
+  if (fp_filepath != 0) {
+    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  }
+  printf("%s%s\n", error_prefix, error_msg);
 #endif
   exit(1);
 }
 
-void syntax_error(char *msg) {
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (fp_filepath != 0) {
-    putstr(fp_filepath); putchar(':');
-    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-    putstr("  syntax error: "); putstr(msg); putchar('\n');
-  }
 #else
-  putstr("syntax error: "); putstr(msg); putchar('\n');
+
+#define stop_compiler(error_prefix, error_msg, show_token_info, tok) \
+  putstr(error_prefix); putstr(error_msg); putstr("\n"); exit(1);
+
 #endif
-  exit(1);
+
+void fatal_error(char * const msg) {
+  stop_compiler("Fatal error: ", msg, false, 0);
+}
+
+void syntax_error(char * const msg) {
+  stop_compiler("Syntax error: ", msg, false, 0);
+}
+
+void parse_error(char * const msg, const int tok) {
+  stop_compiler("Parse error: ", msg, true, tok);
 }
 
 // Before including a file, we save the state of the reader to the include stack.
@@ -949,12 +971,6 @@ int end_ident() {
   return probe;
 }
 
-#define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
-
-void get_tok();
-void get_ident();
-void expect_tok_(int expected_tok, char* file, int line);
-
 #ifdef SAFE_MODE
 
 // Debugging functions
@@ -1452,6 +1468,8 @@ int CLOSE_ID;
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
+
+void get_tok();
 
 // When we parse a macro, we generally want the tokens as they are, without expanding them.
 void get_tok_macro() {
@@ -2205,7 +2223,7 @@ bool attempt_macro_expansion(int macro) {
     begin_macro_expansion(macro, tokens, 0);
     return true;
   } else { // Function-like macro
-    expect_tok(MACRO); // Skip macro identifier
+    get_tok(); // Skip the macro identifier
     if (tok == '(') {
       begin_macro_expansion(macro, tokens, get_macro_args_toks(macro));
       return true;
@@ -2842,68 +2860,16 @@ void get_tok() {
 #include "debug.c"
 #endif
 
-#define parse_error(msg, token) parse_error_internal(msg, token, __FILE__, __LINE__)
-
-void parse_error_internal(char * msg, int token, char * file, int line) {
-
-#ifdef NICE_ERR_MSG
-  #define ANSI_RED     "\x1b[31m"
-  #define ANSI_GREEN   "\x1b[32m"
-  #define ANSI_YELLOW  "\x1b[33m"
-  #define ANSI_BLUE    "\x1b[34m"
-  #define ANSI_MAGENTA "\x1b[35m"
-  #define ANSI_CYAN    "\x1b[36m"
-  #define ANSI_RESET   "\x1b[0m"
-
-  //Error header
-  putstr(ANSI_RED"Error occurred while parsing ");
-  putstr(ANSI_GREEN"\"");
-  putstr(fp_filepath);
-  putstr("\""ANSI_RESET"\n");
-
-  //Error message
-  putstr("  Message: "ANSI_YELLOW);
-  putstr(msg);
-  putstr(ANSI_RESET"\n");
-
-  //Error token
-  putstr("  Offending Token: "ANSI_YELLOW);
-  print_tok_type(token);
-  putstr(ANSI_RESET"\n");
-
-  //Error location
-  putstr("  Location: "ANSI_GREEN);
-  putstr(fp_filepath);
-  putchar(':');
-  putint(last_tok_line_number);
-  putchar(':');
-  putint(last_tok_column_number);
-  putstr(ANSI_RESET"\n");
-#else
-  putstr(msg);
-#endif
-
-#ifdef DEBUG_SHOW_ERR_ORIGIN
-  putstr("Note, error emitted from ");
-  putstr(file);
-  putstr(" line ");
-  putint(line);
-  putstr("\n");
-#endif
-
-  exit(1);
-}
-
-void expect_tok_(int expected_tok, char* file, int line) {
+void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
 #ifdef NICE_ERR_MSG
-    putstr("expected tok="); print_tok_type(expected_tok);
+    putstr("expected tok=");  print_tok_type(expected_tok);
     putstr("\ncurrent tok="); print_tok_type(tok); putchar('\n');
 #else
     dump_int("expected tok = ", expected_tok);
     dump_int("current tok = ", tok);
 #endif
-    parse_error_internal("unexpected token", tok, file, line);
+    parse_error("unexpected token", tok);
   }
   get_tok();
 }
