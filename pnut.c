@@ -245,6 +245,7 @@
 #endif
 
 #if defined(NICE_UX) || defined(SAFE_MODE)
+  #define FULL_PREPROCESSOR_SUPPORT
   #define INCLUDE_LINE_NUMBER_ON_ERROR
   #define NICE_ERR_MSG
 #endif
