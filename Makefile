@@ -43,6 +43,9 @@ pnut-exe.sh: pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
 pnut-exe-bootstrapped: pnut-exe
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped
 
+kit/bintools.c:
+	./utils/process-includes.sh kit/bintools/bintools-base.c > kit/bintools.c
+
 install: pnut-sh pnut-sh.sh
 	sudo cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
 	sudo cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
