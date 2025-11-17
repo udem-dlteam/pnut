@@ -1468,7 +1468,6 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
     sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
     return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
-    return 0;
   } else if (nb_children == 4 && (op == AMP_AMP || op == BAR_BAR)) {
     // Note, this could also be compiled in a single [ ] block using -a and
     // -o, which I think are POSIX compliant but are deprecated.
