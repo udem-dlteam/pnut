@@ -1483,11 +1483,13 @@ int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
 int DEFINED_ID;
-int WARNING_ID;
-int ERROR_ID;
+#ifdef SH_SUPPORT_SHELL_INCLUDE
 int INCLUDE_SHELL_ID;
+#endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
+int WARNING_ID;
+int ERROR_ID;
 int NOT_SUPPORTED_ID;
 #endif
 
@@ -1860,7 +1862,9 @@ void handle_preprocessor_directive() {
     } else if (tok == IDENTIFIER && val == DEFINE_ID) {
       get_tok_macro(); // Get the macro name
       handle_define();
-    } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
+    }
+#ifdef FULL_PREPROCESSOR_SUPPORT
+    else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
 #ifndef DEBUG_EXPAND_INCLUDES
       temp = val;
       putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
@@ -1873,8 +1877,10 @@ void handle_preprocessor_directive() {
       if (temp == ERROR_ID) exit(1);
 #else
       tok = '\n';
-#endif
-    } else {
+#endif // DEBUG_EXPAND_INCLUDES
+    }
+#endif // FULL_PREPROCESSOR_SUPPORT
+    else {
       dump_tok(tok);
       dump_string("directive = ", symbol_buf(val));
       syntax_error("unsupported preprocessor directive");
@@ -2002,8 +2008,6 @@ void init_ident_table() {
   ELIF_ID    = init_ident(IDENTIFIER, "elif");
   ENDIF_ID   = init_ident(IDENTIFIER, "endif");
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
-  WARNING_ID = init_ident(IDENTIFIER, "warning");
-  ERROR_ID   = init_ident(IDENTIFIER, "error");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
   DEFINED_ID = init_ident(IDENTIFIER, "defined");
@@ -2050,6 +2054,8 @@ void init_ident_table() {
 #endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
+  WARNING_ID = init_ident(IDENTIFIER, "warning");
+  ERROR_ID   = init_ident(IDENTIFIER, "error");
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
