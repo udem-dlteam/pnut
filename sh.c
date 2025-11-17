@@ -731,7 +731,7 @@ text save_local_vars() {
 
   if (res) {
     runtime_use_local_vars = true;
-    return string_concat(wrap_str_lit("set $@ "), res);
+    return string_concat(wrap_str_lit("set -- $@ "), res);
   } else {
     return 0;
   }
