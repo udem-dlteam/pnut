@@ -69,7 +69,7 @@ bool comp_body(ast node, STMT_CTX stmt_ctx);
 bool comp_statement(ast node, STMT_CTX stmt_ctx);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
-ast handle_side_effects_go(ast node, int executes_conditionally);
+ast handle_side_effects_go(ast node, bool executes_conditionally);
 
 // Because concatenating strings is very expensive and a common operation, we
 // use a tree structure to represent the concatenated strings. That way, the
@@ -636,7 +636,7 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
   // Make sure we're not shadowing an existing local variable
   if (cgc_lookup_var(ident_symbol, cgc_locals)) {
     dump_ident(ident_symbol);
-    fatal_error("Variable is already in local environment");
+    fatal_error("Local variable shadowing is not supported.");
   }
 
   // The var is not part of the environment, so we add it.
@@ -654,7 +654,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   ast type = get_child_(DECL, variable, 1);
   if (name[0] == '_') { // Underscore is used to prefix global and internal variables
     dump_string("Variable name: ", name);
-    fatal_error("variable name is invalid. It can't start or end with '_'.");
+    fatal_error("variable name is invalid. It can't start with '_'.");
   }
 
   // The shell has special variables that can't be used as regular variables.
@@ -678,7 +678,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 #endif
        ) {
       dump_string("Variable name: ", name);
-      fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
+      fatal_error("local array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
   } else {
     // Arrays of structs and struct value types are not supported for now.
@@ -691,7 +691,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 #endif
        ) {
       dump_string("Variable name: ", name);
-      fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
+      fatal_error("global array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
     }
   }
 }
@@ -1485,6 +1485,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(child1, context, 0, op);
     } else {
+      dump_node(node);
       fatal_error("comp_rvalue_go: unknown rvalue");
       return 0;
     }
@@ -2306,7 +2307,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
                      );
 #endif
   } else if (op == FOR_KW) {
-    comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT); // Assuming this statement never returns...
+    comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT);
 
     str = wrap_char(':'); // Empty statement
     if (get_child_(FOR_KW, node, 1)) {
@@ -2327,16 +2328,16 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     return comp_continue(); // Continue to next iteration of loop
   } else if (op == RETURN_KW) {
     return comp_return(get_child_(RETURN_KW, node, 0));
-  } else if (op == '(') { // six.call
+  } else if (op == '(') { // Function call
     comp_fun_call(node, 0);
     return false;
-  } else if (op == '{') { // six.compound
+  } else if (op == '{') { // Compound statement
     return comp_body(node, stmt_ctx);
-  } else if (op == '=') { // six.x=y
+  } else if (op == '=') { // Assignment
     comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
     return false;
 #ifdef SUPPORT_GOTO
-  } else if (op == ':') {
+  } else if (op == ':') { // Labelled statement
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
     append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, get_child_(':', node, 0))), wrap_char(':')));
