@@ -1,1 +1,1 @@
-tests/_sh/checks/invalid_printf.c:5:0  printf: not enough parameters
+tests/_sh/checks/invalid_printf.c:5:0: printf: not enough parameters

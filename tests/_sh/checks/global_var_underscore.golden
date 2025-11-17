@@ -1,1 +1,1 @@
-tests/_sh/checks/global_var_underscore.c:3:0  variable name is invalid. It can't start or end with '_'.
+tests/_sh/checks/global_var_underscore.c:3:0: variable name is invalid. It can't start with '_'.

@@ -1,1 +1,1 @@
-tests/_sh/checks/continue_outside_loop.c:5:0  comp_statement: continue not in loop
+tests/_sh/checks/continue_outside_loop.c:5:0: comp_statement: continue not in loop

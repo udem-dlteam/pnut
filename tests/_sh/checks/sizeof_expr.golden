@@ -1,1 +1,1 @@
-tests/_sh/checks/sizeof_expr.c:5:0  comp_rvalue_go: sizeof is not supported for this type or expression
+tests/_sh/checks/sizeof_expr.c:5:0: comp_rvalue_go: sizeof is not supported for this type or expression

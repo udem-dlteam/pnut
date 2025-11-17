@@ -1,1 +1,1 @@
-tests/_sh/checks/initializer_nested.c:2:14  nested initializer lists not supported
+tests/_sh/checks/initializer_nested.c:2:14: Syntax error: nested initializer lists not supported

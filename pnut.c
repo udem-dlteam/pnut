@@ -247,6 +247,9 @@
 #if defined(NICE_UX) || defined(SAFE_MODE)
   #define FULL_PREPROCESSOR_SUPPORT
   #define INCLUDE_LINE_NUMBER_ON_ERROR
+#endif
+
+#if defined(NICE_UX)
   #define NICE_ERR_MSG
 #endif
 
@@ -385,67 +388,79 @@ void putoct_unsigned(int n) {
 
 #endif
 
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+#ifdef NICE_ERR_MSG
+
+void change_color(char *color) {
+  printf("%s", color);
+}
+
+#define ANSI_RED     "\x1b[31m"
+#define ANSI_GREEN   "\x1b[32m"
+#define ANSI_YELLOW  "\x1b[33m"
+#define ANSI_RESET   "\x1b[0m"
+
 void print_tok_type(int tok); // Imported from debug.c later in this file
 
-void stop_compiler(char *error_prefix, char *error_msg, bool show_token_info, int token) {
-#ifdef NICE_ERR_MSG
-#ifndef NO_COLOR
-  #define ANSI_RED     "\x1b[31m"
-  #define ANSI_GREEN   "\x1b[32m"
-  #define ANSI_YELLOW  "\x1b[33m"
-  #define ANSI_BLUE    "\x1b[34m"
-  #define ANSI_MAGENTA "\x1b[35m"
-  #define ANSI_CYAN    "\x1b[36m"
-  #define ANSI_RESET   "\x1b[0m"
-#else
-  #define ANSI_RED
-  #define ANSI_GREEN
-  #define ANSI_YELLOW
-  #define ANSI_BLUE
-  #define ANSI_MAGENTA
-  #define ANSI_CYAN
-  #define ANSI_RESET
-#endif
-
+void source_code_error(char *error_prefix, char *error_msg, int token) {
   // Error header
-  printf(ANSI_RED"%s", error_prefix);
-  printf(ANSI_GREEN"%s\n"ANSI_RESET, fp_filepath);
-  printf("  Reason: "ANSI_YELLOW"%s"ANSI_RESET"\n", error_msg);
-  if (show_token_info) {
-    printf("  Offending token: "ANSI_YELLOW);
+  change_color(ANSI_RED);
+  printf("%s\n", error_prefix);
+  printf("  Reason: ");
+  change_color(ANSI_YELLOW);
+  printf("%s\n", error_msg);
+  change_color(ANSI_RESET);
+  if (token) {
+    printf("  Offending token: ");
+    change_color(ANSI_YELLOW);
     print_tok_type(token);
-    printf(ANSI_RESET"\n");
+    change_color(ANSI_RESET);
+    putchar('\n');
   }
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   if (fp_filepath != 0) {
-    printf("  Location: "ANSI_GREEN"%s:%d:%d"ANSI_RESET"\n", fp_filepath, last_tok_line_number, last_tok_column_number);
+    printf("  Location: ");
+    change_color(ANSI_GREEN);
+    printf("%s:%d:%d\n", fp_filepath, last_tok_line_number, last_tok_column_number);
+    change_color(ANSI_RESET);
   }
-#else
+#endif
+  exit(1);
+}
+
+#elif defined(INCLUDE_LINE_NUMBER_ON_ERROR)
+
+void source_code_error(char *error_prefix, char *error_msg, int token) {
   if (fp_filepath != 0) {
     printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
   }
   printf("%s%s\n", error_prefix, error_msg);
-#endif
   exit(1);
 }
 
 #else
 
-#define stop_compiler(error_prefix, error_msg, show_token_info, tok) \
-  putstr(error_prefix); putstr(error_msg); putstr("\n"); exit(1);
+#define source_code_error(error_prefix, error_msg, token) \
+  putstr(error_prefix); putstr(error_msg); putchar('\n'); exit(1);
 
 #endif
 
 void fatal_error(char * const msg) {
-  stop_compiler("Fatal error: ", msg, false, 0);
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  // Fatal errors are simpler and without color
+  if (fp_filepath != 0) {
+    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  }
+#endif
+  putstr(msg); putchar('\n');
+  exit(1);
 }
 
 void syntax_error(char * const msg) {
-  stop_compiler("Syntax error: ", msg, false, 0);
+  source_code_error("Syntax error: ", msg, 0);
 }
 
-void parse_error(char * const msg, const int tok) {
-  stop_compiler("Parse error: ", msg, true, tok);
+void parse_error(char * const msg, const int tok_) {
+  source_code_error("Parse error: ", msg, tok_);
 }
 
 // Before including a file, we save the state of the reader to the include stack.
