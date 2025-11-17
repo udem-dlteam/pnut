@@ -232,7 +232,6 @@
   #define SUPPORT_ALL_C_FEATURES
 #endif
 
-
 #ifdef SUPPORT_ALL_C_FEATURES
   #define FULL_CLI_OPTIONS
   #define FULL_PREPROCESSOR_SUPPORT
@@ -390,6 +389,7 @@ void print_tok_type(int tok); // Imported from debug.c later in this file
 
 void stop_compiler(char *error_prefix, char *error_msg, bool show_token_info, int token) {
 #ifdef NICE_ERR_MSG
+#ifndef NO_COLOR
   #define ANSI_RED     "\x1b[31m"
   #define ANSI_GREEN   "\x1b[32m"
   #define ANSI_YELLOW  "\x1b[33m"
@@ -397,6 +397,15 @@ void stop_compiler(char *error_prefix, char *error_msg, bool show_token_info, in
   #define ANSI_MAGENTA "\x1b[35m"
   #define ANSI_CYAN    "\x1b[36m"
   #define ANSI_RESET   "\x1b[0m"
+#else
+  #define ANSI_RED
+  #define ANSI_GREEN
+  #define ANSI_YELLOW
+  #define ANSI_BLUE
+  #define ANSI_MAGENTA
+  #define ANSI_CYAN
+  #define ANSI_RESET
+#endif
 
   // Error header
   printf(ANSI_RED"%s", error_prefix);
