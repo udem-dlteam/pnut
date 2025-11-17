@@ -933,9 +933,9 @@ text test_op_to_str(int op) {
 
 text character_ident(int c) {
   // Mark character as used
+  text res = 0;
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
   any_character_used = true;
-  text res = 0;
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
     res = wrap_char(c);
