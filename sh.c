@@ -995,6 +995,7 @@ ast replaced_fun_calls_tail = 0;
 ast conditional_fun_calls = 0;
 ast conditional_fun_calls_tail = 0;
 ast literals_inits = 0;
+ast literals_inits_tail = 0;
 bool contains_side_effects = 0;
 
 ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_conditionally) {
@@ -1065,9 +1066,16 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
-      sub1 = fresh_string_ident(get_val_(STRING, node));
-      literals_inits = cons(new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
-      return sub1;
+      sub2 = fresh_string_ident(get_val_(STRING, node));
+      sub1 = new_ast2('=', sub2, get_val_(STRING, node));
+      sub1 = cons(sub1, 0);
+
+      // Add to end of literals_inits
+      if (literals_inits == 0) { literals_inits = sub1; }
+      else { set_child(literals_inits_tail, 1, sub1); }
+      literals_inits_tail = sub1;
+
+      return sub2;
     } else {
       dump_node(node);
       fatal_error("unexpected operator");
