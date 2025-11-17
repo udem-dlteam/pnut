@@ -873,10 +873,28 @@ ast list_singleton(const ast list) {
 }
 #endif
 
-// Simple accessor to get the string from the string pool
-#define STRING_BUF(probe) (string_pool + heap[probe+1])
-#define STRING_LEN(probe) (heap[probe+4])
-#define STRING_BUF_END(probe) (STRING_BUF(probe) + STRING_LEN(probe))
+// Symbol table and string pool management
+// The symbol table is implemented as a chaining hash table.
+// It is stored in the beginning of the heap array, with each top-level entry
+// pointing to a linked list of symbols with the same hash value.
+// The symbols themselves are stored in the heap after the hash table.
+// Each symbol is represented as an object in the heap with the following layout:
+//  - 0: pointer to next symbol in the chain (0 if last symbol)
+//  - 1: offset in the string pool where the symbol's string is stored
+//  - 2: token type (IDENTIFIER, MACRO, TYPEDEF, other C keyword, etc)
+//  - 3: token tag (for macros, typedefs, defstr index, etc)
+//  - 4: length of the symbol's string
+char *symbol_buf(const int symbol) {
+  return string_pool + heap[symbol+1];
+}
+
+int symbol_len(const int symbol) {
+  return heap[symbol+4];
+}
+
+char *symbol_buf_end(const int symbol) {
+  return string_pool + heap[symbol+1] + heap[symbol+4];
+}
 
 void begin_string() {
   string_start = string_pool_alloc;
@@ -894,9 +912,9 @@ void accum_string(const char c) {
 }
 
 // Append a string from the string_pool to the string under construction
-void accum_string_string(const int string_probe) {
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = string_start + STRING_LEN(string_probe);
+void accum_string_string(const int string_symbol) {
+  char *string_start = symbol_buf(string_symbol);
+  char *string_end = string_start + symbol_len(string_symbol);
   while (string_start < string_end) {
     accum_string(*string_start);
     string_start += 1;
@@ -924,53 +942,50 @@ void accum_string_integer(int n) {
 
 #endif
 
-int probe;
-int probe_start;
+int symbol;
+int symbol_start;
 char c1;
 char c2;
-int end_ident_i;
+int end_symbol_i;
 
-// Like end_ident, but for strings instead of identifiers
-// We want to deduplicate strings to reuse memory if possible.
-#define end_string end_ident
-
-int end_ident() {
+// Bug: symbols containing nul characters are not handled correctly
+int end_symbol() {
   string_pool[string_pool_alloc] = 0; // terminate string
   string_pool_alloc += 1; // account for terminator
 
-  probe = heap[hash];
+  symbol = heap[hash];
 
-  while (probe != 0) {
-    probe_start = heap[probe+1];
-    end_ident_i = 0;
-    c1 = string_pool[string_start+end_ident_i];
-    c2 = string_pool[probe_start+end_ident_i];
+  while (symbol != 0) {
+    symbol_start = heap[symbol + 1];
+    end_symbol_i = 0;
+    c1 = string_pool[string_start + end_symbol_i];
+    c2 = string_pool[symbol_start + end_symbol_i];
     while (c1 == c2) {
       if (c1 == 0) {
         string_pool_alloc = string_start; // undo string allocation
-        return probe;
+        return symbol;
       }
-      end_ident_i += 1;
-      c1 = string_pool[string_start+end_ident_i];
-      c2 = string_pool[probe_start+end_ident_i];
+      end_symbol_i += 1;
+      c1 = string_pool[string_start + end_symbol_i];
+      c2 = string_pool[symbol_start + end_symbol_i];
     }
-    hash = probe; // remember previous ident
-    probe = heap[probe];
+    hash = symbol; // remember previous ident
+    symbol = heap[symbol];
   }
 
-  // a new ident has been found
+  // the symbol was not found, create a new one
 
-  probe = alloc_obj(5);
+  symbol = alloc_obj(5);
 
-  heap[hash] = probe; // add new ident at end of chain
+  heap[hash] = symbol; // add new ident at end of chain
 
-  heap[probe] = 0; // no next ident
-  heap[probe+1] = string_start;
-  heap[probe+2] = IDENTIFIER;
-  heap[probe+3] = 0; // Token tag
-  heap[probe+4] = string_pool_alloc - string_start - 1; // string length (excluding terminator)
+  heap[symbol]     = 0; // no next ident
+  heap[symbol + 1] = string_start;
+  heap[symbol + 2] = IDENTIFIER;
+  heap[symbol + 3] = 0; // Token tag
+  heap[symbol + 4] = string_pool_alloc - string_start - 1; // string length (excluding terminator)
 
-  return probe;
+  return symbol;
 }
 
 #ifdef SAFE_MODE
@@ -1000,8 +1015,8 @@ void dump_tok(int tok) {
   dump_int("tok = ", tok);
 }
 
-void dump_ident(int probe) {
-  dump_string("ident = ", STRING_BUF(probe));
+void dump_ident(int symbol) {
+  dump_string("ident = ", symbol_buf(symbol));
 }
 
 void dump_node(ast node) {
@@ -1021,7 +1036,7 @@ void dump_op(int op) {
 #define dump_int(prefix, n)
 #define dump_char(c)
 #define dump_tok(tok)
-#define dump_ident(probe)
+#define dump_ident(symbol)
 #define dump_node(node)
 #define dump_op(op)
 #endif
@@ -1725,7 +1740,7 @@ int evaluate_if_condition() {
 
 void handle_include() {
   if (tok == STRING) {
-    include_file(STRING_BUF(val), fp_dirname);
+    include_file(symbol_buf(val), fp_dirname);
 #ifdef DEBUG_EXPAND_INCLUDES
     // When running pnut in "expand includes" mode, we want to annotate the
     // #include directives that were expanded with a comment so we can remove
@@ -1735,11 +1750,11 @@ void handle_include() {
     get_tok_macro(); // Skip the string
   } else if (tok == '<') {
     accum_string_until('>');
-    val = end_string();
+    val = end_symbol();
     // #include <file> directives only take effect if the search path is provided
     // TODO: Issue a warning to stderr when skipping the directive
     if (include_search_path != 0) {
-      include_file(STRING_BUF(val), include_search_path);
+      include_file(symbol_buf(val), include_search_path);
     }
     get_tok_macro(); // Skip the string
   } else {
@@ -1828,7 +1843,7 @@ void handle_preprocessor_directive() {
 #endif
     } else {
       dump_tok(tok);
-      dump_string("directive = ", STRING_BUF(val));
+      dump_string("directive = ", symbol_buf(val));
       syntax_error("unsupported preprocessor directive");
     }
   } else {
@@ -1839,7 +1854,7 @@ void handle_preprocessor_directive() {
   if (tok != '\n' && tok != EOF) {
     dump_tok(tok);
     if (tok == IDENTIFIER || tok == MACRO) {
-      dump_string("directive = ", STRING_BUF(val));
+      dump_string("directive = ", symbol_buf(val));
     }
     syntax_error("preprocessor expected end of line");
   }
@@ -1868,7 +1883,7 @@ void get_ident() {
     get_ch();
   }
 
-  val = end_ident();
+  val = end_symbol();
   tok = heap[val+2];
 }
 
@@ -1882,7 +1897,7 @@ int intern_str(char* name) {
     i += 1;
   }
 
-  i = end_string();
+  i = end_symbol();
 
   return i;
 }
@@ -2104,7 +2119,7 @@ void check_macro_arity(int macro_args_count, int macro) {
   if (macro_args_count != expected_argc) {
     dump_int("expected_argc = ", expected_argc);
     dump_int("macro_args_count = ", macro_args_count);
-    dump_string("macro = ", STRING_BUF(macro));
+    dump_string("macro = ", symbol_buf(macro));
     syntax_error("macro argument count mismatch");
   }
 }
@@ -2269,7 +2284,7 @@ void stringify() {
   tok = car(car(arg));
   // Support the case where the argument is a single identifier/macro/keyword token
   if ((tok == IDENTIFIER || tok == MACRO || (KEYWORDS_START <= tok && tok <= KEYWORDS_END)) && cdr(arg) == 0) {
-    val = cdr(car(arg)); // Use the identifier probe
+    val = cdr(car(arg)); // Use the identifier symbol
   } else {
     val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
   }
@@ -2336,7 +2351,7 @@ void paste_tokens(int left_tok, int left_val) {
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
-    val = end_ident();
+    val = end_symbol();
     tok = heap[val+2]; // The kind of the identifier
   } else if (left_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
@@ -2361,7 +2376,7 @@ void paste_tokens(int left_tok, int left_val) {
       accum_string_integer(-left_val);
       accum_string_string(right_val);
 
-      val = end_ident();
+      val = end_symbol();
       tok = heap[val+2]; // The kind of the identifier
     } else {
       dump_tok(left_tok);
@@ -2625,7 +2640,7 @@ void get_tok() {
       begin_string();
       accum_string_until('\"');
 
-      val = end_string();
+      val = end_symbol();
       tok = STRING;
 
       break;
@@ -3589,7 +3604,7 @@ void add_typedef(ast declarator) {
   }
 #endif
 
-  // Use probe object to store the typedef'ed type in the symbol table
+  // Use symbol object to store the typedef'ed type in the symbol table
   heap[decl_ident + 2] = TYPE;
   heap[decl_ident + 3] = decl_type;
 }
@@ -3715,7 +3730,7 @@ ast parse_primary_expression() {
         result = cdr(result);
       }
 
-      result = new_ast0(STRING, end_string());
+      result = new_ast0(STRING, end_symbol());
     }
 
   } else if (tok == '(') {

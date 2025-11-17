@@ -12,7 +12,7 @@ void handle_shell_include() {
     runtime_use_put_pstr = true;
     runtime_use_unpack_string = true;
     // Include the file as-is without any preprocessing
-    include_file(STRING_BUF(val), fp_dirname);
+    include_file(symbol_buf(val), fp_dirname);
     while ((c = fgetc(fp)) != EOF) {
       putchar(c);
     }
@@ -208,8 +208,8 @@ text wrap_str_lit(char * const s) {
   return wrap_str_imm(s, 0);
 }
 
-text wrap_str_pool(const int ident_probe) {
-  return wrap_str_imm(STRING_BUF(ident_probe), 0);
+text wrap_str_pool(const int ident_symbol) {
+  return wrap_str_imm(symbol_buf(ident_symbol), 0);
 }
 
 text concatenate_strings_with(const text t1, const text t2, const text sep) {
@@ -538,19 +538,19 @@ text format_special_var(ast ident, bool prefixed_with_dollar) {
   }
 }
 
-text global_var(int ident_probe) {
-  return string_concat(wrap_char('_'), wrap_str_pool(ident_probe));
+text global_var(int ident_symbol) {
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
 }
 
-text local_var(int ident_probe) {
-  if (ident_probe == ARGV_ID) {
+text local_var(int ident_symbol) {
+  if (ident_symbol == ARGV_ID) {
     return wrap_str_lit("argv_");
   } else {
-    return wrap_str_pool(ident_probe);
+    return wrap_str_pool(ident_symbol);
   }
 }
 
-text local_var_or_param(int ident_probe, int binding, bool prefixed_with_dollar) {
+text local_var_or_param(int ident_symbol, int binding, bool prefixed_with_dollar) {
   if (binding_kind(binding) == BINDING_PARAM_LOCAL && is_constant_type(heap[binding + 4])) {
     if (prefixed_with_dollar) {
       return wrap_int(heap[binding + 3]);
@@ -558,19 +558,19 @@ text local_var_or_param(int ident_probe, int binding, bool prefixed_with_dollar)
       return string_concat(wrap_char('$'), wrap_int(heap[binding + 3]));
     }
   } else {
-    return local_var(ident_probe);
+    return local_var(ident_symbol);
   }
 }
 
 text env_var_with_prefix(ast ident, bool prefixed_with_dollar) {
   int binding;
-  int ident_probe;
+  int ident_symbol;
   if (get_op(ident) == IDENTIFIER) {
-    ident_probe = get_val_(IDENTIFIER, ident);
-    if ((binding = cgc_lookup_var(ident_probe, cgc_locals))) {
-      return local_var_or_param(ident_probe, binding, prefixed_with_dollar);
+    ident_symbol = get_val_(IDENTIFIER, ident);
+    if ((binding = cgc_lookup_var(ident_symbol, cgc_locals))) {
+      return local_var_or_param(ident_symbol, binding, prefixed_with_dollar);
     } else {
-      return global_var(ident_probe);
+      return global_var(ident_symbol);
     }
   } else {
     return format_special_var(ident, prefixed_with_dollar);
@@ -617,28 +617,28 @@ ast fresh_ident() {
   return new_fresh_ident(gensym_ix);
 }
 
-ast fresh_string_ident(int string_probe) {
+ast fresh_string_ident(int string_symbol) {
   // Strings are interned, meaning that the same string used twice will have the
   // same address. We use the token tag to mark the string as already defined.
   // This allows comp_defstr to use the same string variable for the same string.
-  if (heap[string_probe + 3] == 0) { // tag defaults to 0
+  if (heap[string_symbol + 3] == 0) { // tag defaults to 0
     string_counter += 1;
-    heap[string_probe + 3] = string_counter - 1;
+    heap[string_symbol + 3] = string_counter - 1;
   }
-  return new_ast0(IDENTIFIER_STRING, heap[string_probe + 3]);
+  return new_ast0(IDENTIFIER_STRING, heap[string_symbol + 3]);
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
-  int ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+  int ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
 
   // Make sure we're not shadowing an existing local variable
-  if (cgc_lookup_var(ident_probe, cgc_locals)) {
-    dump_ident(ident_probe);
+  if (cgc_lookup_var(ident_symbol, cgc_locals)) {
+    dump_ident(ident_symbol);
     fatal_error("Variable is already in local environment");
   }
 
   // The var is not part of the environment, so we add it.
-  cgc_add_local_var(kind, ident_probe, get_child_(DECL, decl, 1));
+  cgc_add_local_var(kind, ident_symbol, get_child_(DECL, decl, 1));
 }
 
 // Since global and internal variables are prefixed with _, we restrict the name
@@ -647,8 +647,8 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 //
 // Also, the shell backend doesn't support variables with aggregate types.
 void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for assert_idents_are_safe
-  ast ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
-  char* name = STRING_BUF(ident_probe);
+  ast ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
+  char* name = symbol_buf(ident_symbol);
   ast type = get_child_(DECL, variable, 1);
   if (name[0] == '_'
   || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
@@ -658,12 +658,12 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 
   // The shell has special variables that can't be used as regular variables.
   if (local &&
-      (  ident_probe == ARGV__ID       || ident_probe == ENV_ID         || ident_probe == HOME_ID
-      || ident_probe == IFS_ID         || ident_probe == LANG_ID        || ident_probe == LC_ALL_ID
-      || ident_probe == LC_COLLATE_ID  || ident_probe == LC_CTYPE_ID    || ident_probe == LC_MESSAGES_ID
-      || ident_probe == LINENO_ID      || ident_probe == NLSPATH_ID     || ident_probe == PATH_ID
-      || ident_probe == PPID_ID        || ident_probe == PS1_ID         || ident_probe == PS4_ID
-      || ident_probe == PWD_ID)) {
+      (  ident_symbol == ARGV__ID       || ident_symbol == ENV_ID         || ident_symbol == HOME_ID
+      || ident_symbol == IFS_ID         || ident_symbol == LANG_ID        || ident_symbol == LC_ALL_ID
+      || ident_symbol == LC_COLLATE_ID  || ident_symbol == LC_CTYPE_ID    || ident_symbol == LC_MESSAGES_ID
+      || ident_symbol == LINENO_ID      || ident_symbol == NLSPATH_ID     || ident_symbol == PATH_ID
+      || ident_symbol == PPID_ID        || ident_symbol == PS1_ID         || ident_symbol == PS4_ID
+      || ident_symbol == PWD_ID)) {
     dump_string("Variable name: ", name);
     fatal_error("variable name is reserved by the shell and can't be used as a local variable.");
   }
@@ -1174,9 +1174,9 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-void comp_defstr(ast ident, int string_probe, int array_size) {
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = STRING_BUF_END(string_probe);
+void comp_defstr(ast ident, int string_symbol, int array_size) {
+  char *string_start = symbol_buf(string_symbol);
+  char *string_end = symbol_buf_end(string_symbol);
   text array_size_text = 0;
 
   if (array_size != -1) {
@@ -1892,9 +1892,9 @@ text comp_fun_call_code(ast node, ast assign_to) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && (param = list_singleton(params)) != 0
         && get_op(param) == STRING)) { // puts("..."), putstr("..."), printf("...")
-      return printf_call(STRING_BUF(get_val_(STRING, param)), 0, 0, true);
+      return printf_call(symbol_buf(get_val_(STRING, param)), 0, 0, true);
     } else if (name_id == PRINTF_ID && params != 0 && get_op(car(params)) == STRING) { // printf("...", ...)
-      handle_printf_call(STRING_BUF(get_val_(STRING, car(params))), tail(params));
+      handle_printf_call(symbol_buf(get_val_(STRING, car(params))), tail(params));
       return 0;
     }
 #ifdef SH_INLINE_PUTCHAR
@@ -2362,7 +2362,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
 void comp_glo_fun_decl(ast node) {
   ast fun_decl = get_child__(FUN_DECL, DECL, node, 0);
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
-  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, fun_decl, 0));
+  ast name_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, fun_decl, 0));
   ast fun_type = get_child__(DECL, '(', fun_decl, 1);
   ast params = get_child_opt_('(', LIST, fun_type, 1);
   text let_params_text = 0;
@@ -2377,7 +2377,7 @@ void comp_glo_fun_decl(ast node) {
   handle_function_params(params);
 
   // If the function is main
-  if (name_probe == MAIN_ID) {
+  if (name_symbol == MAIN_ID) {
     main_defined = true;
     // If main has parameters, we'll prepare the argc/argv values in the epilogue.
     if (params != 0) runtime_use_make_argv = true;
@@ -2404,7 +2404,7 @@ void comp_glo_fun_decl(ast node) {
 
 
   append_glo_decl(string_concat4(
-    function_name(name_probe),
+    function_name(name_symbol),
     wrap_str_lit("() {"),
     let_params_text,
     function_comment

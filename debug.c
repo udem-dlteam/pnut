@@ -24,9 +24,9 @@ void print_string_char(int c) {
   else putchar(c);
 }
 
-void print_tok_string(int string_probe) {
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = string_start + STRING_LEN(string_probe);
+void print_tok_string(int symbol) {
+  char *string_start = symbol_buf(symbol);
+  char *string_end = string_start + symbol_len(symbol);
 
   while (string_start < string_end) {
     print_string_char(*string_start);
@@ -168,10 +168,10 @@ void print_tok(int tok, int val) {
   else if (tok == LIST)             putstr("list");
 
   else if (tok == IDENTIFIER) {
-    putstr(STRING_BUF(val));
+    putstr(symbol_buf(val));
   } else if (tok == MACRO) {
     putchar('[');
-    putstr(STRING_BUF(val));
+    putstr(symbol_buf(val));
     putchar(']');
   }
   else if (tok == INTEGER) {
@@ -417,7 +417,7 @@ void ast_to_sexp(ast obj) {
 
   switch (get_op(obj)) {
     case IDENTIFIER:
-      putstr(STRING_BUF(get_val_(IDENTIFIER, obj)));
+      putstr(symbol_buf(get_val_(IDENTIFIER, obj)));
       break;
 
     case STRING:
@@ -477,7 +477,7 @@ void ast_to_sexp(ast obj) {
 
     case FUN_DECL:
       printf("(define-fun ");
-      putstr(STRING_BUF(get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, get_child__(FUN_DECL, DECL, obj, 0), 0))));
+      putstr(symbol_buf(get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, get_child__(FUN_DECL, DECL, obj, 0), 0))));
       putchar(' ');
       type_ast_to_sexp(get_child_(DECL, get_child__(FUN_DECL, DECL, obj, 0), 1)); // Get type out of decl
       putchar(' ');
@@ -583,7 +583,7 @@ void print_macro_ctx(int ix, int ident, int tokens, int args) {
   if (ident == 0) {
     printf("# %-3d: <unnamed>", ix);
   } else {
-    printf("# %-3d: %s", ix, STRING_BUF(ident));
+    printf("# %-3d: %s", ix, symbol_buf(ident));
   }
   if (args) {
     putchar('(');
