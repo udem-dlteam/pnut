@@ -621,12 +621,13 @@ ast fresh_string_ident(int string_symbol) {
   // Strings are interned, meaning that the same string used twice will have the
   // same address. We use the token tag to mark the string as already defined.
   // This allows comp_defstr to use the same string variable for the same string.
-  int tag = symbol_tag(string_symbol);
-  if (symbol_tag(string_symbol) == 0) { // tag defaults to 0
-    set_symbol_tag(string_symbol, string_counter += 1); // Mark the string as defined
-    tag = string_counter;
+  int index = symbol_defstr_index(string_symbol);
+  if (index == 0) { // index defaults to 0
+    set_symbol_defstr_index(string_symbol, string_counter += 1); // Mark the string as defined
+    index = string_counter;
+
   }
-  return new_ast0(IDENTIFIER_STRING, tag - 1);
+  return new_ast0(IDENTIFIER_STRING, index - 1);
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {

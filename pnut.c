@@ -922,6 +922,18 @@ void set_symbol_tag(const int symbol, const int tag) {
   heap[symbol + 4] = tag;
 }
 
+#ifdef sh
+
+int symbol_defstr_index(const int symbol) {
+  return heap[symbol + 5];
+}
+
+void set_symbol_defstr_index(const int symbol, const int index) {
+  heap[symbol + 5] = index;
+}
+
+#endif
+
 void begin_string() {
   string_start = string_pool_alloc;
   hash = 0;
@@ -1008,7 +1020,11 @@ int end_symbol() {
   }
 
   // the symbol was not found, create a new one
+#ifdef sh
+  symbol = alloc_obj(6);
+#else
   symbol = alloc_obj(5);
+#endif
 
   heap[curr_symbol] = symbol; // chain new symbol to the last symbol in the chain
 
@@ -1017,6 +1033,9 @@ int end_symbol() {
   heap[symbol + 2] = end_symbol_len;  // Length of the symbol
   heap[symbol + 3] = IDENTIFIER;      // Token type
   heap[symbol + 4] = 0;               // Token tag
+#ifdef sh
+  heap[symbol + 5] = 0;               // defstr index
+#endif
 
   return symbol;
 }
