@@ -2801,18 +2801,12 @@ void get_tok() {
             dump_char(ch);
             syntax_error("invalid token");
           }
-        } else {
-          tok = '.';
         }
-#else
-        tok = '.';
 #endif // SUPPORT_VARIADIC_FUNCTIONS
         break;
       }
 #endif
       else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
-
-        tok = ch;
 
         get_ch();
 
