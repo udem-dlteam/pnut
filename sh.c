@@ -887,7 +887,7 @@ text restore_local_vars(int params_count) {
 #endif
 
 text op_to_str(int op) {
-  if      (op < 256)         return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
+  if      (32 < op && op < 127) return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
   else if (op == AMP_AMP)    return wrap_str_lit(" && ");
   else if (op == AMP_EQ)     return wrap_str_lit(" &= ");
   else if (op == BAR_BAR)    return wrap_str_lit(" || ");
