@@ -768,6 +768,15 @@ void runtime_printf() {
   putstr("\n");
 }
 
+bool runtime_use_isatty = DEFAULT_USE;
+bool runtime_isatty_defined = false;
+void runtime_isatty() {
+  if (runtime_isatty_defined++) return;
+  putstr("_isatty() { # $2: fd\n");
+  putstr("  [ -t $2 ] && : $(($1 = 1)) || : $(($1 = 0))\n");
+  putstr("}\n\n");
+}
+
 #endif // SH_MINIMAL_RUNTIME
 
 bool runtime_use_open = DEFAULT_USE;
@@ -1026,5 +1035,6 @@ void produce_runtime() {
 #ifndef SH_MINIMAL_RUNTIME
   if (runtime_use_getchar)    runtime_getchar();
   if (runtime_use_printf)     runtime_printf();
+  if (runtime_use_isatty)     runtime_isatty();
 #endif
 }

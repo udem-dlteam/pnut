@@ -6,6 +6,7 @@
 #include <stdint.h> // for intptr_t
 #include <fcntl.h> // for open
 #include <unistd.h> // for write
+#include <unistd.h> // for isatty
 
 // =========================== configuration options ===========================
 //
@@ -390,14 +391,24 @@ void putoct_unsigned(int n) {
 
 #ifdef NICE_ERR_MSG
 
-void change_color(char *color) {
-  printf("%s", color);
-}
+#if defined(SH_MINIMAL_RUNTIME)
+// No isatty support in minimal runtime
+#define change_color(color)
+
+#else
 
 #define ANSI_RED     "\x1b[31m"
 #define ANSI_GREEN   "\x1b[32m"
 #define ANSI_YELLOW  "\x1b[33m"
 #define ANSI_RESET   "\x1b[0m"
+
+void change_color(char *color) {
+  if (isatty(1)) {
+    printf("%s", color);
+  }
+}
+
+#endif
 
 void print_tok_type(int tok); // Imported from debug.c later in this file
 
@@ -629,6 +640,7 @@ int prev_ch = EOF;
 int tok;
 int val;
 
+// String pool for C keywords, identifiers and string literals
 #define STRING_POOL_SIZE 250000
 char string_pool[STRING_POOL_SIZE];
 int string_pool_alloc = 0;
@@ -1540,6 +1552,9 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
+#ifndef SH_MINIMAL_RUNTIME
+int ISATTY_ID;
+#endif
 
 // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid
 // argv_ since argv is a common C variable name.
@@ -2062,6 +2077,9 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+#ifndef SH_MINIMAL_RUNTIME
+  ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
+#endif
 
   ARGV_ID = init_ident(IDENTIFIER, "argv");
   ARGV__ID = init_ident(IDENTIFIER, "argv_");

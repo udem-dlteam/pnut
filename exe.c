@@ -2993,6 +2993,12 @@ void codegen_builtin() {
   rt_crash("printf is not supported yet.");
   ret();
   init_forward_jump_table(cgc_globals);
+
+  // isatty function stub (always return 0)
+  declare_builtin("isatty", true, int_type, list1(int_type));
+  mov_reg_imm(reg_X, 0);
+  ret();
+  init_forward_jump_table(cgc_globals);
 #endif
 }
 

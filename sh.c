@@ -1931,6 +1931,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
 #ifndef SH_MINIMAL_RUNTIME
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
   else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+  else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
 #endif
 
   if (assign_to) res = comp_lvalue(assign_to);
