@@ -623,9 +623,9 @@ ast fresh_string_ident(int string_symbol) {
   // This allows comp_defstr to use the same string variable for the same string.
   if (heap[string_symbol + 3] == 0) { // tag defaults to 0
     string_counter += 1;
-    heap[string_symbol + 3] = string_counter - 1;
+    heap[string_symbol + 3] = string_counter;
   }
-  return new_ast0(IDENTIFIER_STRING, heap[string_symbol + 3]);
+  return new_ast0(IDENTIFIER_STRING, heap[string_symbol + 3] - 1);
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
