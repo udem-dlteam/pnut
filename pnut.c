@@ -3729,8 +3729,9 @@ ast parse_postfix_expression(ast result) {
       }
       result = new_ast2('(', result, child);
       expect_tok(')');
-
-    } else if (tok == '.') {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (tok == '.') {
 
       get_tok();
       if (tok != IDENTIFIER) {
@@ -3739,9 +3740,7 @@ ast parse_postfix_expression(ast result) {
       result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
       get_tok();
 
-    }
-#ifdef SUPPORT_STRUCT_UNION
-    else if (tok == ARROW) {
+    } else if (tok == ARROW) {
 
       get_tok();
       if (tok != IDENTIFIER) {
