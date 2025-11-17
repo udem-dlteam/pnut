@@ -1465,9 +1465,11 @@ int OPEN_ID;
 int CLOSE_ID;
 #endif
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
+#endif
 
 void get_tok();
 
@@ -1975,12 +1977,14 @@ void init_ident_table() {
 #endif
 }
 
+#if defined(FULL_PREPROCESSOR_SUPPORT) || defined(FULL_CLI_OPTIONS)
 int init_builtin_string_macro(char *macro_str, char* value) {
   int macro_id = init_ident(MACRO, macro_str);
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
   heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
   return macro_id;
 }
+#endif
 
 int init_builtin_int_macro(char *macro_str, int value) {
   int macro_id = init_ident(MACRO, macro_str);
@@ -2001,11 +2005,13 @@ int init_builtin_empty_macro(char *macro_str) {
 void init_pnut_macros() {
   init_builtin_int_macro("PNUT_CC", 1);
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
   init_builtin_string_macro("__DATE__", "Jan  1 1970");
   init_builtin_string_macro("__TIME__", "00:00:00");
   init_builtin_string_macro("__TIMESTAMP__", "Jan  1 1970 00:00:00");
   FILE__ID = init_builtin_string_macro("__FILE__", "<unknown>");
   LINE__ID = init_builtin_int_macro("__LINE__", 0);
+#endif
 
 #if defined(sh)
   init_builtin_int_macro("PNUT_SH", 1);
@@ -2188,6 +2194,7 @@ bool attempt_macro_expansion(int macro) {
     val = macro;
     return false;
   } else if (cdr(heap[macro + 3]) == -1) { // Object-like macro
+#ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
       tokens = cons(cons(STRING, intern_str(fp_filepath)), 0);
@@ -2196,6 +2203,7 @@ bool attempt_macro_expansion(int macro) {
     else if (macro == LINE__ID) {
       tokens = cons(cons(INTEGER, -line_number), 0);
     }
+#endif
 #endif
     begin_macro_expansion(macro, tokens, 0);
     return true;
