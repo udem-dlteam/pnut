@@ -830,7 +830,7 @@ ast clone_ast(const ast orig) {
   int i;
 
   // Account for the value of ast nodes with no child
-  if (nb_children == 0) nb_children = 1;
+  nb_children = TERNARY(nb_children > 0, nb_children, 1);
 
   ast_result = alloc_obj(nb_children + 1);
 
@@ -2084,8 +2084,7 @@ int macro_parse_argument() {
   int rest;
 
   while ((parens_depth > 0 || (tok != ',' && tok != ')')) && tok != EOF) {
-    if (tok == '(') parens_depth += 1; // Enter parenthesis
-    if (tok == ')') parens_depth -= 1; // End of parenthesis
+    parens_depth = parens_depth + (tok == '(') - (tok == ')');
 
     if (arg_tokens == 0) {
       arg_tokens = cons(cons(tok, val), 0);
@@ -2389,7 +2388,7 @@ bool skip_inactive_line() {
   // directive that we need to process even in inactive #if blocks, return true in that case.
 
   // Skip whitespace
-  while (ch <= ' ' && ch != EOF) {
+  while (0 <= ch && ch <= ' ') {
     get_ch();
   }
 
@@ -3590,6 +3589,7 @@ void add_typedef(ast declarator) {
   }
 #endif
 
+  // Use probe object to store the typedef'ed type in the symbol table
   heap[decl_ident + 2] = TYPE;
   heap[decl_ident + 3] = decl_type;
 }
@@ -3877,7 +3877,6 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
-  ast result;
   ast type;
 
   if (tok == '(') {
@@ -3887,8 +3886,7 @@ ast parse_cast_expression() {
       type = parse_declarator(true, parse_declaration_specifiers(false));
 
       expect_tok(')');
-      result = new_ast2(CAST, type, parse_cast_expression());
-      return result;
+      return new_ast2(CAST, type, parse_cast_expression());
     } else {
       return parse_unary_expression_with_parens_prefix();
     }
@@ -4110,11 +4108,12 @@ ast parse_assignment_expression() {
 ast parse_comma_expression() {
 
   ast result = parse_assignment_expression();
+  int child;
 
-  if (tok == ',') { // "comma expressions" without , don't need to be wrapped in a comma node
+  if (tok == ',') { // avoid creating unnecessary nodes
     get_tok();
-    result = new_ast2(',', result, 0);
-    set_child(result, 1, parse_comma_expression());
+    child = parse_comma_expression();
+    result = new_ast2(',', result, child);
   }
 
   return result;
@@ -4146,6 +4145,7 @@ ast parse_expression() {
 }
 
 ast parse_constant_expression() {
+  // Note: does not enforce that the expression is actually constant
   return parse_expression();
 }
 
