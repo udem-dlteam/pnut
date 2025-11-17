@@ -943,47 +943,54 @@ void accum_string_integer(int n) {
 #endif
 
 int symbol;
-int symbol_start;
-char c1;
-char c2;
-int end_symbol_i;
+char *symbol_end;
+char *c1;
+char *c2;
+int end_symbol_len;
+int curr_symbol;
 
-// Bug: symbols containing nul characters are not handled correctly
 int end_symbol() {
+  end_symbol_len = string_pool_alloc - string_start; // exclude terminator
   string_pool[string_pool_alloc] = 0; // terminate string
   string_pool_alloc += 1; // account for terminator
 
-  symbol = heap[hash];
+  curr_symbol = hash;
 
-  while (symbol != 0) {
-    symbol_start = heap[symbol + 1];
-    end_symbol_i = 0;
-    c1 = string_pool[string_start + end_symbol_i];
-    c2 = string_pool[symbol_start + end_symbol_i];
-    while (c1 == c2) {
-      if (c1 == 0) {
-        string_pool_alloc = string_start; // undo string allocation
-        return symbol;
-      }
-      end_symbol_i += 1;
-      c1 = string_pool[string_start + end_symbol_i];
-      c2 = string_pool[symbol_start + end_symbol_i];
+  while ((symbol = heap[curr_symbol]) != 0) {
+    // Skip symbols with different length
+    if (end_symbol_len != heap[symbol + 4]) {
+      curr_symbol = symbol; // remember previous ident
+      continue;
     }
-    hash = symbol; // remember previous ident
-    symbol = heap[symbol];
+
+    c1 = string_pool + string_start;
+    c2 = string_pool + heap[symbol + 1];
+    symbol_end = c1 + end_symbol_len;
+    while (c1 < symbol_end && *c1 == *c2) {
+      c1 += 1;
+      c2 += 1;
+    }
+
+    if (c1 == symbol_end) {
+      // Loop got to the end of the symbol without mismatches => symbol already exists.
+      // Deallocate the string and return the existing symbol
+      string_pool_alloc = string_start;
+      return symbol;
+    }
+
+    curr_symbol = symbol; // remember previous ident
   }
 
   // the symbol was not found, create a new one
-
   symbol = alloc_obj(5);
 
-  heap[hash] = symbol; // add new ident at end of chain
+  heap[curr_symbol] = symbol; // chain new symbol to the last symbol in the chain
 
-  heap[symbol]     = 0; // no next ident
-  heap[symbol + 1] = string_start;
-  heap[symbol + 2] = IDENTIFIER;
-  heap[symbol + 3] = 0; // Token tag
-  heap[symbol + 4] = string_pool_alloc - string_start - 1; // string length (excluding terminator)
+  heap[symbol]     = 0;               // Next symbol in chain
+  heap[symbol + 1] = string_start;    // Offset in string pool
+  heap[symbol + 2] = IDENTIFIER;      // Token type
+  heap[symbol + 3] = 0;               // Token tag
+  heap[symbol + 4] = end_symbol_len;  // Length of the symbol
 
   return symbol;
 }
