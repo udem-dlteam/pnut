@@ -652,8 +652,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
   ast ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
   char* name = symbol_buf(ident_symbol);
   ast type = get_child_(DECL, variable, 1);
-  if (name[0] == '_'
-  || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
+  if (name[0] == '_') { // Underscore is used to prefix global and internal variables
     dump_string("Variable name: ", name);
     fatal_error("variable name is invalid. It can't start or end with '_'.");
   }
