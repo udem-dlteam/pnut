@@ -1478,11 +1478,8 @@ void get_string_char() {
 void accum_string_until(char end) {
   while (ch != end && ch != EOF) {
     get_string_char();
-    tok = ch;
     accum_string(val);
-    ch = tok;
   }
-
   if (ch != end) {
     syntax_error("unterminated string literal");
   }
