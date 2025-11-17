@@ -705,6 +705,7 @@ void handle_function_params(ast lst) {
 }
 
 #ifdef SH_SAVE_VARS_WITH_SET
+
 // Save the value of local variables to positional parameters
 text save_local_vars() {
   int env = cgc_locals_fun;
@@ -781,20 +782,26 @@ text restore_local_vars(int params_count) {
   }
 }
 
-#else
+#elif defined(SH_INITIALIZE_PARAMS_WITH_LET)
 
-#ifdef SH_INITIALIZE_PARAMS_WITH_LET
 // Save the value of local variables to positional parameters
 text let_params(int params) {
   ast ident, decl;
   text res = 0;
-  int params_ix = 2;
+  int params_ix = 2; // $1 is reserved for save_local_vars/restore_local_vars
+  text let_str = wrap_str_lit("let ");
+  text sep_str = wrap_str_lit("; ");
 
   while (params != 0) {
     decl = car_(DECL, params);
     if (!is_constant_type(get_child_(DECL, decl, 1))) { // Skip constant params
       ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
-      res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), local_var(ident), wrap_char(' '), format_special_var(new_dollar_ident(params_ix), false)), wrap_str_lit("; "));
+      res = concatenate_strings_with(res
+                                    , string_concat4( let_str
+                                                    , local_var(ident)
+                                                    , wrap_char(' ')
+                                                    , format_special_var(new_dollar_ident(params_ix), false))
+                                    , sep_str);
     }
     params = tail(params);
     params_ix += 1;
@@ -806,32 +813,30 @@ text let_params(int params) {
 
   return res;
 }
-#endif
 
 text save_local_vars() {
   int env = cgc_locals_fun;
   ast ident;
-  text res = 0;
   int counter = fun_gensym_ix;
+  text let_str = wrap_str_lit("let ");
+  text sep_str = wrap_str_lit("; ");
+  text res = 0;
 
   // Save temporary variables
   while (counter > 0) {
     ident = new_fresh_ident(counter);
-    res = concatenate_strings_with(string_concat(wrap_str_lit("let "), format_special_var(ident, true)), res, wrap_str_lit("; "));
+    res = concatenate_strings_with(string_concat(let_str
+                                                , format_special_var(ident, true))
+                                  , res
+                                  , sep_str);
     counter -= 1;
   }
 
   // Save local variables and parameters
   while (env != 0) {
-#if defined(SH_INITIALIZE_PARAMS_WITH_LET)
     if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
-#elif defined(SH_OPTIMIZE_CONSTANT_PARAMS)
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || is_constant_type(heap[env + 4])) { // Skip constant params
-#else
-    {
-#endif
       ident = binding_ident(env);
-      res = concatenate_strings_with(string_concat(wrap_str_lit("let "), local_var(ident)), res, wrap_str_lit("; "));
+      res = concatenate_strings_with(string_concat(let_str, local_var(ident)), res, sep_str);
     }
 
     env = binding_next(env);
@@ -873,6 +878,11 @@ text restore_local_vars(int params_count) {
     return 0;
   }
 }
+
+#else
+
+#error "Either SH_SAVE_VARS_WITH_SET or SH_INITIALIZE_PARAMS_WITH_LET must be defined."
+
 #endif
 
 text op_to_str(int op) {
