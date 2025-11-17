@@ -4,7 +4,7 @@ LC_ALL=C
 
 : $((p = len = c = b = 0))
 _memset() { # b: $2, c: $3, len: $4
-  set $@ $b $c $len $p
+  set -- $@ $b $c $len $p
   b=$2
   c=$3
   len=$4
@@ -18,7 +18,7 @@ _memset() { # b: $2, c: $3, len: $4
 
 : $((r = l = n = vr = vl = 0))
 _memcmp() { # vl: $2, vr: $3, n: $4
-  set $@ $vl $vr $n $l $r
+  set -- $@ $vl $vr $n $l $r
   vl=$2
   vr=$3
   n=$4
@@ -29,7 +29,7 @@ _memcmp() { # vl: $2, vr: $3, n: $4
     : $((l += 1))
     : $((r += 1))
   done
-  : $(($1 = n ? ((_$l & 255) - (_$r & 255)): 0))
+  : $(($1 = n ? ((_$l & 255) - (_$r & 255)) : 0))
   : $((__tmp = $1)) $((vl = $5)) $((vr = $6)) $((n = $7)) $((l = $8)) $((r = $9)) $(($1 = __tmp))
 }
 
@@ -142,7 +142,7 @@ readonly _HVal=8
 readonly _Idsz=9
 : $((__t1 = pp = 0))
 _next() {
-  set $@ $pp $__t1
+  set -- $@ $pp $__t1
   while [ $((_tk = _$_p)) != 0 ]; do
     : $((_p += 1))
     if [ $_tk = $__LF__ ] ; then
@@ -190,7 +190,7 @@ _next() {
         done
       elif [ $((_$_p)) = $__x__ ] || [ $((_$_p)) = $__X__ ] ; then
         while [ $((_tk = _$((_p += 1)))) != 0 ] && { { [ $_tk -ge $__0__ ] && [ $_tk -le $__9__ ]; } || { [ $_tk -ge $__a__ ] && [ $_tk -le $__f__ ]; } || { [ $_tk -ge $__A__ ] && [ $_tk -le $__F__ ]; }; }; do
-          _ival=$(((_ival * 16) + (_tk & 15) + ((_tk >= __A__) ? 9: 0)))
+          _ival=$(((_ival * 16) + (_tk & 15) + ((_tk >= __A__) ? 9 : 0)))
         done
       else
         while [ $((_$_p)) -ge $__0__ ] && [ $((_$_p)) -le $__7__ ]; do
@@ -320,7 +320,7 @@ _next() {
 
 : $((d = t = lev = 0))
 _expr() { # lev: $2
-  set $@ $lev $t $d
+  set -- $@ $lev $t $d
   lev=$2
   if [ $((! _tk)) != 0 ] ; then
     printf "%d: unexpected eof in expression\n" $_line
@@ -365,7 +365,7 @@ _expr() { # lev: $2
       exit -1
     fi
     : $((_$((_e += 1)) = _IMM))
-    : $((_$((_e += 1)) = (_ty == _CHAR) ? 1: 1))
+    : $((_$((_e += 1)) = (_ty == _CHAR) ? 1 : 1))
     _ty=$_INT
   elif [ $_tk = $_Id ] ; then
     d=$_id
@@ -411,12 +411,12 @@ _expr() { # lev: $2
         printf "%d: undefined variable\n" $_line
         exit -1
       fi
-      : $((_$((_e += 1)) = ((_ty = _$((d + _Type))) == _CHAR) ? _LC: _LI))
+      : $((_$((_e += 1)) = ((_ty = _$((d + _Type))) == _CHAR) ? _LC : _LI))
     fi
   elif [ $_tk = $__LPAREN__ ] ; then
     _next __
     if [ $_tk = $_Int ] || [ $_tk = $_Char ] ; then
-      t=$(((_tk == _Int) ? _INT: _CHAR))
+      t=$(((_tk == _Int) ? _INT : _CHAR))
       _next __
       while [ $_tk = $_Mul ]; do
         _next __
@@ -448,7 +448,7 @@ _expr() { # lev: $2
       printf "%d: bad dereference\n" $_line
       exit -1
     fi
-    : $((_$((_e += 1)) = (_ty == _CHAR) ? _LC: _LI))
+    : $((_$((_e += 1)) = (_ty == _CHAR) ? _LC : _LI))
   elif [ $_tk = $_And ] ; then
     _next __
     _expr __ $_Inc
@@ -508,9 +508,9 @@ _expr() { # lev: $2
     fi
     : $((_$((_e += 1)) = _PSH))
     : $((_$((_e += 1)) = _IMM))
-    : $((_$((_e += 1)) = (_ty > _PTR) ? 1: 1))
-    : $((_$((_e += 1)) = (t == _Inc) ? _ADD: _SUB))
-    : $((_$((_e += 1)) = (_ty == _CHAR) ? _SC: _SI))
+    : $((_$((_e += 1)) = (_ty > _PTR) ? 1 : 1))
+    : $((_$((_e += 1)) = (t == _Inc) ? _ADD : _SUB))
+    : $((_$((_e += 1)) = (_ty == _CHAR) ? _SC : _SI))
   else
     printf "%d: bad expression\n" $_line
     exit -1
@@ -526,7 +526,7 @@ _expr() { # lev: $2
         exit -1
       fi
       _expr __ $_Assign
-      : $((_$((_e += 1)) = ((_ty = t) == _CHAR) ? _SC: _SI))
+      : $((_$((_e += 1)) = ((_ty = t) == _CHAR) ? _SC : _SI))
     elif [ $_tk = $_Cond ] ; then
       _next __
       : $((_$((_e += 1)) = _BZ))
@@ -685,13 +685,13 @@ _expr() { # lev: $2
       fi
       : $((_$((_e += 1)) = _PSH))
       : $((_$((_e += 1)) = _IMM))
-      : $((_$((_e += 1)) = (_ty > _PTR) ? 1: 1))
-      : $((_$((_e += 1)) = (_tk == _Inc) ? _ADD: _SUB))
-      : $((_$((_e += 1)) = (_ty == _CHAR) ? _SC: _SI))
+      : $((_$((_e += 1)) = (_ty > _PTR) ? 1 : 1))
+      : $((_$((_e += 1)) = (_tk == _Inc) ? _ADD : _SUB))
+      : $((_$((_e += 1)) = (_ty == _CHAR) ? _SC : _SI))
       : $((_$((_e += 1)) = _PSH))
       : $((_$((_e += 1)) = _IMM))
-      : $((_$((_e += 1)) = (_ty > _PTR) ? 1: 1))
-      : $((_$((_e += 1)) = (_tk == _Inc) ? _SUB: _ADD))
+      : $((_$((_e += 1)) = (_ty > _PTR) ? 1 : 1))
+      : $((_$((_e += 1)) = (_tk == _Inc) ? _SUB : _ADD))
       _next __
     elif [ $_tk = $_Brak ] ; then
       _next __
@@ -713,7 +713,7 @@ _expr() { # lev: $2
         exit -1
       fi
       : $((_$((_e += 1)) = _ADD))
-      : $((_$((_e += 1)) = ((_ty = t - _PTR) == _CHAR) ? _LC: _LI))
+      : $((_$((_e += 1)) = ((_ty = t - _PTR) == _CHAR) ? _LC : _LI))
     else
       printf "%d: compiler error tk=%d\n" $_line $_tk
       exit -1
@@ -724,7 +724,7 @@ _expr() { # lev: $2
 
 : $((b = a = 0))
 _stmt() {
-  set $@ $a $b
+  set -- $@ $a $b
   if [ $_tk = $_If ] ; then
     _next __
     if [ $_tk = $__LPAREN__ ] ; then
@@ -807,7 +807,7 @@ _stmt() {
 
 : $((__t1 = t = i = cycle = a = bp = sp = pc = idmain = poolsz = ty = bt = fd = argv_ = argc = 0))
 _main() { # argc: $2, argv: $3
-  set $@ $argc $argv_ $fd $bt $ty $poolsz $idmain $pc $sp $bp $a $cycle $i $t $__t1
+  set -- $@ $argc $argv_ $fd $bt $ty $poolsz $idmain $pc $sp $bp $a $cycle $i $t $__t1
   argc=$2
   argv_=$3
   : $((argc -= 1))
@@ -1009,7 +1009,7 @@ _main() { # argc: $2, argv: $3
         _loc=$((i += 1))
         _next __
         while [ $_tk = $_Int ] || [ $_tk = $_Char ]; do
-          bt=$(((_tk == _Int) ? _INT: _CHAR))
+          bt=$(((_tk == _Int) ? _INT : _CHAR))
           _next __
           while [ $_tk != $__SEMICOLON__ ]; do
             ty=$bt
@@ -1091,8 +1091,8 @@ _main() { # argc: $2, argv: $3
     i=$((_$(((pc += 1) - 1))))
     : $((cycle += 1))
     if [ $_debug != 0 ] ; then
-      defstr __str_2 "LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"
-      printf "%d> %.4s" $cycle "$(_put_pstr __ $((__str_2 + i * 5)))"
+      defstr __str_0 "LEA ,IMM ,JMP ,JSR ,BZ  ,BNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PSH ,OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,"
+      printf "%d> %.4s" $cycle "$(_put_pstr __ $((__str_0 + i * 5)))"
       if [ $i -le $_ADJ ] ; then
         printf " %d\n" $((_$pc))
       else
@@ -1109,9 +1109,9 @@ _main() { # argc: $2, argv: $3
       : $((_$((sp -= 1)) = (pc + 1)))
       pc=$((_$pc))
     elif [ $i = $_BZ ] ; then
-      pc=$((a ? (pc + 1): _$pc))
+      pc=$((a ? (pc + 1) : _$pc))
     elif [ $i = $_BNZ ] ; then
-      pc=$((a ? _$pc: (pc + 1)))
+      pc=$((a ? _$pc : (pc + 1)))
     elif [ $i = $_ENT ] ; then
       : $((_$((sp -= 1)) = bp))
       bp=$sp
@@ -1652,7 +1652,7 @@ _close() { # $2: fd
 
 make_argv() {
   __argc=$1; shift;
-  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.
+  _malloc __argv $__argc # Allocate enough space for all elements.
   __argv_ptr=$__argv
 
   while [ $# -ge 1 ]; do

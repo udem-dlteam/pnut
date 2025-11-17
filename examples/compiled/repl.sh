@@ -199,7 +199,7 @@ defstr __str_0 "RD?naeloob,?xelpmoc,cc/llac,?citebahpla-rahc,<,dnuor,dna,etouq,g
 _input=$__str_0
 : $((s = 0))
 _putstr() { # s: $2
-  set $@ $s
+  set -- $@ $s
   s=$2
   while [ $((_$s)) != 0 ]; do
     printf \\$(((_$s)/64))$(((_$s)/8%8))$(((_$s)%8))
@@ -243,7 +243,7 @@ _init_heap() {
 
 : $((copy = field0 = ptr = o = 0))
 _copy() { # o: $2
-  set $@ $o $ptr $field0 $copy
+  set -- $@ $o $ptr $field0 $copy
   o=$2
   if [ $((!(o & 1))) != 0 ] ; then
     ptr=$o
@@ -269,7 +269,7 @@ _copy() { # o: $2
 
 : $((to_space = 0))
 _gc() {
-  set $@ $to_space
+  set -- $@ $to_space
   if [ $_alloc_limit = $_heap_mid ] ; then
     to_space=$_heap_mid
     _alloc_limit=$_heap_end
@@ -291,7 +291,7 @@ _gc() {
 
 : $((x = 0))
 _pop() {
-  set $@ $x
+  set -- $@ $x
   x=$((_$((_stack + __field0))))
   _stack=$((_$((_stack + __field1))))
   : $(($1 = x))
@@ -300,7 +300,7 @@ _pop() {
 
 : $((tag = car = 0))
 _push2() { # car: $2, tag: $3
-  set $@ $car $tag
+  set -- $@ $car $tag
   car=$2
   tag=$3
   : $((_$(((_alloc += 1) - 1)) = car))
@@ -316,7 +316,7 @@ _push2() { # car: $2, tag: $3
 
 : $((allocated = old_stack = tag = cdr = car = 0))
 _alloc_rib() { # car: $2, cdr: $3, tag: $4
-  set $@ $car $cdr $tag $old_stack $allocated
+  set -- $@ $car $cdr $tag $old_stack $allocated
   car=$2
   cdr=$3
   tag=$4
@@ -332,7 +332,7 @@ _alloc_rib() { # car: $2, cdr: $3, tag: $4
 
 : $((allocated = old_stack = tag = cdr = car = 0))
 _alloc_rib2() { # car: $2, cdr: $3, tag: $4
-  set $@ $car $cdr $tag $old_stack $allocated
+  set -- $@ $car $cdr $tag $old_stack $allocated
   car=$2
   cdr=$3
   tag=$4
@@ -347,7 +347,7 @@ _alloc_rib2() { # car: $2, cdr: $3, tag: $4
 
 : $((i = lst = 0))
 _list_tail() { # lst: $2, i: $3
-  set $@ $lst $i
+  set -- $@ $lst $i
   lst=$2
   i=$3
   while [ $(((i -= 1) + 1)) != 0 ]; do
@@ -359,7 +359,7 @@ _list_tail() { # lst: $2, i: $3
 
 : $((i = lst = 0))
 _inst_tail() { # lst: $2, i: $3
-  set $@ $lst $i
+  set -- $@ $lst $i
   lst=$2
   i=$3
   while [ $(((i -= 1) + 1)) != 0 ]; do
@@ -371,7 +371,7 @@ _inst_tail() { # lst: $2, i: $3
 
 : $((__t1 = i = lst = 0))
 _list_ref() { # lst: $2, i: $3
-  set $@ $lst $i $__t1
+  set -- $@ $lst $i $__t1
   lst=$2
   i=$3
   _list_tail __t1 $lst $i
@@ -381,7 +381,7 @@ _list_ref() { # lst: $2, i: $3
 
 : $((__t1 = return_value = o = 0))
 _get_opnd() { # o: $2
-  set $@ $o $return_value $__t1
+  set -- $@ $o $return_value $__t1
   o=$2
   if [ $((o & 1)) != 0 ] ; then
     _list_tail __t1 $_stack $((o >> 1))
@@ -395,7 +395,7 @@ _get_opnd() { # o: $2
 
 : $((s = 0))
 _get_cont() {
-  set $@ $s
+  set -- $@ $s
   s=$_stack
   while [ $((!(_$((s + __field2)) >> 1))) != 0 ]; do
     s=$((_$((s + __field1))))
@@ -406,7 +406,7 @@ _get_cont() {
 
 : $((l = list = 0))
 _lst_length() { # list: $2
-  set $@ $list $l
+  set -- $@ $list $l
   list=$2
   l=0
   while [ $((!(list & 1))) != 0 ] && [ $((_$((list + __field2)) >> 1)) = 0 ]; do
@@ -424,16 +424,16 @@ _get_byte() {
 
 : $((__t1 = x = 0))
 _get_code() {
-  set $@ $x $__t1
+  set -- $@ $x $__t1
   _get_byte __t1
   x=$((__t1 - 35))
-  : $(($1 = (x < 0) ? 57: x))
+  : $(($1 = (x < 0) ? 57 : x))
   : $((__tmp = $1)) $((x = $2)) $((__t1 = $3)) $(($1 = __tmp))
 }
 
 : $((x = n = 0))
 _get_int() { # n: $2
-  set $@ $n $x
+  set -- $@ $n $x
   n=$2
   _get_code x
   : $((n *= (92 / 2)))
@@ -447,7 +447,7 @@ _get_int() { # n: $2
 
 : $((__t1 = n = 0))
 _symbol_ref() { # n: $2
-  set $@ $n $__t1
+  set -- $@ $n $__t1
   n=$2
   _list_ref __t1 $_symbol_table $n
   : $(($1 = __t1))
@@ -456,7 +456,7 @@ _symbol_ref() { # n: $2
 
 : $((__t1 = root = sym = list = name = 0))
 _create_sym() { # name: $2
-  set $@ $name $list $sym $root $__t1
+  set -- $@ $name $list $sym $root $__t1
   name=$2
   _lst_length __t1 $name
   _alloc_rib list $name $__t1 $(((3 << 1) | 1))
@@ -468,7 +468,7 @@ _create_sym() { # name: $2
 
 : $((__t1 = c = accum = n = 0))
 _build_sym_table() {
-  set $@ $n $accum $c $__t1
+  set -- $@ $n $accum $c $__t1
   _get_int n 0
   while [ $n -gt 0 ]; do
     : $(((n -= 1) + 1))
@@ -497,7 +497,7 @@ _build_sym_table() {
 
 : $((c = 0))
 _set_global() { # c: $2
-  set $@ $c
+  set -- $@ $c
   c=$2
   : $((_$((_$((_symbol_table + __field0)) + __field0)) = c))
   _symbol_table=$((_$((_symbol_table + __field1))))
@@ -518,7 +518,7 @@ _init_weights() {
 
 : $((__t1 = c = x = op = d = n = 0))
 _decode() {
-  set $@ $n $d $op $x $c $__t1
+  set -- $@ $n $d $op $x $c $__t1
   while [ 1 != 0 ]; do
     _get_code x
     n=$x
@@ -575,7 +575,7 @@ _decode() {
 
 : $((str = current = length = i = s = 0))
 _scm2str() { # s: $2
-  set $@ $s $i $length $current $str
+  set -- $@ $s $i $length $current $str
   s=$2
   i=0
   length=$((_$((s + __field1)) >> 1))
@@ -594,7 +594,7 @@ _scm2str() { # s: $2
 
 : $((x = 0))
 _bool2scm() { # x: $2
-  set $@ $x
+  set -- $@ $x
   x=$2
   if [ $x != 0 ] ; then
     : $(($1 = _$((_FALSE + __field0))))
@@ -606,7 +606,7 @@ _bool2scm() { # x: $2
 
 : $((__t1 = filename = num_args = bytes_read = success = buffer = file = arg = new_rib = z = y = x = no = 0))
 _prim() { # no: $2
-  set $@ $no $x $y $z $new_rib $arg $file $buffer $success $bytes_read $num_args $filename $__t1
+  set -- $@ $no $x $y $z $new_rib $arg $file $buffer $success $bytes_read $num_args $filename $__t1
   no=$2
   _malloc buffer 1
   if [ $no = 0 ] ; then
@@ -764,7 +764,7 @@ _prim() { # no: $2
 
 : $((__t1 = opnd = x = p = rest = new_pc = k = c2 = s2 = proc = jump = vari = nparams = nparams_vari = nargs = instr = i = 0))
 _run() {
-  set $@ $i $instr $nargs $nparams_vari $nparams $vari $jump $proc $s2 $c2 $k $new_pc $rest $p $x $opnd $__t1
+  set -- $@ $i $instr $nargs $nparams_vari $nparams $vari $jump $proc $s2 $c2 $k $new_pc $rest $p $x $opnd $__t1
   while [ 1 != 0 ]; do
     instr=$((_$((_pc + __field0)) >> 1))
     if [ $instr = 5 ] ; then
@@ -794,7 +794,7 @@ _run() {
           nparams_vari=$((_$((_$((proc + __field0)) + __field0)) >> 1))
           nparams=$((nparams_vari >> 1))
           vari=$((nparams_vari & 1))
-          if [ $((vari ? (nparams > nargs): (nparams != nargs))) != 0 ] ; then
+          if [ $((vari ? (nparams > nargs) : (nparams != nargs))) != 0 ] ; then
             printf "Unexpected number of arguments\n"
             exit 1
           fi
@@ -872,7 +872,7 @@ _run() {
 
 : $((first = 0))
 _setup_stack() {
-  set $@ $first
+  set -- $@ $first
   _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
   _push2 __ $(((0 << 1) | 1)) $(((0 << 1) | 1))
   first=$((_$((_stack + __field1))))
@@ -886,7 +886,7 @@ _setup_stack() {
 
 : $((__t2 = __t1 = 0))
 _init() {
-  set $@ $__t1 $__t2
+  set -- $@ $__t1 $__t2
   _init_weights __
   _init_heap __
   _alloc_rib __t1 $(((0 << 1) | 1)) $(((0 << 1) | 1)) $(((5 << 1) | 1))
