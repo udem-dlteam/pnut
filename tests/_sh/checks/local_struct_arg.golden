@@ -1,1 +1,1 @@
-tests/_sh/checks/local_struct_arg.c:10:0  array/struct value type is not supported for shell backend. Use a reference type instead.
+tests/_sh/checks/local_struct_arg.c:10:0: local array/struct value type is not supported for shell backend. Use a reference type instead.

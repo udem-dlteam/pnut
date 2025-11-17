@@ -1006,20 +1006,20 @@ ast struct_member(ast struct_type, ast member_ident) {
 
 #endif // SUPPORT_STRUCT_UNION
 
-int resolve_identifier(int ident_probe) {
-  int binding = cgc_lookup_var(ident_probe, cgc_locals);
+int resolve_identifier(int ident_symbol) {
+  int binding = cgc_lookup_var(ident_symbol, cgc_locals);
   if (binding != 0) return binding;
 
-  binding = cgc_lookup_var(ident_probe, cgc_globals);
+  binding = cgc_lookup_var(ident_symbol, cgc_globals);
   if (binding != 0) return binding;
 
-  binding = cgc_lookup_fun(ident_probe, cgc_globals);
+  binding = cgc_lookup_fun(ident_symbol, cgc_globals);
   if (binding != 0) return binding;
 
-  binding = cgc_lookup_enum_value(ident_probe, cgc_globals);
+  binding = cgc_lookup_enum_value(ident_symbol, cgc_globals);
   if (binding != 0) return binding;
 
-  dump_ident(ident_probe);
+  dump_ident(ident_symbol);
   fatal_error("identifier not found");
   return 0;
 }
@@ -1091,9 +1091,13 @@ ast value_type(ast node) {
     } else if (op == '+' || op == '-' || op == '~' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
       // Unary operation don't change the type
       return value_type(child0);
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       return int_type; // sizeof always returns an integer
-    } else {
+    }
+#endif
+    else {
       dump_node(node);
       fatal_error("value_type: unexpected operator");
       return -1;
@@ -1729,7 +1733,7 @@ void codegen_rvalue(ast node) {
           break;
       }
     } else if (op == STRING) {
-      codegen_string(STRING_BUF(get_val_(STRING, node)), STRING_BUF_END(get_val_(STRING, node)));
+      codegen_string(symbol_buf(get_val_(STRING, node)), symbol_buf_end(get_val_(STRING, node)));
     } else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
@@ -1803,14 +1807,18 @@ void codegen_rvalue(ast node) {
     } else if (op == '&') {
       codegen_lvalue(child0);
       grow_fs(-1);
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       if (get_op(child0) == DECL) {
         mov_reg_imm(reg_X, type_width(get_child_(DECL, child0, 1), true, false));
       } else {
         mov_reg_imm(reg_X, type_width(value_type(child0), true, false));
       }
       push_reg(reg_X);
-    } else {
+    }
+#endif // SUPPORT_SIZEOF
+    else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
     }
@@ -2024,10 +2032,10 @@ void handle_enum_struct_union_type_decl(ast type) {
   // If not an enum, struct, or union, do nothing
 }
 
-void codegen_initializer_string(int string_probe, ast type, int base_reg, int offset) {
-  char *string_start = STRING_BUF(string_probe);
+void codegen_initializer_string(int string_symbol, ast type, int base_reg, int offset) {
+  char *string_start = symbol_buf(string_symbol);
   int i = 0;
-  int str_len = STRING_LEN(string_probe);
+  int str_len = symbol_len(string_symbol);
   int arr_len;
 
   // Only acceptable types are char[] or char*
@@ -2042,7 +2050,7 @@ void codegen_initializer_string(int string_probe, ast type, int base_reg, int of
     }
   } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
     // Create the string and assign global variable to the pointer
-    codegen_string(STRING_BUF(string_probe), STRING_BUF_END(string_probe));
+    codegen_string(symbol_buf(string_symbol), symbol_buf_end(string_symbol));
     pop_reg(reg_X);
     mov_mem_reg(base_reg, offset, reg_X);
   } else {
@@ -2184,7 +2192,7 @@ int initializer_size(ast initializer) {
       return size;
 
     case STRING:
-      return heap[get_val_(STRING, initializer) + 4] + 1;
+      return symbol_len(get_val_(STRING, initializer)) + 1; // +1 for null terminator
 
     default:
       fatal_error("initializer_size: unknown initializer");
@@ -2212,20 +2220,20 @@ void codegen_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
-  int name_probe = get_val_(IDENTIFIER, name);
-  int binding = cgc_lookup_var(name_probe, cgc_globals);
+  int name_symbol = get_val_(IDENTIFIER, name);
+  int binding = cgc_lookup_var(name_symbol, cgc_globals);
 
   if (get_op(type) == '(') {
     // Forward declaration
-    binding = cgc_lookup_fun(name_probe, cgc_globals);
-    if (binding == 0) cgc_add_global_fun(name_probe, alloc_label(STRING_BUF(name_probe)), type);
+    binding = cgc_lookup_fun(name_symbol, cgc_globals);
+    if (binding == 0) cgc_add_global_fun(name_symbol, alloc_label(symbol_buf(name_symbol)), type);
 
   } else {
     handle_enum_struct_union_type_decl(type);
     infer_array_length(type, init);
 
     if (binding == 0) {
-      cgc_add_global(name_probe, type_width(type, true, true), type, false);
+      cgc_add_global(name_symbol, type_width(type, true, true), type, false);
       binding = cgc_globals;
     }
 
@@ -2657,7 +2665,7 @@ void init_forward_jump_table(int binding) {
 void codegen_glo_fun_decl(ast node) {
   ast decl = get_child__(FUN_DECL, DECL, node, 0);
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
-  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+  ast name_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
   ast fun_type = get_child__(DECL, '(', decl, 1);
   ast params = get_child_opt_('(', LIST, fun_type, 1);
   ast fun_return_type = get_child_('(', fun_type, 0);
@@ -2668,15 +2676,15 @@ void codegen_glo_fun_decl(ast node) {
     fatal_error("Returning arrays or structs from function not supported");
   }
 
-  binding = cgc_lookup_fun(name_probe, cgc_globals);
+  binding = cgc_lookup_fun(name_symbol, cgc_globals);
 
   if (binding == 0) {
-    cgc_add_global_fun(name_probe, alloc_label(STRING_BUF(name_probe)), fun_type);
+    cgc_add_global_fun(name_symbol, alloc_label(symbol_buf(name_symbol)), fun_type);
     binding = cgc_globals;
   }
 
   // If the function is main
-  if (name_probe == MAIN_ID) {
+  if (name_symbol == MAIN_ID) {
     main_lbl = fun_binding_lbl(binding);
     // Check if main returns an exit code.
     if (get_op(fun_return_type) != VOID_KW) main_returns = true;
@@ -2685,7 +2693,7 @@ void codegen_glo_fun_decl(ast node) {
   // Poor man's debug info
 #ifdef ADD_DEBUG_INFO
   debug_interrupt(); // Marker to helps us find the function in the disassembly
-  codegen_string(STRING_BUF(name_probe), STRING_BUF_END(name_probe));
+  codegen_string(symbol_buf(name_symbol), symbol_buf_end(name_symbol));
 #endif
 
   def_label(fun_binding_lbl(binding));
@@ -2693,7 +2701,7 @@ void codegen_glo_fun_decl(ast node) {
   // if (fp_filepath[0] != 'p' || fp_filepath[1] != 'o' || fp_filepath[2] != 'r' || fp_filepath[3] != 't') {
   //   rt_debug(fp_filepath);
   //   rt_debug(":");
-  //   rt_debug(STRING_BUF(name_probe));
+  //   rt_debug(symbol_buf(name_symbol));
   //   rt_debug("\n");
   // }
 
@@ -2983,6 +2991,12 @@ void codegen_builtin() {
   // printf function stub
   declare_builtin("printf", true, int_type, list1(string_type));
   rt_crash("printf is not supported yet.");
+  ret();
+  init_forward_jump_table(cgc_globals);
+
+  // isatty function stub (always return 0)
+  declare_builtin("isatty", true, int_type, list1(int_type));
+  mov_reg_imm(reg_X, 0);
   ret();
   init_forward_jump_table(cgc_globals);
 #endif

@@ -1,1 +1,1 @@
-tests/_sh/checks/struct_no_nested_struct.c:9:0  Nested structures not supported by shell backend. Use a reference type instead.
+tests/_sh/checks/struct_no_nested_struct.c:9:0: Nested structures not supported by shell backend. Use a reference type instead.

@@ -428,7 +428,7 @@ void runtime_make_argv() {
   runtime_unpack_string();
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
-  putstr("  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.\n");
+  putstr("  _malloc __argv $__argc # Allocate enough space for all elements.\n");
   putstr("  __argv_ptr=$__argv\n");
   putstr("\n");
   putstr("  while [ $# -ge 1 ]; do\n");
@@ -768,6 +768,15 @@ void runtime_printf() {
   putstr("\n");
 }
 
+bool runtime_use_isatty = DEFAULT_USE;
+bool runtime_isatty_defined = false;
+void runtime_isatty() {
+  if (runtime_isatty_defined++) return;
+  putstr("_isatty() { # $2: fd\n");
+  putstr("  [ -t $2 ] && : $(($1 = 1)) || : $(($1 = 0))\n");
+  putstr("}\n\n");
+}
+
 #endif // SH_MINIMAL_RUNTIME
 
 bool runtime_use_open = DEFAULT_USE;
@@ -1026,5 +1035,6 @@ void produce_runtime() {
 #ifndef SH_MINIMAL_RUNTIME
   if (runtime_use_getchar)    runtime_getchar();
   if (runtime_use_printf)     runtime_printf();
+  if (runtime_use_isatty)     runtime_isatty();
 #endif
 }

@@ -215,7 +215,7 @@ _write() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))
 
 make_argv() {
   __argc=$1; shift;
-  _malloc __argv $__argc # Allocate enough space for all elements. No need to initialize.
+  _malloc __argv $__argc # Allocate enough space for all elements.
   __argv_ptr=$__argv
 
   while [ $# -ge 1 ]; do

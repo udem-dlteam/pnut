@@ -6,6 +6,7 @@
 #include <stdint.h> // for intptr_t
 #include <fcntl.h> // for open
 #include <unistd.h> // for write
+#include <unistd.h> // for isatty
 
 // =========================== configuration options ===========================
 //
@@ -232,27 +233,28 @@
   #define SUPPORT_ALL_C_FEATURES
 #endif
 
-
 #ifdef SUPPORT_ALL_C_FEATURES
   #define FULL_CLI_OPTIONS
   #define FULL_PREPROCESSOR_SUPPORT
   #define SUPPORT_COMPLEX_INITIALIZER
   #define SUPPORT_DO_WHILE
   #define SUPPORT_GOTO
+  #define SUPPORT_SIZEOF
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_TYPE_SPECIFIERS
   #define SUPPORT_VARIADIC_FUNCTIONS
 #endif
 
 #if defined(NICE_UX) || defined(SAFE_MODE)
+  #define FULL_PREPROCESSOR_SUPPORT
   #define INCLUDE_LINE_NUMBER_ON_ERROR
+#endif
+
+#if defined(NICE_UX)
   #define NICE_ERR_MSG
 #endif
 
 // Disabled options:
-// Add pnut source location in parse_error()
-// #define DEBUG_SHOW_ERR_ORIGIN
-
 // Support skip line continuations
 // #define SUPPORT_LINE_CONTINUATION
 
@@ -387,32 +389,89 @@ void putoct_unsigned(int n) {
 
 #endif
 
-void fatal_error(char *msg) {
+#ifdef NICE_ERR_MSG
+
+#if defined(SH_MINIMAL_RUNTIME)
+// No isatty support in minimal runtime
+#define change_color(color)
+
+#else
+
+#define ANSI_RED     "\x1b[31m"
+#define ANSI_GREEN   "\x1b[32m"
+#define ANSI_YELLOW  "\x1b[33m"
+#define ANSI_RESET   "\x1b[0m"
+
+void change_color(char *color) {
+  if (isatty(1)) {
+    printf("%s", color);
+  }
+}
+
+#endif
+
+void print_tok_type(int tok); // Imported from debug.c later in this file
+
+void source_code_error(char *error_prefix, char *error_msg, int token) {
+  // Error header
+  change_color(ANSI_RED);
+  printf("%s\n", error_prefix);
+  printf("  Reason: ");
+  change_color(ANSI_YELLOW);
+  printf("%s\n", error_msg);
+  change_color(ANSI_RESET);
+  if (token) {
+    printf("  Offending token: ");
+    change_color(ANSI_YELLOW);
+    print_tok_type(token);
+    change_color(ANSI_RESET);
+    putchar('\n');
+  }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   if (fp_filepath != 0) {
-    putstr(fp_filepath); putchar(':');
-    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-    putstr("  "); putstr(msg); putchar('\n');
-  } else {
-    putstr(msg); putchar('\n');
+    printf("  Location: ");
+    change_color(ANSI_GREEN);
+    printf("%s:%d:%d\n", fp_filepath, last_tok_line_number, last_tok_column_number);
+    change_color(ANSI_RESET);
   }
-#else
-  putstr(msg); putchar('\n');
 #endif
   exit(1);
 }
 
-void syntax_error(char *msg) {
-#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+#elif defined(INCLUDE_LINE_NUMBER_ON_ERROR)
+
+void source_code_error(char *error_prefix, char *error_msg, int token) {
   if (fp_filepath != 0) {
-    putstr(fp_filepath); putchar(':');
-    putint(last_tok_line_number); putchar(':'); putint(last_tok_column_number);
-    putstr("  syntax error: "); putstr(msg); putchar('\n');
+    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
   }
-#else
-  putstr("syntax error: "); putstr(msg); putchar('\n');
-#endif
+  printf("%s%s\n", error_prefix, error_msg);
   exit(1);
+}
+
+#else
+
+#define source_code_error(error_prefix, error_msg, token) \
+  putstr(error_prefix); putstr(error_msg); putchar('\n'); exit(1);
+
+#endif
+
+void fatal_error(char * const msg) {
+#ifdef INCLUDE_LINE_NUMBER_ON_ERROR
+  // Fatal errors are simpler and without color
+  if (fp_filepath != 0) {
+    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  }
+#endif
+  putstr(msg); putchar('\n');
+  exit(1);
+}
+
+void syntax_error(char * const msg) {
+  source_code_error("Syntax error: ", msg, 0);
+}
+
+void parse_error(char * const msg, const int tok_) {
+  source_code_error("Parse error: ", msg, tok_);
 }
 
 // Before including a file, we save the state of the reader to the include stack.
@@ -455,8 +514,7 @@ void restore_include_context() {
 
 // Tokens and AST nodes
 enum {
-  // Keywords
-
+  // C keywords
   KEYWORDS_START = 300,
   BREAK_KW,
   CASE_KW,
@@ -469,7 +527,9 @@ enum {
   FOR_KW,
   IF_KW,
   RETURN_KW,
+#ifdef SUPPORT_SIZEOF
   SIZEOF_KW,
+#endif
   SWITCH_KW,
   TYPEDEF_KW,
   WHILE_KW,
@@ -580,6 +640,7 @@ int prev_ch = EOF;
 int tok;
 int val;
 
+// String pool for C keywords, identifiers and string literals
 #define STRING_POOL_SIZE 250000
 char string_pool[STRING_POOL_SIZE];
 int string_pool_alloc = 0;
@@ -604,9 +665,7 @@ int alloc_obj(const int size) {
 
   alloc_result = heap_alloc;
 
-  heap_alloc += size;
-
-  if (heap_alloc > HEAP_SIZE) {
+  if ((heap_alloc += size) > HEAP_SIZE) {
     fatal_error("heap overflow");
   }
 
@@ -806,7 +865,7 @@ ast clone_ast(const ast orig) {
   int i;
 
   // Account for the value of ast nodes with no child
-  if (nb_children == 0) nb_children = 1;
+  nb_children = TERNARY(nb_children > 0, nb_children, 1);
 
   ast_result = alloc_obj(nb_children + 1);
 
@@ -849,10 +908,56 @@ ast list_singleton(const ast list) {
 }
 #endif
 
-// Simple accessor to get the string from the string pool
-#define STRING_BUF(probe) (string_pool + heap[probe+1])
-#define STRING_LEN(probe) (heap[probe+4])
-#define STRING_BUF_END(probe) (STRING_BUF(probe) + STRING_LEN(probe))
+// Symbol table and string pool management
+// The symbol table is implemented as a chaining hash table.
+// It is stored in the beginning of the heap array, with each top-level entry
+// pointing to a linked list of symbols with the same hash value.
+// The symbols themselves are stored in the heap after the hash table.
+// Each symbol is represented as an object in the heap with the following layout:
+//  - 0: pointer to next symbol in the chain (0 if last symbol)
+//  - 1: offset in the string pool where the symbol's string is stored
+//  - 2: length of the symbol's string
+//  - 3: token type (IDENTIFIER, MACRO, TYPEDEF, other C keyword, etc)
+//  - 4: token tag (for macros, typedefs, defstr index, etc)
+char *symbol_buf(const int symbol) {
+  return string_pool + heap[symbol + 1];
+}
+
+int symbol_len(const int symbol) {
+  return heap[symbol + 2];
+}
+
+char *symbol_buf_end(const int symbol) {
+  return string_pool + heap[symbol + 1] + heap[symbol + 2];
+}
+
+int symbol_type(const int symbol) {
+  return heap[symbol + 3];
+}
+
+void set_symbol_type(const int symbol, const int type) {
+  heap[symbol + 3] = type;
+}
+
+int symbol_tag(const int symbol) {
+  return heap[symbol + 4];
+}
+
+void set_symbol_tag(const int symbol, const int tag) {
+  heap[symbol + 4] = tag;
+}
+
+#ifdef sh
+
+int symbol_defstr_index(const int symbol) {
+  return heap[symbol + 5];
+}
+
+void set_symbol_defstr_index(const int symbol, const int index) {
+  heap[symbol + 5] = index;
+}
+
+#endif
 
 void begin_string() {
   string_start = string_pool_alloc;
@@ -870,9 +975,9 @@ void accum_string(const char c) {
 }
 
 // Append a string from the string_pool to the string under construction
-void accum_string_string(const int string_probe) {
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = string_start + STRING_LEN(string_probe);
+void accum_string_string(const int string_symbol) {
+  char *string_start = symbol_buf(string_symbol);
+  char *string_end = string_start + symbol_len(string_symbol);
   while (string_start < string_end) {
     accum_string(*string_start);
     string_start += 1;
@@ -885,7 +990,7 @@ void accum_string_string(const int string_probe) {
 // Note that this function only supports small integers, represented as positive number.
 void accum_string_integer(int n) {
 #ifdef SUPPORT_64_BIT_LITERALS
-  if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
+  if (n < 0) syntax_error("accum_string_integer: Only small integers can be pasted");
 #else
   if (n < 0) {
     accum_string('-');
@@ -900,60 +1005,65 @@ void accum_string_integer(int n) {
 
 #endif
 
-int probe;
-int probe_start;
-char c1;
-char c2;
-int end_ident_i;
+int symbol;
+char *symbol_end;
+char *c1;
+char *c2;
+int end_symbol_len;
+int curr_symbol;
 
-// Like end_ident, but for strings instead of identifiers
-// We want to deduplicate strings to reuse memory if possible.
-#define end_string end_ident
-
-int end_ident() {
+int end_symbol() {
+  end_symbol_len = string_pool_alloc - string_start; // exclude terminator
   string_pool[string_pool_alloc] = 0; // terminate string
   string_pool_alloc += 1; // account for terminator
 
-  probe = heap[hash];
+  curr_symbol = hash;
 
-  while (probe != 0) {
-    probe_start = heap[probe+1];
-    end_ident_i = 0;
-    c1 = string_pool[string_start+end_ident_i];
-    c2 = string_pool[probe_start+end_ident_i];
-    while (c1 == c2) {
-      if (c1 == 0) {
-        string_pool_alloc = string_start; // undo string allocation
-        return probe;
-      }
-      end_ident_i += 1;
-      c1 = string_pool[string_start+end_ident_i];
-      c2 = string_pool[probe_start+end_ident_i];
+  while ((symbol = heap[curr_symbol]) != 0) {
+    // Skip symbols with different length
+    if (end_symbol_len != heap[symbol + 2]) {
+      curr_symbol = symbol; // remember previous ident
+      continue;
     }
-    hash = probe; // remember previous ident
-    probe = heap[probe];
+
+    c1 = string_pool + string_start;
+    c2 = string_pool + heap[symbol + 1];
+    symbol_end = c1 + end_symbol_len;
+    while (c1 < symbol_end && *c1 == *c2) {
+      c1 += 1;
+      c2 += 1;
+    }
+
+    if (c1 == symbol_end) {
+      // Loop got to the end of the symbol without mismatches => symbol already exists.
+      // Deallocate the string and return the existing symbol
+      string_pool_alloc = string_start;
+      return symbol;
+    }
+
+    curr_symbol = symbol; // remember previous ident
   }
 
-  // a new ident has been found
+  // the symbol was not found, create a new one
+#ifdef sh
+  symbol = alloc_obj(6);
+#else
+  symbol = alloc_obj(5);
+#endif
 
-  probe = alloc_obj(5);
+  heap[curr_symbol] = symbol; // chain new symbol to the last symbol in the chain
 
-  heap[hash] = probe; // add new ident at end of chain
+  heap[symbol]     = 0;               // Next symbol in chain
+  heap[symbol + 1] = string_start;    // Offset in string pool
+  heap[symbol + 2] = end_symbol_len;  // Length of the symbol
+  heap[symbol + 3] = IDENTIFIER;      // Token type
+  heap[symbol + 4] = 0;               // Token tag
+#ifdef sh
+  heap[symbol + 5] = 0;               // defstr index
+#endif
 
-  heap[probe] = 0; // no next ident
-  heap[probe+1] = string_start;
-  heap[probe+2] = IDENTIFIER;
-  heap[probe+3] = 0; // Token tag
-  heap[probe+4] = string_pool_alloc - string_start - 1; // string length (excluding terminator)
-
-  return probe;
+  return symbol;
 }
-
-#define expect_tok(expected_tok) expect_tok_(expected_tok, __FILE__, __LINE__)
-
-void get_tok();
-void get_ident();
-void expect_tok_(int expected_tok, char* file, int line);
 
 #ifdef SAFE_MODE
 
@@ -982,8 +1092,8 @@ void dump_tok(int tok) {
   dump_int("tok = ", tok);
 }
 
-void dump_ident(int probe) {
-  dump_string("ident = ", STRING_BUF(probe));
+void dump_ident(int symbol) {
+  dump_string("ident = ", symbol_buf(symbol));
 }
 
 void dump_node(ast node) {
@@ -1003,7 +1113,7 @@ void dump_op(int op) {
 #define dump_int(prefix, n)
 #define dump_char(c)
 #define dump_tok(tok)
-#define dump_ident(probe)
+#define dump_ident(symbol)
 #define dump_node(node)
 #define dump_op(op)
 #endif
@@ -1326,7 +1436,7 @@ int accum_digit(int base) {
   } else {
     int limit = MININT / base;
     if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
-      fatal_error("literal integer overflow");
+      syntax_error("literal integer overflow");
     }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -1393,11 +1503,8 @@ void get_string_char() {
 void accum_string_until(char end) {
   while (ch != end && ch != EOF) {
     get_string_char();
-    tok = ch;
     accum_string(val);
-    ch = tok;
   }
-
   if (ch != end) {
     syntax_error("unterminated string literal");
   }
@@ -1417,21 +1524,19 @@ int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
 int DEFINED_ID;
-int WARNING_ID;
-int ERROR_ID;
+#ifdef SH_SUPPORT_SHELL_INCLUDE
 int INCLUDE_SHELL_ID;
+#endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
+int WARNING_ID;
+int ERROR_ID;
 int NOT_SUPPORTED_ID;
 #endif
 
 // We want to recognize certain identifers without having to do expensive string comparisons
 int MAIN_ID;
 #ifdef sh
-int ARGV__ID;
-int ARGV_ID;
-int IFS_ID;
-
 int PUTCHAR_ID;
 int GETCHAR_ID;
 int EXIT_ID;
@@ -1447,11 +1552,39 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
+#ifndef SH_MINIMAL_RUNTIME
+int ISATTY_ID;
 #endif
 
+// In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid
+// argv_ since argv is a common C variable name.
+int ARGV__ID;
+int ARGV_ID;
+// Shell special variables
+int ENV_ID;
+int HOME_ID;
+int IFS_ID;
+int LANG_ID;
+int LC_ALL_ID;
+int LC_COLLATE_ID;
+int LC_CTYPE_ID;
+int LC_MESSAGES_ID;
+int LINENO_ID;
+int NLSPATH_ID;
+int PATH_ID;
+int PPID_ID;
+int PS1_ID;
+int PS4_ID;
+int PWD_ID;
+#endif
+
+#ifdef FULL_PREPROCESSOR_SUPPORT
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
+#endif
+
+void get_tok();
 
 // When we parse a macro, we generally want the tokens as they are, without expanding them.
 void get_tok_macro() {
@@ -1540,7 +1673,7 @@ void handle_define() {
     syntax_error("#define directive can only be followed by a identifier");
   }
 
-  heap[val + 2] = MACRO; // Mark the identifier as a macro
+  set_symbol_type(val, MACRO); // Mark the identifier as a macro
   macro = val;
   if (ch == '(') { // Function-like macro
     args_count = 0;
@@ -1566,18 +1699,19 @@ void handle_define() {
   }
 
   // Accumulate tokens so they can be replayed when the macro is used
-  heap[macro + 3] = cons(read_macro_tokens(args), args_count);
-
+  set_symbol_tag(macro, cons(read_macro_tokens(args), args_count));
 }
 
 int eval_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
-  int op1;
-  int op2;
-  ast child0, child1;
 
-  if (get_nb_children(expr) >= 1) child0 = get_child(expr, 0);
-  if (get_nb_children(expr) >= 2) child1 = get_child(expr, 1);
+  int val0, val1; // Results of evaluating child0 and child1, for non-lazy operators
+  if (op != '?' && op != AMP_AMP && op != BAR_BAR && op != '(') {
+    // For non-lazy operators, we can pre-evaluate the children.
+    // This makes eval_constant's shell version much shorter and easier to review.
+    if (get_nb_children(expr) >= 1) val0 = eval_constant(get_child(expr, 0), if_macro);
+    if (get_nb_children(expr) >= 2) val1 = eval_constant(get_child(expr, 1), if_macro);
+  }
 
   switch (op) {
     case INTEGER:
@@ -1598,92 +1732,68 @@ int eval_constant(ast expr, bool if_macro) {
 #endif
       return -get_val(expr);
     case CHARACTER:   return get_val_(CHARACTER, expr);
-    case '~':         return ~eval_constant(child0, if_macro);
-    case '!':         return !eval_constant(child0, if_macro);
+    case '~':         return ~val0;
+    case '!':         return !val0;
+    case '*':         return val0 *  val1;
+    case '/':         return val0 /  val1;
+    case '%':         return val0 %  val1;
+    case '&':         return val0 &  val1;
+    case '|':         return val0 |  val1;
+    case '^':         return val0 ^  val1;
+    case LSHIFT:      return val0 << val1;
+    case RSHIFT:      return val0 >> val1;
+    case EQ_EQ:       return val0 == val1;
+    case EXCL_EQ:     return val0 != val1;
+    case LT_EQ:       return val0 <= val1;
+    case GT_EQ:       return val0 >= val1;
+    case '<':         return val0 <  val1;
+    case '>':         return val0 >  val1;
+
+    // - and + can be unary or binary
     case '-':
     case '+':
-      op1 = eval_constant(child0, if_macro);
       if (get_nb_children(expr) == 1) {
-        return TERNARY(op == '-', -op1, op1);
+        return TERNARY(op == '-', -val0, val0);
       } else {
-        op2 = eval_constant(child1, if_macro);
-        return TERNARY(op == '-', (op1 - op2), (op1 + op2));
+        return TERNARY(op == '-', (val0 - val1), (val0 + val1));
       }
 
     case '?':
-      op1 = eval_constant(child0, if_macro);
-      if (op1) {
-        return eval_constant(child1, if_macro);
+      val0 = eval_constant(get_child(expr, 0), if_macro);
+      if (val0) {
+        return eval_constant(get_child(expr, 1), if_macro);
       } else {
         return eval_constant(get_child(expr, 2), if_macro);
       }
 
-    case '*':
-    case '/':
-    case '%':
-    case '&':
-    case '|':
-    case '^':
-    case LSHIFT:
-    case RSHIFT:
-    case EQ_EQ:
-    case EXCL_EQ:
-    case LT_EQ:
-    case GT_EQ:
-    case '<':
-    case '>':
-      op1 = eval_constant(child0, if_macro);
-      op2 = eval_constant(child1, if_macro);
-      switch (op) {
-        case '*':     return op1 * op2;
-        case '/':     return op1 / op2;
-        case '%':     return op1 % op2;
-        case '&':     return op1 & op2;
-        case '|':     return op1 | op2;
-        case '^':     return op1 ^ op2;
-        case LSHIFT:  return op1 << op2;
-        case RSHIFT:  return op1 >> op2;
-        case EQ_EQ:   return op1 == op2;
-        case EXCL_EQ: return op1 != op2;
-        case LT_EQ:   return op1 <= op2;
-        case GT_EQ:   return op1 >= op2;
-        case '<':     return op1 < op2;
-        case '>':     return op1 > op2;
-      }
-      return 0; // Should never reach here
-
     case AMP_AMP:
-      op1 = eval_constant(child0, if_macro);
-      if (!op1) return 0;
-      else return eval_constant(child1, if_macro);
-
     case BAR_BAR:
-      op1 = eval_constant(child0, if_macro);
-      if (op1) return 1;
-      else return eval_constant(child1, if_macro);
+      val0 = eval_constant(get_child(expr, 0), if_macro);
+      if (op == AMP_AMP && !val0) return 0;
+      else if (op == BAR_BAR && val0) return 1;
+      else return eval_constant(get_child(expr, 1), if_macro);
 
     case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val_(IDENTIFIER, child0) == DEFINED_ID) {
-        return child1 == MACRO;
+      if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
+        return get_child(expr, 1) == MACRO;
       } else {
-        fatal_error("unknown function call in constant expressions");
+        syntax_error("unknown function call in constant expressions");
         return 0;
       }
 
     case IDENTIFIER:
-      if (if_macro) {
-        // Undefined identifiers are 0
-        // At this point, macros have already been expanded so we can't have a macro identifier
-        return 0;
-      } else {
+      if (!if_macro) {
+        // At this point, macros have already been expanded so we can't have a
+        // macro identifier, which means we're dealing with a regular identifier.
         // TODO: Enums when outside of if_macro
-        fatal_error("identifiers are not allowed in constant expression");
-        return 0;
+        syntax_error("identifiers are not allowed in constant expression");
       }
+
+      return 0; // Undefined identifiers evaluate to 0
 
     default:
       dump_op(op);
-      fatal_error("unsupported operator in constant expression");
+      syntax_error("unsupported operator in constant expression");
       return 0;
   }
 }
@@ -1709,7 +1819,7 @@ int evaluate_if_condition() {
 
 void handle_include() {
   if (tok == STRING) {
-    include_file(STRING_BUF(val), fp_dirname);
+    include_file(symbol_buf(val), fp_dirname);
 #ifdef DEBUG_EXPAND_INCLUDES
     // When running pnut in "expand includes" mode, we want to annotate the
     // #include directives that were expanded with a comment so we can remove
@@ -1719,11 +1829,11 @@ void handle_include() {
     get_tok_macro(); // Skip the string
   } else if (tok == '<') {
     accum_string_until('>');
-    val = end_string();
+    val = end_symbol();
     // #include <file> directives only take effect if the search path is provided
     // TODO: Issue a warning to stderr when skipping the directive
     if (include_search_path != 0) {
-      include_file(STRING_BUF(val), include_search_path);
+      include_file(symbol_buf(val), include_search_path);
     }
     get_tok_macro(); // Skip the string
   } else {
@@ -1787,7 +1897,7 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the macro name
       if (tok == IDENTIFIER || tok == MACRO) {
         // TODO: Doesn't play nice with typedefs, because they are not marked as macros
-        heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
+        set_symbol_type(val, IDENTIFIER); // Unmark the macro
         get_tok_macro(); // Skip the macro name
       } else {
         dump_tok(tok);
@@ -1796,7 +1906,9 @@ void handle_preprocessor_directive() {
     } else if (tok == IDENTIFIER && val == DEFINE_ID) {
       get_tok_macro(); // Get the macro name
       handle_define();
-    } else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
+    }
+#ifdef FULL_PREPROCESSOR_SUPPORT
+    else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
 #ifndef DEBUG_EXPAND_INCLUDES
       temp = val;
       putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
@@ -1809,10 +1921,12 @@ void handle_preprocessor_directive() {
       if (temp == ERROR_ID) exit(1);
 #else
       tok = '\n';
-#endif
-    } else {
+#endif // DEBUG_EXPAND_INCLUDES
+    }
+#endif // FULL_PREPROCESSOR_SUPPORT
+    else {
       dump_tok(tok);
-      dump_string("directive = ", STRING_BUF(val));
+      dump_string("directive = ", symbol_buf(val));
       syntax_error("unsupported preprocessor directive");
     }
   } else {
@@ -1823,7 +1937,7 @@ void handle_preprocessor_directive() {
   if (tok != '\n' && tok != EOF) {
     dump_tok(tok);
     if (tok == IDENTIFIER || tok == MACRO) {
-      dump_string("directive = ", STRING_BUF(val));
+      dump_string("directive = ", symbol_buf(val));
     }
     syntax_error("preprocessor expected end of line");
   }
@@ -1852,28 +1966,24 @@ void get_ident() {
     get_ch();
   }
 
-  val = end_ident();
-  tok = heap[val+2];
+  val = end_symbol();
+  tok = symbol_type(val);
 }
 
 int intern_str(char* name) {
-  int i = 0;
-
   begin_string();
 
-  while (name[i] != 0) {
-    accum_string(name[i]);
-    i += 1;
+  while (*name != 0) {
+    accum_string(*name);
+    name += 1;
   }
 
-  i = end_string();
-
-  return i;
+  return end_symbol();
 }
 
-int init_ident(int tok, char *name) {
+int init_ident(const int tok, char * const name) {
   int i = intern_str(name);
-  heap[i+2] = tok;
+  set_symbol_type(i, tok);
   return i;
 }
 
@@ -1897,7 +2007,9 @@ void init_ident_table() {
   init_ident(FOR_KW,      "for");
   init_ident(IF_KW,       "if");
   init_ident(RETURN_KW,   "return");
+#ifdef SUPPORT_SIZEOF
   init_ident(SIZEOF_KW,   "sizeof");
+#endif
   init_ident(SWITCH_KW,   "switch");
   init_ident(TYPEDEF_KW,  "typedef");
   init_ident(WHILE_KW,    "while");
@@ -1940,8 +2052,6 @@ void init_ident_table() {
   ELIF_ID    = init_ident(IDENTIFIER, "elif");
   ENDIF_ID   = init_ident(IDENTIFIER, "endif");
   DEFINE_ID  = init_ident(IDENTIFIER, "define");
-  WARNING_ID = init_ident(IDENTIFIER, "warning");
-  ERROR_ID   = init_ident(IDENTIFIER, "error");
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
   DEFINED_ID = init_ident(IDENTIFIER, "defined");
@@ -1952,10 +2062,6 @@ void init_ident_table() {
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
 #ifdef sh
-  ARGV_ID = init_ident(IDENTIFIER, "argv");
-  ARGV__ID = init_ident(IDENTIFIER, "argv_");
-  IFS_ID  = init_ident(IDENTIFIER, "IFS");
-
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
   GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
   EXIT_ID    = init_ident(IDENTIFIER, "exit");
@@ -1971,25 +2077,50 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+#ifndef SH_MINIMAL_RUNTIME
+  ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
+#endif
+
+  ARGV_ID = init_ident(IDENTIFIER, "argv");
+  ARGV__ID = init_ident(IDENTIFIER, "argv_");
+  ENV_ID = init_ident(IDENTIFIER, "ENV");
+  HOME_ID = init_ident(IDENTIFIER, "HOME");
+  IFS_ID = init_ident(IDENTIFIER, "IFS");
+  LANG_ID = init_ident(IDENTIFIER, "LANG");
+  LC_ALL_ID = init_ident(IDENTIFIER, "LC_ALL");
+  LC_COLLATE_ID = init_ident(IDENTIFIER, "LC_COLLATE");
+  LC_CTYPE_ID = init_ident(IDENTIFIER, "LC_CTYPE");
+  LC_MESSAGES_ID = init_ident(IDENTIFIER, "LC_MESSAGES");
+  LINENO_ID = init_ident(IDENTIFIER, "LINENO");
+  NLSPATH_ID = init_ident(IDENTIFIER, "NLSPATH");
+  PATH_ID = init_ident(IDENTIFIER, "PATH");
+  PPID_ID = init_ident(IDENTIFIER, "PPID");
+  PS1_ID = init_ident(IDENTIFIER, "PS1");
+  PS4_ID = init_ident(IDENTIFIER, "PS4");
+  PWD_ID = init_ident(IDENTIFIER, "PWD");
 #endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
+  WARNING_ID = init_ident(IDENTIFIER, "warning");
+  ERROR_ID   = init_ident(IDENTIFIER, "error");
   // Stringizing is recognized by the macro expander, but it returns a hardcoded
   // string instead of the actual value. This may be enough to compile TCC.
   NOT_SUPPORTED_ID = init_ident(IDENTIFIER, "NOT_SUPPORTED");
 #endif
 }
 
+#if defined(FULL_PREPROCESSOR_SUPPORT) || defined(FULL_CLI_OPTIONS)
 int init_builtin_string_macro(char *macro_str, char* value) {
   int macro_id = init_ident(MACRO, macro_str);
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
-  heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
+  set_symbol_tag(macro_id, cons(cons(cons(STRING, intern_str(value)), 0), -1));
   return macro_id;
 }
+#endif
 
 int init_builtin_int_macro(char *macro_str, int value) {
   int macro_id = init_ident(MACRO, macro_str);
-  heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
+  set_symbol_tag(macro_id, cons(cons(cons(INTEGER, -value), 0), -1));
   return macro_id;
 }
 
@@ -1997,7 +2128,7 @@ int init_builtin_int_macro(char *macro_str, int value) {
 
 int init_builtin_empty_macro(char *macro_str) {
   int macro_id = init_ident(MACRO, macro_str);
-  heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
+  set_symbol_tag(macro_id, cons(0, -1)); // -1 means it's an object-like macro, 0 means no tokens
   return macro_id;
 }
 
@@ -2006,11 +2137,13 @@ int init_builtin_empty_macro(char *macro_str) {
 void init_pnut_macros() {
   init_builtin_int_macro("PNUT_CC", 1);
 
+#ifdef FULL_PREPROCESSOR_SUPPORT
   init_builtin_string_macro("__DATE__", "Jan  1 1970");
   init_builtin_string_macro("__TIME__", "00:00:00");
   init_builtin_string_macro("__TIMESTAMP__", "Jan  1 1970 00:00:00");
   FILE__ID = init_builtin_string_macro("__FILE__", "<unknown>");
   LINE__ID = init_builtin_int_macro("__LINE__", 0);
+#endif
 
 #if defined(sh)
   init_builtin_int_macro("PNUT_SH", 1);
@@ -2048,8 +2181,7 @@ int macro_parse_argument() {
   int rest;
 
   while ((parens_depth > 0 || (tok != ',' && tok != ')')) && tok != EOF) {
-    if (tok == '(') parens_depth += 1; // Enter parenthesis
-    if (tok == ')') parens_depth -= 1; // End of parenthesis
+    parens_depth = parens_depth + (tok == '(') - (tok == ')');
 
     if (arg_tokens == 0) {
       arg_tokens = cons(cons(tok, val), 0);
@@ -2065,11 +2197,11 @@ int macro_parse_argument() {
 }
 
 void check_macro_arity(int macro_args_count, int macro) {
-  int expected_argc = cdr(heap[macro + 3]);
+  int expected_argc = cdr(symbol_tag(macro));
   if (macro_args_count != expected_argc) {
     dump_int("expected_argc = ", expected_argc);
     dump_int("macro_args_count = ", macro_args_count);
-    dump_string("macro = ", STRING_BUF(macro));
+    dump_string("macro = ", symbol_buf(macro));
     syntax_error("macro argument count mismatch");
   }
 }
@@ -2100,7 +2232,7 @@ int get_macro_args_toks(int macro) {
     macro_args_count += 1;
   }
 
-  if (tok != ')') syntax_error("unterminated macro argument list");
+  if (tok != ')') parse_error("unterminated macro argument list", tok);
 
   if (prev_is_comma) {
     args = cons(0, args); // Push empty arg
@@ -2115,7 +2247,7 @@ int get_macro_args_toks(int macro) {
 int get_macro_arg(int ix) {
   int arg = macro_args;
   while (ix > 0) {
-    if (arg == 0) syntax_error("too few arguments to macro");
+    if (arg == 0) fatal_error("get_macro_arg: argument index out of range");
     arg = cdr(arg);
     ix -= 1;
   }
@@ -2186,13 +2318,14 @@ void undo_token(int prev_tok, int prev_val) {
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
 bool attempt_macro_expansion(int macro) {
   // We must save the tokens because the macro may be redefined while reading the arguments
-  int tokens = car(heap[macro + 3]);
+  int tokens = car(symbol_tag(macro));
 
   if (macro_is_already_expanding(macro)) { // Self referencing macro
     tok = IDENTIFIER;
     val = macro;
     return false;
-  } else if (cdr(heap[macro + 3]) == -1) { // Object-like macro
+  } else if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
+#ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
       tokens = cons(cons(STRING, intern_str(fp_filepath)), 0);
@@ -2202,10 +2335,11 @@ bool attempt_macro_expansion(int macro) {
       tokens = cons(cons(INTEGER, -line_number), 0);
     }
 #endif
+#endif
     begin_macro_expansion(macro, tokens, 0);
     return true;
   } else { // Function-like macro
-    expect_tok(MACRO); // Skip macro identifier
+    get_tok(); // Skip the macro identifier
     if (tok == '(') {
       begin_macro_expansion(macro, tokens, get_macro_args_toks(macro));
       return true;
@@ -2232,7 +2366,7 @@ void stringify() {
   tok = car(car(arg));
   // Support the case where the argument is a single identifier/macro/keyword token
   if ((tok == IDENTIFIER || tok == MACRO || (KEYWORDS_START <= tok && tok <= KEYWORDS_END)) && cdr(arg) == 0) {
-    val = cdr(car(arg)); // Use the identifier probe
+    val = cdr(car(arg)); // Use the identifier symbol
   } else {
     val = NOT_SUPPORTED_ID; // Return string "NOT_SUPPORTED"
   }
@@ -2299,8 +2433,8 @@ void paste_tokens(int left_tok, int left_val) {
       syntax_error("cannot paste an identifier with a non-identifier or non-negative integer");
     }
 
-    val = end_ident();
-    tok = heap[val+2]; // The kind of the identifier
+    val = end_symbol();
+    tok = symbol_type(val); // The kind of the identifier
   } else if (left_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
           || left_tok == INTEGER_HEX || left_tok == INTEGER_OCT
@@ -2324,8 +2458,8 @@ void paste_tokens(int left_tok, int left_val) {
       accum_string_integer(-left_val);
       accum_string_string(right_val);
 
-      val = end_ident();
-      tok = heap[val+2]; // The kind of the identifier
+      val = end_symbol();
+      tok = symbol_type(val); // The kind of the identifier
     } else {
       dump_tok(left_tok);
       dump_tok(right_tok);
@@ -2351,7 +2485,7 @@ bool skip_inactive_line() {
   // directive that we need to process even in inactive #if blocks, return true in that case.
 
   // Skip whitespace
-  while (ch <= ' ' && ch != EOF) {
+  while (0 <= ch && ch <= ' ') {
     get_ch();
   }
 
@@ -2400,7 +2534,7 @@ void get_tok() {
       // Tokens that are identifiers and up are tokens whose kind can change
       // between the moment the macro is defined and where it is used.
       // So we reload the kind from the ident table.
-      if (tok >= IDENTIFIER) tok = heap[val + 2];
+      if (tok >= IDENTIFIER) tok = symbol_type(val);
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
       // Check if the next token is ## for token pasting
@@ -2588,7 +2722,7 @@ void get_tok() {
       begin_string();
       accum_string_until('\"');
 
-      val = end_string();
+      val = end_symbol();
       tok = STRING;
 
       break;
@@ -2794,18 +2928,12 @@ void get_tok() {
             dump_char(ch);
             syntax_error("invalid token");
           }
-        } else {
-          tok = '.';
         }
-#else
-        tok = '.';
 #endif // SUPPORT_VARIADIC_FUNCTIONS
         break;
       }
 #endif
       else if (ch == '~' || ch == '.' || ch == '?' || ch == ',' || ch == ':' || ch == ';' || ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}') {
-
-        tok = ch;
 
         get_ch();
 
@@ -2842,68 +2970,16 @@ void get_tok() {
 #include "debug.c"
 #endif
 
-#define parse_error(msg, token) parse_error_internal(msg, token, __FILE__, __LINE__)
-
-void parse_error_internal(char * msg, int token, char * file, int line) {
-
-#ifdef NICE_ERR_MSG
-  #define ANSI_RED     "\x1b[31m"
-  #define ANSI_GREEN   "\x1b[32m"
-  #define ANSI_YELLOW  "\x1b[33m"
-  #define ANSI_BLUE    "\x1b[34m"
-  #define ANSI_MAGENTA "\x1b[35m"
-  #define ANSI_CYAN    "\x1b[36m"
-  #define ANSI_RESET   "\x1b[0m"
-
-  //Error header
-  putstr(ANSI_RED"Error occurred while parsing ");
-  putstr(ANSI_GREEN"\"");
-  putstr(fp_filepath);
-  putstr("\""ANSI_RESET"\n");
-
-  //Error message
-  putstr("  Message: "ANSI_YELLOW);
-  putstr(msg);
-  putstr(ANSI_RESET"\n");
-
-  //Error token
-  putstr("  Offending Token: "ANSI_YELLOW);
-  print_tok_type(token);
-  putstr(ANSI_RESET"\n");
-
-  //Error location
-  putstr("  Location: "ANSI_GREEN);
-  putstr(fp_filepath);
-  putchar(':');
-  putint(last_tok_line_number);
-  putchar(':');
-  putint(last_tok_column_number);
-  putstr(ANSI_RESET"\n");
-#else
-  putstr(msg);
-#endif
-
-#ifdef DEBUG_SHOW_ERR_ORIGIN
-  putstr("Note, error emitted from ");
-  putstr(file);
-  putstr(" line ");
-  putint(line);
-  putstr("\n");
-#endif
-
-  exit(1);
-}
-
-void expect_tok_(int expected_tok, char* file, int line) {
+void expect_tok(int expected_tok) {
   if (tok != expected_tok) {
 #ifdef NICE_ERR_MSG
-    putstr("expected tok="); print_tok_type(expected_tok);
+    putstr("expected tok=");  print_tok_type(expected_tok);
     putstr("\ncurrent tok="); print_tok_type(tok); putchar('\n');
 #else
     dump_int("expected tok = ", expected_tok);
     dump_int("current tok = ", tok);
 #endif
-    parse_error_internal("unexpected token", tok, file, line);
+    parse_error("unexpected token", tok);
   }
   get_tok();
 }
@@ -3250,7 +3326,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
       case EXTERN_KW:
 #endif
       case TYPEDEF_KW:
-        if (specifier_storage_class != 0) fatal_error("Multiple storage classes not supported");
+        if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
         specifier_storage_class = tok;
         get_tok();
@@ -3301,7 +3377,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         // Lookup type in the types table. It is stored in the tag of the
         // interned string object. The type is cloned so it can be modified.
-        type_specifier = clone_ast(heap[val + 3]);
+        type_specifier = clone_ast(symbol_tag(val));
         get_tok();
         break;
 
@@ -3530,7 +3606,7 @@ ast parse_initializer_list() {
 
   while (tok != '}' && tok != EOF) {
 #ifdef sh
-    if (tok == '{') fatal_error("nested initializer lists not supported");
+    if (tok == '{') syntax_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
       rest = result = cons(parse_initializer(), 0);
@@ -3610,8 +3686,9 @@ void add_typedef(ast declarator) {
   }
 #endif
 
-  heap[decl_ident + 2] = TYPE;
-  heap[decl_ident + 3] = decl_type;
+  // Use symbol object to store the typedef'ed type in the symbol table
+  set_symbol_type(decl_ident, TYPE);
+  set_symbol_tag(decl_ident, decl_type);
 }
 
 ast parse_fun_def(ast declarator) {
@@ -3735,7 +3812,7 @@ ast parse_primary_expression() {
         result = cdr(result);
       }
 
-      result = new_ast0(STRING, end_string());
+      result = new_ast0(STRING, end_symbol());
     }
 
   } else if (tok == '(') {
@@ -3774,8 +3851,9 @@ ast parse_postfix_expression(ast result) {
       }
       result = new_ast2('(', result, child);
       expect_tok(')');
-
-    } else if (tok == '.') {
+    }
+#ifdef SUPPORT_STRUCT_UNION
+    else if (tok == '.') {
 
       get_tok();
       if (tok != IDENTIFIER) {
@@ -3784,9 +3862,7 @@ ast parse_postfix_expression(ast result) {
       result = new_ast2('.', result, new_ast0(IDENTIFIER, val));
       get_tok();
 
-    }
-#ifdef SUPPORT_STRUCT_UNION
-    else if (tok == ARROW) {
+    } else if (tok == ARROW) {
 
       get_tok();
       if (tok != IDENTIFIER) {
@@ -3855,6 +3931,7 @@ ast parse_unary_expression() {
     result = parse_cast_expression();
     result = new_ast1(op, result);
 
+#ifdef SUPPORT_SIZEOF
   } else if (skip_newlines && tok == SIZEOF_KW) { // only parse sizeof if we're not in a #if expression
 
     get_tok();
@@ -3872,6 +3949,7 @@ ast parse_unary_expression() {
     }
     result = new_ast1(SIZEOF_KW, result);
 
+#endif // SUPPORT_SIZEOF
   } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
 
     get_tok_macro();
@@ -3896,7 +3974,6 @@ ast parse_unary_expression() {
 }
 
 ast parse_cast_expression() {
-  ast result;
   ast type;
 
   if (tok == '(') {
@@ -3906,8 +3983,7 @@ ast parse_cast_expression() {
       type = parse_declarator(true, parse_declaration_specifiers(false));
 
       expect_tok(')');
-      result = new_ast2(CAST, type, parse_cast_expression());
-      return result;
+      return new_ast2(CAST, type, parse_cast_expression());
     } else {
       return parse_unary_expression_with_parens_prefix();
     }
@@ -4129,11 +4205,12 @@ ast parse_assignment_expression() {
 ast parse_comma_expression() {
 
   ast result = parse_assignment_expression();
+  int child;
 
-  if (tok == ',') { // "comma expressions" without , don't need to be wrapped in a comma node
+  if (tok == ',') { // avoid creating unnecessary nodes
     get_tok();
-    result = new_ast2(',', result, 0);
-    set_child(result, 1, parse_comma_expression());
+    child = parse_comma_expression();
+    result = new_ast2(',', result, child);
   }
 
   return result;
@@ -4165,6 +4242,7 @@ ast parse_expression() {
 }
 
 ast parse_constant_expression() {
+  // Note: does not enforce that the expression is actually constant
   return parse_expression();
 }
 
@@ -4318,21 +4396,20 @@ ast parse_compound_statement() {
 
   expect_tok('{');
 
-  // TODO: Simplify this
-  if (tok != '}' && tok != EOF) {
+  while (tok != '}' && tok != EOF) {
     if (is_type_starter(tok)) {
       child1 = parse_declaration(true);
     } else {
       child1 = parse_statement();
     }
-    result = new_ast2('{', child1, 0);
-    rest = result;
-    while (tok != '}' && tok != EOF) {
-      if (is_type_starter(tok)) {
-        child1 = parse_declaration(true);
-      } else {
-        child1 = parse_statement();
-      }
+
+    // Skip empty statements (semicolon)
+    if (child1 == 0) continue;
+
+    if (result == 0) {
+      result = new_ast2('{', child1, 0);
+      rest = result;
+    } else {
       child1 = new_ast2('{', child1, 0);
       set_child(rest, 1, child1);
       rest = child1;

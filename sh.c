@@ -12,7 +12,7 @@ void handle_shell_include() {
     runtime_use_put_pstr = true;
     runtime_use_unpack_string = true;
     // Include the file as-is without any preprocessing
-    include_file(STRING_BUF(val), fp_dirname);
+    include_file(symbol_buf(val), fp_dirname);
     while ((c = fgetc(fp)) != EOF) {
       putchar(c);
     }
@@ -69,7 +69,7 @@ bool comp_body(ast node, STMT_CTX stmt_ctx);
 bool comp_statement(ast node, STMT_CTX stmt_ctx);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
-ast handle_side_effects_go(ast node, int executes_conditionally);
+ast handle_side_effects_go(ast node, bool executes_conditionally);
 
 // Because concatenating strings is very expensive and a common operation, we
 // use a tree structure to represent the concatenated strings. That way, the
@@ -208,8 +208,8 @@ text wrap_str_lit(char * const s) {
   return wrap_str_imm(s, 0);
 }
 
-text wrap_str_pool(const int ident_probe) {
-  return wrap_str_imm(STRING_BUF(ident_probe), 0);
+text wrap_str_pool(const int ident_symbol) {
+  return wrap_str_imm(symbol_buf(ident_symbol), 0);
 }
 
 text concatenate_strings_with(const text t1, const text t2, const text sep) {
@@ -345,6 +345,7 @@ void print_text(text t) {
 // Codegen context
 
 #define GLO_DECL_SIZE 100000
+#define GLO_DECL_ENTRY_SIZE 3
 text glo_decls[GLO_DECL_SIZE];  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
@@ -408,18 +409,22 @@ void init_comp_context() {
 }
 
 void append_glo_decl(text decl) {
+  if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
   glo_decls[glo_decl_ix] = nest_level;
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = decl;
-  glo_decl_ix += 3;
+  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
 }
 
+// Fixups are represented as negative nest levels (-1, -2, ...). The actual
+// nest level is obtained by negating the value and subtracting 1.
 int append_glo_decl_fixup() {
-  glo_decls[glo_decl_ix] = -nest_level - 1; // Negative value to indicate that it's a fixup
+  if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
+  glo_decls[glo_decl_ix] = - (nest_level + 1);
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = 0;
-  glo_decl_ix += 3;
-  return glo_decl_ix - 3;
+  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
+  return glo_decl_ix - GLO_DECL_ENTRY_SIZE;
 }
 
 void fixup_glo_decl(int fixup_ix, text decl) {
@@ -439,7 +444,7 @@ void fixup_glo_decl(int fixup_ix, text decl) {
 void undo_glo_decls(int start) {
   while (start < glo_decl_ix) {
     glo_decls[start + 1] -= 1; // To support nested undone declarations
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -448,22 +453,19 @@ void undo_glo_decls(int start) {
 bool any_active_glo_decls(int start) {
   while (start < glo_decl_ix) {
     if (glo_decls[start + 1] && glo_decls[start + 2] != 0) return true;
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
   return false;
 }
 
 // Replay the declarations betwee start and end. Replayed declarations must first
 // be undone with undo_glo_decls.
-// The reindent parameter controls if the declarations should be replayed at the
-// current nest level or at the nest level when they were added.
-void replay_glo_decls(int start, int end, int reindent) {
+void replay_glo_decls(int start, int end) {
   while (start < end) {
     if (glo_decls[start + 1] == 0) { // Skip inactive declarations that are at the current level
       append_glo_decl(glo_decls[start + 2]);
-      if (!reindent) glo_decls[glo_decl_ix - 3] = glo_decls[start]; // Replace nest_level
     }
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -473,7 +475,7 @@ text replay_glo_decls_inline(int start, int end) {
     if (glo_decls[start + 1] == 0) { // Skip inactive declarations
       res = concatenate_strings_with(res, glo_decls[start + 2], wrap_str_lit("; "));
     }
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
   if (res != 0) { res = string_concat(res, wrap_str_lit("; ")); }
 
@@ -495,7 +497,7 @@ void print_glo_decls() {
         putchar('\n');
       }
     }
-    i += 3;
+    i += GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -536,19 +538,19 @@ text format_special_var(ast ident, bool prefixed_with_dollar) {
   }
 }
 
-text global_var(int ident_probe) {
-  return string_concat(wrap_char('_'), wrap_str_pool(ident_probe));
+text global_var(int ident_symbol) {
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
 }
 
-text local_var(int ident_probe) {
-  if (ident_probe == ARGV_ID) {
+text local_var(int ident_symbol) {
+  if (ident_symbol == ARGV_ID) {
     return wrap_str_lit("argv_");
   } else {
-    return wrap_str_pool(ident_probe);
+    return wrap_str_pool(ident_symbol);
   }
 }
 
-text local_var_or_param(int ident_probe, int binding, bool prefixed_with_dollar) {
+text local_var_or_param(int ident_symbol, int binding, bool prefixed_with_dollar) {
   if (binding_kind(binding) == BINDING_PARAM_LOCAL && is_constant_type(heap[binding + 4])) {
     if (prefixed_with_dollar) {
       return wrap_int(heap[binding + 3]);
@@ -556,19 +558,19 @@ text local_var_or_param(int ident_probe, int binding, bool prefixed_with_dollar)
       return string_concat(wrap_char('$'), wrap_int(heap[binding + 3]));
     }
   } else {
-    return local_var(ident_probe);
+    return local_var(ident_symbol);
   }
 }
 
 text env_var_with_prefix(ast ident, bool prefixed_with_dollar) {
   int binding;
-  int ident_probe;
+  int ident_symbol;
   if (get_op(ident) == IDENTIFIER) {
-    ident_probe = get_val_(IDENTIFIER, ident);
-    if ((binding = cgc_lookup_var(ident_probe, cgc_locals))) {
-      return local_var_or_param(ident_probe, binding, prefixed_with_dollar);
+    ident_symbol = get_val_(IDENTIFIER, ident);
+    if ((binding = cgc_lookup_var(ident_symbol, cgc_locals))) {
+      return local_var_or_param(ident_symbol, binding, prefixed_with_dollar);
     } else {
-      return global_var(ident_probe);
+      return global_var(ident_symbol);
     }
   } else {
     return format_special_var(ident, prefixed_with_dollar);
@@ -615,28 +617,30 @@ ast fresh_ident() {
   return new_fresh_ident(gensym_ix);
 }
 
-ast fresh_string_ident(int string_probe) {
+ast fresh_string_ident(int string_symbol) {
   // Strings are interned, meaning that the same string used twice will have the
   // same address. We use the token tag to mark the string as already defined.
   // This allows comp_defstr to use the same string variable for the same string.
-  if (heap[string_probe + 3] == 0) { // tag defaults to 0
-    string_counter += 1;
-    heap[string_probe + 3] = string_counter - 1;
+  int index = symbol_defstr_index(string_symbol);
+  if (index == 0) { // index defaults to 0
+    set_symbol_defstr_index(string_symbol, string_counter += 1); // Mark the string as defined
+    index = string_counter;
+
   }
-  return new_ast0(IDENTIFIER_STRING, heap[string_probe + 3]);
+  return new_ast0(IDENTIFIER_STRING, index - 1);
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
-  int ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
+  int ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
 
   // Make sure we're not shadowing an existing local variable
-  if (cgc_lookup_var(ident_probe, cgc_locals)) {
-    dump_ident(ident_probe);
-    fatal_error("Variable is already in local environment");
+  if (cgc_lookup_var(ident_symbol, cgc_locals)) {
+    dump_ident(ident_symbol);
+    fatal_error("Local variable shadowing is not supported.");
   }
 
   // The var is not part of the environment, so we add it.
-  cgc_add_local_var(kind, ident_probe, get_child_(DECL, decl, 1));
+  cgc_add_local_var(kind, ident_symbol, get_child_(DECL, decl, 1));
 }
 
 // Since global and internal variables are prefixed with _, we restrict the name
@@ -645,21 +649,24 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 //
 // Also, the shell backend doesn't support variables with aggregate types.
 void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for assert_idents_are_safe
-  ast ident_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
-  char* name = STRING_BUF(ident_probe);
+  ast ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, variable, 0));
+  char* name = symbol_buf(ident_symbol);
   ast type = get_child_(DECL, variable, 1);
-  if (name[0] == '_'
-  || (name[0] != '\0' && name[1] == '_' && name[2] == '\0')) { // Check for a_ variables that could conflict with character constants
+  if (name[0] == '_') { // Underscore is used to prefix global and internal variables
     dump_string("Variable name: ", name);
-    fatal_error("variable name is invalid. It can't start or end with '_'.");
+    fatal_error("variable name is invalid. It can't start with '_'.");
   }
 
-  // IFS is a special shell variable that's overwritten by certain.
-  // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
-  // This check only applies to local variables because globals are prefixed with _.
-  if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
+  // The shell has special variables that can't be used as regular variables.
+  if (local &&
+      (  ident_symbol == ARGV__ID       || ident_symbol == ENV_ID         || ident_symbol == HOME_ID
+      || ident_symbol == IFS_ID         || ident_symbol == LANG_ID        || ident_symbol == LC_ALL_ID
+      || ident_symbol == LC_COLLATE_ID  || ident_symbol == LC_CTYPE_ID    || ident_symbol == LC_MESSAGES_ID
+      || ident_symbol == LINENO_ID      || ident_symbol == NLSPATH_ID     || ident_symbol == PATH_ID
+      || ident_symbol == PPID_ID        || ident_symbol == PS1_ID         || ident_symbol == PS4_ID
+      || ident_symbol == PWD_ID)) {
     dump_string("Variable name: ", name);
-    fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
+    fatal_error("variable name is reserved by the shell and can't be used as a local variable.");
   }
 
   if (local) {
@@ -671,7 +678,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 #endif
        ) {
       dump_string("Variable name: ", name);
-      fatal_error("array/struct value type is not supported for shell backend. Use a reference type instead.");
+      fatal_error("local array/struct value type is not supported for shell backend. Use a reference type instead.");
     }
   } else {
     // Arrays of structs and struct value types are not supported for now.
@@ -684,7 +691,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 #endif
        ) {
       dump_string("Variable name: ", name);
-      fatal_error("array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
+      fatal_error("global array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
     }
   }
 }
@@ -699,6 +706,7 @@ void handle_function_params(ast lst) {
 }
 
 #ifdef SH_SAVE_VARS_WITH_SET
+
 // Save the value of local variables to positional parameters
 text save_local_vars() {
   int env = cgc_locals_fun;
@@ -723,7 +731,7 @@ text save_local_vars() {
 
   if (res) {
     runtime_use_local_vars = true;
-    return string_concat(wrap_str_lit("set $@ "), res);
+    return string_concat(wrap_str_lit("set -- $@ "), res);
   } else {
     return 0;
   }
@@ -775,20 +783,26 @@ text restore_local_vars(int params_count) {
   }
 }
 
-#else
+#elif defined(SH_INITIALIZE_PARAMS_WITH_LET)
 
-#ifdef SH_INITIALIZE_PARAMS_WITH_LET
 // Save the value of local variables to positional parameters
 text let_params(int params) {
   ast ident, decl;
   text res = 0;
-  int params_ix = 2;
+  int params_ix = 2; // $1 is reserved for save_local_vars/restore_local_vars
+  text let_str = wrap_str_lit("let ");
+  text sep_str = wrap_str_lit("; ");
 
   while (params != 0) {
     decl = car_(DECL, params);
     if (!is_constant_type(get_child_(DECL, decl, 1))) { // Skip constant params
       ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
-      res = concatenate_strings_with(res, string_concat4(wrap_str_lit("let "), local_var(ident), wrap_char(' '), format_special_var(new_dollar_ident(params_ix), false)), wrap_str_lit("; "));
+      res = concatenate_strings_with(res
+                                    , string_concat4( let_str
+                                                    , local_var(ident)
+                                                    , wrap_char(' ')
+                                                    , format_special_var(new_dollar_ident(params_ix), false))
+                                    , sep_str);
     }
     params = tail(params);
     params_ix += 1;
@@ -800,32 +814,30 @@ text let_params(int params) {
 
   return res;
 }
-#endif
 
 text save_local_vars() {
   int env = cgc_locals_fun;
   ast ident;
-  text res = 0;
   int counter = fun_gensym_ix;
+  text let_str = wrap_str_lit("let ");
+  text sep_str = wrap_str_lit("; ");
+  text res = 0;
 
   // Save temporary variables
   while (counter > 0) {
     ident = new_fresh_ident(counter);
-    res = concatenate_strings_with(string_concat(wrap_str_lit("let "), format_special_var(ident, true)), res, wrap_str_lit("; "));
+    res = concatenate_strings_with(string_concat(let_str
+                                                , format_special_var(ident, true))
+                                  , res
+                                  , sep_str);
     counter -= 1;
   }
 
   // Save local variables and parameters
   while (env != 0) {
-#if defined(SH_INITIALIZE_PARAMS_WITH_LET)
     if (binding_kind(env) != BINDING_PARAM_LOCAL) { // Skip params
-#elif defined(SH_OPTIMIZE_CONSTANT_PARAMS)
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || is_constant_type(heap[env + 4])) { // Skip constant params
-#else
-    {
-#endif
       ident = binding_ident(env);
-      res = concatenate_strings_with(string_concat(wrap_str_lit("let "), local_var(ident)), res, wrap_str_lit("; "));
+      res = concatenate_strings_with(string_concat(let_str, local_var(ident)), res, sep_str);
     }
 
     env = binding_next(env);
@@ -867,10 +879,15 @@ text restore_local_vars(int params_count) {
     return 0;
   }
 }
+
+#else
+
+#error "Either SH_SAVE_VARS_WITH_SET or SH_INITIALIZE_PARAMS_WITH_LET must be defined."
+
 #endif
 
 text op_to_str(int op) {
-  if      (op < 256)         return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
+  if      (32 < op && op < 127) return string_concat3(wrap_char(' '), wrap_char(op), wrap_char(' '));
   else if (op == AMP_AMP)    return wrap_str_lit(" && ");
   else if (op == AMP_EQ)     return wrap_str_lit(" &= ");
   else if (op == BAR_BAR)    return wrap_str_lit(" || ");
@@ -916,60 +933,62 @@ text test_op_to_str(int op) {
 
 text character_ident(int c) {
   // Mark character as used
+  text res = 0;
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
   any_character_used = true;
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
-    return string_concat5(wrap_char('_'), wrap_char('_'), wrap_char(c), wrap_char('_'), wrap_char('_'));
+    res = wrap_char(c);
   } else if (c < 32) {
     // First 32 characters are control characters.
     char* control_character_identifiers =
-      "__NUL__\0"     "__SOH__\0"     "__STX__\0"     "__ETX__\0"
-      "__EOT__\0"     "__ENQ__\0"     "__ACK__\0"     "__BEL__\0"
-      "__BS__\0\0"    "__HT__\0\0"    "__LF__\0\0"    "__VT__\0\0"
-      "__FF__\0\0"    "__CR__\0\0"    "__SO__\0\0"    "__SI__\0\0"
-      "__DLE__\0"     "__DC1__\0"     "__DC2__\0"     "__DC3__\0"
-      "__DC4__\0"     "__NAK__\0"     "__SYN__\0"     "__ETB__\0"
-      "__CAN__\0"     "__EM__\0\0"    "__SUB__\0"     "__ESC__\0"
-      "__FS__\0\0"    "__GS__\0\0"    "__RS__\0\0"    "__US__\0\0"
+      "NUL\0"     "SOH\0"     "STX\0"     "ETX\0"
+      "EOT\0"     "ENQ\0"     "ACK\0"     "BEL\0"
+      "BS\0\0"    "HT\0\0"    "LF\0\0"    "VT\0\0"
+      "FF\0\0"    "CR\0\0"    "SO\0\0"    "SI\0\0"
+      "DLE\0"     "DC1\0"     "DC2\0"     "DC3\0"
+      "DC4\0"     "NAK\0"     "SYN\0"     "ETB\0"
+      "CAN\0"     "EM\0\0"    "SUB\0"     "ESC\0"
+      "FS\0\0"    "GS\0\0"    "RS\0\0"    "US\0\0"
     ;
     // Control characters
-    return wrap_str_lit(control_character_identifiers + (c * 8)); // Each string has length 7 + null terminator
+    res = wrap_str_lit(control_character_identifiers + (c * 4)); // Each string has length 3 + null terminator
   } else if (c < '0') {
     // Symbols from space to /
     char* printable_character_identifiers1 =
-      "__SPACE__\0\0\0\0\0\0"     "__EXCL__\0\0\0\0\0\0\0"    "__DQUOTE__\0\0\0\0\0"        "__HASH__\0\0\0\0\0\0\0"
-      "__DOLLAR__\0\0\0\0\0"      "__PERCENT__\0\0\0\0"       "__AMP__\0\0\0\0\0\0\0\0"     "__QUOTE__\0\0\0\0\0\0"
-      "__LPAREN__\0\0\0\0\0"      "__RPAREN__\0\0\0\0\0"      "__STAR__\0\0\0\0\0\0\0"      "__PLUS__\0\0\0\0\0\0\0"
-      "__COMMA__\0\0\0\0\0\0"     "__MINUS__\0\0\0\0\0\0"     "__PERIOD__\0\0\0\0\0"        "__SLASH__\0\0\0\0\0\0"
+      "SPACE\0\0\0"     "EXCL\0\0\0\0"    "DQUOTE\0\0"        "HASH\0\0\0\0"
+      "DOLLAR\0\0"      "PERCENT\0"       "AMP\0\0\0\0\0"     "QUOTE\0\0\0"
+      "LPAREN\0\0"      "RPAREN\0\0"      "STAR\0\0\0\0"      "PLUS\0\0\0\0"
+      "COMMA\0\0\0"     "MINUS\0\0\0"     "PERIOD\0\0"        "SLASH\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 8); // Each string has length 7 + null terminator
   } else if (c <= 'A') {
     // Symbols from : to @
     char* printable_character_identifiers2 =
-      "__COLON__\0\0\0\0\0\0"     "__SEMICOLON__\0\0"         "__LT__\0\0\0\0\0\0\0\0\0"    "__EQ__\0\0\0\0\0\0\0\0\0"
-      "__GT__\0\0\0\0\0\0\0\0\0"  "__QUESTION__\0\0\0"        "__AT__\0\0\0\0\0\0\0\0\0"
+      "COLON\0\0\0\0\0"     "SEMICOLON\0"         "LT\0\0\0\0\0\0\0\0"    "EQ\0\0\0\0\0\0\0\0"
+      "GT\0\0\0\0\0\0\0\0"  "QUESTION\0\0"        "AT\0\0\0\0\0\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers2 + (c - ':') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers2 + (c - ':') * 10); // Each string has length 9 + null terminator
   } else if (c <= 'a') {
     // Symbols from [ to `
     char* printable_character_identifiers3 =
-      "__LBRACK__\0\0\0\0\0"      "__BACKSLASH__\0\0"         "__RBRACK__\0\0\0\0\0"        "__CARET__\0\0\0\0\0\0"
-      "__UNDERSCORE__\0"          "__BACKTICK__\0\0\0"
+      "LBRACK\0\0\0\0\0"      "BACKSLASH\0\0"         "RBRACK\0\0\0\0\0"        "CARET\0\0\0\0\0\0"
+      "UNDERSCORE\0"          "BACKTICK\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers3 + (c - '[') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers3 + (c - '[') * 11); // Each string has length 10 + null terminator
   } else if (c <= 127) {
     // Symbols from { to ~ and DEL (127)
     char* printable_character_identifiers4 =
-      "__LBRACE__\0\0\0\0\0"      "__BAR__\0\0\0\0\0\0\0\0"   "__RBRACE__\0\0\0\0\0"        "__TILDE__\0\0\0\0\0\0"
-      "__DEL__\0\0\0\0\0\0\0\0"
+      "LBRACE\0"      "BAR\0\0\0\0"   "RBRACE\0"        "TILDE\0\0"
+      "DEL\0\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers4 + (c - '{') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers4 + (c - '{') * 7); // Each string has length 6 + null terminator
   } else {
     dump_char(c);
     fatal_error("character_ident: invalid character");
-    return 0;
   }
+
+  return string_concat5(wrap_char('_'), wrap_char('_'), res, wrap_char('_'), wrap_char('_'));
 }
 
 ast replaced_fun_calls = 0;
@@ -977,6 +996,7 @@ ast replaced_fun_calls_tail = 0;
 ast conditional_fun_calls = 0;
 ast conditional_fun_calls_tail = 0;
 ast literals_inits = 0;
+ast literals_inits_tail = 0;
 bool contains_side_effects = 0;
 
 ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_conditionally) {
@@ -1047,9 +1067,16 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       return node;
     } else if (op == STRING) {
       /* We must initialize strings before the expression */
-      sub1 = fresh_string_ident(get_val_(STRING, node));
-      literals_inits = cons(new_ast2('=', sub1, get_val_(STRING, node)), literals_inits);
-      return sub1;
+      sub2 = fresh_string_ident(get_val_(STRING, node));
+      sub1 = new_ast2('=', sub2, get_val_(STRING, node));
+      sub1 = cons(sub1, 0);
+
+      // Add to end of literals_inits
+      if (literals_inits == 0) { literals_inits = sub1; }
+      else { set_child(literals_inits_tail, 1, sub1); }
+      literals_inits_tail = sub1;
+
+      return sub2;
     } else {
       dump_node(node);
       fatal_error("unexpected operator");
@@ -1062,9 +1089,13 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(child0, executes_conditionally));
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
-    } else {
+    }
+#endif
+    else {
       dump_node(node);
       fatal_error("unexpected operator");
       return 0;
@@ -1144,9 +1175,9 @@ ast handle_side_effects(ast node) {
   return handle_side_effects_go(node, false);
 }
 
-void comp_defstr(ast ident, int string_probe, int array_size) {
-  char *string_start = STRING_BUF(string_probe);
-  char *string_end = STRING_BUF_END(string_probe);
+void comp_defstr(ast ident, int string_symbol, int array_size) {
+  char *string_start = symbol_buf(string_symbol);
+  char *string_end = symbol_buf_end(string_symbol);
   text array_size_text = 0;
 
   if (array_size != -1) {
@@ -1377,7 +1408,9 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(child0);
       return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
@@ -1406,11 +1439,14 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
+    }
+#endif // SUPPORT_SIZEOF
 #ifdef SH_SUPPORT_ADDRESS_OF
-    } else if (op == '&') {
+    else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
+    }
 #endif
-    } else {
+    else {
       dump_node(node);
       fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
@@ -1449,6 +1485,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == CAST) { // Casts are no-op
       return comp_rvalue_go(child1, context, 0, op);
     } else {
+      dump_node(node);
       fatal_error("comp_rvalue_go: unknown rvalue");
       return 0;
     }
@@ -1456,8 +1493,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     sub1 = comp_rvalue_go(child0, RVALUE_CTX_ARITH_EXPANSION, 0, op);
     sub2 = comp_rvalue_go(child1, RVALUE_CTX_ARITH_EXPANSION, 0, op);
     sub3 = comp_rvalue_go(child2, RVALUE_CTX_ARITH_EXPANSION, 0, op);
-    return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(": "), sub3), outer_op, op);
-    return 0;
+    return wrap_if_needed(true, context, test_side_effects, string_concat5(sub1, op_to_str(op), sub2, wrap_str_lit(" : "), sub3), outer_op, op);
   } else if (nb_children == 4 && (op == AMP_AMP || op == BAR_BAR)) {
     // Note, this could also be compiled in a single [ ] block using -a and
     // -o, which I think are POSIX compliant but are deprecated.
@@ -1858,9 +1894,9 @@ text comp_fun_call_code(ast node, ast assign_to) {
     if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
         && (param = list_singleton(params)) != 0
         && get_op(param) == STRING)) { // puts("..."), putstr("..."), printf("...")
-      return printf_call(STRING_BUF(get_val_(STRING, param)), 0, 0, true);
+      return printf_call(symbol_buf(get_val_(STRING, param)), 0, 0, true);
     } else if (name_id == PRINTF_ID && params != 0 && get_op(car(params)) == STRING) { // printf("...", ...)
-      handle_printf_call(STRING_BUF(get_val_(STRING, car(params))), tail(params));
+      handle_printf_call(symbol_buf(get_val_(STRING, car(params))), tail(params));
       return 0;
     }
 #ifdef SH_INLINE_PUTCHAR
@@ -1895,6 +1931,7 @@ text comp_fun_call_code(ast node, ast assign_to) {
 #ifndef SH_MINIMAL_RUNTIME
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
   else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+  else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
 #endif
 
   if (assign_to) res = comp_lvalue(assign_to);
@@ -2141,7 +2178,7 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   start_glo_decl_idx = glo_decl_ix;
   always_returns = comp_statement(body, stmt_ctx);
   append_glo_decl(last_line);
-  replay_glo_decls(heap[loop_binding + 2], heap[loop_binding + 3], true);
+  replay_glo_decls(heap[loop_binding + 2], heap[loop_binding + 3]);
   // while loops cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
   nest_level -= 1;
@@ -2164,7 +2201,7 @@ bool comp_break() {
 bool comp_continue() {
   int binding = cgc_lookup_enclosing_loop(cgc_locals);
   if (binding == 0) fatal_error("comp_statement: continue not in loop");
-  replay_glo_decls(heap[binding + 2], heap[binding + 3], true);
+  replay_glo_decls(heap[binding + 2], heap[binding + 3]);
   // We could remove the continue when in tail position, but it's not worth doing
   append_glo_decl(wrap_str_lit("continue"));
   return false;
@@ -2271,7 +2308,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
                      );
 #endif
   } else if (op == FOR_KW) {
-    comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT); // Assuming this statement never returns...
+    comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT);
 
     str = wrap_char(':'); // Empty statement
     if (get_child_(FOR_KW, node, 1)) {
@@ -2292,16 +2329,16 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     return comp_continue(); // Continue to next iteration of loop
   } else if (op == RETURN_KW) {
     return comp_return(get_child_(RETURN_KW, node, 0));
-  } else if (op == '(') { // six.call
+  } else if (op == '(') { // Function call
     comp_fun_call(node, 0);
     return false;
-  } else if (op == '{') { // six.compound
+  } else if (op == '{') { // Compound statement
     return comp_body(node, stmt_ctx);
-  } else if (op == '=') { // six.x=y
+  } else if (op == '=') { // Assignment
     comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
     return false;
 #ifdef SUPPORT_GOTO
-  } else if (op == ':') {
+  } else if (op == ':') { // Labelled statement
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
     append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, get_child_(':', node, 0))), wrap_char(':')));
@@ -2328,7 +2365,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
 void comp_glo_fun_decl(ast node) {
   ast fun_decl = get_child__(FUN_DECL, DECL, node, 0);
   ast body = get_child_opt_(FUN_DECL, '{', node, 1);
-  ast name_probe = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, fun_decl, 0));
+  ast name_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, fun_decl, 0));
   ast fun_type = get_child__(DECL, '(', fun_decl, 1);
   ast params = get_child_opt_('(', LIST, fun_type, 1);
   text let_params_text = 0;
@@ -2343,7 +2380,7 @@ void comp_glo_fun_decl(ast node) {
   handle_function_params(params);
 
   // If the function is main
-  if (name_probe == MAIN_ID) {
+  if (name_symbol == MAIN_ID) {
     main_defined = true;
     // If main has parameters, we'll prepare the argc/argv values in the epilogue.
     if (params != 0) runtime_use_make_argv = true;
@@ -2370,7 +2407,7 @@ void comp_glo_fun_decl(ast node) {
 
 
   append_glo_decl(string_concat4(
-    function_name(name_probe),
+    function_name(name_symbol),
     wrap_str_lit("() {"),
     let_params_text,
     function_comment
@@ -2442,7 +2479,7 @@ void comp_glo_var_decl(ast node) {
     // string, and then initialize the array variable with the variable passed
     // to defstr.
     if (init != 0 && get_op(init) == STRING) {
-      init_len = heap[get_val_(STRING, init) + 4] + 1; // string_end - string_start
+      init_len = symbol_len(get_val_(STRING, init)) + 1; // +1 for null terminator
       if (arr_len != 0 && arr_len < init_len) {
         fatal_error("Array type is too small for initializer");
       }
