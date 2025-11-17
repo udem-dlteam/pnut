@@ -1,13 +1,16 @@
-#include "include/signal.h"
+#include <pnut_lib.h>
+#include <signal.h>
 
-#ifdef TODO
+#ifdef ADD_LIBC_STUB
 
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
-  return 0; /*TODO*/
+  pnut_abort("sigaction not implemented");
+  return 0;
 }
 
 int sigemptyset(sigset_t *set) {
-  return 0; /*TODO*/
+  pnut_abort("sigemptyset not implemented");
+  return 0;
 }
 
 #endif

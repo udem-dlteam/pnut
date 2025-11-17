@@ -1,9 +1,9 @@
-#include "include/math.h"
+#include <math.h>
 
-#ifndef PNUT_CC
+#ifdef ADD_LIBC_STUB
 
 double ldexp(double x, int exp) {
-  return 0.0; /*TODO*/
+  pnut_abort("ldexp not implemented");
 }
 
 #endif

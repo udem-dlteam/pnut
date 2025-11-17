@@ -1,4 +1,6 @@
-#include "include/ctype.h"
+#include <ctype.h>
+
+#ifdef ADD_LIBC_STUB
 
 int isdigit(int c) {
   return c >= '0' && c <= '9';
@@ -71,3 +73,10 @@ int isspace(int c) {
 int ispunct(int c) {
   return isprint(c) & !isspace(c) & !isalnum(c);
 }
+
+int isblank(int c) {
+  // Assume default C locale
+  return c == ' ' || c == '\t';
+}
+
+#endif
