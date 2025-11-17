@@ -1091,9 +1091,13 @@ ast value_type(ast node) {
     } else if (op == '+' || op == '-' || op == '~' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
       // Unary operation don't change the type
       return value_type(child0);
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       return int_type; // sizeof always returns an integer
-    } else {
+    }
+#endif
+    else {
       dump_node(node);
       fatal_error("value_type: unexpected operator");
       return -1;
@@ -1803,14 +1807,18 @@ void codegen_rvalue(ast node) {
     } else if (op == '&') {
       codegen_lvalue(child0);
       grow_fs(-1);
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       if (get_op(child0) == DECL) {
         mov_reg_imm(reg_X, type_width(get_child_(DECL, child0, 1), true, false));
       } else {
         mov_reg_imm(reg_X, type_width(value_type(child0), true, false));
       }
       push_reg(reg_X);
-    } else {
+    }
+#endif // SUPPORT_SIZEOF
+    else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
     }

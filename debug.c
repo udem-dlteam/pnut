@@ -85,7 +85,9 @@ void print_tok(int tok, int val) {
   else if (tok == FOR_KW)       putstr("for");
   else if (tok == IF_KW)        putstr("if");
   else if (tok == RETURN_KW)    putstr("return");
+#ifdef SUPPORT_SIZEOF
   else if (tok == SIZEOF_KW)    putstr("sizeof");
+#endif
   else if (tok == SWITCH_KW)    putstr("switch");
   else if (tok == TYPEDEF_KW)   putstr("typedef");
   else if (tok == WHILE_KW)     putstr("while");
@@ -227,7 +229,9 @@ void print_tok_type(int tok) {
   else if (tok == FOR_KW)       putstr("for");
   else if (tok == IF_KW)        putstr("if");
   else if (tok == RETURN_KW)    putstr("return");
+#ifdef SUPPORT_SIZEOF
   else if (tok == SIZEOF_KW)    putstr("sizeof");
+#endif
   else if (tok == SWITCH_KW)    putstr("switch");
   else if (tok == TYPEDEF_KW)   putstr("typedef");
   else if (tok == WHILE_KW)     putstr("while");
@@ -328,7 +332,6 @@ void print_tok_type(int tok) {
       putstr("bar");
     } else
 #endif
-
     putchar(tok);
   }
   else {
@@ -490,6 +493,7 @@ void ast_to_sexp(ast obj) {
       printf(")");
       break;
 
+#ifdef SUPPORT_SIZEOF
     case SIZEOF_KW:
       printf("(sizeof ");
       if (get_op(get_child_(SIZEOF_KW, obj, 0)) == DECL) {
@@ -499,6 +503,7 @@ void ast_to_sexp(ast obj) {
       }
       printf(")");
       break;
+#endif
 
     case '[':
       printf("(array_at ");

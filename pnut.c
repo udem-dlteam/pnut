@@ -239,6 +239,7 @@
   #define SUPPORT_COMPLEX_INITIALIZER
   #define SUPPORT_DO_WHILE
   #define SUPPORT_GOTO
+  #define SUPPORT_SIZEOF
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_TYPE_SPECIFIERS
   #define SUPPORT_VARIADIC_FUNCTIONS
@@ -477,8 +478,7 @@ void restore_include_context() {
 
 // Tokens and AST nodes
 enum {
-  // Keywords
-
+  // C keywords
   KEYWORDS_START = 300,
   BREAK_KW,
   CASE_KW,
@@ -491,7 +491,9 @@ enum {
   FOR_KW,
   IF_KW,
   RETURN_KW,
+#ifdef SUPPORT_SIZEOF
   SIZEOF_KW,
+#endif
   SWITCH_KW,
   TYPEDEF_KW,
   WHILE_KW,
@@ -1894,7 +1896,9 @@ void init_ident_table() {
   init_ident(FOR_KW,      "for");
   init_ident(IF_KW,       "if");
   init_ident(RETURN_KW,   "return");
+#ifdef SUPPORT_SIZEOF
   init_ident(SIZEOF_KW,   "sizeof");
+#endif
   init_ident(SWITCH_KW,   "switch");
   init_ident(TYPEDEF_KW,  "typedef");
   init_ident(WHILE_KW,    "while");
@@ -3806,6 +3810,7 @@ ast parse_unary_expression() {
     result = parse_cast_expression();
     result = new_ast1(op, result);
 
+#ifdef SUPPORT_SIZEOF
   } else if (skip_newlines && tok == SIZEOF_KW) { // only parse sizeof if we're not in a #if expression
 
     get_tok();
@@ -3823,6 +3828,7 @@ ast parse_unary_expression() {
     }
     result = new_ast1(SIZEOF_KW, result);
 
+#endif // SUPPORT_SIZEOF
   } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
 
     get_tok_macro();

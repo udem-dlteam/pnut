@@ -1064,9 +1064,13 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
     } else if (op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE || op == PLUS_PLUS_POST || op == MINUS_MINUS_POST) {
       contains_side_effects = true;
       return new_ast1(op, handle_side_effects_go(child0, executes_conditionally));
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       return node; // sizeof is a compile-time operator
-    } else {
+    }
+#endif
+    else {
       dump_node(node);
       fatal_error("unexpected operator");
       return 0;
@@ -1379,7 +1383,9 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(child0);
       return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
-    } else if (op == SIZEOF_KW) {
+    }
+#ifdef SUPPORT_SIZEOF
+    else if (op == SIZEOF_KW) {
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
@@ -1408,11 +1414,14 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
         fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
         return 0;
       }
+    }
+#endif // SUPPORT_SIZEOF
 #ifdef SH_SUPPORT_ADDRESS_OF
-    } else if (op == '&') {
+    else if (op == '&') {
       return wrap_if_needed(false, context, test_side_effects, comp_lvalue_address(child0), outer_op, op);
+    }
 #endif
-    } else {
+    else {
       dump_node(node);
       fatal_error("comp_rvalue_go: unexpected operator");
       return 0;
