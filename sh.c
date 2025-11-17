@@ -918,58 +918,60 @@ text character_ident(int c) {
   // Mark character as used
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
   any_character_used = true;
+  text res = 0;
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
-    return string_concat5(wrap_char('_'), wrap_char('_'), wrap_char(c), wrap_char('_'), wrap_char('_'));
+    res = wrap_char(c);
   } else if (c < 32) {
     // First 32 characters are control characters.
     char* control_character_identifiers =
-      "__NUL__\0"     "__SOH__\0"     "__STX__\0"     "__ETX__\0"
-      "__EOT__\0"     "__ENQ__\0"     "__ACK__\0"     "__BEL__\0"
-      "__BS__\0\0"    "__HT__\0\0"    "__LF__\0\0"    "__VT__\0\0"
-      "__FF__\0\0"    "__CR__\0\0"    "__SO__\0\0"    "__SI__\0\0"
-      "__DLE__\0"     "__DC1__\0"     "__DC2__\0"     "__DC3__\0"
-      "__DC4__\0"     "__NAK__\0"     "__SYN__\0"     "__ETB__\0"
-      "__CAN__\0"     "__EM__\0\0"    "__SUB__\0"     "__ESC__\0"
-      "__FS__\0\0"    "__GS__\0\0"    "__RS__\0\0"    "__US__\0\0"
+      "NUL\0"     "SOH\0"     "STX\0"     "ETX\0"
+      "EOT\0"     "ENQ\0"     "ACK\0"     "BEL\0"
+      "BS\0\0"    "HT\0\0"    "LF\0\0"    "VT\0\0"
+      "FF\0\0"    "CR\0\0"    "SO\0\0"    "SI\0\0"
+      "DLE\0"     "DC1\0"     "DC2\0"     "DC3\0"
+      "DC4\0"     "NAK\0"     "SYN\0"     "ETB\0"
+      "CAN\0"     "EM\0\0"    "SUB\0"     "ESC\0"
+      "FS\0\0"    "GS\0\0"    "RS\0\0"    "US\0\0"
     ;
     // Control characters
-    return wrap_str_lit(control_character_identifiers + (c * 8)); // Each string has length 7 + null terminator
+    res = wrap_str_lit(control_character_identifiers + (c * 4)); // Each string has length 3 + null terminator
   } else if (c < '0') {
     // Symbols from space to /
     char* printable_character_identifiers1 =
-      "__SPACE__\0\0\0\0\0\0"     "__EXCL__\0\0\0\0\0\0\0"    "__DQUOTE__\0\0\0\0\0"        "__HASH__\0\0\0\0\0\0\0"
-      "__DOLLAR__\0\0\0\0\0"      "__PERCENT__\0\0\0\0"       "__AMP__\0\0\0\0\0\0\0\0"     "__QUOTE__\0\0\0\0\0\0"
-      "__LPAREN__\0\0\0\0\0"      "__RPAREN__\0\0\0\0\0"      "__STAR__\0\0\0\0\0\0\0"      "__PLUS__\0\0\0\0\0\0\0"
-      "__COMMA__\0\0\0\0\0\0"     "__MINUS__\0\0\0\0\0\0"     "__PERIOD__\0\0\0\0\0"        "__SLASH__\0\0\0\0\0\0"
+      "SPACE\0\0\0"     "EXCL\0\0\0\0"    "DQUOTE\0\0"        "HASH\0\0\0\0"
+      "DOLLAR\0\0"      "PERCENT\0"       "AMP\0\0\0\0\0"     "QUOTE\0\0\0"
+      "LPAREN\0\0"      "RPAREN\0\0"      "STAR\0\0\0\0"      "PLUS\0\0\0\0"
+      "COMMA\0\0\0"     "MINUS\0\0\0"     "PERIOD\0\0"        "SLASH\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 8); // Each string has length 7 + null terminator
   } else if (c <= 'A') {
     // Symbols from : to @
     char* printable_character_identifiers2 =
-      "__COLON__\0\0\0\0\0\0"     "__SEMICOLON__\0\0"         "__LT__\0\0\0\0\0\0\0\0\0"    "__EQ__\0\0\0\0\0\0\0\0\0"
-      "__GT__\0\0\0\0\0\0\0\0\0"  "__QUESTION__\0\0\0"        "__AT__\0\0\0\0\0\0\0\0\0"
+      "COLON\0\0\0\0\0"     "SEMICOLON\0"         "LT\0\0\0\0\0\0\0\0"    "EQ\0\0\0\0\0\0\0\0"
+      "GT\0\0\0\0\0\0\0\0"  "QUESTION\0\0"        "AT\0\0\0\0\0\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers2 + (c - ':') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers2 + (c - ':') * 10); // Each string has length 9 + null terminator
   } else if (c <= 'a') {
     // Symbols from [ to `
     char* printable_character_identifiers3 =
-      "__LBRACK__\0\0\0\0\0"      "__BACKSLASH__\0\0"         "__RBRACK__\0\0\0\0\0"        "__CARET__\0\0\0\0\0\0"
-      "__UNDERSCORE__\0"          "__BACKTICK__\0\0\0"
+      "LBRACK\0\0\0\0\0"      "BACKSLASH\0\0"         "RBRACK\0\0\0\0\0"        "CARET\0\0\0\0\0\0"
+      "UNDERSCORE\0"          "BACKTICK\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers3 + (c - '[') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers3 + (c - '[') * 11); // Each string has length 10 + null terminator
   } else if (c <= 127) {
     // Symbols from { to ~ and DEL (127)
     char* printable_character_identifiers4 =
-      "__LBRACE__\0\0\0\0\0"      "__BAR__\0\0\0\0\0\0\0\0"   "__RBRACE__\0\0\0\0\0"        "__TILDE__\0\0\0\0\0\0"
-      "__DEL__\0\0\0\0\0\0\0\0"
+      "LBRACE\0"      "BAR\0\0\0\0"   "RBRACE\0"        "TILDE\0\0"
+      "DEL\0\0\0\0"
     ;
-    return wrap_str_lit(printable_character_identifiers4 + (c - '{') * 15); // Each string has length 14 + null terminator
+    res = wrap_str_lit(printable_character_identifiers4 + (c - '{') * 7); // Each string has length 6 + null terminator
   } else {
     dump_char(c);
     fatal_error("character_ident: invalid character");
-    return 0;
   }
+
+  return string_concat5(wrap_char('_'), wrap_char('_'), res, wrap_char('_'), wrap_char('_'));
 }
 
 ast replaced_fun_calls = 0;
