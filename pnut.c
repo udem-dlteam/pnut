@@ -1585,17 +1585,18 @@ void handle_define() {
 
   // Accumulate tokens so they can be replayed when the macro is used
   heap[macro + 3] = cons(read_macro_tokens(args), args_count);
-
 }
 
 int eval_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
-  int op1;
-  int op2;
-  ast child0, child1;
 
-  if (get_nb_children(expr) >= 1) child0 = get_child(expr, 0);
-  if (get_nb_children(expr) >= 2) child1 = get_child(expr, 1);
+  int val0, val1; // Results of evaluating child0 and child1, for non-lazy operators
+  if (op != '?' && op != AMP_AMP && op != BAR_BAR && op != '(') {
+    // For non-lazy operators, we can pre-evaluate the children.
+    // This makes eval_constant's shell version much shorter and easier to review.
+    if (get_nb_children(expr) >= 1) val0 = eval_constant(get_child(expr, 0), if_macro);
+    if (get_nb_children(expr) >= 2) val1 = eval_constant(get_child(expr, 1), if_macro);
+  }
 
   switch (op) {
     case INTEGER:
@@ -1616,88 +1617,64 @@ int eval_constant(ast expr, bool if_macro) {
 #endif
       return -get_val(expr);
     case CHARACTER:   return get_val_(CHARACTER, expr);
-    case '~':         return ~eval_constant(child0, if_macro);
-    case '!':         return !eval_constant(child0, if_macro);
+    case '~':         return ~val0;
+    case '!':         return !val0;
+    case '*':         return val0 *  val1;
+    case '/':         return val0 /  val1;
+    case '%':         return val0 %  val1;
+    case '&':         return val0 &  val1;
+    case '|':         return val0 |  val1;
+    case '^':         return val0 ^  val1;
+    case LSHIFT:      return val0 << val1;
+    case RSHIFT:      return val0 >> val1;
+    case EQ_EQ:       return val0 == val1;
+    case EXCL_EQ:     return val0 != val1;
+    case LT_EQ:       return val0 <= val1;
+    case GT_EQ:       return val0 >= val1;
+    case '<':         return val0 <  val1;
+    case '>':         return val0 >  val1;
+
+    // - and + can be unary or binary
     case '-':
     case '+':
-      op1 = eval_constant(child0, if_macro);
       if (get_nb_children(expr) == 1) {
-        return TERNARY(op == '-', -op1, op1);
+        return TERNARY(op == '-', -val0, val0);
       } else {
-        op2 = eval_constant(child1, if_macro);
-        return TERNARY(op == '-', (op1 - op2), (op1 + op2));
+        return TERNARY(op == '-', (val0 - val1), (val0 + val1));
       }
 
     case '?':
-      op1 = eval_constant(child0, if_macro);
-      if (op1) {
-        return eval_constant(child1, if_macro);
+      val0 = eval_constant(get_child(expr, 0), if_macro);
+      if (val0) {
+        return eval_constant(get_child(expr, 1), if_macro);
       } else {
         return eval_constant(get_child(expr, 2), if_macro);
       }
 
-    case '*':
-    case '/':
-    case '%':
-    case '&':
-    case '|':
-    case '^':
-    case LSHIFT:
-    case RSHIFT:
-    case EQ_EQ:
-    case EXCL_EQ:
-    case LT_EQ:
-    case GT_EQ:
-    case '<':
-    case '>':
-      op1 = eval_constant(child0, if_macro);
-      op2 = eval_constant(child1, if_macro);
-      switch (op) {
-        case '*':     return op1 * op2;
-        case '/':     return op1 / op2;
-        case '%':     return op1 % op2;
-        case '&':     return op1 & op2;
-        case '|':     return op1 | op2;
-        case '^':     return op1 ^ op2;
-        case LSHIFT:  return op1 << op2;
-        case RSHIFT:  return op1 >> op2;
-        case EQ_EQ:   return op1 == op2;
-        case EXCL_EQ: return op1 != op2;
-        case LT_EQ:   return op1 <= op2;
-        case GT_EQ:   return op1 >= op2;
-        case '<':     return op1 < op2;
-        case '>':     return op1 > op2;
-      }
-      return 0; // Should never reach here
-
     case AMP_AMP:
-      op1 = eval_constant(child0, if_macro);
-      if (!op1) return 0;
-      else return eval_constant(child1, if_macro);
-
     case BAR_BAR:
-      op1 = eval_constant(child0, if_macro);
-      if (op1) return 1;
-      else return eval_constant(child1, if_macro);
+      val0 = eval_constant(get_child(expr, 0), if_macro);
+      if (op == AMP_AMP && !val0) return 0;
+      else if (op == BAR_BAR && val0) return 1;
+      else return eval_constant(get_child(expr, 1), if_macro);
 
     case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val_(IDENTIFIER, child0) == DEFINED_ID) {
-        return child1 == MACRO;
+      if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
+        return get_child(expr, 1) == MACRO;
       } else {
         fatal_error("unknown function call in constant expressions");
         return 0;
       }
 
     case IDENTIFIER:
-      if (if_macro) {
-        // Undefined identifiers are 0
-        // At this point, macros have already been expanded so we can't have a macro identifier
-        return 0;
-      } else {
+      if (!if_macro) {
+        // At this point, macros have already been expanded so we can't have a
+        // macro identifier, which means we're dealing with a regular identifier.
         // TODO: Enums when outside of if_macro
         fatal_error("identifiers are not allowed in constant expression");
-        return 0;
       }
+
+      return 0; // Undefined identifiers evaluate to 0
 
     default:
       dump_op(op);
