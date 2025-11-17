@@ -638,9 +638,7 @@ int alloc_obj(const int size) {
 
   alloc_result = heap_alloc;
 
-  heap_alloc += size;
-
-  if (heap_alloc > HEAP_SIZE) {
+  if ((heap_alloc += size) > HEAP_SIZE) {
     fatal_error("heap overflow");
   }
 
@@ -965,7 +963,7 @@ void accum_string_string(const int string_symbol) {
 // Note that this function only supports small integers, represented as positive number.
 void accum_string_integer(int n) {
 #ifdef SUPPORT_64_BIT_LITERALS
-  if (n < 0) fatal_error("accum_string_integer: Only small integers can be pasted");
+  if (n < 0) syntax_error("accum_string_integer: Only small integers can be pasted");
 #else
   if (n < 0) {
     accum_string('-');
@@ -1411,7 +1409,7 @@ int accum_digit(int base) {
   } else {
     int limit = MININT / base;
     if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
-      fatal_error("literal integer overflow");
+      syntax_error("literal integer overflow");
     }
 
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -1749,7 +1747,7 @@ int eval_constant(ast expr, bool if_macro) {
       if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
         return get_child(expr, 1) == MACRO;
       } else {
-        fatal_error("unknown function call in constant expressions");
+        syntax_error("unknown function call in constant expressions");
         return 0;
       }
 
@@ -1758,14 +1756,14 @@ int eval_constant(ast expr, bool if_macro) {
         // At this point, macros have already been expanded so we can't have a
         // macro identifier, which means we're dealing with a regular identifier.
         // TODO: Enums when outside of if_macro
-        fatal_error("identifiers are not allowed in constant expression");
+        syntax_error("identifiers are not allowed in constant expression");
       }
 
       return 0; // Undefined identifiers evaluate to 0
 
     default:
       dump_op(op);
-      fatal_error("unsupported operator in constant expression");
+      syntax_error("unsupported operator in constant expression");
       return 0;
   }
 }
@@ -2201,7 +2199,7 @@ int get_macro_args_toks(int macro) {
     macro_args_count += 1;
   }
 
-  if (tok != ')') syntax_error("unterminated macro argument list");
+  if (tok != ')') parse_error("unterminated macro argument list", tok);
 
   if (prev_is_comma) {
     args = cons(0, args); // Push empty arg
@@ -2216,7 +2214,7 @@ int get_macro_args_toks(int macro) {
 int get_macro_arg(int ix) {
   int arg = macro_args;
   while (ix > 0) {
-    if (arg == 0) syntax_error("too few arguments to macro");
+    if (arg == 0) fatal_error("get_macro_arg: argument index out of range");
     arg = cdr(arg);
     ix -= 1;
   }
@@ -3295,7 +3293,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
       case EXTERN_KW:
 #endif
       case TYPEDEF_KW:
-        if (specifier_storage_class != 0) fatal_error("Multiple storage classes not supported");
+        if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
         specifier_storage_class = tok;
         get_tok();
@@ -3575,7 +3573,7 @@ ast parse_initializer_list() {
 
   while (tok != '}' && tok != EOF) {
 #ifdef sh
-    if (tok == '{') fatal_error("nested initializer lists not supported");
+    if (tok == '{') syntax_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
       rest = result = cons(parse_initializer(), 0);
