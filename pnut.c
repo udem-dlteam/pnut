@@ -1446,10 +1446,6 @@ int NOT_SUPPORTED_ID;
 // We want to recognize certain identifers without having to do expensive string comparisons
 int MAIN_ID;
 #ifdef sh
-int ARGV__ID;
-int ARGV_ID;
-int IFS_ID;
-
 int PUTCHAR_ID;
 int GETCHAR_ID;
 int EXIT_ID;
@@ -1465,6 +1461,27 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
+
+// In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid
+// argv_ since argv is a common C variable name.
+int ARGV__ID;
+int ARGV_ID;
+// Shell special variables
+int ENV_ID;
+int HOME_ID;
+int IFS_ID;
+int LANG_ID;
+int LC_ALL_ID;
+int LC_COLLATE_ID;
+int LC_CTYPE_ID;
+int LC_MESSAGES_ID;
+int LINENO_ID;
+int NLSPATH_ID;
+int PATH_ID;
+int PPID_ID;
+int PS1_ID;
+int PS4_ID;
+int PWD_ID;
 #endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
@@ -1953,10 +1970,6 @@ void init_ident_table() {
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
 #ifdef sh
-  ARGV_ID = init_ident(IDENTIFIER, "argv");
-  ARGV__ID = init_ident(IDENTIFIER, "argv_");
-  IFS_ID  = init_ident(IDENTIFIER, "IFS");
-
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
   GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
   EXIT_ID    = init_ident(IDENTIFIER, "exit");
@@ -1972,6 +1985,24 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+
+  ARGV_ID = init_ident(IDENTIFIER, "argv");
+  ARGV__ID = init_ident(IDENTIFIER, "argv_");
+  ENV_ID = init_ident(IDENTIFIER, "ENV");
+  HOME_ID = init_ident(IDENTIFIER, "HOME");
+  IFS_ID = init_ident(IDENTIFIER, "IFS");
+  LANG_ID = init_ident(IDENTIFIER, "LANG");
+  LC_ALL_ID = init_ident(IDENTIFIER, "LC_ALL");
+  LC_COLLATE_ID = init_ident(IDENTIFIER, "LC_COLLATE");
+  LC_CTYPE_ID = init_ident(IDENTIFIER, "LC_CTYPE");
+  LC_MESSAGES_ID = init_ident(IDENTIFIER, "LC_MESSAGES");
+  LINENO_ID = init_ident(IDENTIFIER, "LINENO");
+  NLSPATH_ID = init_ident(IDENTIFIER, "NLSPATH");
+  PATH_ID = init_ident(IDENTIFIER, "PATH");
+  PPID_ID = init_ident(IDENTIFIER, "PPID");
+  PS1_ID = init_ident(IDENTIFIER, "PS1");
+  PS4_ID = init_ident(IDENTIFIER, "PS4");
+  PWD_ID = init_ident(IDENTIFIER, "PWD");
 #endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT

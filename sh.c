@@ -654,12 +654,16 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     fatal_error("variable name is invalid. It can't start or end with '_'.");
   }
 
-  // IFS is a special shell variable that's overwritten by certain.
-  // In zsh, writing to argv assigns to $@, so we map argv to argv_, and forbid argv_.
-  // This check only applies to local variables because globals are prefixed with _.
-  if (local && (ident_probe == ARGV__ID || ident_probe == IFS_ID)) {
+  // The shell has special variables that can't be used as regular variables.
+  if (local &&
+      (  ident_probe == ARGV__ID       || ident_probe == ENV_ID         || ident_probe == HOME_ID
+      || ident_probe == IFS_ID         || ident_probe == LANG_ID        || ident_probe == LC_ALL_ID
+      || ident_probe == LC_COLLATE_ID  || ident_probe == LC_CTYPE_ID    || ident_probe == LC_MESSAGES_ID
+      || ident_probe == LINENO_ID      || ident_probe == NLSPATH_ID     || ident_probe == PATH_ID
+      || ident_probe == PPID_ID        || ident_probe == PS1_ID         || ident_probe == PS4_ID
+      || ident_probe == PWD_ID)) {
     dump_string("Variable name: ", name);
-    fatal_error("variable name is invalid. It can't be 'IFS' or 'argv_'.");
+    fatal_error("variable name is reserved by the shell and can't be used as a local variable.");
   }
 
   if (local) {
