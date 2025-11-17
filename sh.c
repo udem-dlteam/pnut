@@ -345,6 +345,7 @@ void print_text(text t) {
 // Codegen context
 
 #define GLO_DECL_SIZE 100000
+#define GLO_DECL_ENTRY_SIZE 3
 text glo_decls[GLO_DECL_SIZE];  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
@@ -408,18 +409,22 @@ void init_comp_context() {
 }
 
 void append_glo_decl(text decl) {
+  if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
   glo_decls[glo_decl_ix] = nest_level;
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = decl;
-  glo_decl_ix += 3;
+  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
 }
 
+// Fixups are represented as negative nest levels (-1, -2, ...). The actual
+// nest level is obtained by negating the value and subtracting 1.
 int append_glo_decl_fixup() {
-  glo_decls[glo_decl_ix] = -nest_level - 1; // Negative value to indicate that it's a fixup
+  if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
+  glo_decls[glo_decl_ix] = - (nest_level + 1);
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = 0;
-  glo_decl_ix += 3;
-  return glo_decl_ix - 3;
+  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
+  return glo_decl_ix - GLO_DECL_ENTRY_SIZE;
 }
 
 void fixup_glo_decl(int fixup_ix, text decl) {
@@ -439,7 +444,7 @@ void fixup_glo_decl(int fixup_ix, text decl) {
 void undo_glo_decls(int start) {
   while (start < glo_decl_ix) {
     glo_decls[start + 1] -= 1; // To support nested undone declarations
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -448,22 +453,19 @@ void undo_glo_decls(int start) {
 bool any_active_glo_decls(int start) {
   while (start < glo_decl_ix) {
     if (glo_decls[start + 1] && glo_decls[start + 2] != 0) return true;
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
   return false;
 }
 
 // Replay the declarations betwee start and end. Replayed declarations must first
 // be undone with undo_glo_decls.
-// The reindent parameter controls if the declarations should be replayed at the
-// current nest level or at the nest level when they were added.
-void replay_glo_decls(int start, int end, int reindent) {
+void replay_glo_decls(int start, int end) {
   while (start < end) {
     if (glo_decls[start + 1] == 0) { // Skip inactive declarations that are at the current level
       append_glo_decl(glo_decls[start + 2]);
-      if (!reindent) glo_decls[glo_decl_ix - 3] = glo_decls[start]; // Replace nest_level
     }
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -473,7 +475,7 @@ text replay_glo_decls_inline(int start, int end) {
     if (glo_decls[start + 1] == 0) { // Skip inactive declarations
       res = concatenate_strings_with(res, glo_decls[start + 2], wrap_str_lit("; "));
     }
-    start += 3;
+    start += GLO_DECL_ENTRY_SIZE;
   }
   if (res != 0) { res = string_concat(res, wrap_str_lit("; ")); }
 
@@ -495,7 +497,7 @@ void print_glo_decls() {
         putchar('\n');
       }
     }
-    i += 3;
+    i += GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -2155,7 +2157,7 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   start_glo_decl_idx = glo_decl_ix;
   always_returns = comp_statement(body, stmt_ctx);
   append_glo_decl(last_line);
-  replay_glo_decls(heap[loop_binding + 2], heap[loop_binding + 3], true);
+  replay_glo_decls(heap[loop_binding + 2], heap[loop_binding + 3]);
   // while loops cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
   nest_level -= 1;
@@ -2178,7 +2180,7 @@ bool comp_break() {
 bool comp_continue() {
   int binding = cgc_lookup_enclosing_loop(cgc_locals);
   if (binding == 0) fatal_error("comp_statement: continue not in loop");
-  replay_glo_decls(heap[binding + 2], heap[binding + 3], true);
+  replay_glo_decls(heap[binding + 2], heap[binding + 3]);
   // We could remove the continue when in tail position, but it's not worth doing
   append_glo_decl(wrap_str_lit("continue"));
   return false;
