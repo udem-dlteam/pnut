@@ -2192,7 +2192,7 @@ int initializer_size(ast initializer) {
       return size;
 
     case STRING:
-      return heap[get_val_(STRING, initializer) + 4] + 1;
+      return symbol_len(get_val_(STRING, initializer)) + 1; // +1 for null terminator
 
     default:
       fatal_error("initializer_size: unknown initializer");

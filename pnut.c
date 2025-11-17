@@ -881,19 +881,35 @@ ast list_singleton(const ast list) {
 // Each symbol is represented as an object in the heap with the following layout:
 //  - 0: pointer to next symbol in the chain (0 if last symbol)
 //  - 1: offset in the string pool where the symbol's string is stored
-//  - 2: token type (IDENTIFIER, MACRO, TYPEDEF, other C keyword, etc)
-//  - 3: token tag (for macros, typedefs, defstr index, etc)
-//  - 4: length of the symbol's string
+//  - 2: length of the symbol's string
+//  - 3: token type (IDENTIFIER, MACRO, TYPEDEF, other C keyword, etc)
+//  - 4: token tag (for macros, typedefs, defstr index, etc)
 char *symbol_buf(const int symbol) {
-  return string_pool + heap[symbol+1];
+  return string_pool + heap[symbol + 1];
 }
 
 int symbol_len(const int symbol) {
-  return heap[symbol+4];
+  return heap[symbol + 2];
 }
 
 char *symbol_buf_end(const int symbol) {
-  return string_pool + heap[symbol+1] + heap[symbol+4];
+  return string_pool + heap[symbol + 1] + heap[symbol + 2];
+}
+
+int symbol_type(const int symbol) {
+  return heap[symbol + 3];
+}
+
+void set_symbol_type(const int symbol, const int type) {
+  heap[symbol + 3] = type;
+}
+
+int symbol_tag(const int symbol) {
+  return heap[symbol + 4];
+}
+
+void set_symbol_tag(const int symbol, const int tag) {
+  heap[symbol + 4] = tag;
 }
 
 void begin_string() {
@@ -958,7 +974,7 @@ int end_symbol() {
 
   while ((symbol = heap[curr_symbol]) != 0) {
     // Skip symbols with different length
-    if (end_symbol_len != heap[symbol + 4]) {
+    if (end_symbol_len != heap[symbol + 2]) {
       curr_symbol = symbol; // remember previous ident
       continue;
     }
@@ -988,9 +1004,9 @@ int end_symbol() {
 
   heap[symbol]     = 0;               // Next symbol in chain
   heap[symbol + 1] = string_start;    // Offset in string pool
-  heap[symbol + 2] = IDENTIFIER;      // Token type
-  heap[symbol + 3] = 0;               // Token tag
-  heap[symbol + 4] = end_symbol_len;  // Length of the symbol
+  heap[symbol + 2] = end_symbol_len;  // Length of the symbol
+  heap[symbol + 3] = IDENTIFIER;      // Token type
+  heap[symbol + 4] = 0;               // Token tag
 
   return symbol;
 }
@@ -1601,7 +1617,7 @@ void handle_define() {
     syntax_error("#define directive can only be followed by a identifier");
   }
 
-  heap[val + 2] = MACRO; // Mark the identifier as a macro
+  set_symbol_type(val, MACRO); // Mark the identifier as a macro
   macro = val;
   if (ch == '(') { // Function-like macro
     args_count = 0;
@@ -1627,7 +1643,7 @@ void handle_define() {
   }
 
   // Accumulate tokens so they can be replayed when the macro is used
-  heap[macro + 3] = cons(read_macro_tokens(args), args_count);
+  set_symbol_tag(macro, cons(read_macro_tokens(args), args_count));
 }
 
 int eval_constant(ast expr, bool if_macro) {
@@ -1825,7 +1841,7 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the macro name
       if (tok == IDENTIFIER || tok == MACRO) {
         // TODO: Doesn't play nice with typedefs, because they are not marked as macros
-        heap[val + 2] = IDENTIFIER; // Unmark the macro identifier
+        set_symbol_type(val, IDENTIFIER); // Unmark the macro
         get_tok_macro(); // Skip the macro name
       } else {
         dump_tok(tok);
@@ -1891,27 +1907,23 @@ void get_ident() {
   }
 
   val = end_symbol();
-  tok = heap[val+2];
+  tok = symbol_type(val);
 }
 
 int intern_str(char* name) {
-  int i = 0;
-
   begin_string();
 
-  while (name[i] != 0) {
-    accum_string(name[i]);
-    i += 1;
+  while (*name != 0) {
+    accum_string(*name);
+    name += 1;
   }
 
-  i = end_symbol();
-
-  return i;
+  return end_symbol();
 }
 
-int init_ident(int tok, char *name) {
+int init_ident(const int tok, char * const name) {
   int i = intern_str(name);
-  heap[i+2] = tok;
+  set_symbol_type(i, tok);
   return i;
 }
 
@@ -2038,14 +2050,14 @@ void init_ident_table() {
 int init_builtin_string_macro(char *macro_str, char* value) {
   int macro_id = init_ident(MACRO, macro_str);
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
-  heap[macro_id + 3] = cons(cons(cons(STRING, intern_str(value)), 0), -1);
+  set_symbol_tag(macro_id, cons(cons(cons(STRING, intern_str(value)), 0), -1));
   return macro_id;
 }
 #endif
 
 int init_builtin_int_macro(char *macro_str, int value) {
   int macro_id = init_ident(MACRO, macro_str);
-  heap[macro_id + 3] = cons(cons(cons(INTEGER, -value), 0), -1);
+  set_symbol_tag(macro_id, cons(cons(cons(INTEGER, -value), 0), -1));
   return macro_id;
 }
 
@@ -2053,7 +2065,7 @@ int init_builtin_int_macro(char *macro_str, int value) {
 
 int init_builtin_empty_macro(char *macro_str) {
   int macro_id = init_ident(MACRO, macro_str);
-  heap[macro_id + 3] = cons(0, -1); // -1 means it's an object-like macro, 0 means no tokens
+  set_symbol_tag(macro_id, cons(0, -1)); // -1 means it's an object-like macro, 0 means no tokens
   return macro_id;
 }
 
@@ -2122,7 +2134,7 @@ int macro_parse_argument() {
 }
 
 void check_macro_arity(int macro_args_count, int macro) {
-  int expected_argc = cdr(heap[macro + 3]);
+  int expected_argc = cdr(symbol_tag(macro));
   if (macro_args_count != expected_argc) {
     dump_int("expected_argc = ", expected_argc);
     dump_int("macro_args_count = ", macro_args_count);
@@ -2243,13 +2255,13 @@ void undo_token(int prev_tok, int prev_val) {
 // If the wrong number of arguments is passed to a function-like macro, a fatal error is raised.
 bool attempt_macro_expansion(int macro) {
   // We must save the tokens because the macro may be redefined while reading the arguments
-  int tokens = car(heap[macro + 3]);
+  int tokens = car(symbol_tag(macro));
 
   if (macro_is_already_expanding(macro)) { // Self referencing macro
     tok = IDENTIFIER;
     val = macro;
     return false;
-  } else if (cdr(heap[macro + 3]) == -1) { // Object-like macro
+  } else if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
@@ -2359,7 +2371,7 @@ void paste_tokens(int left_tok, int left_val) {
     }
 
     val = end_symbol();
-    tok = heap[val+2]; // The kind of the identifier
+    tok = symbol_type(val); // The kind of the identifier
   } else if (left_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
           || left_tok == INTEGER_HEX || left_tok == INTEGER_OCT
@@ -2384,7 +2396,7 @@ void paste_tokens(int left_tok, int left_val) {
       accum_string_string(right_val);
 
       val = end_symbol();
-      tok = heap[val+2]; // The kind of the identifier
+      tok = symbol_type(val); // The kind of the identifier
     } else {
       dump_tok(left_tok);
       dump_tok(right_tok);
@@ -2459,7 +2471,7 @@ void get_tok() {
       // Tokens that are identifiers and up are tokens whose kind can change
       // between the moment the macro is defined and where it is used.
       // So we reload the kind from the ident table.
-      if (tok >= IDENTIFIER) tok = heap[val + 2];
+      if (tok >= IDENTIFIER) tok = symbol_type(val);
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
       // Check if the next token is ## for token pasting
@@ -3302,7 +3314,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         // Lookup type in the types table. It is stored in the tag of the
         // interned string object. The type is cloned so it can be modified.
-        type_specifier = clone_ast(heap[val + 3]);
+        type_specifier = clone_ast(symbol_tag(val));
         get_tok();
         break;
 
@@ -3612,8 +3624,8 @@ void add_typedef(ast declarator) {
 #endif
 
   // Use symbol object to store the typedef'ed type in the symbol table
-  heap[decl_ident + 2] = TYPE;
-  heap[decl_ident + 3] = decl_type;
+  set_symbol_type(decl_ident, TYPE);
+  set_symbol_tag(decl_ident, decl_type);
 }
 
 ast parse_fun_def(ast declarator) {

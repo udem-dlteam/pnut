@@ -621,11 +621,12 @@ ast fresh_string_ident(int string_symbol) {
   // Strings are interned, meaning that the same string used twice will have the
   // same address. We use the token tag to mark the string as already defined.
   // This allows comp_defstr to use the same string variable for the same string.
-  if (heap[string_symbol + 3] == 0) { // tag defaults to 0
-    string_counter += 1;
-    heap[string_symbol + 3] = string_counter;
+  int tag = symbol_tag(string_symbol);
+  if (symbol_tag(string_symbol) == 0) { // tag defaults to 0
+    set_symbol_tag(string_symbol, string_counter += 1); // Mark the string as defined
+    tag = string_counter;
   }
-  return new_ast0(IDENTIFIER_STRING, heap[string_symbol + 3] - 1);
+  return new_ast0(IDENTIFIER_STRING, tag - 1);
 }
 
 void add_var_to_local_env(ast decl, enum BINDING kind) {
@@ -2476,7 +2477,7 @@ void comp_glo_var_decl(ast node) {
     // string, and then initialize the array variable with the variable passed
     // to defstr.
     if (init != 0 && get_op(init) == STRING) {
-      init_len = heap[get_val_(STRING, init) + 4] + 1; // string_end - string_start
+      init_len = symbol_len(get_val_(STRING, init)) + 1; // +1 for null terminator
       if (arr_len != 0 && arr_len < init_len) {
         fatal_error("Array type is too small for initializer");
       }
