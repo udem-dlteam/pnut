@@ -3248,7 +3248,7 @@ ast parse_type_specifier() {
     case CHAR_KW:
     case INT_KW:
     case VOID_KW:
-#ifdef DEBUG_PARSER
+#ifndef sh
     case FLOAT_KW:
     case DOUBLE_KW:
 #endif
@@ -3281,7 +3281,7 @@ ast parse_type_specifier() {
 
     case LONG_KW:
       get_tok();
-#ifdef DEBUG_PARSER
+#ifndef sh
       if (tok == DOUBLE_KW) {
         get_tok();
         return new_ast0(DOUBLE_KW, 0);

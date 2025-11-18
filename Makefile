@@ -46,6 +46,9 @@ pnut-exe-bootstrapped: pnut-exe
 kit/bintools.c:
 	./utils/process-includes.sh kit/bintools/bintools-base.c > kit/bintools.c
 
+kit/jammed.sh: kit/bintools.c
+	./kit/make-jammed.sh
+
 install: pnut-sh pnut-sh.sh
 	sudo cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
 	sudo cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
