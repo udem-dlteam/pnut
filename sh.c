@@ -6,23 +6,16 @@
 
 void handle_shell_include() {
   int c;
-  if (tok == STRING) {
-    // Include pack_string and unpack_string functions
-    // since they will likely be used in the included file
-    runtime_use_put_pstr = true;
-    runtime_use_unpack_string = true;
-    // Include the file as-is without any preprocessing
-    include_file(symbol_buf(val), fp_dirname);
-    while ((c = fgetc(fp)) != EOF) {
-      putchar(c);
-    }
-    putchar('\n');
-    restore_include_context();
-    get_tok_macro(); // Skip the string
-  } else {
-    dump_tok(tok);
-    syntax_error("expected string to #include_shell directive");
+  // Include pack_string and unpack_string functions
+  // since they will likely be used in the included file
+  runtime_use_put_pstr = true;
+  runtime_use_unpack_string = true;
+  // Include the file as-is without any preprocessing
+  while ((c = fgetc(fp)) != EOF) {
+    putchar(c);
   }
+  putchar('\n');
+  restore_include_context();
 }
 
 #endif // SH_SUPPORT_SHELL_INCLUDE

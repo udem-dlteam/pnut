@@ -1302,7 +1302,9 @@ void get_ch() {
 }
 
 #ifdef PNUT_CC
+
 // TODO: It would be nice to not have to duplicate this code
+
 int strlen(char *str) {
   int i = 0;
   while (str[i] != '\0') i += 1;
@@ -1316,12 +1318,35 @@ void memcpy(char *dest, char *src, int n) {
   }
 }
 
+// Returns a pointer to the last occurrence of character c in string str.
+// If c is not found, returns 0.
+char *strrchr(char *str, int c) {
+  char *last = 0;
+  while (*str != '\0') {
+    if (*str == c) last = str;
+    str += 1;
+  }
+  return last;
+}
+
+#ifdef SH_SUPPORT_SHELL_INCLUDE
+
+int strcmp(char *s1, char *s2) {
+  while (*s1 != '\0' && *s2 != '\0') {
+    if (*s1 != *s2) break;
+    s1 += 1;
+    s2 += 1;
+  }
+  return (*s1 - *s2);
+}
+
 #endif
 
-char *substr(char *str, int start, int end) {
-  int len = end - start;
+#endif
+
+char *substr(char *str, const int len) {
   char *temp = malloc(len + 1);
-  memcpy(temp, str + start, len);
+  memcpy(temp, str, len);
   temp[len] = '\0';
   return temp;
 }
@@ -1340,17 +1365,11 @@ char *str_concat(char *s1, char *s2) {
 // For example, /a/b/c.txt -> /a/b/
 // If the path does not contain a slash, it returns "".
 char *file_parent_directory(char *path) {
-  int i = 0;
-  int last_slash = -1;
-  while (path[i] != '\0') {
-    if (path[i] == '/') last_slash = i;
-
-    i += 1;
-  }
-  if (last_slash == -1) {
+  char *last_slash = strrchr(path, '/');
+  if (last_slash == 0) {
     return 0;
   } else {
-    return substr(path, 0, last_slash + 1);
+    return substr(path, last_slash - path + 1);
   }
 }
 
@@ -1530,9 +1549,6 @@ int DEFINE_ID;
 int UNDEF_ID;
 int INCLUDE_ID;
 int DEFINED_ID;
-#ifdef SH_SUPPORT_SHELL_INCLUDE
-int INCLUDE_SHELL_ID;
-#endif
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
 int WARNING_ID;
@@ -1823,9 +1839,29 @@ int evaluate_if_condition() {
   return eval_constant(expr, true);
 }
 
+#ifdef SH_SUPPORT_SHELL_INCLUDE
+void handle_shell_include();
+#endif
+
 void handle_include() {
+  char *buf;
+#ifdef SH_SUPPORT_SHELL_INCLUDE
+  char *ext;
+#endif
+
   if (tok == STRING) {
-    include_file(symbol_buf(val), fp_dirname);
+    buf = symbol_buf(val);
+    include_file(buf, fp_dirname);
+
+#ifdef SH_SUPPORT_SHELL_INCLUDE
+    ext = strrchr(buf, '.');
+    // When including a file ending with .sh, we treat it as a shell script.
+    // This is obviously not standard C, but serves to mix existing shell code
+    // with compiled C code.
+    if (ext && strcmp(ext, ".sh") == 0) {
+      handle_shell_include();
+    }
+#endif
 #ifdef DEBUG_EXPAND_INCLUDES
     // When running pnut in "expand includes" mode, we want to annotate the
     // #include directives that were expanded with a comment so we can remove
@@ -1839,7 +1875,8 @@ void handle_include() {
     // #include <file> directives only take effect if the search path is provided
     // TODO: Issue a warning to stderr when skipping the directive
     if (include_search_path != 0) {
-      include_file(symbol_buf(val), include_search_path);
+      buf = symbol_buf(val);
+      include_file(buf, include_search_path);
     }
     get_tok_macro(); // Skip the string
   } else {
@@ -1847,10 +1884,6 @@ void handle_include() {
     syntax_error("expected string to #include directive");
   }
 }
-
-#ifdef SH_SUPPORT_SHELL_INCLUDE
-void handle_shell_include();
-#endif
 
 void handle_preprocessor_directive() {
   int temp;
@@ -1892,13 +1925,6 @@ void handle_preprocessor_directive() {
       get_tok_macro(); // Get the STRING token
       handle_include();
     }
-#ifdef SH_SUPPORT_SHELL_INCLUDE
-    // Not standard C, but serves to mix existing shell code with compiled C code
-    else if (tok == IDENTIFIER && val == INCLUDE_SHELL_ID) {
-      get_tok_macro(); // Get the STRING token
-      handle_shell_include();
-    }
-#endif
     else if (tok == IDENTIFIER && val == UNDEF_ID) {
       get_tok_macro(); // Get the macro name
       if (tok == IDENTIFIER || tok == MACRO) {
@@ -2061,9 +2087,6 @@ void init_ident_table() {
   UNDEF_ID   = init_ident(IDENTIFIER, "undef");
   INCLUDE_ID = init_ident(IDENTIFIER, "include");
   DEFINED_ID = init_ident(IDENTIFIER, "defined");
-#ifdef SH_SUPPORT_SHELL_INCLUDE
-  INCLUDE_SHELL_ID = init_ident(IDENTIFIER, "include_shell");
-#endif
 
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
