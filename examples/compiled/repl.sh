@@ -923,10 +923,10 @@ _free() { # $2 = object to free
 }
 
 # Unpack a Shell string into an appropriately sized buffer
-unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
-  __ends_with_eof=$3
+  __ends_with_eof=${3:-1}
   __fgetc_buf16=
   __stdin_buf256=
   __continue=1
@@ -1008,7 +1008,7 @@ refill_buffer() { # $1: fd
     : $((__buffer_fd$__fd = __buffer))
     : $((__buflen_fd$__fd = __buflen))
   fi
-  unpack_string "$__temp_buf" $__buffer $__ends_with_eof
+  unpack_string_to_buf "$__temp_buf" $__buffer $__ends_with_eof
 }
 
 read_byte() { # $2: fd

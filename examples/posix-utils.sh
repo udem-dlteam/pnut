@@ -72,7 +72,7 @@ unpack_lines() {
   _malloc $1 $___i
   ___i=0
   for ___line in $2; do
-    unpack_string _$(($1 + ___i))  "$___line"
+    unpack_string _$(($1 + ___i)) "$___line"
     : $((___i += 1))
   done
   : $((_$(($1 + ___i)) = 0)) # Null delimiter

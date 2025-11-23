@@ -76,7 +76,7 @@ unpack_lines() {
   _malloc $1 $___i
   ___i=0
   for ___line in $2; do
-    unpack_string _$(($1 + ___i))  "$___line"
+    unpack_string _$(($1 + ___i)) "$___line"
     : $((___i += 1))
   done
   : $((_$(($1 + ___i)) = 0)) # Null delimiter
@@ -240,25 +240,6 @@ endlet() { # $1: return variable
 }
 
 
-# Unpack a Shell string into an appropriately sized buffer
-unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
-  __buffer=$2
-  __ends_with_eof=$3
-  while [ ! -z "$__fgetc_buf" ]; do
-    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-    : $((_$__buffer = __c))
-    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
-    : $((__buffer += 1))              # Move to the next buffer position
-  done
-
-  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
-    : $((_$__buffer = 10))            # Line ends with newline
-    : $((__buffer += 1))
-  fi
-  : $((_$__buffer = 0))               # Then \0
-}
-
 __stdin_buf=
 __stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
 _getchar() {
@@ -287,6 +268,40 @@ _getchar() {
   __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
   : $(($1 = __c))
     __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
+}
+
+__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
+
+_malloc() { # $2 = object size
+  : $((_$__ALLOC = $2)) # Track object size
+  : $(($1 = $__ALLOC + 1))
+  : $((__ALLOC += $2 + 1))
+}
+
+# Unpack a Shell string into an appropriately sized buffer
+unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+  __fgetc_buf=$1
+  __buffer=$2
+  __ends_with_eof=${3:-1}
+  while [ ! -z "$__fgetc_buf" ]; do
+    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+    : $((_$__buffer = __c))
+    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    : $((__buffer += 1))              # Move to the next buffer position
+  done
+
+  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
+    : $((_$__buffer = 10))            # Line ends with newline
+    : $((__buffer += 1))
+  fi
+  : $((_$__buffer = 0))               # Then \0
+}
+
+# Unpack a Shell string into a newly allocated buffer
+unpack_string() { # $1: return location, $2: Shell string
+  _malloc __addr $((${#2} + 1))  # Allocate buffer
+  unpack_string_to_buf "$2" $__addr
+  : $(($1 = __addr))
 }
 
 __code=0; # Exit code
