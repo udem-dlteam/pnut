@@ -862,6 +862,8 @@ ast new_ast4(const int op, const ast child0, const ast child1, const ast child2,
   return ast_result;
 }
 
+#ifndef sh
+
 ast clone_ast(const ast orig) {
   int nb_children = get_nb_children(orig);
   int i;
@@ -878,6 +880,8 @@ ast clone_ast(const ast orig) {
 
   return ast_result;
 }
+
+#endif
 
 ast cons(const int child0, const int child1)    { return new_ast2(LIST, child0, child1); }
 ast car(const int pair)                         { return get_child_(LIST, pair, 0); }
@@ -3378,8 +3382,14 @@ ast parse_declaration_specifiers(bool allow_typedef) {
       case TYPE:
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         // Lookup type in the types table. It is stored in the tag of the
-        // interned string object. The type is cloned so it can be modified.
+        // interned string object.
+#ifdef sh
+        // pnut-sh doesn't mutate the type nodes, so no need to clone them
+        type_specifier = symbol_tag(val);
+#else
+        // The type is cloned so it can be modified.
         type_specifier = clone_ast(symbol_tag(val));
+#endif
         get_tok();
         break;
 
