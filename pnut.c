@@ -653,80 +653,157 @@ int string_pool_alloc = 0;
 int string_start;
 int hash;
 
+#ifdef PRINT_MEMORY_STATS
+int symbol_count = 0; // Number of symbols allocated
+
+int ast_cons_counter = 0; // Number of AST cons cells allocated
+int cons_counter = 0; // Number of general cons cells allocated
+int temp_cons_counter = 0; // Number of temporary cons cells allocated
+
+int cloned_obj_count = 0; // Number of objects cloned
+int cloned_obj_size_total = 0; // Total size of objects cloned
+#endif
+
 // These parameters give a perfect hashing of the C keywords
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
+
+// Heap management.
+//
+// The heap is separated into a global heap and a temporary heap.
+// - The global heap is for long-lived objects that live until the end of the
+//   program. These are symbols, macros, typedefs, and global
+//   vars/funs/struct/union/enum declarations. In particular, the symbol table
+//   occupies the beginning of the global heap, from index 0 to HASH_PRIME.
+//
+// - The temporary heap is for short-lived objects that are only needed during
+//   parsing of a top-level declaration, mostly AST nodes. The temporary heap is
+//   reset after each top-level declaration is parsed.
+//
+// The heap has the following layout:
+// =========================================
+// | 0                | SYMBOL_TABLE_START |
+// |             ...........               |
+// | HASH_PRIME       | GLOBAL_HEAP_START  |
+// |             ...........               |
+// | GLO_HEAP_SIZE    | TEMP_HEAP_START    |
+// |             ...........               |
+// | HEAP_SIZE        | END_OF_HEAP        |
+// =========================================
+
 // Some C implementations place globals on the stack, where size is limited.
 #ifdef SMALL_HEAP
 #define HEAP_SIZE 131072 // 128 KB
 #else
 #define HEAP_SIZE 786432 // 768 KB
 #endif
-intptr_t heap[HEAP_SIZE];
-int heap_alloc = HASH_PRIME;
+#define GLO_HEAP_SIZE 196608 // 192 KB
+intptr_t heap[HEAP_SIZE]; // 384 KB for heap
+int heap_alloc = GLO_HEAP_SIZE;
+int glo_heap_alloc = HASH_PRIME;
 
-int alloc_result;
+bool alloc_obj_to_global = false;
 
-int alloc_obj(const int size) {
-
-  alloc_result = heap_alloc;
-
-  if ((heap_alloc += size) > HEAP_SIZE) {
-    fatal_error("heap overflow");
+int alloc_glo_obj(const int size) {
+  if ((glo_heap_alloc += size) > GLO_HEAP_SIZE) {
+    fatal_error("global heap overflow");
   }
 
-  return alloc_result;
+  return (glo_heap_alloc - size);
 }
 
-int get_op(const ast node) {
-  return heap[node] & 1023;
+int alloc_obj(const int size) {
+  if (alloc_obj_to_global) {
+    return alloc_glo_obj(size);
+  } else {
+    if ((heap_alloc += size) > HEAP_SIZE) {
+      fatal_error("heap overflow");
+    }
+
+    return (heap_alloc - size);
+  }
 }
 
-ast get_nb_children(const ast node) {
-  return heap[node] >> 10;
-}
-
+#ifdef SAFE_MODE
 // Because everything is an int in pnut, it's easy to make mistakes and pass the
 // wrong node type to a function. These versions of get_child take the input
 // and/or output node type and checks that the node has the expected type before
 // returning the child node.
 // It also checks that the index is within bounds.
-#ifdef SAFE_MODE
+int heap_start = GLO_HEAP_SIZE;
+
+// A reference is in bounds if it points to an area of the heap that is active.
+// That is, either a reference to a global object (<= glo_heap_alloc), whose
+// lifetime is until the end of the program, or a reference to a temporary
+// object, which is in the area between heap_start and heap_alloc.
+//
+// This check is primarily useful to check for dangling object references when
+// allocating objects using an arena allocator.
+//
+// During normal operation, heap_start is constant and heap_alloc increases as
+// each top-level declaration is parsed before being reset to heap_start for
+// the next top-level declaration. When running in SAFE_MODE however, heap_start
+// is simply reset to heap_alloc after each top-level declaration, such that
+// using dangling references is caught by this check.
+#define REF_IN_BOUNDS(ref) ((ref) <= glo_heap_alloc || ((ref) >= heap_start && (ref) < heap_alloc))
+
+void check_ref(char* file, int line, ast node) {
+  if (!REF_IN_BOUNDS(node)) {
+    printf("%s:%d: Node %d is out of bounds\n", file, line, node);
+    exit(1);
+  }
+}
+
+int get_op_checked(char *const file, int line, const ast node) {
+  check_ref(file, line, node);
+  return heap[node] & 1023;
+}
+
+ast get_nb_children_checked(char* file, int line, ast node) {
+  check_ref(file, line, node);
+  return heap[node] >> 10;
+}
+
 int get_val_checked(char* file, int line, ast node) {
-  if (get_nb_children(node) != 0) {
-    printf("%s:%d: get_val called on node %d with %d children\n", file, line, get_op(node), get_nb_children(node));
+  check_ref(file, line, node);
+  if (get_nb_children_checked(file, line, node) != 0) {
+    printf("%s:%d: get_val called on node %d with %d children\n", file, line, get_op_checked(file, line, node), get_nb_children_checked(file, line, node));
     exit(1);
   }
   return heap[node+1];
 }
 
 int get_val_go(char* file, int line, int expected_node, ast node) {
-  if (get_op(node) != expected_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_node, get_op(node));
+  check_ref(file, line, node);
+  if (get_op_checked(file, line, node) != expected_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_node, get_op_checked(file, line, node));
     exit(1);
   }
   return get_val_checked(file, line, node);
 }
 
 void set_val_checked(char* file, int line, ast node, int val) {
-  if (get_nb_children(node) != 0) {
-    printf("%s:%d: set_val called on node %d with %d children\n", file, line, get_op(node), get_nb_children(node));
+  check_ref(file, line, node);
+  if (get_nb_children_checked(file, line, node) != 0) {
+    printf("%s:%d: set_val called on node %d with %d children\n", file, line, get_op_checked(file, line, node), get_nb_children_checked(file, line, node));
     exit(1);
   }
   heap[node+1] = val;
 }
 
 ast get_child_checked(char* file, int line, ast node, int i) {
-  if (i != 0 && i >= get_nb_children(node)) {
-    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op(node));
+  check_ref(file, line, node);
+  if (i != 0 && i >= get_nb_children_checked(file, line, node)) {
+    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op_checked(file, line, node));
     exit(1);
   }
   return heap[node+i+1];
 }
 
 void set_child_checked(char* file, int line, ast node, int i, ast child) {
-  if (i != 0 && i >= get_nb_children(node)) {
-    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op(node));
+  check_ref(file, line, node);
+  if (i != 0 && i >= get_nb_children_checked(file, line, node)) {
+    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op_checked(file, line, node));
     exit(1);
   }
   heap[node+i+1] = child;
@@ -735,9 +812,10 @@ void set_child_checked(char* file, int line, ast node, int i, ast child) {
 // This function checks that the parent node has the expected operator before
 // returning the child node.
 ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i) {
+  check_ref(file, line, node);
   ast res = get_child_checked(file, line, node, i);
-  if (get_op(node) != expected_parent_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op_checked(file, line, node));
     exit(1);
   }
   return res;
@@ -746,13 +824,14 @@ ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i
 // This function checks that the parent node has the expected operator and that
 // the child node has the expected operator before returning the child node.
 ast get_child__go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  check_ref(file, line, node);
   ast res = get_child_checked(file, line, node, i);
-  if (get_op(node) != expected_parent_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op_checked(file, line, node));
     exit(1);
   }
-  if (get_op(res) != expected_node) {
-    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(res));
+  if (get_op_checked(file, line, res) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op_checked(file, line, res));
     exit(1);
   }
   return res;
@@ -762,18 +841,21 @@ ast get_child__go(char* file, int line, int expected_parent_node, int expected_n
 // the child node has the expected operator (if child node is not 0) before
 // returning the child node.
 ast get_child_opt_go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
+  check_ref(file, line, node);
   ast res = get_child_checked(file, line, node, i);
-  if (get_op(node) != expected_parent_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op_checked(file, line, node));
     exit(1);
   }
-  if (res > 0 && get_op(res) != expected_node) {
-    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(res));
+  if (res > 0 && get_op_checked(file, line, res) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op_checked(file, line, res));
     exit(1);
   }
   return res;
 }
 
+#define get_op(node) get_op_checked(__FILE__, __LINE__, node)
+#define get_nb_children(node) get_nb_children_checked(__FILE__, __LINE__, node)
 #define get_val(node) get_val_checked(__FILE__, __LINE__, node)
 #define get_val_(expected_node, node) get_val_go(__FILE__, __LINE__, expected_node, node)
 #define set_val(node, val) set_val_checked(__FILE__, __LINE__, node, val)
@@ -784,6 +866,14 @@ ast get_child_opt_go(char* file, int line, int expected_parent_node, int expecte
 #define get_child_opt_(expected_parent_node, expected_node, node, i) get_child_opt_go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
 
 #else
+
+int get_op(const ast node) {
+  return heap[node] & 1023;
+}
+
+ast get_nb_children(const ast node) {
+  return heap[node] >> 10;
+}
 
 int get_val(const ast node) {
   return heap[node+1];
@@ -866,24 +956,88 @@ ast new_ast4(const int op, const ast child0, const ast child1, const ast child2,
   return ast_result;
 }
 
-ast clone_ast(const ast orig) {
-  int nb_children = get_nb_children(orig);
-  int i;
+int ast_mask(int op) {
+  // Some operators have children that are not AST nodes.
+  // This function returns a mask that indicates which children are _not_ AST nodes.
+  // Only a few operators need this, the rest have all children as AST nodes (a 0 mask).
+  switch (op) {
+    case '[': return 2; // child #1 is an int
+    case '(': return 4; // child #2 is an int
+    case '*':
+    case ENUM_KW:
+      return 1; // child #0 is an int
+#ifdef SUPPORT_STRUCT_UNION
+    case STRUCT_KW:
+    case UNION_KW:
+      return 1; // child #0 is an int
+#endif
 
-  // Account for the value of ast nodes with no child
-  nb_children = TERNARY(nb_children > 0, nb_children, 1);
-
-  ast_result = alloc_obj(nb_children + 1);
-
-  heap[ast_result] = heap[orig]; // copy operator and nb of children
-  for (i = 0; i < nb_children; i += 1) {
-    set_child(ast_result, i, get_child(orig, i));
+    default:
+      return 0; // all children are AST nodes
   }
-
-  return ast_result;
 }
 
-ast cons(const int child0, const int child1)    { return new_ast2(LIST, child0, child1); }
+ast clone_obj(const ast orig) {
+  if (orig == 0) return 0;
+  int nb_children = get_nb_children(orig);
+  int i;
+  int mask = ast_mask(get_op(orig));
+
+  // Account for the value of ast nodes with no child
+  int result = alloc_obj(TERNARY(nb_children == 0, 2, nb_children + 1));
+#ifdef PRINT_MEMORY_STATS
+  cloned_obj_count += 1;
+  cloned_obj_size_total += (TERNARY(nb_children == 0, 2, nb_children + 1));
+#endif
+
+  heap[result] = heap[orig]; // copy operator and nb of children
+  if (nb_children == 0) {
+    set_val(result, get_val(orig)); // copy value
+  } else {
+    for (i = 0; i < nb_children; i += 1) {
+      ast new_child = get_child(orig, i);
+      if ((mask & (1 << i)) == 0) {
+        new_child = clone_obj(new_child); // This child is AST node, deep clone it
+      }
+      set_child(result, i, new_child);
+    }
+  }
+
+  return result;
+}
+
+ast promote_obj_to_global(const ast orig) {
+  int prev = alloc_obj_to_global;
+  alloc_obj_to_global = true;
+  ast res = clone_obj(orig);
+  alloc_obj_to_global = prev;
+  return res;
+}
+
+ast ast_cons(const int child0, const int child1) {
+#ifdef PRINT_MEMORY_STATS
+  ast_cons_counter += 1;
+#endif
+  return new_ast2(LIST, child0, child1);
+}
+
+ast cons(const int child0, const int child1) {
+#ifdef PRINT_MEMORY_STATS
+  cons_counter += 1;
+#endif
+  alloc_obj_to_global = true;
+  ast res = new_ast2(LIST, child0, child1);
+  alloc_obj_to_global = false;
+  return res;
+}
+
+ast temp_cons(const int child0, const int child1) {
+#ifdef PRINT_MEMORY_STATS
+  temp_cons_counter += 1;
+#endif
+  return new_ast2(LIST, child0, child1);
+}
+
 ast car(const int pair)                         { return get_child_(LIST, pair, 0); }
 ast cdr(const int pair)                         { return get_child_(LIST, pair, 1); }
 #ifdef SAFE_MODE
@@ -1052,9 +1206,13 @@ int end_symbol() {
 
   // the symbol was not found, create a new one
 #ifdef sh
-  symbol = alloc_obj(6);
+  symbol = alloc_glo_obj(6);
 #else
-  symbol = alloc_obj(5);
+  symbol = alloc_glo_obj(5);
+#endif
+#ifdef PRINT_MEMORY_STATS
+  // Count symbols objects allocated
+  symbol_count += 1;
 #endif
 
   heap[curr_symbol] = symbol; // chain new symbol to the last symbol in the chain
@@ -1103,7 +1261,6 @@ void dump_ident(int symbol) {
 }
 
 void dump_node(ast node) {
-  putstr("op=");
   putint(get_op(node));
   putstr(" with #children =");
   putint(get_nb_children(node));
@@ -1697,7 +1854,7 @@ void handle_define() {
       get_tok_macro();
       // Accumulate parameters in reverse order. That's ok because the arguments
       // to the macro will also be in reverse order.
-      args = cons(val, args);
+      args = temp_cons(val, args);
       args_count += 1;
     }
   } else {
@@ -2190,10 +2347,10 @@ int macro_parse_argument() {
     parens_depth = parens_depth + (tok == '(') - (tok == ')');
 
     if (arg_tokens == 0) {
-      arg_tokens = cons(cons(tok, val), 0);
+      arg_tokens = temp_cons(temp_cons(tok, val), 0);
       rest = arg_tokens;
     } else {
-      set_cdr(rest, cons(cons(tok, val), 0));
+      set_cdr(rest, temp_cons(temp_cons(tok, val), 0));
       rest = cdr(rest);
     }
     get_tok_macro_expand();
@@ -2225,7 +2382,7 @@ int get_macro_args_toks(int macro) {
     if (tok == ',') {
       get_tok_macro_expand(); // Skip comma
       if (prev_is_comma) { // Push empty arg
-        args = cons(0, args);
+        args = temp_cons(0, args);
         macro_args_count += 1;
       }
       prev_is_comma = true;
@@ -2234,14 +2391,14 @@ int get_macro_args_toks(int macro) {
       prev_is_comma = false;
     }
 
-    args = cons(macro_parse_argument(), args);
+    args = temp_cons(macro_parse_argument(), args);
     macro_args_count += 1;
   }
 
   if (tok != ')') parse_error("unterminated macro argument list", tok);
 
   if (prev_is_comma) {
-    args = cons(0, args); // Push empty arg
+    args = temp_cons(0, args); // Push empty arg
     macro_args_count += 1;
   }
 
@@ -2312,7 +2469,7 @@ bool macro_is_already_expanding(int ident) {
 // Undoes the effect of get_tok by replacing the current token with the previous
 // token and saving the current token to be returned by the next call to get_tok.
 void undo_token(int prev_tok, int prev_val) {
-  begin_macro_expansion(0, cons(cons(tok, val), 0), 0); // Push the current token back
+  begin_macro_expansion(0, temp_cons(temp_cons(tok, val), 0), 0); // Push the current token back
   tok = prev_tok;
   val = prev_val;
 }
@@ -2334,11 +2491,11 @@ bool attempt_macro_expansion(int macro) {
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
-      tokens = cons(cons(STRING, intern_str(fp_filepath)), 0);
+      tokens = temp_cons(temp_cons(STRING, intern_str(fp_filepath)), 0);
     }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     else if (macro == LINE__ID) {
-      tokens = cons(cons(INTEGER, -line_number), 0);
+      tokens = temp_cons(temp_cons(INTEGER, -line_number), 0);
     }
 #endif
 #endif
@@ -3152,10 +3309,10 @@ ast parse_enum() {
       }
 
       if (result == 0) {
-        result = cons(new_ast2('=', ident, value), 0);
+        result = ast_cons(new_ast2('=', ident, value), 0);
         rest = result;
       } else {
-        set_child(rest, 1, cons(new_ast2('=', ident, value), 0));
+        set_child(rest, 1, ast_cons(new_ast2('=', ident, value), 0));
         rest = get_child_(LIST, rest, 1);
       }
 
@@ -3211,18 +3368,18 @@ ast parse_struct_or_union(int struct_or_union_tok) {
         decl = new_ast3(DECL, 0, type_specifier, 0);
 
         if (result == 0) {
-          rest = result = cons(decl, 0);
+          rest = result = ast_cons(decl, 0);
         } else {
-          set_child(rest, 1, cons(decl, 0));
+          set_child(rest, 1, ast_cons(decl, 0));
           rest = get_child_(LIST, rest, 1);
         }
       } else {
         while (1) {
           decl = parse_declarator(false, type_specifier);
           if (result == 0) {
-            rest = result = cons(decl, 0);
+            rest = result = ast_cons(decl, 0);
           } else {
-            set_child(rest, 1, cons(decl, 0));
+            set_child(rest, 1, ast_cons(decl, 0));
             rest = get_child_(LIST, rest, 1);
           }
 
@@ -3383,7 +3540,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         // Lookup type in the types table. It is stored in the tag of the
         // interned string object. The type is cloned so it can be modified.
-        type_specifier = clone_ast(symbol_tag(val));
+        type_specifier = clone_obj(symbol_tag(val));
         get_tok();
         break;
 
@@ -3451,9 +3608,9 @@ int parse_param_list() {
     if (tok == ',') get_tok();
 
     if (result == 0) {
-      rest = result = cons(decl, 0);
+      rest = result = ast_cons(decl, 0);
     } else {
-      set_child(rest, 1, cons(decl, 0));
+      set_child(rest, 1, ast_cons(decl, 0));
       rest = get_child_(LIST, rest, 1);
     }
   }
@@ -3615,9 +3772,9 @@ ast parse_initializer_list() {
     if (tok == '{') syntax_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
-      rest = result = cons(parse_initializer(), 0);
+      rest = result = ast_cons(parse_initializer(), 0);
     } else {
-      set_child(rest, 1, cons(parse_initializer(), 0));
+      set_child(rest, 1, ast_cons(parse_initializer(), 0));
       rest = get_child_(LIST, rest, 1);
     }
     if (tok == ',') get_tok();
@@ -3658,14 +3815,14 @@ ast parse_declarator_and_initializer(bool is_for_typedef, ast type_specifier) {
 }
 
 ast parse_declarators(bool is_for_typedef, ast type_specifier, ast first_declarator) {
-  ast declarators = cons(first_declarator, 0); // Wrap the declarators in a list
+  ast declarators = ast_cons(first_declarator, 0); // Wrap the declarators in a list
   ast rest = declarators;
 
   // Otherwise, this is a variable or declaration
   while (tok != ';') {
     if (tok == ',') {
       get_tok();
-      set_child(rest, 1, cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
+      set_child(rest, 1, ast_cons(parse_declarator_and_initializer(is_for_typedef, type_specifier), 0));
       rest = get_child__(LIST, LIST, rest, 1);
     } else {
       parse_error("';' or ',' expected", tok);
@@ -3694,7 +3851,7 @@ void add_typedef(ast declarator) {
 
   // Use symbol object to store the typedef'ed type in the symbol table
   set_symbol_type(decl_ident, TYPE);
-  set_symbol_tag(decl_ident, decl_type);
+  set_symbol_tag(decl_ident, promote_obj_to_global(decl_type));
 }
 
 ast parse_fun_def(ast declarator) {
@@ -3802,10 +3959,10 @@ ast parse_primary_expression() {
     get_tok();
 
     if (tok == STRING) { // Contiguous strings
-      result = cons(get_val_(STRING, result), 0); // Result is now a list of string values
+      result = ast_cons(get_val_(STRING, result), 0); // Result is now a list of string values
       rest = result;
       while (tok == STRING) {
-        set_cdr(rest, cons(val, 0));
+        set_cdr(rest, ast_cons(val, 0));
         rest = cdr(rest);
         get_tok();
       }
@@ -4224,7 +4381,7 @@ ast parse_comma_expression() {
 
 ast parse_call_params() {
   ast result = parse_assignment_expression();
-  result = cons(result, 0);
+  result = ast_cons(result, 0);
 
   if (tok == ',') {
     get_tok();
@@ -4623,6 +4780,22 @@ int main(int argc, char **argv) {
     output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == DECLS);
 #endif
     codegen_glo_decl(decl);
+#ifdef ONE_PASS_FRONTEND
+#ifdef SAFE_MODE
+// Reset heap to the start of this translation unit so get_* function catch invalid heap accesses
+  if (macro_tok_lst == 0) {
+    heap_start = heap_alloc;
+  } else {
+    printf("# Warning: Cannot reset heap to start of translation unit because macros still expanding\n");
+  }
+#else
+  if (macro_tok_lst == 0) {
+    heap_alloc = GLO_HEAP_SIZE;
+  } else {
+    printf("# Warning: Cannot reset heap to start of translation unit because macros still expanding\n");
+  }
+#endif
+#endif
   }
   codegen_end();
 #endif
