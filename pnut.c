@@ -391,7 +391,8 @@ void putoct_unsigned(int n) {
 
 #ifdef NICE_ERR_MSG
 
-#if defined(SH_MINIMAL_RUNTIME)
+#if defined(SH_MINIMAL_RUNTIME) || defined(NO_COLOR)
+
 // No isatty support in minimal runtime
 #define change_color(color)
 
