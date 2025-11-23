@@ -665,17 +665,13 @@ int hash;
 intptr_t heap[HEAP_SIZE];
 int heap_alloc = HASH_PRIME;
 
-int alloc_result;
-
 int alloc_obj(const int size) {
-
-  alloc_result = heap_alloc;
 
   if ((heap_alloc += size) > HEAP_SIZE) {
     fatal_error("heap overflow");
   }
 
-  return alloc_result;
+  return (heap_alloc - size);
 }
 
 int get_op(const ast node) {
