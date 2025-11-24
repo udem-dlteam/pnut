@@ -838,6 +838,9 @@ int type_width(ast type, bool array_value, bool word_align) {
 #if WORD_SIZE == 8
       width = 8;
       break;
+#elif defined (BOOTSTRAP_LONG)
+      width = 4;
+      break;
 #else
       fatal_error("type_width: long type not supported");
       return -1;
