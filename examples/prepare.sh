@@ -2,7 +2,7 @@
 
 set -e -u
 
-fail() { echo "$1"; exit $2; }
+fail() { echo "$1"; exit ${2:-1}; }
 
 DIR="examples/"
 COMP_DIR="$DIR/compiled"
@@ -15,7 +15,7 @@ echo "Compiling examples"
 PNUT_SH_OPTIONS="-Dsh -DRT_COMPACT -DSAFE_MODE"
 
 # Compile pnut.exe
-gcc -o build/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c 2> /dev/null || fail "Error: Failed to compile pnut"
+gcc -o build/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c 2> /dev/null || fail "Error: Failed to compile pnut $(gcc -o build/pnut-sh-base.exe $PNUT_SH_OPTIONS pnut.c)"
 
 pnut_compile_options() {
   echo `sed -n -e "/\/\/ pnut-options:/p" "$1" | sed -e "s/^\/\/ pnut-options://" |  tr '\n' ',' | sed -e 's/,$//'`

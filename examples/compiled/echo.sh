@@ -35,10 +35,10 @@ _malloc() { # $2 = object size
 
 
 # Unpack a Shell string into an appropriately sized buffer
-unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
+unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
-  __ends_with_eof=$3
+  __ends_with_eof=${3:-1}
   while [ ! -z "$__fgetc_buf" ]; do
     __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
     : $((_$__buffer = __c))
@@ -60,7 +60,7 @@ make_argv() {
 
   while [ $# -ge 1 ]; do
     _malloc _$__argv_ptr $((${#1} + 1))
-    unpack_string "$1" $((_$__argv_ptr)) 1
+    unpack_string_to_buf "$1" $((_$__argv_ptr)) 1
     : $((__argv_ptr += 1))
     shift
   done

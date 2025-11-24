@@ -281,16 +281,16 @@ void runtime_char_to_int() {
 
 // string packing/unpacking
 
-bool runtime_use_unpack_string = DEFAULT_USE;
-bool runtime_unpack_string_defined = false;
-void runtime_unpack_string() {
-  if (runtime_unpack_string_defined++) return;
+bool runtime_use_unpack_string_to_buf = DEFAULT_USE;
+bool runtime_unpack_string_to_buf_defined = false;
+void runtime_unpack_string_to_buf() {
+  if (runtime_unpack_string_to_buf_defined++) return;
   runtime_char_to_int();
   putstr("# Unpack a Shell string into an appropriately sized buffer\n");
-  putstr("unpack_string() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
+  putstr("unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
   putstr("  __fgetc_buf=$1\n");
   putstr("  __buffer=$2\n");
-  putstr("  __ends_with_eof=$3\n");
+  putstr("  __ends_with_eof=${3:-1}\n");
 #ifndef SH_OPTIMIZE_LONG_LINES
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
   extract_first_char("  ", "__fgetc_buf", "_$__buffer")
@@ -425,7 +425,7 @@ bool runtime_make_argv_defined = false;
 void runtime_make_argv() {
   if (runtime_make_argv_defined++) return;
   runtime_malloc();
-  runtime_unpack_string();
+  runtime_unpack_string_to_buf();
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
   putstr("  _malloc __argv $__argc # Allocate enough space for all elements.\n");
@@ -433,7 +433,7 @@ void runtime_make_argv() {
   putstr("\n");
   putstr("  while [ $# -ge 1 ]; do\n");
   putstr("    _malloc _$__argv_ptr $((${#1} + 1))\n");
-  putstr("    unpack_string \"$1\" $((_$__argv_ptr)) 1\n");
+  putstr("    unpack_string_to_buf \"$1\" $((_$__argv_ptr)) 1\n");
   putstr("    : $((__argv_ptr += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
@@ -777,6 +777,21 @@ void runtime_isatty() {
   putstr("}\n\n");
 }
 
+bool runtime_use_unpack_string = DEFAULT_USE;
+bool runtime_unpack_string_defined = false;
+void runtime_unpack_string() {
+  if (runtime_unpack_string_defined++) return;
+  runtime_malloc();
+  runtime_unpack_string_to_buf();
+  putstr("# Unpack a Shell string into a newly allocated buffer\n");
+  putstr("unpack_string() { # $1: return location, $2: Shell string\n");
+  putstr("  _malloc __addr $((${#2} + 1))  # Allocate buffer\n");
+  putstr("  unpack_string_to_buf \"$2\" $__addr\n");
+  putstr("  : $(($1 = __addr))\n");
+  putstr("}\n");
+  putstr("\n");
+}
+
 #endif // SH_MINIMAL_RUNTIME
 
 bool runtime_use_open = DEFAULT_USE;
@@ -860,7 +875,7 @@ void runtime_read_byte() {
   runtime_malloc();
   runtime_free();
   runtime_char_to_int();
-  runtime_unpack_string();
+  runtime_unpack_string_to_buf();
   putstr("refill_buffer() { # $1: fd\n");
   putstr("  __fd=$1\n");
   putstr("  __buffer=$((__buffer_fd$__fd))\n");
@@ -880,7 +895,7 @@ void runtime_read_byte() {
   putstr("    : $((__buffer_fd$__fd = __buffer))\n");
   putstr("    : $((__buflen_fd$__fd = __buflen))\n");
   putstr("  fi\n");
-  putstr("  unpack_string \"$__temp_buf\" $__buffer $__ends_with_eof\n");
+  putstr("  unpack_string_to_buf \"$__temp_buf\" $__buffer $__ends_with_eof\n");
   putstr("}\n");
   putstr("\n");
   putstr("read_byte() { # $2: fd\n");
@@ -1010,31 +1025,32 @@ void runtime_fgetc() {
 }
 
 void produce_runtime() {
-  if (runtime_use_defstr)     runtime_defstr();
-  if (runtime_use_malloc)     runtime_malloc();
-  if (runtime_use_free)       runtime_free();
-  if (runtime_use_put_pstr)   runtime_put_pstr();
-  if (runtime_use_fopen)      runtime_fopen();
-  if (runtime_use_fclose)     runtime_fclose();
-  if (runtime_use_fgetc)      runtime_fgetc();
-  if (runtime_use_read)       runtime_read();
-  if (runtime_use_write)      runtime_write();
-  if (runtime_use_open)       runtime_open();
-  if (runtime_use_close)      runtime_close();
-  if (runtime_use_make_argv)  runtime_make_argv();
-  if (runtime_use_local_vars) runtime_local_vars();
-  if (runtime_use_unpack_string) runtime_unpack_string();
+  if (runtime_use_defstr)               runtime_defstr();
+  if (runtime_use_malloc)               runtime_malloc();
+  if (runtime_use_free)                 runtime_free();
+  if (runtime_use_put_pstr)             runtime_put_pstr();
+  if (runtime_use_fopen)                runtime_fopen();
+  if (runtime_use_fclose)               runtime_fclose();
+  if (runtime_use_fgetc)                runtime_fgetc();
+  if (runtime_use_read)                 runtime_read();
+  if (runtime_use_write)                runtime_write();
+  if (runtime_use_open)                 runtime_open();
+  if (runtime_use_close)                runtime_close();
+  if (runtime_use_make_argv)            runtime_make_argv();
+  if (runtime_use_local_vars)           runtime_local_vars();
+  if (runtime_use_unpack_string_to_buf) runtime_unpack_string_to_buf();
 
 #ifndef SH_INLINE_PUTCHAR
-  if (runtime_use_putchar)    runtime_putchar();
+  if (runtime_use_putchar)              runtime_putchar();
 #endif
 #ifndef SH_INLINE_EXIT
-  if (runtime_use_exit)       runtime_exit();
+  if (runtime_use_exit)                 runtime_exit();
 #endif
 
 #ifndef SH_MINIMAL_RUNTIME
-  if (runtime_use_getchar)    runtime_getchar();
-  if (runtime_use_printf)     runtime_printf();
-  if (runtime_use_isatty)     runtime_isatty();
+  if (runtime_use_getchar)              runtime_getchar();
+  if (runtime_use_printf)               runtime_printf();
+  if (runtime_use_isatty)               runtime_isatty();
+  if (runtime_use_unpack_string)        runtime_unpack_string();
 #endif
 }
