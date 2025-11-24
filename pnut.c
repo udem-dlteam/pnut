@@ -1890,88 +1890,90 @@ void handle_preprocessor_directive() {
 #ifdef SH_INCLUDE_C_CODE
   int prev_char_buf_ix = code_char_buf_ix; // Index of the # token in the code buffer
 #endif
-  get_tok_macro(); // Get the # token
-  get_tok_macro(); // Get the directive
+  {
+    get_tok_macro(); // Get the # token
+    get_tok_macro(); // Get the directive
 
-  if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
-    temp = val;
-    get_tok_macro(); // Get the macro name
-    push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
-    get_tok_macro(); // Skip the macro name
-  } else if (tok == IF_KW) {
-    temp = evaluate_if_condition() != 0;
-    push_if_macro_mask(temp);
-  } else if (tok == IDENTIFIER && val == ELIF_ID) {
-    temp = evaluate_if_condition() != 0;
-    if (prev_macro_mask() && !if_macro_executed) {
-      if_macro_executed |= temp;
-      if_macro_mask = temp;
-    } else {
-      if_macro_mask = false;
-    }
-  } else if (tok == ELSE_KW) {
-    if (prev_macro_mask()) { // If the parent block mask is true
-      if_macro_mask = !if_macro_executed;
-      if_macro_executed = true;
-    } else {
-      if_macro_mask = false;
-    }
-    get_tok_macro(); // Skip the else keyword
-  } else if (tok == IDENTIFIER && val == ENDIF_ID) {
-    pop_if_macro_mask();
-    get_tok_macro(); // Skip the else keyword
-  } else if (if_macro_mask) {
-    if (tok == IDENTIFIER && val == INCLUDE_ID) {
-      get_tok_macro(); // Get the STRING token
-      handle_include();
-    }
-    else if (tok == IDENTIFIER && val == UNDEF_ID) {
-      get_tok_macro(); // Get the macro name
-      if (tok == IDENTIFIER || tok == MACRO) {
-        // TODO: Doesn't play nice with typedefs, because they are not marked as macros
-        set_symbol_type(val, IDENTIFIER); // Unmark the macro
-        get_tok_macro(); // Skip the macro name
-      } else {
-        dump_tok(tok);
-        syntax_error("#undef directive can only be followed by a identifier");
-      }
-    } else if (tok == IDENTIFIER && val == DEFINE_ID) {
-      get_tok_macro(); // Get the macro name
-      handle_define();
-    }
-#ifdef FULL_PREPROCESSOR_SUPPORT
-    else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
-#ifndef DEBUG_EXPAND_INCLUDES
+    if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
       temp = val;
-      putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
-      // Print the rest of the line, it does not support \ at the end of the line but that's ok
-      while (ch != '\n' && ch != EOF) {
-        putchar(ch); get_ch();
+      get_tok_macro(); // Get the macro name
+      push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
+      get_tok_macro(); // Skip the macro name
+    } else if (tok == IF_KW) {
+      temp = evaluate_if_condition() != 0;
+      push_if_macro_mask(temp);
+    } else if (tok == IDENTIFIER && val == ELIF_ID) {
+      temp = evaluate_if_condition() != 0;
+      if (prev_macro_mask() && !if_macro_executed) {
+        if_macro_executed |= temp;
+        if_macro_mask = temp;
+      } else {
+        if_macro_mask = false;
       }
-      putchar('\n');
-      tok = '\n';
-      if (temp == ERROR_ID) exit(1);
-#else
-      tok = '\n';
-#endif // DEBUG_EXPAND_INCLUDES
+    } else if (tok == ELSE_KW) {
+      if (prev_macro_mask()) { // If the parent block mask is true
+        if_macro_mask = !if_macro_executed;
+        if_macro_executed = true;
+      } else {
+        if_macro_mask = false;
+      }
+      get_tok_macro(); // Skip the else keyword
+    } else if (tok == IDENTIFIER && val == ENDIF_ID) {
+      pop_if_macro_mask();
+      get_tok_macro(); // Skip the else keyword
+    } else if (if_macro_mask) {
+      if (tok == IDENTIFIER && val == INCLUDE_ID) {
+        get_tok_macro(); // Get the STRING token
+        handle_include();
+      }
+      else if (tok == IDENTIFIER && val == UNDEF_ID) {
+        get_tok_macro(); // Get the macro name
+        if (tok == IDENTIFIER || tok == MACRO) {
+          // TODO: Doesn't play nice with typedefs, because they are not marked as macros
+          set_symbol_type(val, IDENTIFIER); // Unmark the macro
+          get_tok_macro(); // Skip the macro name
+        } else {
+          dump_tok(tok);
+          syntax_error("#undef directive can only be followed by a identifier");
+        }
+      } else if (tok == IDENTIFIER && val == DEFINE_ID) {
+        get_tok_macro(); // Get the macro name
+        handle_define();
+      }
+  #ifdef FULL_PREPROCESSOR_SUPPORT
+      else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
+  #ifndef DEBUG_EXPAND_INCLUDES
+        temp = val;
+        putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
+        // Print the rest of the line, it does not support \ at the end of the line but that's ok
+        while (ch != '\n' && ch != EOF) {
+          putchar(ch); get_ch();
+        }
+        putchar('\n');
+        tok = '\n';
+        if (temp == ERROR_ID) exit(1);
+  #else
+        tok = '\n';
+  #endif // DEBUG_EXPAND_INCLUDES
+      }
+  #endif // FULL_PREPROCESSOR_SUPPORT
+      else {
+        dump_tok(tok);
+        dump_string("directive = ", symbol_buf(val));
+        syntax_error("unsupported preprocessor directive");
+      }
+    } else {
+      // Skip the rest of the directive
+      while (tok != '\n' && tok != EOF) get_tok_macro();
     }
-#endif // FULL_PREPROCESSOR_SUPPORT
-    else {
-      dump_tok(tok);
-      dump_string("directive = ", symbol_buf(val));
-      syntax_error("unsupported preprocessor directive");
-    }
-  } else {
-    // Skip the rest of the directive
-    while (tok != '\n' && tok != EOF) get_tok_macro();
-  }
 
-  if (tok != '\n' && tok != EOF) {
-    dump_tok(tok);
-    if (tok == IDENTIFIER || tok == MACRO) {
-      dump_string("directive = ", symbol_buf(val));
+    if (tok != '\n' && tok != EOF) {
+      dump_tok(tok);
+      if (tok == IDENTIFIER || tok == MACRO) {
+        dump_string("directive = ", symbol_buf(val));
+      }
+      syntax_error("preprocessor expected end of line");
     }
-    syntax_error("preprocessor expected end of line");
   }
 
   // Because handle_preprocessor_directive is called from get_tok, and it loops
