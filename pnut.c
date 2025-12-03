@@ -1189,11 +1189,16 @@ int code_char_buf_ix = 0;
 // declaration since it belongs to the next declaration.
 int last_tok_code_buf_ix = 0;
 
+// Don't emit C code output in quiet mode
+bool quiet_mode = false;
 
 void remove_c_code_substr(int start, int end) {
   int i;
-  if (start < 0 || end > code_char_buf_ix || start > end) {
-    printf("start=%d, end=%d, code_char_buf_ix=%d\n", start, end, code_char_buf_ix);
+  if (quiet_mode) {
+    // Discard C code and output nothing
+    code_char_buf_ix = 0;
+    return;
+  } else  if (start < 0 || end > code_char_buf_ix || start > end) {
     fatal_error("remove_c_code_substr: Invalid start or end index");
   } else if (start == end) {
     // Nothing to remove
@@ -1238,6 +1243,12 @@ void output_declaration_c_code() {
 
   int i = 0;
 
+  if (quiet_mode) {
+    // Discard C code and output nothing
+    code_char_buf_ix = 0;
+    return;
+  }
+
   adjust_for_trailing_comment();
 
   // Skip leading newlines if any.
@@ -1247,7 +1258,6 @@ void output_declaration_c_code() {
   putchar(' ');
 
   for (; i < last_tok_code_buf_ix; i += 1) {
-
     if (code_char_buf[i] == '\n') {
       putchar('\n');
       putchar('#');
@@ -4607,6 +4617,64 @@ void handle_macro_D(char *opt) {
 
 #endif // FULL_CLI_OPTIONS
 
+#ifdef SH_INCLUDE_C_CODE
+
+// To avoid emitting many empty lines at the end, we accumulate newlines and
+// only emit them when a non-newline character is output.
+int newline_accumulated = 0;
+
+void output_rest_of_line(FILE *fp) {
+  int c;
+  while (newline_accumulated > 0) {
+    putchar('\n');
+    newline_accumulated -= 1;
+  }
+  while ((c = fgetc(fp)) != EOF && c != '\n') {
+    putchar(c);
+  }
+  if (c == '\n') putchar('\n');
+}
+
+void extract_c_code_from_sh_file(char *filename) {
+  int c;
+  FILE *sh_fp = fopen(filename, "r");
+
+  if (sh_fp == 0) {
+    dump_string("#include ", fp_filepath);
+    fatal_error("could not open .sh file for reading");
+    return;
+  }
+
+  // Skip first line (shebang)
+  while ((c = fgetc(sh_fp)) != EOF && c != '\n');
+
+  // Process the rest of the file:
+  // - Empty lines are kept as is.
+  // - Lines starting with "# " have it removed (these are C code lines)
+  // - Ignore other lines (which are shell commands or shell comments starting with "#_")
+  while ((c = fgetc(sh_fp)) != EOF) {
+    if (c == '\n') {
+      newline_accumulated += 1;
+      continue;
+    } else if (c == '#') {
+      if ((c = fgetc(sh_fp)) == ' ') {
+        output_rest_of_line(sh_fp);
+        continue;
+      } else if (ch == '\n') {
+        // Line with only '#', keep as empty line
+        putchar('\n');
+        continue;
+      }
+    }
+
+    // Not a C code line, skip to end of line
+    while ((c = fgetc(sh_fp)) != EOF && c != '\n');
+  }
+
+  fclose(sh_fp);
+}
+#endif
+
 int main(int argc, char **argv) {
   int i;
   ast decl;
@@ -4673,6 +4741,22 @@ int main(int argc, char **argv) {
             init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
             break;
 #endif // FULL_CLI_OPTIONS
+#ifdef SH_INCLUDE_C_CODE
+        case 'C':
+          // The -C option takes the filename of a .sh file compiled by pnut-sh
+          // and extracts the C code included in it.
+          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing input file name for -C option");
+            i += 1;
+            extract_c_code_from_sh_file(argv[i]);
+          } else {
+            extract_c_code_from_sh_file(argv[i] + 2);
+          }
+          return 0;
+        case 'q': // quiet mode
+          quiet_mode = true;
+          break;
+#endif
         default:
           putstr("Option "); putstr(argv[i]); putchar('\n');
           fatal_error("unknown option");
@@ -4723,7 +4807,9 @@ int main(int argc, char **argv) {
   while (tok != EOF) {
     decl = parse_declaration(false);
 #ifdef SH_INCLUDE_C_CODE
-    output_declaration_c_code();
+    if (!quiet_mode) {
+      output_declaration_c_code();
+    }
 #endif
     codegen_glo_decl(decl);
   }
