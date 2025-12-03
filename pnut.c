@@ -286,6 +286,9 @@ typedef long long int intptr_t;
 typedef int intptr_t;
 #endif
 
+typedef int FILE;
+#define fdopen(n, m) n // fdopen is a no-op, file descriptors are used directly as *FILE
+
 #ifdef PNUT_SH
 // on pnut-sh, the file can only be opened in 3 modes: read, write and append
 // if it doesn't exist, it will be created.
@@ -307,10 +310,6 @@ typedef int intptr_t;
 #define EOF (-1)
 
 typedef int bool;
-
-#ifdef PNUT_CC
-typedef int FILE;
-#endif
 
 // State for the reader
 //  - fp: current file pointer

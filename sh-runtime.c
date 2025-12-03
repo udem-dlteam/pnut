@@ -961,15 +961,11 @@ bool runtime_use_fopen = DEFAULT_USE;
 bool runtime_fopen_defined = false;
 void runtime_fopen() {
   if (runtime_fopen_defined++) return;
-  runtime_malloc();
   runtime_open();
-  putstr("#_ Open the file and return a FILE* for the file.\n");
-  putstr("#_ The FILE structure contains the file descriptor.\n");
+  putstr("#_ Open the file and return the file descriptor directly.\n");
   putstr("_fopen() { # $2: File name, $3: Mode\n");
   putstr("  _open __fd $2 $((_$3 == 119)) 511\n");
-  putstr("  _malloc __file 1        # Allocate FILE structure\n");
-  putstr("  : $((_$__file = __fd))  # Save fd\n");
-  putstr("  : $(($1 = __file))\n");
+  putstr("  : $(($1 = __fd))\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -1003,10 +999,7 @@ void runtime_fclose() {
   runtime_free();
   runtime_close();
   putstr("_fclose() { # $2: file\n");
-  putstr("  __file=$2\n");
-  putstr("  __fd=$((_$__file))  # Get fd\n");
-  putstr("  _free __ $__file    # Release FILE structure\n");
-  putstr("  _close $1 $__fd\n");
+  putstr("  _close $1 $2\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -1017,9 +1010,7 @@ void runtime_fgetc() {
   if (runtime_fgetc_defined++) return;
   runtime_read_byte();
   putstr("_fgetc() { # $2: file\n");
-  putstr("  __file=$2\n");
-  putstr("  __fd=$((_$__file))\n");
-  putstr("  read_byte $1 $__fd\n");
+  putstr("  read_byte $1 $2\n");
   putstr("}\n");
   putstr("\n");
 }
