@@ -1,4 +1,3 @@
-// Those includes are parsed by pnut but ignored
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdlib.h>
@@ -171,8 +170,8 @@
   // number of shell variables used by the program.
   // #define SH_PROFILE_MEMORY
 
-  // Make sure we don't use the long line optimization when RT_COMPACT is on
   #ifdef RT_COMPACT
+  // Make sure we don't use the long line optimization when RT_COMPACT is on
   #undef SH_OPTIMIZE_LONG_LINES
   #undef RT_USE_LOOKUP_TABLE
   #endif
@@ -310,9 +309,7 @@ typedef int intptr_t;
 typedef int bool;
 
 #ifdef PNUT_CC
-
 typedef int FILE;
-
 #endif
 
 // State for the reader
@@ -1125,10 +1122,16 @@ void dump_op(int op) {
 #endif
 
 #define IFDEF_DEPTH_MAX 20
-bool if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
-bool if_macro_stack_ix = 0;
+int if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
+int if_macro_stack_ix = 0;
 bool if_macro_mask = true;      // Indicates if the current if/elif block is being executed
 bool if_macro_executed = false; // If any of the previous if/elif conditions were true
+#ifdef SH_INCLUDE_C_CODE
+bool if_macro_keep_directive_block_code = false; // Whether to keep the code of the current directive
+#define IFDEF_STACK_ENTRY_SIZE 3
+#else
+#define IFDEF_STACK_ENTRY_SIZE 2
+#endif
 
 // get_tok parameters:
 // Whether to expand macros or not.
@@ -1150,7 +1153,7 @@ int macro_args_count;   // Number of arguments for the current macro being expan
 bool paste_last_token = false; // Whether the last token was a ## or not
 
 bool prev_macro_mask() {
-  return if_macro_stack_ix == 0 || if_macro_stack[if_macro_stack_ix - 2];
+  return if_macro_stack_ix == 0 || if_macro_stack[if_macro_stack_ix - IFDEF_STACK_ENTRY_SIZE];
 }
 
 void push_if_macro_mask(bool new_mask) {
@@ -1160,7 +1163,11 @@ void push_if_macro_mask(bool new_mask) {
   // Save current mask on the stack because it's about to be overwritten
   if_macro_stack[if_macro_stack_ix] = if_macro_mask;
   if_macro_stack[if_macro_stack_ix + 1] = if_macro_executed;
-  if_macro_stack_ix += 2;
+#ifdef SH_INCLUDE_C_CODE
+  // Once if_macro_keep_directive_block_code is set, it is kept for all nested blocks.
+  if_macro_stack[if_macro_stack_ix + 2] = if_macro_keep_directive_block_code;
+#endif
+  if_macro_stack_ix += IFDEF_STACK_ENTRY_SIZE;
 
   // If the current block is masked off, then the new mask is the logical AND of the current mask and the new mask
   new_mask = if_macro_mask & new_mask;
@@ -1173,9 +1180,12 @@ void pop_if_macro_mask() {
   if (if_macro_stack_ix == 0) {
     fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
   }
-  if_macro_stack_ix -= 2;
+  if_macro_stack_ix -= IFDEF_STACK_ENTRY_SIZE;
   if_macro_mask = if_macro_stack[if_macro_stack_ix];
   if_macro_executed = if_macro_stack[if_macro_stack_ix + 1];
+#ifdef SH_INCLUDE_C_CODE
+  if_macro_keep_directive_block_code = if_macro_stack[if_macro_stack_ix + 2];
+#endif
 }
 
 // Includes the preprocessed C code along with the generated shell code
@@ -1361,7 +1371,7 @@ bool skip_inactive_line() {
     get_ch();
   }
 
-  if (ch == '#') {
+  if (ch == '#' || ch == EOF) {
     return true;
   } else {
     // Skip to the end of the line
@@ -1409,9 +1419,9 @@ int strcmp(char *s1, char *s2) {
   return (*s1 - *s2);
 }
 
-#endif
+#endif // SH_SUPPORT_SHELL_INCLUDE
 
-#endif
+#endif // PNUT_CC
 
 char *substr(char *str, const int len) {
   char *temp = malloc(len + 1);
@@ -1673,6 +1683,10 @@ int PWD_ID;
 // Macros that are defined by the preprocessor
 int FILE__ID;
 int LINE__ID;
+#endif
+#ifdef SH_INCLUDE_C_CODE
+int PNUT_CC_ID;
+int PNUT_SH_ID;
 #endif
 
 void get_tok();
@@ -1965,7 +1979,10 @@ void handle_preprocessor_directive() {
 #ifdef SH_INCLUDE_C_CODE
     int hash_code_buf_ix = code_char_buf_ix;
     int dir_tok, dir_val;
-    bool is_system_include;
+    // Forces the inclusion of the directive code in the C code buffer.
+    // Used for system include directives, and trailing directives of conditional
+    // blocks when if_macro_keep_directive_block_code is set.
+    bool keep_directive_code = if_macro_keep_directive_block_code;
 #endif
 
     get_tok_macro(); // Get the # token
@@ -1980,6 +1997,13 @@ void handle_preprocessor_directive() {
       temp = val;
       get_tok_macro(); // Get the macro name
       push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
+#ifdef SH_INCLUDE_C_CODE
+      // In SH_INCLUDE_C_CODE mode, we want to hide the conditional preprocessor
+      // directives from the C code buffer, except for those using PNUT_SH
+      // so that when we extract the C code from pnut-exe.sh and bootstrap
+      // pnut-exe from it, the C code contains the necessary directives.
+      if_macro_keep_directive_block_code |= (val == PNUT_SH_ID || val == PNUT_CC_ID);
+#endif
       get_tok_macro(); // Skip the macro name
     } else if (tok == IF_KW) {
       temp = evaluate_if_condition();
@@ -2007,8 +2031,9 @@ void handle_preprocessor_directive() {
       if (tok == IDENTIFIER && val == INCLUDE_ID) {
         get_tok_macro(); // Get the STRING token
 #ifdef SH_INCLUDE_C_CODE
-        is_system_include = handle_include();
+        keep_directive_code =
 #endif
+        handle_include();
       }
       else if (tok == IDENTIFIER && val == UNDEF_ID) {
         get_tok_macro(); // Get the macro name
@@ -2060,17 +2085,16 @@ void handle_preprocessor_directive() {
     }
 
 #ifdef SH_INCLUDE_C_CODE
-    if ((dir_tok == IDENTIFIER && (dir_val == IFDEF_ID || dir_val == IFNDEF_ID || dir_val == ELIF_ID || dir_val == ENDIF_ID || (dir_val == INCLUDE_ID && !is_system_include)))
-      || dir_tok == IF_KW || dir_tok == ELSE_KW) {
+    if (!if_macro_keep_directive_block_code && !keep_directive_code &&
+      (( dir_tok == IDENTIFIER && (dir_val == IFDEF_ID || dir_val == IFNDEF_ID || dir_val == ELIF_ID || dir_val == ENDIF_ID || dir_val == INCLUDE_ID))
+      || dir_tok == IF_KW || dir_tok == ELSE_KW)) {
       // Hide the conditional preprocessor directives from the C code buffer.
-      // TODO
+      //
       // We can't simply remove from hash_code_buf_ix to code_char_buf_ix
       // because the preprocessor directive may have been indented, and
-      // code_char_buf_ix points to the
-
-      // get_tok_macro read all the whitespace after the directive, of which we
-      // want to keep the last line (so the next statement is properly indented).
-      // We also want to remove any leading whitespace before the directive.
+      // code_char_buf_ix points to the character after the newline following
+      // the directive. So we need to find the last newline after the directive
+      // and the newline before the directive.
       int last_newline_ix = code_char_buf_ix;
       while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
         last_newline_ix -= 1;
@@ -2088,14 +2112,17 @@ void handle_preprocessor_directive() {
     // When if_macro_mask is false, skip ahead until the next directive
     if (!if_macro_mask) {
       while (!skip_inactive_line());
+      if (ch == EOF) return;
 #ifdef SH_INCLUDE_C_CODE
       // Remove the inactive line from the code buffer
       // The code buffer now contains a bunch of lines that were skipped, and
       // the start of the next preprocessor directive (up to the '#'). Remove
       // the skipped lines from the code buffer but keep the # of the next
       // directive.
-      code_char_buf_ix = hash_code_buf_ix - 1; // -1 to overwrite the '#'
-      code_char_buf[code_char_buf_ix++] = '#';
+      if (!if_macro_keep_directive_block_code) {
+        code_char_buf_ix = hash_code_buf_ix - 1; // -1 to overwrite the '#'
+        code_char_buf[code_char_buf_ix++] = '#';
+      }
 #endif
       tok = '#';
     } else {
@@ -2282,6 +2309,9 @@ int init_builtin_empty_macro(char *macro_str) {
 #endif
 
 void init_pnut_macros() {
+#ifdef SH_INCLUDE_C_CODE
+  PNUT_CC_ID =
+#endif
   init_builtin_int_macro("PNUT_CC", 1);
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
@@ -2293,6 +2323,9 @@ void init_pnut_macros() {
 #endif
 
 #if defined(sh)
+#ifdef SH_INCLUDE_C_CODE
+  PNUT_SH_ID =
+#endif
   init_builtin_int_macro("PNUT_SH", 1);
 #elif defined(target_i386_linux)
   init_builtin_int_macro("PNUT_EXE", 1);
