@@ -1189,47 +1189,80 @@ int code_char_buf_ix = 0;
 // declaration since it belongs to the next declaration.
 int last_tok_code_buf_ix = 0;
 
-void output_declaration_c_code(bool no_header) {
+
+void remove_c_code_substr(int start, int end) {
+  int i;
+  if (start < 0 || end > code_char_buf_ix || start > end) {
+    printf("start=%d, end=%d, code_char_buf_ix=%d\n", start, end, code_char_buf_ix);
+    fatal_error("remove_c_code_substr: Invalid start or end index");
+  } else if (start == end) {
+    // Nothing to remove
+  } else {
+    // Move the characters after the removed substring to the start position
+    for (i = end; i < code_char_buf_ix; i += 1) {
+      code_char_buf[start + i - end] = code_char_buf[i];
+    }
+    code_char_buf_ix -= (end - start);
+    // Adjust last_tok_code_buf_ix
+    last_tok_code_buf_ix -= (end - start);
+  }
+}
+
+void adjust_for_trailing_comment() {
+  // last_tok_code_buf_ix points to the end of the last token used by the
+  // declaration. This is a problem for declarations with trailing comments,
+  // since the comment comes after last_tok_code_buf_ix.
+  // To fix this, we look for trailing comments after last_tok_code_buf_ix
+  // and include them in the output.
+  int last_tok_code_buf_ix_save = last_tok_code_buf_ix;
+  while (code_char_buf[last_tok_code_buf_ix + 1] == ' ' ||
+          code_char_buf[last_tok_code_buf_ix + 1] == '\t') {
+    last_tok_code_buf_ix += 1;
+  }
+
+  if (code_char_buf[last_tok_code_buf_ix + 1] == '/'
+  && code_char_buf[last_tok_code_buf_ix + 2] == '/') {
+    // Trailing comment, move last_tok_code_buf_ix to the end of the line
+    while (code_char_buf[last_tok_code_buf_ix] != '\n' &&
+            last_tok_code_buf_ix < code_char_buf_ix) {
+      last_tok_code_buf_ix += 1;
+    }
+  } else {
+    // No trailing comment, back to original position
+    last_tok_code_buf_ix = last_tok_code_buf_ix_save;
+  }
+}
+
+// Output the C code corresponding to the last declaration parsed.
+void output_declaration_c_code() {
 
   int i = 0;
 
-  if (!no_header) {
-    putstr("#################################### C code ####################################\n");
-  }
-  putchar('#');
-  putchar(' ');
+  adjust_for_trailing_comment();
 
   // Skip leading newlines if any.
   while (code_char_buf[i] == '\n') i += 1;
 
+  putchar('#');
+  putchar(' ');
+
   for (; i < last_tok_code_buf_ix; i += 1) {
 
     if (code_char_buf[i] == '\n') {
-      // Condense the C code by removing extra newlines
-      if (code_char_buf[i - 1] != code_char_buf[i]) {
-        putchar('\n');
-        putchar('#');
-        putchar(' ');
-      }
+      putchar('\n');
+      putchar('#');
+      putchar(' ');
     } else {
       putchar(code_char_buf[i]);
     }
   }
 
-  // End of decl
   putchar('\n');
-  if (!no_header) {
-    putstr("################################# End of C code ################################\n");
-  }
 
-  // Copy the last token characters to the beginning of the buffer
-  for (i = 0; i < code_char_buf_ix - last_tok_code_buf_ix; i += 1) {
-    code_char_buf[i] = code_char_buf[last_tok_code_buf_ix + i];
-  }
-
-  code_char_buf_ix = i;
+  // Keep any character that come after last_tok_code_buf_ix
+  remove_c_code_substr(0, last_tok_code_buf_ix);
 }
-#endif
+#endif // SH_INCLUDE_C_CODE
 
 #ifdef SUPPORT_LINE_CONTINUATION
 // get_ch_ is reponsible for reading the next character from the input file,
@@ -1869,7 +1902,8 @@ int evaluate_if_condition() {
 void handle_shell_include();
 #endif
 
-void handle_include() {
+// Return whether the include was a system include or not
+bool handle_include() {
   char *buf;
 #ifdef SH_SUPPORT_SHELL_INCLUDE
   char *ext;
@@ -1895,6 +1929,7 @@ void handle_include() {
     putstr(" // INCLUDED");
 #endif
     get_tok_macro(); // Skip the string
+    return false;
   } else if (tok == '<') {
     accum_string_until('>');
     val = end_symbol();
@@ -1905,20 +1940,31 @@ void handle_include() {
       include_file(buf, include_search_path);
     }
     get_tok_macro(); // Skip the string
+    return true;
   } else {
     dump_tok(tok);
     syntax_error("expected string to #include directive");
+    return false;
   }
 }
 
+// Handles preprocessor directives
 void handle_preprocessor_directive() {
   int temp;
+  while (1) {
 #ifdef SH_INCLUDE_C_CODE
-  int prev_char_buf_ix = code_char_buf_ix; // Index of the # token in the code buffer
+    int hash_code_buf_ix = code_char_buf_ix;
+    int dir_tok, dir_val;
+    bool is_system_include;
 #endif
-  {
+
     get_tok_macro(); // Get the # token
     get_tok_macro(); // Get the directive
+
+#ifdef SH_INCLUDE_C_CODE
+    dir_tok = tok;
+    dir_val = val;
+#endif
 
     if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
       temp = val;
@@ -1926,13 +1972,13 @@ void handle_preprocessor_directive() {
       push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
       get_tok_macro(); // Skip the macro name
     } else if (tok == IF_KW) {
-      temp = evaluate_if_condition() != 0;
-      push_if_macro_mask(temp);
+      temp = evaluate_if_condition();
+      push_if_macro_mask(temp != 0);
     } else if (tok == IDENTIFIER && val == ELIF_ID) {
-      temp = evaluate_if_condition() != 0;
+      temp = evaluate_if_condition() ;
       if (prev_macro_mask() && !if_macro_executed) {
-        if_macro_executed |= temp;
-        if_macro_mask = temp;
+        if_macro_mask = temp != 0;
+        if_macro_executed |= if_macro_mask;
       } else {
         if_macro_mask = false;
       }
@@ -1950,7 +1996,9 @@ void handle_preprocessor_directive() {
     } else if (if_macro_mask) {
       if (tok == IDENTIFIER && val == INCLUDE_ID) {
         get_tok_macro(); // Get the STRING token
-        handle_include();
+#ifdef SH_INCLUDE_C_CODE
+        is_system_include = handle_include();
+#endif
       }
       else if (tok == IDENTIFIER && val == UNDEF_ID) {
         get_tok_macro(); // Get the macro name
@@ -2000,18 +2048,50 @@ void handle_preprocessor_directive() {
       }
       syntax_error("preprocessor expected end of line");
     }
-  }
-
-  // Because handle_preprocessor_directive is called from get_tok, and it loops
-  // after the call to handle_preprocessor_directive, we don't need to call
-  // get_tok before returning.
 
 #ifdef SH_INCLUDE_C_CODE
-  code_char_buf_ix = prev_char_buf_ix - 1;
-  // Copy the current char and a newline, because they were consumed by the last get_tok call
-  code_char_buf[code_char_buf_ix++] = '\n';
-  code_char_buf[code_char_buf_ix++] = ch;
+    if ((dir_tok == IDENTIFIER && (dir_val == IFDEF_ID || dir_val == IFNDEF_ID || dir_val == ELIF_ID || dir_val == ENDIF_ID || (dir_val == INCLUDE_ID && !is_system_include)))
+      || dir_tok == IF_KW || dir_tok == ELSE_KW) {
+      // Hide the conditional preprocessor directives from the C code buffer.
+      // TODO
+      // We can't simply remove from hash_code_buf_ix to code_char_buf_ix
+      // because the preprocessor directive may have been indented, and
+      // code_char_buf_ix points to the
+
+      // get_tok_macro read all the whitespace after the directive, of which we
+      // want to keep the last line (so the next statement is properly indented).
+      // We also want to remove any leading whitespace before the directive.
+      int last_newline_ix = code_char_buf_ix;
+      while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
+        last_newline_ix -= 1;
+      }
+      int newline_before_directive_ix = hash_code_buf_ix - 1;
+      while (newline_before_directive_ix > 0 && code_char_buf[newline_before_directive_ix] != '\n') {
+        newline_before_directive_ix -= 1;
+      }
+
+      // Remove between the end of the directive and the last newline
+      remove_c_code_substr(newline_before_directive_ix + 1, last_newline_ix);
+    }
 #endif
+
+    // When if_macro_mask is false, skip ahead until the next directive
+    if (!if_macro_mask) {
+      while (!skip_inactive_line());
+#ifdef SH_INCLUDE_C_CODE
+      // Remove the inactive line from the code buffer
+      // The code buffer now contains a bunch of lines that were skipped, and
+      // the start of the next preprocessor directive (up to the '#'). Remove
+      // the skipped lines from the code buffer but keep the # of the next
+      // directive.
+      code_char_buf_ix = hash_code_buf_ix - 1; // -1 to overwrite the '#'
+      code_char_buf[code_char_buf_ix++] = '#';
+#endif
+      tok = '#';
+    } else {
+      break; // Return to normal processing
+    }
+  }
 }
 
 void get_ident() {
@@ -2534,10 +2614,10 @@ void paste_tokens(int left_tok, int left_val) {
 void get_tok() {
 
 #ifdef SH_INCLUDE_C_CODE
-  int prev_char_buf_ix = code_char_buf_ix;
-  // Save the cursor in a local variable so we can restore it when the token is
-  // masked off. Not using the last_tok_code_buf_ix global because get_tok can
-  // be called recursively by handle_preprocessor_directive.
+  // Compute the index of the previous token. Because get_tok can be called
+  // recursively by handle_preprocessor_directive, it must be stored in a local
+  // variable so that the first get_tok call in the recursion chain can restore
+  // before returning.
   int prev_last_tok_char_buf_ix = code_char_buf_ix;
 #endif
 
@@ -2546,17 +2626,7 @@ void get_tok() {
   int prev_tok_column_number = column_number;
 #endif
 
-#ifdef SH_INCLUDE_C_CODE
-    code_char_buf_ix = prev_char_buf_ix; // Skip over tokens that are masked off
-#endif
-
   while (1) {
-    // When if_macro_mask is false, skip all tokens until we reach a preprocessor directive.
-    if (!if_macro_mask) {
-      while (!skip_inactive_line());
-      tok = '\n'; // Return a newline token to end the current directive
-    }
-
     // Check if there are any tokens to replay. Macros are just identifiers that
     // have been marked as macros. In terms of how we get into that state, a
     // macro token is first returned by the get_ident call a few lines below.
@@ -2655,10 +2725,10 @@ void get_tok() {
       get_ident();
 
       if (tok == MACRO) {
-        // We only expand in ifdef true blocks and if the expander is enabled.
-        // Since this is the "base case" of the macro expansion, we don't need
-        // to disable the other places where macro expansion is done.
-        if (if_macro_mask && expand_macro) {
+        // We only expand the macro if expand_macro is true. Since this is the
+        // base case of the macro expansion, we don't need to disable the other
+        // places where macro expansion is done.
+        if (expand_macro) {
           if (attempt_macro_expansion(val)) {
             continue;
           }
@@ -4653,7 +4723,7 @@ int main(int argc, char **argv) {
   while (tok != EOF) {
     decl = parse_declaration(false);
 #ifdef SH_INCLUDE_C_CODE
-    output_declaration_c_code(get_op(decl) == '=' | get_op(decl) == DECLS);
+    output_declaration_c_code();
 #endif
     codegen_glo_decl(decl);
   }
