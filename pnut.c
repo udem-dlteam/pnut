@@ -1190,7 +1190,7 @@ void pop_if_macro_mask() {
 
 // Includes the preprocessed C code along with the generated shell code
 #ifdef SH_INCLUDE_C_CODE
-#define C_CODE_BUF_LEN 20000
+#define C_CODE_BUF_LEN 200000
 
 char code_char_buf[C_CODE_BUF_LEN];
 int code_char_buf_ix = 0;
@@ -1343,6 +1343,9 @@ void get_ch() {
   // Save C code chars so they can be displayed with the shell code
   code_char_buf[code_char_buf_ix] = ch;
   code_char_buf_ix += 1;
+  if (code_char_buf_ix >= C_CODE_BUF_LEN) {
+    fatal_error("C code buffer overflow");
+  }
 #endif
 #ifdef DEBUG_EXPAND_INCLUDES
   // Because ch is always 1 character ahead of the token, we print the character
@@ -2119,9 +2122,13 @@ void handle_preprocessor_directive() {
       // the start of the next preprocessor directive (up to the '#'). Remove
       // the skipped lines from the code buffer but keep the # of the next
       // directive.
-      if (!if_macro_keep_directive_block_code) {
+      if (!if_macro_keep_directive_block_code && !keep_directive_code) {
         code_char_buf_ix = hash_code_buf_ix - 1; // -1 to overwrite the '#'
-        code_char_buf[code_char_buf_ix++] = '#';
+        code_char_buf[code_char_buf_ix] = '#';
+        code_char_buf_ix += 1;
+        if (code_char_buf_ix >= C_CODE_BUF_LEN) {
+          fatal_error("C code buffer overflow");
+        }
       }
 #endif
       tok = '#';
