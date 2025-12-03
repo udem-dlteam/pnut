@@ -1202,6 +1202,11 @@ int last_tok_code_buf_ix = 0;
 // Don't emit C code output in quiet mode
 bool quiet_mode = false;
 
+// List of macros defined from the command line
+// Each element of the list is a pair where the car is the macro name symbol
+// and the cdr is the macro value symbol (or 0 if no value).
+ast cli_macros = 0;
+
 void remove_c_code_substr(int start, int end) {
   int i;
   if (quiet_mode) {
@@ -1282,6 +1287,48 @@ void output_declaration_c_code() {
   // Keep any character that come after last_tok_code_buf_ix
   remove_c_code_substr(0, last_tok_code_buf_ix);
 }
+
+// Output the macros defined from the command line to document which options
+// were used to compile the code.
+void output_defined_cli_macros() {
+  ast macros = cli_macros;
+  ast macro_tokens;
+  int macro_tok;
+  int macro_val;
+  if (cli_macros != 0) putstr("# // Macros defined from the command line\n");
+
+  while (macros != 0) {
+    ast macro = car(macros);
+    putstr(symbol_type(macro) == MACRO ? "# #define " : "# #undef ");
+    putstr(symbol_buf(macro));
+    // cons(cons(STRING, value_symb), 0)
+    // For macros with a single value token, we print it on the same line
+    macro_tokens = car(symbol_tag(macro));
+    if (macro_tokens != 0 && tail(macro_tokens) == 0) {
+      putchar(' ');
+      macro_tokens = car(macro_tokens);
+      macro_tok = car(macro_tokens);
+      macro_val = cdr(macro_tokens);
+      if (macro_tok == STRING) {
+        putchar('"');
+        putstr(symbol_buf(macro_val));
+        putchar('"');
+      } else if (macro_tok == INTEGER) {
+        putint(-macro_val);
+      } else {
+        fatal_error("output_defined_cli_macros: Unsupported macro value token");
+      }
+    } else if (macro_tokens != 0) {
+      fatal_error("output_defined_cli_macros: Macros with multiple tokens not supported");
+    }
+    putchar('\n');
+    macros = tail(macros);
+  }
+  if (cli_macros != 0) {
+    putchar('\n');
+  }
+}
+
 #endif // SH_INCLUDE_C_CODE
 
 #ifdef SUPPORT_LINE_CONTINUATION
@@ -4658,10 +4705,19 @@ void handle_macro_D(char *opt) {
     // Default to 1 when no value is given
     set_builtin_int_macro(macro_symbol, 1);
   }
+
+#ifdef SH_INCLUDE_C_CODE
+  // Add to the list of macros to define/undefine in the generated shell script
+  cli_macros = cons(macro_symbol, cli_macros);
+#endif
 }
 
 void handle_macro_U(char *opt) {
   init_ident(IDENTIFIER, opt);
+#ifdef SH_INCLUDE_C_CODE
+  // Add to the list of macros to define/undefine in the generated shell script
+  cli_macros = cons(intern_str(opt), cli_macros);
+#endif
 }
 
 #endif // FULL_CLI_OPTIONS
@@ -4788,6 +4844,10 @@ int main(int argc, char **argv) {
           case 'D':
             // pnut-sh only needs -D<macro> and no other options
             init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+#ifdef SH_INCLUDE_C_CODE
+            // Also add to  the list of macros to define in the generated shell script
+            cli_macros = cons(intern_str(argv[i] + 2), cli_macros);
+#endif
             break;
 #endif // FULL_CLI_OPTIONS
 #ifdef SH_INCLUDE_C_CODE
@@ -4852,6 +4912,10 @@ int main(int argc, char **argv) {
   }
 #else
   codegen_begin();
+#ifdef SH_INCLUDE_C_CODE
+  // Add #define and #undef directives for macros defined on the command line
+  output_defined_cli_macros();
+#endif
   get_tok();
   while (tok != EOF) {
     decl = parse_declaration(false);
