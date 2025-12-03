@@ -1301,6 +1301,32 @@ void get_ch() {
 #endif
 }
 
+void skip_to_end_of_line() {
+  while (ch != '\n' && ch != EOF) {
+    get_ch();
+  }
+}
+
+bool skip_inactive_line() {
+  // If the line starts with #, it's potentially a preprocessor directive that
+  // needs to be processed, return true in that case, false otherwise.
+  // Note that this doesn't handle line continuations, but that's an acceptable
+  // trade-off.
+
+  // Skip whitespace
+  while (0 <= ch && ch <= ' ') {
+    get_ch();
+  }
+
+  if (ch == '#') {
+    return true;
+  } else {
+    // Skip to the end of the line
+    skip_to_end_of_line();
+    return false;
+  }
+}
+
 #ifdef PNUT_CC
 
 // TODO: It would be nice to not have to duplicate this code
@@ -2504,30 +2530,6 @@ void paste_tokens(int left_tok, int left_val) {
 }
 
 #endif // FULL_PREPROCESSOR_SUPPORT
-
-void skip_to_end_of_line() {
-  while (ch != '\n' && ch != EOF) {
-    get_ch();
-  }
-}
-
-bool skip_inactive_line() {
-  // If the line starts with whitespace followed by a #, it's potentially a preprocessor
-  // directive that we need to process even in inactive #if blocks, return true in that case.
-
-  // Skip whitespace
-  while (0 <= ch && ch <= ' ') {
-    get_ch();
-  }
-
-  if (ch == '#') {
-    return true;
-  } else {
-    // Skip to the end of the line
-    skip_to_end_of_line();
-    return false;
-  }
-}
 
 void get_tok() {
 
