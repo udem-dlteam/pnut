@@ -2341,7 +2341,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   } else if (op == ':') { // Labelled statement
     // Labelled statement are not very useful as gotos are not supported in the
     // Shell backend, but we still emit a label comment for readability.
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, get_child_(':', node, 0))), wrap_char(':')));
+    append_glo_decl(string_concat3(wrap_str_lit("#_ "), wrap_str_pool(get_val_(IDENTIFIER, get_child_(':', node, 0))), wrap_char(':')));
     return comp_statement(get_child_(':', node, 1), stmt_ctx);
   } else if (op == GOTO_KW) {
     fatal_error("goto statements not supported");
@@ -2538,9 +2538,9 @@ void comp_assignment_constant(text constant_name, ast rhs) {
 void comp_enum_cases(ast ident, ast cases) {
   ast cas;
   if (ident != 0) {
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, ident)), wrap_str_lit(" enum declaration")));
+    append_glo_decl(string_concat3(wrap_str_lit("#_ "), wrap_str_pool(get_val_(IDENTIFIER, ident)), wrap_str_lit(" enum declaration")));
   } else {
-    append_glo_decl(wrap_str_lit("# Enum declaration"));
+    append_glo_decl(wrap_str_lit("#_ Enum declaration"));
   }
 
   while (cases != 0) {
@@ -2584,9 +2584,9 @@ void comp_struct(ast ident, ast members) {
   int offset = new_ast0(INTEGER, 0);
   int field_type;
   if (ident != 0) {
-    append_glo_decl(string_concat3(wrap_str_lit("# "), wrap_str_pool(get_val_(IDENTIFIER, ident)), wrap_str_lit(" struct member declarations")));
+    append_glo_decl(string_concat3(wrap_str_lit("#_ "), wrap_str_pool(get_val_(IDENTIFIER, ident)), wrap_str_lit(" struct member declarations")));
   } else {
-    append_glo_decl(wrap_str_lit("# Struct member declarations"));
+    append_glo_decl(wrap_str_lit("#_ Struct member declarations"));
   }
   while (members != 0) {
     decl = car_(DECL, members);
@@ -2688,7 +2688,7 @@ void codegen_end() {
 #endif
 
   if (any_character_used) {
-    putstr("# Character constants\n");
+    putstr("#_ Character constants\n");
     for(c = 0; c < 256; c += 1) {
       if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
         putstr("readonly ");
@@ -2698,7 +2698,7 @@ void codegen_end() {
     }
   }
 
-  putstr("# Runtime library\n");
+  putstr("#_ Runtime library\n");
   produce_runtime();
 
   if (main_defined) {
