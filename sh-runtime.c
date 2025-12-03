@@ -768,15 +768,6 @@ void runtime_printf() {
   putstr("\n");
 }
 
-bool runtime_use_isatty = DEFAULT_USE;
-bool runtime_isatty_defined = false;
-void runtime_isatty() {
-  if (runtime_isatty_defined++) return;
-  putstr("_isatty() { # $2: fd\n");
-  putstr("  [ -t $2 ] && : $(($1 = 1)) || : $(($1 = 0))\n");
-  putstr("}\n\n");
-}
-
 bool runtime_use_unpack_string = DEFAULT_USE;
 bool runtime_unpack_string_defined = false;
 void runtime_unpack_string() {
@@ -792,7 +783,20 @@ void runtime_unpack_string() {
   putstr("\n");
 }
 
-#endif // SH_MINIMAL_RUNTIME
+#endif // !SH_MINIMAL_RUNTIME
+
+#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+
+bool runtime_use_isatty = DEFAULT_USE;
+bool runtime_isatty_defined = false;
+void runtime_isatty() {
+  if (runtime_isatty_defined++) return;
+  putstr("_isatty() { # $2: fd\n");
+  putstr("  [ -t $2 ] && : $(($1 = 1)) || : $(($1 = 0))\n");
+  putstr("}\n\n");
+}
+
+#endif // !SH_MINIMAL_RUNTIME || SUPPORT_STDIN_INPUT
 
 bool runtime_use_open = DEFAULT_USE;
 bool runtime_open_defined = false;
@@ -1041,7 +1045,9 @@ void produce_runtime() {
 #ifndef SH_MINIMAL_RUNTIME
   if (runtime_use_getchar)              runtime_getchar();
   if (runtime_use_printf)               runtime_printf();
-  if (runtime_use_isatty)               runtime_isatty();
   if (runtime_use_unpack_string)        runtime_unpack_string();
+#endif
+#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+  if (runtime_use_isatty)               runtime_isatty();
 #endif
 }

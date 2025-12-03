@@ -262,6 +262,9 @@
 // Support skip line continuations
 // #define SUPPORT_LINE_CONTINUATION
 
+// Support reading input from stdin
+// #define SUPPORT_STDIN_INPUT
+
 // Print memory usage statistics at the end of the program.
 // #define PRINT_MEMORY_STATS
 
@@ -1702,7 +1705,7 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
-#ifndef SH_MINIMAL_RUNTIME
+#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
 int ISATTY_ID;
 #endif
 
@@ -2304,7 +2307,7 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
-#ifndef SH_MINIMAL_RUNTIME
+#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
 #endif
 
@@ -4871,14 +4874,27 @@ int main(int argc, char **argv) {
           break;
       }
     } else {
+#ifdef SUPPORT_STDIN_INPUT
+      if (!isatty(0)) {
+        fatal_error("Cannot specify input file when stdin is not a terminal");
+      }
+#endif
       // Options that don't start with '-' are file names
       include_file(argv[i], 0);
     }
   }
 
   if (fp == 0) {
-    putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
-    fatal_error("no input file");
+#ifdef SUPPORT_STDIN_INPUT
+    if (!isatty(0)) {
+      fp = fdopen(0, "r");
+      fp_filepath = "<stdin>";
+    } else
+#endif
+    {
+      putstr("Usage: "); putstr(argv[0]); putstr(" <filename>\n");
+      fatal_error("no input file");
+    }
   }
 
   ch = '\n';
