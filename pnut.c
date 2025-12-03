@@ -2291,24 +2291,29 @@ void init_ident_table() {
 }
 
 #if defined(FULL_PREPROCESSOR_SUPPORT) || defined(FULL_CLI_OPTIONS)
-int init_builtin_string_macro(char *macro_str, char* value) {
-  int macro_id = init_ident(MACRO, macro_str);
+int set_builtin_string_macro(int macro_id, int value_symb) {
   // Macro object shape: ([(tok, val)], arity). -1 arity means it's an object-like macro
-  set_symbol_tag(macro_id, cons(cons(cons(STRING, intern_str(value)), 0), -1));
+  set_symbol_tag(macro_id, cons(cons(cons(STRING, value_symb), 0), -1));
   return macro_id;
+}
+
+int init_builtin_string_macro(char *macro_str, char* value) {
+  return set_builtin_string_macro(init_ident(MACRO, macro_str), intern_str(value));
 }
 #endif
 
-int init_builtin_int_macro(char *macro_str, int value) {
-  int macro_id = init_ident(MACRO, macro_str);
+int set_builtin_int_macro(int macro_id, int value) {
   set_symbol_tag(macro_id, cons(cons(cons(INTEGER, -value), 0), -1));
   return macro_id;
 }
 
+int init_builtin_int_macro(char *macro_str, int value) {
+  return set_builtin_int_macro(init_ident(MACRO, macro_str), value);
+}
+
 #ifdef FULL_CLI_OPTIONS
 
-int init_builtin_empty_macro(char *macro_str) {
-  int macro_id = init_ident(MACRO, macro_str);
+int set_builtin_empty_macro(int macro_id) {
   set_symbol_tag(macro_id, cons(0, -1)); // -1 means it's an object-like macro, 0 means no tokens
   return macro_id;
 }
@@ -4612,14 +4617,19 @@ ast parse_compound_statement() {
 
 void handle_macro_D(char *opt) {
   char *start = opt;
-  char *macro_buf;
-  char *buf2;
+  int macro_symbol;
+  int value_symbol;
   int acc;
-  while (*opt != 0 && *opt != '=') opt += 1; // Find = sign if any
 
-  macro_buf = malloc(opt - start + 1);
-  memcpy(macro_buf, start, opt - start);
-  macro_buf[opt - start] = '\0';
+  begin_string();
+
+  while (*opt != 0 && *opt != '=') {
+    accum_string(*opt);
+    opt += 1;
+  }
+
+  macro_symbol = end_symbol();
+  set_symbol_type(macro_symbol, MACRO); // Mark as macro
 
   if (*opt == '=') {
     opt += 1;
@@ -4628,11 +4638,8 @@ void handle_macro_D(char *opt) {
       start = opt;
       while (*opt != 0 && *opt != '"') opt += 1;
       if (*opt == 0) fatal_error("Unterminated string literal");
-      buf2 = malloc(opt - start + 1);
-      memcpy(buf2, start, opt - start);
-      buf2[opt - start] = '\0';
-      init_builtin_string_macro(macro_buf, buf2);
-      free(buf2);
+      value_symbol = intern_str(start);
+      set_builtin_string_macro(macro_symbol, value_symbol);
     } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
       acc = 0;
       while ('0' <= *opt && *opt <= '9') {
@@ -4641,18 +4648,20 @@ void handle_macro_D(char *opt) {
         opt += 1;
       }
       if (*opt != 0) fatal_error("Invalid macro definition value");
-      init_builtin_int_macro(macro_buf, acc);
+      set_builtin_int_macro(macro_symbol, acc);
     } else if (*opt == '\0') { // No value given, empty macro
-      init_builtin_empty_macro(macro_buf);
+      set_builtin_empty_macro(macro_symbol);
     } else {
       fatal_error("Invalid macro definition value");
     }
   } else {
     // Default to 1 when no value is given
-    init_builtin_int_macro(macro_buf, 1);
+    set_builtin_int_macro(macro_symbol, 1);
   }
+}
 
-  free(macro_buf);
+void handle_macro_U(char *opt) {
+  init_ident(IDENTIFIER, opt);
 }
 
 #endif // FULL_CLI_OPTIONS
@@ -4758,9 +4767,9 @@ int main(int argc, char **argv) {
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
             i += 1;
-            init_ident(IDENTIFIER, argv[i]);
+            handle_macro_U(argv[i]);
           } else {
-            init_ident(IDENTIFIER, argv[i] + 2); // skip '-U'
+            handle_macro_U(argv[i] + 2); // skip '-U'
           }
           break;
 
