@@ -4772,7 +4772,7 @@ void extract_c_code_from_sh_file(char *filename) {
       if ((c = fgetc(sh_fp)) == ' ') {
         output_rest_of_line(sh_fp);
         continue;
-      } else if (ch == '\n') {
+      } else if (c == '\n') {
         // Line with only '#', keep as empty line
         putchar('\n');
         continue;
