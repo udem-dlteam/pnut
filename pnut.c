@@ -225,6 +225,9 @@
   // Use stack allocation for global variables instead of heap allocation.
   // #define USE_STACK_FOR_GLOBALS
 
+  // Pnut-exe doesn't support generating annotated code.
+  #undef SH_INCLUDE_C_CODE
+
 #else
   // Frontend-only variants of pnut (e.g. for running reader, tokenizer or parser)
   // Options that turns Pnut into a C preprocessor or some variant of it
@@ -240,6 +243,7 @@
 #ifdef SUPPORT_ALL_C_FEATURES
   #define FULL_CLI_OPTIONS
   #define FULL_PREPROCESSOR_SUPPORT
+  #define SUPPORT_EXTRACT_C_ANNOTATIONS
   #define SUPPORT_COMPLEX_INITIALIZER
   #define SUPPORT_DO_WHILE
   #define SUPPORT_GOTO
@@ -1202,7 +1206,7 @@ int code_char_buf_ix = 0;
 int last_tok_code_buf_ix = 0;
 
 // Don't emit C code output in quiet mode
-bool quiet_mode = false;
+bool code_annotations_quiet_mode = false;
 
 // List of macros defined from the command line
 // Each element of the list is a pair where the car is the macro name symbol
@@ -1211,7 +1215,7 @@ ast cli_macros = 0;
 
 void remove_c_code_substr(int start, int end) {
   int i;
-  if (quiet_mode) {
+  if (code_annotations_quiet_mode) {
     // Discard C code and output nothing
     code_char_buf_ix = 0;
     return;
@@ -1260,7 +1264,7 @@ void output_declaration_c_code() {
 
   int i = 0;
 
-  if (quiet_mode) {
+  if (code_annotations_quiet_mode) {
     // Discard C code and output nothing
     code_char_buf_ix = 0;
     return;
@@ -4724,7 +4728,7 @@ void handle_macro_U(char *opt) {
 
 #endif // FULL_CLI_OPTIONS
 
-#ifdef SH_INCLUDE_C_CODE
+#ifdef SUPPORT_EXTRACT_C_ANNOTATIONS
 
 // To avoid emitting many empty lines at the end, we accumulate newlines and
 // only emit them when a non-newline character is output.
@@ -4780,7 +4784,8 @@ void extract_c_code_from_sh_file(char *filename) {
 
   fclose(sh_fp);
 }
-#endif
+
+#endif // SUPPORT_EXTRACT_C_ANNOTATIONS
 
 int main(int argc, char **argv) {
   int i;
@@ -4852,7 +4857,7 @@ int main(int argc, char **argv) {
 #endif
             break;
 #endif // FULL_CLI_OPTIONS
-#ifdef SH_INCLUDE_C_CODE
+#ifdef SUPPORT_EXTRACT_C_ANNOTATIONS
         case 'C':
           // The -C option takes the filename of a .sh file compiled by pnut-sh
           // and extracts the C code included in it.
@@ -4863,9 +4868,11 @@ int main(int argc, char **argv) {
           } else {
             extract_c_code_from_sh_file(argv[i] + 2);
           }
-          return 0;
-        case 'q': // quiet mode
-          quiet_mode = true;
+          return 0; // Done after extracting C code, no further processing needed
+#endif
+#ifdef SH_INCLUDE_C_CODE
+        case 'q': // disable code annotations
+          code_annotations_quiet_mode = true;
           break;
 #endif
         default:
@@ -4935,7 +4942,7 @@ int main(int argc, char **argv) {
   while (tok != EOF) {
     decl = parse_declaration(false);
 #ifdef SH_INCLUDE_C_CODE
-    if (!quiet_mode) {
+    if (!code_annotations_quiet_mode) {
       output_declaration_c_code();
     }
 #endif
