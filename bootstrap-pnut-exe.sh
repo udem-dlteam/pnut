@@ -74,30 +74,30 @@ bootstrap_with_shell() {
       printf "         FAILURE... %s\n" "pnut-sh.sh != pnut-sh-compiled-by-pnut-sh-sh.sh"
       exit 1
     fi
-    printf_timing "pnut-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-sh-sh.sh" \
-                  "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh"
+    printf_timing "pnut-sh.sh compiling pnut.c -> pnut-exe.sh" \
+                  "$1 $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh"
   else
-    ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh
+    ./$TEMP_DIR/pnut-sh-compiled-by-gcc.exe $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh
   fi
-  printf_timing "pnut-exe-compiled-by-pnut-sh-sh.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
-                "$1 $TEMP_DIR/pnut-exe-compiled-by-pnut-sh-sh.sh $PNUT_EXE_OPTIONS pnut.c -o $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
+  printf_timing "pnut-exe.sh compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-sh.exe" \
+                "$1 $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS pnut.c -o $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-sh.exe"
 
-  chmod +x $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe
+  chmod +x $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-sh.exe
 
-  printf_timing "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
-                "./$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe $PNUT_EXE_OPTIONS pnut.c -o $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
+  printf_timing "pnut-exe-compiled-by-pnut-exe-sh.exe compiling pnut.c -> pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe" \
+                "./$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-sh.exe $PNUT_EXE_OPTIONS pnut.c -o $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe"
 
-  chmod +x $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe
+  chmod +x $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe
 
-  if [ -s $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe ] ; then
-    if diff $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe 2>&1 > /dev/null ; then
-      printf "         SUCCESS... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe == pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
+  if [ -s $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe ] ; then
+    if diff $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-sh.exe $TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe 2>&1 > /dev/null ; then
+      printf "         SUCCESS... %s\n" "pnut-exe-compiled-by-pnut-exe-sh.exe == pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe"
     else
-      printf "         FAILURE... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe != pnut-sh-compiled-by-pnut-sh-sh.sh"
+      printf "         FAILURE... %s\n" "pnut-exe-compiled-by-pnut-exe-sh.exe != pnut-sh-compiled-by-pnut-sh-sh.sh"
       exit 1
     fi
   else
-    printf "         FAILURE... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe is empty! (compiler crash?)"
+    printf "         FAILURE... %s\n" "pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe is empty! (compiler crash?)"
     exit 1
   fi
 
@@ -119,14 +119,14 @@ bootstrap_with_shell() {
 
     ls -l \
     "$TEMP_DIR/pnut-sh-compiled-by-gcc.exe" \
-    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
-    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-sh.exe" \
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe"
 
     printf "\n"
 
     sha1sum \
-    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe" \
-    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-sh-sh.exe"
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-sh.exe" \
+    "$TEMP_DIR/pnut-exe-compiled-by-pnut-exe-compiled-by-pnut-exe-sh.exe"
 
   fi
 }
