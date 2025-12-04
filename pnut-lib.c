@@ -1,13 +1,15 @@
 // Used for the pnut.sh website.
 
-#define SUPPORT_INCLUDE
-
 #include "pnut.c"
 
-void compile(char* file) {
+void compile(bool annotate, char* file) {
 
   int i;
   ast decl;
+
+#ifdef SH_INCLUDE_C_CODE
+  code_annotations_quiet_mode = !annotate;
+#endif
 
   init_ident_table();
 
@@ -22,6 +24,11 @@ void compile(char* file) {
 
   while (tok != EOF) {
     decl = parse_declaration(false);
+#ifdef SH_INCLUDE_C_CODE
+    if (!code_annotations_quiet_mode) {
+      output_declaration_c_code();
+    }
+#endif
     codegen_glo_decl(decl);
   }
 
