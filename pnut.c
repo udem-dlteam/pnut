@@ -1331,7 +1331,8 @@ void output_defined_cli_macros() {
     macros = tail(macros);
   }
   if (cli_macros != 0) {
-    putchar('\n');
+    // Add a newline in the C code, which maps to "# \n" in annotations
+    putstr("# \n");
   }
 }
 
