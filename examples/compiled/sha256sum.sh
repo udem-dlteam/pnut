@@ -231,7 +231,7 @@ _main() { let argc $2; let myargv $3
   endlet $1 __t1 i myargv argc
 }
 
-# Runtime library
+#_ Runtime library
 
 unpack_escaped_string() { # $1 = string, $2 = size (optional)
   __str="$1"
@@ -275,9 +275,9 @@ unpack_escaped_string() { # $1 = string, $2 = size (optional)
   done
 }
 
-# Define a string, and return a reference to it in the varible taken as argument.
-# If the variable is already defined, this function does nothing.
-# Note that it's up to the caller to ensure that no 2 strings share the same variable.
+#_ Define a string, and return a reference to it in the varible taken as argument.
+#_ If the variable is already defined, this function does nothing.
+#_ Note that it's up to the caller to ensure that no 2 strings share the same variable.
 defstr() { # $1 = variable name, $2 = string, $3 = size (optional)
   set +u # Necessary to allow the variable to be empty
   if [ $(($1)) -eq 0 ]; then
@@ -297,7 +297,7 @@ _free() { # $2 = object to free
   : $(($1 = 0))              # Return 0
 }
 
-# Unpack a Shell string into an appropriately sized buffer
+#_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
@@ -470,7 +470,7 @@ make_argv() {
   done
 }
 
-# Local variables
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)

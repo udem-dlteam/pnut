@@ -18,10 +18,10 @@ _main() {
   endlet $1 i name
 }
 
-# Character constants
+#_ Character constants
 readonly __NUL__=0
 readonly __LF__=10
-# Runtime library
+#_ Runtime library
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 _malloc() { # $2 = object size
@@ -39,7 +39,7 @@ _put_pstr() {
   done
 }
 
-# Local variables
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)

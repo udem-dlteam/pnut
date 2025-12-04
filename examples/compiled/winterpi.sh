@@ -47,10 +47,10 @@ _main() {
   endlet $1 c d b k i
 }
 
-# Character constants
+#_ Character constants
 readonly __0__=48
-# Runtime library
-# Local variables
+#_ Runtime library
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)
