@@ -33,7 +33,7 @@ _main() {
   endlet $1 sum i n
 }
 
-# Runtime library
+#_ Runtime library
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 _malloc() { # $2 = object size
@@ -42,7 +42,7 @@ _malloc() { # $2 = object size
   : $((__ALLOC += $2 + 1))
 }
 
-# Local variables
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)

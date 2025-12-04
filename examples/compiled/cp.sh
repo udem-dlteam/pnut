@@ -45,7 +45,7 @@ _main() { let argc $2; let args $3
   endlet $1 len c dst src args argc
 }
 
-# Runtime library
+#_ Runtime library
 _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
@@ -66,7 +66,7 @@ _free() { # $2 = object to free
 }
 
 
-# Unpack a Shell string into an appropriately sized buffer
+#_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
@@ -226,7 +226,7 @@ make_argv() {
   done
 }
 
-# Local variables
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)

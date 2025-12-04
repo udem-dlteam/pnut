@@ -2844,6 +2844,27 @@ void rt_malloc() {
   mov_reg_reg(reg_X, reg_Y);              // Return the old bump pointer
 }
 
+#ifdef SUPPORT_STDIN_INPUT
+void rt_isatty() {
+  // Return 1 for stdin (fd 0), 0 otherwise
+  // This is because pnut uses isatty(stdin) to determine whether to read from
+  // stdin interactively, and uses isatty(stdout) to determine whether to output
+  // colors, so it's important to return the "failsafe" value for each.
+
+  int lbl1 = alloc_label(0); // false label
+  int lbl2 = alloc_label(0); // end label
+
+  // reg_X = fd
+  mov_reg_imm(reg_Y, 0); // fd == 0
+  jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
+  mov_reg_imm(reg_X, 0); // false
+  jump(lbl2);
+  def_label(lbl1);
+  mov_reg_imm(reg_X, 1); // true
+  def_label(lbl2);
+}
+#endif
+
 #endif
 
 void codegen_builtin_movs(ast params) {
@@ -2999,7 +3020,11 @@ void codegen_builtin() {
 
   // isatty function stub (always return 0)
   declare_builtin("isatty", true, int_type, list1(int_type));
+#ifdef SUPPORT_STDIN_INPUT
+  rt_isatty();
+#else
   mov_reg_imm(reg_X, 0);
+#endif
   ret();
   init_forward_jump_table(cgc_globals);
 #endif

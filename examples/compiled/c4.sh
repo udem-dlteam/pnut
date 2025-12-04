@@ -47,7 +47,7 @@ _loc=0
 _line=0
 _src=0
 _debug=0
-# Enum declaration
+#_ Enum declaration
 readonly _Num=128
 readonly _Fun=129
 readonly _Sys=130
@@ -85,7 +85,7 @@ readonly _Mod=161
 readonly _Inc=162
 readonly _Dec=163
 readonly _Brak=164
-# Enum declaration
+#_ Enum declaration
 readonly _LEA=0
 readonly _IMM=1
 readonly _JMP=2
@@ -125,11 +125,11 @@ readonly _FREE=35
 readonly _MSET=36
 readonly _MCMP=37
 readonly _EXIT=38
-# Enum declaration
+#_ Enum declaration
 readonly _CHAR=0
 readonly _INT=1
 readonly _PTR=2
-# Enum declaration
+#_ Enum declaration
 readonly _Tk=0
 readonly _Hash=1
 readonly _Name=2
@@ -1196,7 +1196,7 @@ _main() { # argc: $2, argv: $3
   : $((__tmp = $1)) $((argc = $4)) $((argv_ = $5)) $((fd = $6)) $((bt = $7)) $((ty = $8)) $((poolsz = $9)) $((idmain = ${10})) $((pc = ${11})) $((sp = ${12})) $((bp = ${13})) $((a = ${14})) $((cycle = ${15})) $((i = ${16})) $((t = ${17})) $((__t1 = ${18})) $(($1 = __tmp))
 }
 
-# Character constants
+#_ Character constants
 readonly __LF__=10
 readonly __EXCL__=33
 readonly __DQUOTE__=34
@@ -1240,7 +1240,7 @@ readonly __LBRACE__=123
 readonly __BAR__=124
 readonly __RBRACE__=125
 readonly __TILDE__=126
-# Runtime library
+#_ Runtime library
 __ALLOC=1 # Starting heap at 1 because 0 is the null pointer.
 
 _malloc() { # $2 = object size
@@ -1422,9 +1422,9 @@ unpack_escaped_string() { # $1 = string, $2 = size (optional)
   done
 }
 
-# Define a string, and return a reference to it in the varible taken as argument.
-# If the variable is already defined, this function does nothing.
-# Note that it's up to the caller to ensure that no 2 strings share the same variable.
+#_ Define a string, and return a reference to it in the varible taken as argument.
+#_ If the variable is already defined, this function does nothing.
+#_ Note that it's up to the caller to ensure that no 2 strings share the same variable.
 defstr() { # $1 = variable name, $2 = string, $3 = size (optional)
   if [ $(($1)) -eq 0 ]; then
     unpack_escaped_string "$2" $3
@@ -1451,7 +1451,7 @@ _put_pstr() {
   done
 }
 
-# Unpack a Shell string into an appropriately sized buffer
+#_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
@@ -1663,7 +1663,7 @@ make_argv() {
   done
 }
 
-# Local variables
+#_ Local variables
 __=0
 
 read_int() {

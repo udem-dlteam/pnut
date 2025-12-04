@@ -20,12 +20,12 @@ _main() {
   endlet $1 __t1 n
 }
 
-# Character constants
+#_ Character constants
 readonly __LF__=10
 readonly __0__=48
 readonly __9__=57
-# Runtime library
-# Local variables
+#_ Runtime library
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)
