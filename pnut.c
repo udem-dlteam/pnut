@@ -4781,6 +4781,8 @@ void extract_c_code_from_sh_file(char *filename) {
 
     // Not a C code line, skip to end of line
     while ((c = fgetc(sh_fp)) != EOF && c != '\n');
+    // Reset accumulated newlines so newlines between shell lines are not output
+    newline_accumulated = 0;
   }
 
   fclose(sh_fp);
