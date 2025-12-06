@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdint.h> // for intptr_t
 #include <fcntl.h> // for open
