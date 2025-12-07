@@ -300,6 +300,61 @@ jobs:
           ./bootstrap-pnut-sh-by-pnut-exe.sh --backend ${{ matrix.target }}
           ./bootstrap-pnut-sh-by-pnut-exe.sh --backend ${{ matrix.target }} --minimal-pnut
 
+  bootstrap-pnut-annotated:
+    strategy:
+      matrix:
+        target: ["i386_linux"]
+        include:
+          - target: i386_linux
+            host: ubuntu-latest
+    runs-on: ${{ matrix.host }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coreutils time ksh
+
+      - name: Bootstrap pnut-sh with pnut-exe on ${{ matrix.target }} backend
+        run: |
+          set -e
+
+          # Make a "master" pnut.c with all includes processed
+          ./utils/process-includes.sh pnut.c > pnut-included.c
+
+          # Extract annotated version of pnut.c from build/pnut-sh.sh
+          time ksh build/pnut-sh.sh -C build/pnut-sh.sh > pnut-sh.c
+
+          # Diff with patience algorithm because it matches lines nicely
+          # Diff output example:
+          #  1 file changed, 15288 insertions(+), 11 deletions(-)
+          # We want to make sure the number of deleted lines is small, as that
+          # indicates that preprocessor directives (and controlled code) are
+          # not partially removed.
+          # !! This test does not catch the case where lines that should be
+          # removed are kept !!
+          difference_pnut_sh=$(git diff --diff-algorithm=patience --no-index pnut-sh.c pnut-included.c --shortstat)
+
+          # Check that the number of deleted lines is small
+          deleted_lines_pnut_sh=$(echo "$difference_pnut_sh" | cut -d ' ' -f 7)
+          if [ "$deleted_lines_pnut_sh" -gt 20 ]; then
+            echo "Too many lines were deleted when comparing the annotated pnut-sh.c with the preprocessed pnut.c"
+            echo "Deleted lines: $deleted_lines"
+            echo "Diff summary: $difference"
+            exit 1
+          fi
+
+          # Try to reproduce the original pnut-sh.sh from pnut-sh.sh compiling pnut-sh.c
+          ksh build/pnut-sh.sh pnut-sh.c > build/pnut-sh-from-pnut-sh.sh
+          diff build/pnut-sh-from-pnut-sh.sh build/pnut-sh.sh \
+            || { echo "Failed to reproduce build/pnut-sh.sh from annotated pnut-sh.c" ; exit 1; }
+
+          # Then do the same for pnut-exe
+          time ksh build/pnut-sh.sh -C build/pnut-exe.sh > pnut-exe.c
+          difference_pnut_exe=$(git diff --diff-algorithm=patience --no-index pnut-exe.c pnut-included.c --shortstat)
+
   compile-in-safe-mode:
     runs-on: ubuntu-latest
     steps:
@@ -493,6 +548,7 @@ jobs:
            , bootstrap-pnut-sh
            , bootstrap-pnut-exe
            , bootstrap-pnut-sh-with-pnut-exe
+           , bootstrap-pnut-annotated
            , bootstrap-bash-2_05a
            , pnut-variants-run
            ]
