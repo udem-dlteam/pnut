@@ -183,9 +183,9 @@ unpack_escaped_string() { # $1 = string, $2 = size (optional)
   done
 }
 
-# Define a string, and return a reference to it in the varible taken as argument.
-# If the variable is already defined, this function does nothing.
-# Note that it's up to the caller to ensure that no 2 strings share the same variable.
+#_ Define a string, and return a reference to it in the varible taken as argument.
+#_ If the variable is already defined, this function does nothing.
+#_ Note that it's up to the caller to ensure that no 2 strings share the same variable.
 defstr() { # $1 = variable name, $2 = string, $3 = size (optional)
   set +u # Necessary to allow the variable to be empty
   if [ $(($1)) -eq 0 ]; then
@@ -208,7 +208,7 @@ _putstr() { # s: $2
   : $((__tmp = $1)) $((s = $3)) $(($1 = __tmp))
 }
 
-# rib struct member declarations
+#_ rib struct member declarations
 readonly __field0=0
 readonly __field1=1
 readonly __field2=2
@@ -909,9 +909,9 @@ _main() {
   _init __
 }
 
-# Character constants
+#_ Character constants
 readonly __NUL__=0
-# Runtime library
+#_ Runtime library
 _free() { # $2 = object to free
   __ptr=$(($2 - 1))          # Start of object
   __end=$((__ptr + _$__ptr)) # End of object
@@ -922,7 +922,7 @@ _free() { # $2 = object to free
   : $(($1 = 0))              # Return 0
 }
 
-# Unpack a Shell string into an appropriately sized buffer
+#_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
@@ -1140,7 +1140,7 @@ _close() { # $2: fd
   : $(($1 = 0))
 }
 
-# Local variables
+#_ Local variables
 __=0
 
 __code=0; # Exit code

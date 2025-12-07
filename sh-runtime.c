@@ -75,7 +75,7 @@ bool runtime_use_local_vars = DEFAULT_USE;
 bool runtime_local_vars_defined = false;
 void runtime_local_vars() {
   if (runtime_local_vars_defined++) return;
-  putstr("# Local variables\n");
+  putstr("#_ Local variables\n");
   putstr("__=0\n");
 #ifndef SH_SAVE_VARS_WITH_SET
   putstr("__SP=0\n");
@@ -286,7 +286,7 @@ bool runtime_unpack_string_to_buf_defined = false;
 void runtime_unpack_string_to_buf() {
   if (runtime_unpack_string_to_buf_defined++) return;
   runtime_char_to_int();
-  putstr("# Unpack a Shell string into an appropriately sized buffer\n");
+  putstr("#_ Unpack a Shell string into an appropriately sized buffer\n");
   putstr("unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
   putstr("  __fgetc_buf=$1\n");
   putstr("  __buffer=$2\n");
@@ -347,10 +347,10 @@ bool runtime_use_initialize = DEFAULT_USE;
 bool runtime_initialize_defined = false;
 void runtime_initialize() {
   if (runtime_initialize_defined++) return;
-  putstr("# Initialize memory with the list of values.\n");
+  putstr("#_ Initialize memory with the list of values.\n");
 #ifndef RT_NO_INIT_GLOBALS
-  putstr("# When the expected number of elements is higher than the actual number of\n");
-  putstr("# elements, the remaining elements are set to 0\n");
+  putstr("#_ When the expected number of elements is higher than the actual number of\n");
+  putstr("#_ elements, the remaining elements are set to 0\n");
 #endif
   putstr("initialize() { # $1 = var name, $2 = length, $3... = elements\n");
   putstr("  __ptr=$(($1))\n");
@@ -528,9 +528,9 @@ bool runtime_defstr_defined = false;
 void runtime_defstr() {
   if (runtime_defstr_defined++) return;
   runtime_unpack_escaped_string();
-  putstr("# Define a string, and return a reference to it in the varible taken as argument.\n");
-  putstr("# If the variable is already defined, this function does nothing.\n");
-  putstr("# Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
+  putstr("#_ Define a string, and return a reference to it in the varible taken as argument.\n");
+  putstr("#_ If the variable is already defined, this function does nothing.\n");
+  putstr("#_ Note that it's up to the caller to ensure that no 2 strings share the same variable.\n");
   putstr("defstr() { # $1 = variable name, $2 = string, $3 = size (optional)\n");
 #ifndef RT_UNSAFE_HEAP
   putstr("  set +u # Necessary to allow the variable to be empty\n");
@@ -768,6 +768,25 @@ void runtime_printf() {
   putstr("\n");
 }
 
+bool runtime_use_unpack_string = DEFAULT_USE;
+bool runtime_unpack_string_defined = false;
+void runtime_unpack_string() {
+  if (runtime_unpack_string_defined++) return;
+  runtime_malloc();
+  runtime_unpack_string_to_buf();
+  putstr("#_ Unpack a Shell string into a newly allocated buffer\n");
+  putstr("unpack_string() { # $1: return location, $2: Shell string\n");
+  putstr("  _malloc __addr $((${#2} + 1))  # Allocate buffer\n");
+  putstr("  unpack_string_to_buf \"$2\" $__addr\n");
+  putstr("  : $(($1 = __addr))\n");
+  putstr("}\n");
+  putstr("\n");
+}
+
+#endif // !SH_MINIMAL_RUNTIME
+
+#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+
 bool runtime_use_isatty = DEFAULT_USE;
 bool runtime_isatty_defined = false;
 void runtime_isatty() {
@@ -777,22 +796,7 @@ void runtime_isatty() {
   putstr("}\n\n");
 }
 
-bool runtime_use_unpack_string = DEFAULT_USE;
-bool runtime_unpack_string_defined = false;
-void runtime_unpack_string() {
-  if (runtime_unpack_string_defined++) return;
-  runtime_malloc();
-  runtime_unpack_string_to_buf();
-  putstr("# Unpack a Shell string into a newly allocated buffer\n");
-  putstr("unpack_string() { # $1: return location, $2: Shell string\n");
-  putstr("  _malloc __addr $((${#2} + 1))  # Allocate buffer\n");
-  putstr("  unpack_string_to_buf \"$2\" $__addr\n");
-  putstr("  : $(($1 = __addr))\n");
-  putstr("}\n");
-  putstr("\n");
-}
-
-#endif // SH_MINIMAL_RUNTIME
+#endif // !SH_MINIMAL_RUNTIME || SUPPORT_STDIN_INPUT
 
 bool runtime_use_open = DEFAULT_USE;
 bool runtime_open_defined = false;
@@ -961,15 +965,11 @@ bool runtime_use_fopen = DEFAULT_USE;
 bool runtime_fopen_defined = false;
 void runtime_fopen() {
   if (runtime_fopen_defined++) return;
-  runtime_malloc();
   runtime_open();
-  putstr("# Open the file and return a FILE* for the file.\n");
-  putstr("# The FILE structure contains the file descriptor.\n");
+  putstr("#_ Open the file and return the file descriptor directly.\n");
   putstr("_fopen() { # $2: File name, $3: Mode\n");
   putstr("  _open __fd $2 $((_$3 == 119)) 511\n");
-  putstr("  _malloc __file 1        # Allocate FILE structure\n");
-  putstr("  : $((_$__file = __fd))  # Save fd\n");
-  putstr("  : $(($1 = __file))\n");
+  putstr("  : $(($1 = __fd))\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -1003,10 +1003,7 @@ void runtime_fclose() {
   runtime_free();
   runtime_close();
   putstr("_fclose() { # $2: file\n");
-  putstr("  __file=$2\n");
-  putstr("  __fd=$((_$__file))  # Get fd\n");
-  putstr("  _free __ $__file    # Release FILE structure\n");
-  putstr("  _close $1 $__fd\n");
+  putstr("  _close $1 $2\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -1017,9 +1014,7 @@ void runtime_fgetc() {
   if (runtime_fgetc_defined++) return;
   runtime_read_byte();
   putstr("_fgetc() { # $2: file\n");
-  putstr("  __file=$2\n");
-  putstr("  __fd=$((_$__file))\n");
-  putstr("  read_byte $1 $__fd\n");
+  putstr("  read_byte $1 $2\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -1050,7 +1045,9 @@ void produce_runtime() {
 #ifndef SH_MINIMAL_RUNTIME
   if (runtime_use_getchar)              runtime_getchar();
   if (runtime_use_printf)               runtime_printf();
-  if (runtime_use_isatty)               runtime_isatty();
   if (runtime_use_unpack_string)        runtime_unpack_string();
+#endif
+#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+  if (runtime_use_isatty)               runtime_isatty();
 #endif
 }

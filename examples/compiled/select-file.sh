@@ -208,10 +208,10 @@ _main() {
   endlet $1 __t1 len ix files
 }
 
-# Character constants
+#_ Character constants
 readonly __0__=48
 readonly __9__=57
-# Runtime library
+#_ Runtime library
 _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
@@ -221,7 +221,7 @@ _put_pstr() {
   done
 }
 
-# Local variables
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)
@@ -278,7 +278,7 @@ _malloc() { # $2 = object size
   : $((__ALLOC += $2 + 1))
 }
 
-# Unpack a Shell string into an appropriately sized buffer
+#_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
@@ -297,7 +297,7 @@ unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   : $((_$__buffer = 0))               # Then \0
 }
 
-# Unpack a Shell string into a newly allocated buffer
+#_ Unpack a Shell string into a newly allocated buffer
 unpack_string() { # $1: return location, $2: Shell string
   _malloc __addr $((${#2} + 1))  # Allocate buffer
   unpack_string_to_buf "$2" $__addr

@@ -58,10 +58,10 @@ _main() { let argc $2; let myargv $3
   endlet $1 i myargv argc
 }
 
-# Character constants
+#_ Character constants
 readonly __NUL__=0
 readonly __MINUS__=45
-# Runtime library
+#_ Runtime library
 _free() { # $2 = object to free
   __ptr=$(($2 - 1))          # Start of object
   __end=$((__ptr + _$__ptr)) # End of object
@@ -73,7 +73,7 @@ _free() { # $2 = object to free
 }
 
 
-# Unpack a Shell string into an appropriately sized buffer
+#_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
   __fgetc_buf=$1
   __buffer=$2
@@ -256,7 +256,7 @@ make_argv() {
   done
 }
 
-# Local variables
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)

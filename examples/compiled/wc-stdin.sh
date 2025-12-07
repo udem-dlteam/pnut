@@ -31,12 +31,12 @@ _main() {
   endlet $1 last_sep sep c chars words lines
 }
 
-# Character constants
+#_ Character constants
 readonly __HT__=9
 readonly __LF__=10
 readonly __SPACE__=32
-# Runtime library
-# Local variables
+#_ Runtime library
+#_ Local variables
 __=0
 __SP=0
 let() { # $1: variable name, $2: value (optional)
