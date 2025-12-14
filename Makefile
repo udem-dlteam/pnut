@@ -50,13 +50,12 @@ kit/jammed.sh: kit/bintools.c
 	./kit/make-jammed.sh
 
 install: pnut-sh pnut-sh.sh
-	sudo cp $(BUILD_DIR)/pnut-sh /usr/local/bin/pnut
-	sudo cp $(BUILD_DIR)/pnut-sh.sh /usr/local/bin/pnut.sh
+	cp $(BUILD_DIR)/pnut-sh $(DESTDIR)$(PREFIX)/bin/pnut
+	cp $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(PREFIX)/bin/pnut.sh
 
 uninstall:
-	sudo $(RM) /usr/local/bin/pnut
-	sudo $(RM) /usr/local/bin/pnut.sh
-
+	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut
+	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut.sh
 clean:
 	$(RM) -r $(BUILD_DIR)
 	# Recursively remove .exe files from the tests directory
