@@ -2,7 +2,10 @@
 
 BUILD_DIR = build
 
-BUILD_OPT_SH = -Dsh -DNICE_UX $(BUILD_OPT)
+ifeq ($(CFLAGS),)
+	CFLAGS = -std=c99
+endif
+
 
 BUILD_OPT_EXE.Linux.i386 = -Dtarget_i386_linux -DNICE_UX $(BUILD_OPT)
 BUILD_OPT_EXE.Linux.x86_64 = -Dtarget_x86_64_linux -DNICE_UX $(BUILD_OPT)
@@ -22,7 +25,7 @@ endif
 
 pnut-sh: pnut.c sh.c sh-runtime.c
 	mkdir -p $(BUILD_DIR)
-	gcc $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
+	gcc $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
 
 pnut-sh.sh: pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
@@ -34,7 +37,7 @@ pnut-sh-bootstrapped.sh: pnut-sh
 
 pnut-exe: pnut.c x86.c exe.c elf.c mach-o.c
 	mkdir -p $(BUILD_DIR)
-	gcc $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
+	gcc $(CFLAGS) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
 
 pnut-exe.sh: pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.sh
