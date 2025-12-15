@@ -168,7 +168,6 @@ pnut-artifact-arm:
 # Bootstrap pnut-sh with pnut-sh.sh (obtained using $(CC)).
 bootstrap-pnut-sh: pnut-sh.sh
 	env time $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
-	@sha256sum $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
@@ -177,7 +176,6 @@ bootstrap-pnut-sh: pnut-sh.sh
 # Bootstrap pnut-exe.sh with pnut-sh.sh (obtained using $(CC)).
 bootstrap-pnut-exe-script: pnut-sh.sh pnut-exe.sh
 	env time $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped.sh
-	@sha256sum $(BUILD_DIR)/pnut-exe.sh $(BUILD_DIR)/pnut-exe-bootstrapped.sh
 	@if ! diff $(BUILD_DIR)/pnut-exe.sh $(BUILD_DIR)/pnut-exe-bootstrapped.sh >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
@@ -186,7 +184,6 @@ bootstrap-pnut-exe-script: pnut-sh.sh pnut-exe.sh
 # Bootstrap pnut-exe from pnut-exe (by $(CC)).
 bootstrap-pnut-exe: pnut-exe.sh pnut-exe-bootstrapped
 	env time $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-exe.sh $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
-	@sha256sum $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again
 	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap executables differ"; \
 		exit 1; \
@@ -194,7 +191,6 @@ bootstrap-pnut-exe: pnut-exe.sh pnut-exe-bootstrapped
 
 bootstrap-pnut-exe-no-shell: pnut-exe-bootstrapped
 	env time $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
-	@sha256sum $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again
 	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap executables differ"; \
 		exit 1; \
@@ -206,7 +202,6 @@ bootstrap-pnut-sh-with-pnut-exe: pnut-exe-bootstrapped pnut-sh.sh
 	env time $(BUILD_DIR)/pnut-exe $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	@chmod +x $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	$(BUILD_DIR)/pnut-sh-from-pnut-exe $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh
-	@sha256sum $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
