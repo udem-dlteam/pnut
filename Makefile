@@ -87,8 +87,8 @@ pnut-sh.sh: pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
 	@chmod +x $(BUILD_DIR)/pnut-sh.sh
 
-pnut-sh-bootstrapped.sh: pnut-sh
-	$$SHELL $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
+pnut-sh-bootstrapped.sh: pnut-sh.sh
+	$(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	@chmod +x $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 
