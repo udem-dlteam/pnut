@@ -12,9 +12,9 @@ mkdir -p "$BUILD_DIR"
 if [ ! -f "$BUILD_DIR/bash" ]; then
   # Redirect output to stderr to avoid mixing with the output of --print-path
   {
-    git clone https://git.savannah.gnu.org/git/bash.git "$BUILD_DIR" --depth 1
+    git clone https://git.savannah.gnu.org/git/bash.git "$BUILD_DIR" --depth 1 -b bash-5.3
     cd "$BUILD_DIR"
-    git checkout a8a1c2fac029404d3f42cd39f5a20f24b6e4fe4b # Bash 5.3 (29/06/2025)
+    git checkout b8c60bc9ca365f8261fa97900b6fa939f6ebc303 # Bash 5.3 (03/06/2025)
     ./configure --enable-static-link
     make
     echo "Statically linked bash created at $BUILD_DIR/bash"
