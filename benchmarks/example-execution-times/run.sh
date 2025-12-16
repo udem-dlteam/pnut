@@ -69,7 +69,7 @@ done;
 # (display "Hello, world!")
 echo '(display "Hello, world!")' > $COMP_DIR/program.scm
 
-PNUT_SH_OPTIONS="-Dsh -DSH_OPTIMIZE_LONG_LINES"
+PNUT_SH_OPTIONS="-Dtarget_sh -DSH_OPTIMIZE_LONG_LINES"
 PNUT_x86_OPTIONS="-Dtarget_i386_linux"
 #PNUT_x86_OPTIONS="-Dtarget_x86_64_linux"
 #PNUT_x86_OPTIONS="-Dtarget_x86_64_mac"

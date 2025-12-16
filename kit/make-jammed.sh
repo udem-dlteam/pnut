@@ -38,7 +38,7 @@ program_dependencies() {
 }
 
 # Prepare pnut-sh.sh
-PNUT_SH_OPTIONS="-Dsh -DPNUT_BOOTSTRAP"
+PNUT_SH_OPTIONS="-Dtarget_sh -DPNUT_BOOTSTRAP"
 gcc -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
 ./$TEMP_DIR/pnut-sh $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
 

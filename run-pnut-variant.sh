@@ -11,7 +11,7 @@ run_with_shell() {
 
   echo "Running $variant with $1"
 
-  env time $1 "$TEMP_DIR/pnut-$variant.sh" $PNUT_OPTIONS -Dsh "pnut.c" > "$TEMP_DIR/pnut-$variant.output"
+  env time $1 "$TEMP_DIR/pnut-$variant.sh" $PNUT_OPTIONS -Dtarget_sh "pnut.c" > "$TEMP_DIR/pnut-$variant.output"
 }
 
 # Parse the arguments
@@ -34,7 +34,7 @@ pnut_exec="$TEMP_DIR/pnut-$variant"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir "$TEMP_DIR"; fi
 
-gcc -o "$pnut_exec" $PNUT_OPTIONS -Dsh pnut.c
+gcc -o "$pnut_exec" $PNUT_OPTIONS -Dtarget_sh pnut.c
 $pnut_exec $PNUT_OPTIONS $PNUT_VARIANT_OPTIONS "pnut.c" > "$TEMP_DIR/pnut-$variant.sh"
 
 if [ "$shell" = "all" ]; then

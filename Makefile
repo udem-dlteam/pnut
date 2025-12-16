@@ -60,7 +60,7 @@ ifeq ($(ANNOTATE_SH),1)
 	BOOTSTRAP_FLAGS += -DSH_INCLUDE_C_CODE
 endif
 
-BUILD_OPT_SH = -Dsh $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
+BUILD_OPT_SH = -Dtarget_sh $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
 
 BUILD_OPT_EXE.Linux.i386 = 	 	-Dtarget_i386_linux
 BUILD_OPT_EXE.Linux.x86_64 = 	-Dtarget_x86_64_linux

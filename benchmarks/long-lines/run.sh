@@ -27,7 +27,7 @@ lengths="1000 2000 5000 10000 20000"
 shells="dash bash yash zsh ksh"
 
 # Compile pnut with
-PNUT_OPTIONS="-Dsh"
+PNUT_OPTIONS="-Dtarget_sh"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_OPTIONS pnut.c
 gcc -o $COMP_DIR/pnut-sh-long-lines.exe $PNUT_OPTIONS -DSH_OPTIMIZE_LONG_LINES pnut.c
 

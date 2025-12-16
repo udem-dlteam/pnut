@@ -9,7 +9,7 @@ if [ "$SHELL_TO_TEST" = "" ] ; then
 fi
 
 TEMP_DIR="build"
-PNUT_SH_OPTIONS="-Dsh $PNUT_SH_OPTIONS_EXTRA"
+PNUT_SH_OPTIONS="-Dtarget_sh $PNUT_SH_OPTIONS_EXTRA"
 PNUT_I386_OPTIONS="-Dtarget_i386_linux"
 
 echo "PLATFORM: `uname -a`"

@@ -35,7 +35,7 @@ compile() {
   print_time $TIME_MS "for: $1 with $file $(sha256sum $COMP_DIR/$output_name-with-$1.sh | cut -d' ' -f1) size: $(wc -l < $file) $(wc -l < $COMP_DIR/$output_name-with-$1.sh)"
 }
 
-PNUT_SH_OPTIONS="-Dsh"
+PNUT_SH_OPTIONS="-Dtarget_sh"
 PNUT_x86_OPTIONS="-Dtarget_i386_linux"
 #PNUT_x86_OPTIONS="-Dtarget_x86_64_linux"
 #PNUT_x86_OPTIONS="-Dtarget_x86_64_mac"
@@ -57,7 +57,7 @@ done
 
 # Compile pnut-sh.c using pnut-sh on different shells/compilers
 for run_with in $runners; do
-  compile "$run_with" "pnut.c" "-Dsh" "pnut-sh"
+  compile "$run_with" "pnut.c" "-Dtarget_sh" "pnut-sh"
 done
 
 # Compile pnut-exe.c using pnut-sh on different shells/compilers
