@@ -1,4 +1,10 @@
-.PHONY: pnut-sh pnut-sh.sh pnut-sh-from-pnut-exe.sh pnut-exe pnut-exe.sh pnut-exe-bootstrapped bootstrap-pnut-sh bootstrap-pnut-exe install uninstall clean test-sh test-i386-linux test-x86_64-linux test-x86_64-mac
+.PHONY: \
+	pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh pnut-exe pnut-exe.sh pnut-exe-bootstrapped \
+	install uninstall clean \
+	test-sh test-i386-linux test-x86_64-linux test-x86_64-mac \
+	pnut-artifact-x86 pnut-artifact-arm \
+	bootstrap-pnut-sh bootstrap-pnut-exe-script bootstrap-pnut-exe \
+	bootstrap-pnut-exe-no-shell bootstrap-pnut-sh-with-pnut-exe
 
 BUILD_DIR = build
 
