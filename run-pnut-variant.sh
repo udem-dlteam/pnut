@@ -15,7 +15,7 @@ run_with_shell() {
 }
 
 # Parse the arguments
-shell="$SHELL" # Use current shell as the default. "all" to test all shells.
+shell="/bin/sh" # Default to /bin/sh. "all" to test all shells.
 variant=""
 
 while [ $# -gt 0 ]; do
