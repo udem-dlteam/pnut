@@ -32,10 +32,10 @@ jobs:
           for comp in gcc clang-14; do
             make pnut-sh CC=$comp
             make pnut-exe CC=$comp TARGET=Linux.i386
-            make pnut-exe CC=$comp TARGET=Linux.i386 ONE_PASS=1
+            make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=1
             make pnut-exe CC=$comp TARGET=Linux.i386 SAFE=1 NICE_UX=1
             make pnut-exe CC=$comp TARGET=Linux.x86_64
-            make pnut-exe CC=$comp TARGET=Linux.x86_64 ONE_PASS=1
+            make pnut-exe CC=$comp TARGET=Linux.x86_64 EXE_ONE_PASS=1
             make pnut-exe CC=$comp TARGET=Linux.x86_64 SAFE=1 NICE_UX=1
             make pnut-exe CC=$comp TARGET=Darwin.x86_64
             make pnut-exe CC=$comp TARGET=Darwin.x86_64 SAFE=1 NICE_UX=1
@@ -233,7 +233,7 @@ jobs:
           make bootstrap-pnut-exe-no-shell
           if [ ${{ matrix.host }} != "macos-latest" ]; then
             # One pass generator is not supported on macOS
-            make bootstrap-pnut-exe-no-shell ONE_PASS=1
+            make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=1
           fi
 
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
@@ -245,8 +245,8 @@ jobs:
           make bootstrap-pnut-exe MINIMAL=1
           if [ ${{ matrix.host }} != "macos-latest" ]; then
             # One pass generator is not supported on macOS
-            make bootstrap-pnut-exe ONE_PASS=1 MINIMAL=0
-            make bootstrap-pnut-exe ONE_PASS=1 MINIMAL=1
+            make bootstrap-pnut-exe EXE_ONE_PASS=1 MINIMAL=0
+            make bootstrap-pnut-exe EXE_ONE_PASS=1 MINIMAL=1
           fi
 
   bootstrap-pnut-sh-with-pnut-exe:
@@ -302,7 +302,7 @@ jobs:
           for target in Linux.x86_64 Linux.i386; do
             for minimal in 0 1; do
               for one_pass in 0 1; do
-                make pnut-exe TARGET=$target MINIMAL=$minimal ONE_PASS=$one_pass
+                make pnut-exe TARGET=$target MINIMAL=$minimal EXE_ONE_PASS=$one_pass
               done
             done
           done
@@ -353,7 +353,7 @@ jobs:
             export PNUT_BUILD_OPT="$COMPATIBILITY_OPTIONS"
             export TARGET=Linux.i386
             export BOOTSTRAP_SHELL=bash
-            export ONE_PASS=1
+            export EXE_ONE_PASS=1
             export CFLAGS=" " # Clear -std=c99 flag which is not supported by woody's gcc
 
             # Run tests with bash 2.05a

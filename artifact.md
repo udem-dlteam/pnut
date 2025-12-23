@@ -110,9 +110,9 @@ cat build/pnut-sh.sh | less
 ### Bootstrapping pnut
 
 Pnut's main use case is to compile itself. To ensure that the bootstrap process
-works, the `./bootstrap-pnut-sh.sh` script can be used. This script compiles
-pnut-sh twice: once with pnut-sh compiled with GCC (pnut-sh.sh) and then with
-pnut-sh.sh (pnut-sh-twice-bootstrapped.sh). The script then compares the two
+works, the `make bootstrap-pnut-sh` script can be used. This script compiles
+pnut-sh twice: once with pnut-sh compiled with GCC (`pnut-sh.sh`) and then with
+pnut-sh.sh (`pnut-sh-bootstrapped.sh`). The script then compares the two
 generated scripts to ensure that they are identical.
 
 Note that the steps running shell versions of pnut can take a while to complete.
@@ -122,7 +122,7 @@ Note that the steps running shell versions of pnut can take a while to complete.
 # For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'`
 # before running the script.
 # This script takes around 1m30 on bash. Faster on ksh/dash
-./bootstrap-pnut-sh.sh --shell bash
+make bootstrap-pnut-sh BOOTSTRAP_SHELL=bash &
 ```
 
 Or you can invoke pnut directly:
@@ -131,22 +131,22 @@ Or you can invoke pnut directly:
 # Compile pnut-sh to a shell script using GCC
 make pnut-sh.sh
 # Compile pnut-sh to a shell script with pnut-sh.sh
-bash ./build/pnut-sh.sh pnut.c -Dsh -DNICE_UX \
-  > build/pnut-sh-twice-bootstrapped.sh
-sha256sum build/pnut-sh.sh build/pnut-sh-twice-bootstrapped.sh
+bash ./build/pnut-sh.sh pnut.c -Dtarget_sh -DNICE_UX \
+  > build/pnut-sh-bootstrapped.sh
+sha256sum build/pnut-sh.sh build/pnut-sh-bootstrapped.sh
 ```
 
-To compile pnut-exe with pnut-sh, the `./bootstrap-pnut-exe.sh` script can be
+To compile pnut-exe with pnut-sh, the `make bootstrap-pnut-exe-script` script can be
 used. This script compiles pnut-exe to shell twice: once with pnut-sh compiled
-with GCC (pnut-exe.sh) and then with pnut-sh.sh (pnut-exe-twice-bootstrapped.sh).
+with GCC (`pnut-exe.sh`) and then with pnut-sh.sh (`pnut-exe-bootstrapped.sh`).
 
 ```shell
 # Bootstrap pnut-exe with <shell>
-# Backends available: x86_64_mac, x86_64_linux, i386_linux
+# Backends available: Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64
 # For bash-2.05a, use `export PNUT_OPTIONS='-DRT_FREE_UNSETS_VARS_NOT'`
 # before running the script.
 # This script takes a few minutes.
-./bootstrap-pnut-exe.sh --backend x86_64_linux --shell bash
+make bootstrap-pnut-exe-script BOOTSTRAP_SHELL=bash TARGET=Linux.x86_64
 ```
 
 Or manually:
@@ -160,15 +160,15 @@ chmod +x build/pnut-exe.sh
 
 # We then use pnut-exe.sh to compile pnut-exe again, this time creating a binary
 bash ./build/pnut-exe.sh pnut.c -Dtarget_x86_64_linux -DNICE_UX \
-  > build/pnut-exe.exe
-chmod +x build/pnut-exe.exe
+  > build/pnut-exe
+chmod +x build/pnut-exe
 
 # Finally, we use pnut-exe to compile pnut-exe to make sure it works
-./build/pnut-exe.exe pnut.c -Dtarget_x86_64_linux -DNICE_UX \
-  > build/pnut-exe-twice-bootstrapped.exe
+./build/pnut-exe pnut.c -Dtarget_x86_64_linux -DNICE_UX \
+  > build/pnut-exe-bootstrapped-again
 
 # And we check that the binaries are identical
-sha256sum build/pnut-exe.exe build/pnut-exe-twice-bootstrapped.exe
+sha256sum build/pnut-exe build/pnut-exe-bootstrapped-again
 ```
 
 <!-- ## Running tests
@@ -288,6 +288,6 @@ generated as the input is read, so it can be interesting to watch the compiler's
 progress.
 
 ```shell
-./bootstrap-pnut-sh.sh --shell bash & # Run in the background
-tail -f build/pnut-sh-twice-bootstrapped.sh
+make bootstrap-pnut-sh BOOTSTRAP_SHELL=bash & # Run in the background
+tail -f build/pnut-sh-bootstrapped.sh
 ```

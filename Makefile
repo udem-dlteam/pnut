@@ -19,45 +19,77 @@ BOOTSTRAP_SHELL ?= /bin/sh
 # Targets for pnut-exe: auto, Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64
 TARGET ?= auto
 
+############################### General options ################################
 # Bootstrap script options that can be passed via make variables
 # Examples:
-#   make pnut-sh FAST=1 SAFE=1                    # Enable fast and safe mode for shell backend
-#   make pnut-exe MINIMAL=1 STATS=1               # Enable minimal pnut and memory stats for exe backend
-#   make pnut-exe TARGET=Linux.x86_64 ONE_PASS=1  # Build exe for Linux x86_64 with one-pass generator
-FAST ?= 0 	 		# Generate faster shell code that's less readable (pnut-sh only)
-SAFE ?= 0 	 		# Enables safe mode with additional runtime checks (pnut-sh and pnut-exe)
-MINIMAL ?= 0 		# Include only features used to bootstrap pnut (pnut-sh and pnut-exe)
-ONE_PASS ?= 1 	# Use one-pass code generator (pnut-exe only, default enabled)
-STATS ?= 0 	 		# Print memory usage statistics after execution (pnut-sh and pnut-exe)
-NICE_UX ?= 0		# Better error messages and more complete command line options (pnut-sh and pnut-exe)
-PROFILE_MEM ?= 0 # Shell scripts count memory usage (pnut-sh only)
-ANNOTATE_SH ?= 0	# Annotate generated shell code with comments
+#		make pnut-sh.sh  MINIMAL=1 							 # Build minimal pnut-sh.sh
+#		make pnut-sh.sh  MINIMAL=1 SH_ANNOTATE=1 # Build minimal annotated pnut-sh.sh
+#		make pnut-exe TARGET=Linux.x86_64 EXE_ONE_PASS=1 # Build exe for Linux x86_64 with one-pass generator
+
+# Include only features used to bootstrap pnut
+MINIMAL 				?= 0
+# Better error messages and more complete command line options
+NICE_UX 				?= 0
+# Allow reading input from stdin when no input file is specified
+STDIN_INPUT 		?= 0
+
+############################# Development options ##############################
+# Enables safe mode with additional runtime checks
+SAFE 					  ?= 0
+# Print memory usage statistics after execution
+STATS 					?= 0
+
+########################### pnut-sh specific options ###########################
+# Generate faster shell code that's less readable
+SH_FAST 			 	?= 0
+# Annotate generated shell code with comments
+SH_ANNOTATE    	?= 0
+# Use compact runtime library in shell scripts
+SH_COMPACT_RT  	?= 0
+# Shell scripts count memory usage (for development/debugging)
+SH_PROFILE_MEM 	?= 0
+
+########################## pnut-exe specific options ###########################
+# Use one-pass code generator (default enabled)
+EXE_ONE_PASS 		?= 1
 
 # Bootstrap flags
 BOOTSTRAP_FLAGS =
-ifeq ($(FAST),1)
-  BOOTSTRAP_FLAGS += -DSH_SAVE_VARS_WITH_SET
-endif
-ifeq ($(SAFE),1)
-  BOOTSTRAP_FLAGS += -DSAFE_MODE
-endif
 ifeq ($(MINIMAL),1)
   BOOTSTRAP_FLAGS += -DPNUT_BOOTSTRAP
-endif
-ifeq ($(ONE_PASS),1)
-  BOOTSTRAP_FLAGS += -DONE_PASS_GENERATOR
-endif
-ifeq ($(STATS),1)
-  BOOTSTRAP_FLAGS += -DPRINT_MEMORY_STATS
+else
+# Default is NICE_UX enabled
+	NICE_UX = 1
 endif
 ifeq ($(NICE_UX),1)
   BOOTSTRAP_FLAGS += -DNICE_UX
 endif
-ifeq ($(PROFILE_MEM),1)
+ifeq ($(STDIN_INPUT),1)
+	BOOTSTRAP_FLAGS += -DSUPPORT_STDIN_INPUT
+endif
+
+ifeq ($(SAFE),1)
+  BOOTSTRAP_FLAGS += -DSAFE_MODE
+endif
+ifeq ($(STATS),1)
+  BOOTSTRAP_FLAGS += -DPRINT_MEMORY_STATS
+endif
+
+ifeq ($(SH_FAST),1)
+  BOOTSTRAP_FLAGS += -DSH_SAVE_VARS_WITH_SET
+endif
+ifeq ($(SH_ANNOTATE),1)
+	BOOTSTRAP_FLAGS += -DSH_INCLUDE_C_CODE
+endif
+ifeq ($(SH_COMPACT_RT),1)
+	BOOTSTRAP_FLAGS += -DRT_COMPACT
+endif
+ifeq ($(SH_PROFILE_MEM),1)
 	BOOTSTRAP_FLAGS += -DSH_PROFILE_MEMORY
 endif
-ifeq ($(ANNOTATE_SH),1)
-	BOOTSTRAP_FLAGS += -DSH_INCLUDE_C_CODE
+
+ifeq ($(EXE_ONE_PASS),1)
+  BOOTSTRAP_FLAGS += -DONE_PASS_GENERATOR
 endif
 
 BUILD_OPT_SH = -Dtarget_sh $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
@@ -119,9 +151,16 @@ install: pnut-sh pnut-sh.sh
 	cp $(BUILD_DIR)/pnut-sh $(DESTDIR)$(PREFIX)/bin/pnut
 	cp $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(PREFIX)/bin/pnut.sh
 
+install-pnut-exe: pnut-exe pnut-exe.sh
+	cp $(BUILD_DIR)/pnut-exe $(DESTDIR)$(PREFIX)/bin/pnut-exe
+	cp $(BUILD_DIR)/pnut-exe.sh $(DESTDIR)$(PREFIX)/bin/pnut-exe.sh
+
 uninstall:
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut.sh
+	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe
+	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe.sh
+
 clean:
 	$(RM) -r $(BUILD_DIR)
 	# Recursively remove .exe files from the tests directory
@@ -148,28 +187,31 @@ pnut-artifact-x86:
 pnut-artifact-arm:
 	docker build -t pnut-artifact-arm . --build-arg PNUT_SOURCE=clone --platform linux/arm64
 
-################################################################################
-# The following recipes perform some steps of the complete pnut bootstrap
-# process to allow each part to be tested individually. The **bootstrap test**
-# is used to verify that the step output is in a good enough state to recompile
-# and reproduce itself bit-for-bit.
-#
-# The bootstrap steps are:
-# 1) Bootstrap pnut-sh.sh from pnut-sh.sh:  bootstrap-pnut-sh
-# 2) Bootstrap pnut-exe.sh from pnut-sh.sh: bootstrap-pnut-exe-script
-# 3) Bootstrap pnut-exe from pnut-exe.sh:   bootstrap-pnut-exe
-# 4) Bootstrap pnut-exe from pnut-exe:      bootstrap-pnut-exe-no-shell
-#
-# In principle, these steps depend on the output of the previous step. However,
-# to speed up testing, the bootstrap compiler of each step is produced using the
-# system C compiler (gcc/clang) rather than the output of the previous step. To
-# ensure this does not invalidate the bootstrap process, each step compares its
-# output to the output obtained using the system compiler. This ensures that the
-# output and input of adjacent steps don't diverge.
-#
-# For completeness, an additional recipe bootstraps pnut-sh from pnut-exe.
-#
-################################################################################
+define BOOTSTRAP_HELP
+The following recipes perform some steps of the complete pnut bootstrap
+process to allow each part to be tested individually. The **bootstrap test**
+is used to verify that the step output is in a good enough state to recompile
+and reproduce itself bit-for-bit.
+
+The bootstrap steps are:
+1) Bootstrap pnut-sh.sh from pnut-sh.sh:  bootstrap-pnut-sh
+2) Bootstrap pnut-exe.sh from pnut-sh.sh: bootstrap-pnut-exe-script
+3) Bootstrap pnut-exe from pnut-exe.sh:   bootstrap-pnut-exe
+4) Bootstrap pnut-exe from pnut-exe:      bootstrap-pnut-exe-no-shell
+
+In principle, these steps depend on the output of the previous step. However,
+to speed up testing, the bootstrap compiler of each step is produced using the
+system C compiler (gcc/clang) rather than the output of the previous step. To
+ensure this does not invalidate the bootstrap process, each step compares its
+output to the output obtained using the system compiler. This ensures that the
+output and input of adjacent steps don't diverge.
+
+For completeness, an additional recipe bootstraps pnut-sh from pnut-exe.
+endef
+
+export BOOTSTRAP_HELP
+bootstrap-help:
+	@echo "$$BOOTSTRAP_HELP"
 
 # Bootstrap pnut-sh with pnut-sh.sh (obtained using $(CC)).
 bootstrap-pnut-sh: pnut-sh.sh

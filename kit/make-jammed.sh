@@ -15,7 +15,7 @@ error() {
   exit 1
 }
 
-readonly TEMP_DIR="build/kit"
+readonly TEMP_DIR="kit"
 
 JAM_OPT=""
 INCLUDE_UTILS=0
