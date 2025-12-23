@@ -31,13 +31,13 @@ jobs:
           # Testing with gcc clang in case they have different warnings
           for comp in gcc clang-14; do
             make pnut-sh CC=$comp
-            make pnut-exe CC=$comp TARGET=Linux.i386
+            make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=0
             make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=1
             make pnut-exe CC=$comp TARGET=Linux.i386 SAFE=1 NICE_UX=1
-            make pnut-exe CC=$comp TARGET=Linux.x86_64
+            make pnut-exe CC=$comp TARGET=Linux.x86_64 EXE_ONE_PASS=0
             make pnut-exe CC=$comp TARGET=Linux.x86_64 EXE_ONE_PASS=1
             make pnut-exe CC=$comp TARGET=Linux.x86_64 SAFE=1 NICE_UX=1
-            make pnut-exe CC=$comp TARGET=Darwin.x86_64
+            make pnut-exe CC=$comp TARGET=Darwin.x86_64 EXE_ONE_PASS=0
             make pnut-exe CC=$comp TARGET=Darwin.x86_64 SAFE=1 NICE_UX=1
           done
 
@@ -226,28 +226,25 @@ jobs:
             sudo ./install
           fi
 
-      - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
-        run: |
-          set -e
-          export TARGET=${{ matrix.target }}
-          make bootstrap-pnut-exe-no-shell
-          if [ ${{ matrix.host }} != "macos-latest" ]; then
-            # One pass generator is not supported on macOS
-            make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=1
-          fi
-
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
           export BOOTSTRAP_SHELL=${{ matrix.shell }}
           export TARGET=${{ matrix.target }}
-          make bootstrap-pnut-exe
-          make bootstrap-pnut-exe MINIMAL=1
-          if [ ${{ matrix.host }} != "macos-latest" ]; then
-            # One pass generator is not supported on macOS
-            make bootstrap-pnut-exe EXE_ONE_PASS=1 MINIMAL=0
-            make bootstrap-pnut-exe EXE_ONE_PASS=1 MINIMAL=1
-          fi
+          for minimal in 0 1; do
+            for one_pass in 0 1; do
+              if [ ${{ matrix.host }} = "macos-latest" ] && [ $one_pass -eq 1 ]; then
+                # One pass generator is not supported on macOS
+                continue
+              fi
+              # First bootstrap pnut-exe without using any shell, since that is faster
+              make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+              # Bootstrap pnut-exe.sh
+              make bootstrap-pnut-exe-script EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+              # Then bootstrap pnut-exe from pnut-exe.sh
+              make bootstrap-pnut-exe EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            done
+          done
 
   bootstrap-pnut-sh-with-pnut-exe:
     strategy:
@@ -373,9 +370,9 @@ jobs:
 
             # Bootstrap pnut-exe with bash 2.05a
             make bootstrap-pnut-exe MINIMAL=1
-            make bootstrap-pnut-exe
+            make bootstrap-pnut-exe MINIMAL=0
             make bootstrap-pnut-exe-no-shell MINIMAL=1
-            make bootstrap-pnut-exe-no-shell
+            make bootstrap-pnut-exe-no-shell MINIMAL=0
           EOF
 
   pnut-variants-run:
