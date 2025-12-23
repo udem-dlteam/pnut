@@ -257,6 +257,7 @@ bootstrap-pnut-exe: pnut-exe.sh pnut-exe-bootstrapped
 
 bootstrap-pnut-exe-no-shell: pnut-exe-bootstrapped
 	@echo "Bootstrapping pnut-exe from pnut-exe..."
+	@$(RM) $(BUILD_DIR)/pnut-exe-bootstrapped-again # MacOS behaves differently if the file exists
 	$(TIMEC) $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
 	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap executables differ"; \
@@ -268,6 +269,7 @@ bootstrap-pnut-exe-no-shell: pnut-exe-bootstrapped
 # the bootstrapped pnut-sh.
 bootstrap-pnut-sh-with-pnut-exe: pnut-exe-bootstrapped pnut-sh.sh
 	@echo "Bootstrapping pnut-sh from pnut-exe..."
+	@$(RM) $(BUILD_DIR)/pnut-sh-from-pnut-exe # MacOS behaves differently if the file exists
 	$(TIMEC) $(BUILD_DIR)/pnut-exe $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	@chmod +x $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	$(BUILD_DIR)/pnut-sh-from-pnut-exe $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh
