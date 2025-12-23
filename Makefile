@@ -156,7 +156,7 @@ kit/jammed.sh: kit/bintools.c
 
 install: pnut-sh pnut-sh.sh
 	cp $(BUILD_DIR)/pnut-sh $(DESTDIR)$(PREFIX)/bin/pnut
-	cp $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(PREFIX)/bin/pnut.sh
+	cp $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(PREFIX)/bin/pnut-sh.sh
 
 install-pnut-exe: pnut-exe pnut-exe.sh
 	cp $(BUILD_DIR)/pnut-exe $(DESTDIR)$(PREFIX)/bin/pnut-exe
@@ -164,7 +164,7 @@ install-pnut-exe: pnut-exe pnut-exe.sh
 
 uninstall:
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut
-	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut.sh
+	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-sh.sh
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe.sh
 

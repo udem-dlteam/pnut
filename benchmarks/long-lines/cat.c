@@ -1,7 +1,7 @@
 /*
  * compile with:
  *
- *   $ ksh pnut.sh cat.c > cat.sh
+ *   $ ksh build/pnut-sh.sh cat.c > cat.sh
  *
  * execute with:
  *

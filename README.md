@@ -120,9 +120,9 @@ compatible with other minimal compilers, such as
 [M2-Planet](https://github.com/oriansj/M2-Planet), allowing its use in a variety
 of bootstrapping scenarios.
 
-To bootstrap `tcc` from `pnut-sh.sh`, the following steps are required:
+To bootstrap `tcc` from `pnut-sh.sh`, the following steps are taken:
 
-1. Compile `pnut-exe.c` to `pnut-exe.sh` using `pnut.sh`. `pnut-exe.sh` is a shell script that turns C code into machine code.
+1. Compile `pnut-exe.c` to `pnut-exe.sh` using `pnut-sh.sh`. `pnut-exe.sh` is a shell script that turns C code into machine code.
 2. Compile `pnut-exe.c` to `pnut-exe` using `pnut-exe.sh`. This version of `pnut-exe` is an executable and is much faster.
 3. Compile the `kit/bintools.c` using `pnut-exe` to produce the required binary utilities.
 4. Compile TCC using `pnut-exe`, then recompile it with TCC (a few times) to get the final `tcc` executable.
