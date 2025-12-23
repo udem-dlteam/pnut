@@ -2,7 +2,7 @@
 
 Pnut compiles a reasonably large subset of C99 to human-readable POSIX shell
 scripts. It can be used to generate portable shell scripts without having to
-write shell.
+write shell. Try the [web version](https://pnut.sh/#demo)!
 
 Its main uses are:
 
@@ -29,9 +29,10 @@ Scheme Read-eval-print loop directly in shell. See
 ## Install
 
 Pnut can be distributed as the `pnut-sh.sh` shell script, or compiled to
-executable code using a C compiler.
+executable code using a C compiler. Pregenerated shell scripts can be found on
+the [GitHub releases page](https://github.com/udem-dlteam/pnut/releases).
 
-To install pnut:
+To compile and install pnut:
 
 ```shell
 > git clone https://github.com/udem-dlteam/pnut.git
