@@ -13,6 +13,11 @@ ifeq ($(CFLAGS),)
 	CFLAGS = -std=c99
 endif
 
+# Default: use 'env time -p' to measure time
+ifeq ($(TIMEC),)
+	TIMEC = env time -p
+endif
+
 # Bootstrap targets with integrated options
 BOOTSTRAP_SHELL ?= /bin/sh
 
@@ -222,42 +227,52 @@ bootstrap-help:
 
 # Bootstrap pnut-sh with pnut-sh.sh (obtained using $(CC)).
 bootstrap-pnut-sh: pnut-sh.sh
-	env time $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
+	@echo "Bootstrapping pnut-sh.sh from pnut-sh.sh..."
+	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
 	fi
+	@echo "Success!"
 
 # Bootstrap pnut-exe.sh with pnut-sh.sh (obtained using $(CC)).
 bootstrap-pnut-exe-script: pnut-sh.sh pnut-exe.sh
-	env time $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped.sh
+	@echo "Bootstrapping pnut-exe.sh from pnut-sh.sh..."
+	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped.sh
 	@if ! diff $(BUILD_DIR)/pnut-exe.sh $(BUILD_DIR)/pnut-exe-bootstrapped.sh >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
 	fi
+	@echo "Success!"
 
 # Bootstrap pnut-exe from pnut-exe (by $(CC)).
 bootstrap-pnut-exe: pnut-exe.sh pnut-exe-bootstrapped
-	env time $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-exe.sh $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
+	@echo "Bootstrapping pnut-exe from pnut-exe.sh..."
+	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-exe.sh $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
 	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap executables differ"; \
 		exit 1; \
 	fi
+	@echo "Success!"
 
 bootstrap-pnut-exe-no-shell: pnut-exe-bootstrapped
-	env time $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
+	@echo "Bootstrapping pnut-exe from pnut-exe..."
+	$(TIMEC) $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
 	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap executables differ"; \
 		exit 1; \
 	fi
+	@echo "Success!"
 
 # For completeness, bootstrap pnut-sh from pnut-exe, then recompile pnut-sh from
 # the bootstrapped pnut-sh.
 bootstrap-pnut-sh-with-pnut-exe: pnut-exe-bootstrapped pnut-sh.sh
-	env time $(BUILD_DIR)/pnut-exe $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh-from-pnut-exe
+	@echo "Bootstrapping pnut-sh from pnut-exe..."
+	$(TIMEC) $(BUILD_DIR)/pnut-exe $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	@chmod +x $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	$(BUILD_DIR)/pnut-sh-from-pnut-exe $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
 	fi
+	@echo "Success!"
