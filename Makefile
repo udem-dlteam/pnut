@@ -19,6 +19,33 @@ BOOTSTRAP_SHELL ?= /bin/sh
 # Targets for pnut-exe: auto, Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64
 TARGET ?= auto
 
+BUILD_OPT_EXE.Linux.i386 = 	 	-Dtarget_i386_linux
+BUILD_OPT_EXE.Linux.x86_64 = 	-Dtarget_x86_64_linux
+BUILD_OPT_EXE.Darwin.x86_64 = -Dtarget_x86_64_mac
+BUILD_OPT_EXE.Darwin.arm64 = 	-Dtarget_x86_64_mac # no arm64 backend yet, x86 is emulated on ARM Macs
+
+# Handle custom target selection
+ifeq ($(TARGET),auto)
+  # Detect the operating system and architecture
+  UNAME_S := $(shell uname -s)
+  UNAME_M := $(shell uname -m)
+	TARGET := $(UNAME_S).$(UNAME_M)
+endif
+
+# Set the build options for the current operating system and architecture
+BUILD_OPT_EXE = $(BUILD_OPT_EXE.$(TARGET))
+# If targetting MacOS, disable EXE_ONE_PASS because not supported.
+ifeq ($(TARGET),Darwin.x86_64)
+	EXE_ONE_PASS = 0
+endif
+ifeq ($(TARGET),Darwin.arm64)
+	EXE_ONE_PASS = 0
+endif
+# Error if unknown target
+ifeq ($(BUILD_OPT_EXE),)
+$(error Unknown target specified: $(TARGET). Supported targets are: Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64)
+endif
+
 ############################### General options ################################
 # Bootstrap script options that can be passed via make variables
 # Examples:
@@ -93,27 +120,7 @@ ifeq ($(EXE_ONE_PASS),1)
 endif
 
 BUILD_OPT_SH = -Dtarget_sh $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
-
-BUILD_OPT_EXE.Linux.i386 = 	 	-Dtarget_i386_linux
-BUILD_OPT_EXE.Linux.x86_64 = 	-Dtarget_x86_64_linux
-BUILD_OPT_EXE.Darwin.x86_64 = -Dtarget_x86_64_mac
-BUILD_OPT_EXE.Darwin.arm64 = 	-Dtarget_x86_64_mac # no arm64 backend yet, x86 is emulated on ARM Macs
-
-# Handle custom target selection
-ifeq ($(TARGET),auto)
-  # Detect the operating system and architecture
-  UNAME_S := $(shell uname -s)
-  UNAME_M := $(shell uname -m)
-  # Set the build options for the current operating system and architecture
-  BUILD_OPT_EXE = $(BUILD_OPT_EXE.$(UNAME_S).$(UNAME_M)) $(BOOTSTRAP_FLAGS)
-else
-  BUILD_OPT_EXE = $(BUILD_OPT_EXE.$(TARGET)) $(BOOTSTRAP_FLAGS)
-endif
-
-# Error if unknown target
-ifeq ($(BUILD_OPT_EXE),)
-$(error Unknown target specified: $(TARGET). Supported targets are: Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64)
-endif
+BUILD_OPT_EXE += $(BOOTSTRAP_FLAGS)
 
 build:
 	@mkdir -p $(BUILD_DIR)
