@@ -231,20 +231,41 @@ jobs:
           set -e
           export BOOTSTRAP_SHELL=${{ matrix.shell }}
           export TARGET=${{ matrix.target }}
-          for minimal in 0 1; do
-            for one_pass in 0 1; do
-              if [ ${{ matrix.host }} = "macos-latest" ] && [ $one_pass -eq 1 ]; then
-                # One pass generator is not supported on macOS
-                continue
+
+          do_bootstrap() {
+            one_pass=$1
+            minimal=$2
+            if [ ${{ matrix.host }} = "macos-latest" ] && [ $one_pass -eq 1 ]; then
+              # One pass generator is not supported on macOS
+              return
+            fi
+            make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe-script EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+          }
+
+          # For fast shells (ksh, dash, bash), test both the one-pass and minimal options
+          case "${{ matrix.shell }}" in
+            "ksh"|"dash"|"bash")
+              for minimal in 0 1; do
+                for one_pass in 0 1; do
+                  do_bootstrap $one_pass $minimal
+                done
+              done
+              ;;
+            *)
+              # For slower shells (mksh, yash, zsh, osh), only test the standard
+              # bootstrap with the one-pass and minimal options, unless on macOS
+              minimal=1
+              if [ ${{ matrix.host }} = "macos-latest" ]; then
+                one_pass=0
+              else
+                one_pass=1
               fi
-              # First bootstrap pnut-exe without using any shell, since that is faster
-              make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
-              # Bootstrap pnut-exe.sh
-              make bootstrap-pnut-exe-script EXE_ONE_PASS=$one_pass MINIMAL=$minimal
-              # Then bootstrap pnut-exe from pnut-exe.sh
-              make bootstrap-pnut-exe EXE_ONE_PASS=$one_pass MINIMAL=$minimal
-            done
-          done
+
+              do_bootstrap $one_pass $minimal
+              ;;
+          esac
 
   bootstrap-pnut-sh-with-pnut-exe:
     strategy:
@@ -293,9 +314,10 @@ jobs:
         run: |
           set -e
           export SAFE=1
+
           make pnut-sh.sh
           make pnut-sh.sh MINIMAL=1
-          # No compile-only flag for pnut-exe since it's fast enough
+
           for target in Linux.x86_64 Linux.i386; do
             for minimal in 0 1; do
               for one_pass in 0 1; do
@@ -303,6 +325,7 @@ jobs:
               done
             done
           done
+
           ./run-tests.sh sh --safe --compile-only
           ./run-tests.sh x86_64_linux --safe --compile-only
           ./run-tests.sh x86_64_linux --safe --one-pass-generator --compile-only
