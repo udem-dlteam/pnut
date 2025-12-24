@@ -125,7 +125,7 @@ To bootstrap `tcc` from `pnut-sh.sh`, the following steps are taken:
 
 1. Compile `pnut-exe.c` to `pnut-exe.sh` using `pnut-sh.sh`. `pnut-exe.sh` is a shell script that turns C code into machine code.
 2. Compile `pnut-exe.c` to `pnut-exe` using `pnut-exe.sh`. This version of `pnut-exe` is an executable and is much faster.
-3. Compile the `kit/bintools.c` using `pnut-exe` to produce the required binary utilities.
+3. Compile the `kit/bintools.c` using `pnut-exe` to produce binary utilities used for bootstrapping.
 4. Compile TCC using `pnut-exe`, then recompile it with TCC (a few times) to get the final `tcc` executable.
 
 The `./kit/setup-rootfs.sh` script can be used to create an isolated environment
@@ -160,19 +160,17 @@ the bootstrap script to include TCC and GCC is ongoing.
 
 ### Annotated Shell Scripts
 
-`pnut-sh` can include C code annotations in the generated shell script (with the
-`SH_ANNOTATE=1` makefile option) to make them self-contained and easier to
+`pnut-sh` can include C code annotations in the generated shell scripts (with
+the `SH_ANNOTATE=1` makefile option) to make them self-contained and easier to
 audit. These annotations correspond to the original C source code, with the
 lines inside inactive `#if`/`#ifdef` blocks removed, with each top-level shell
-declaration prefixed by a comment containing the corresponding C
-code.
+declaration prefixed with its corresponding C code as comment.
 
 This feature is especially interesting when applied to `pnut-sh.sh`, as it turns
-it into some sort of "quine-like" program: from the annotated shell script, the
-original C source code can be extracted and recompiled to obtain the original
-`pnut-sh.sh` shell script, closing the loop and confirming that the generated
-shell script matches the embedded C code. This can be done with the following
-commands:
+it into a "quine-like" program: from the annotated shell script, the original C
+source code can be extracted and recompiled to obtain the original `pnut-sh.sh`
+shell script, closing the loop and confirming that the generated shell script
+matches the embedded C code. This can be done with the following commands:
 
 ```shell
 # Generate pnut-sh.sh with annotations
@@ -217,6 +215,7 @@ with itself. This can be done with:
 
 1. `make bootstrap-pnut-sh BOOTSTRAP_SHELL=/bin/sh`: to bootstrap `pnut-sh.sh` with `pnut-sh`
 2. `make bootstrap-pnut-exe-script BOOTSTRAP_SHELL=/bin/sh`: to bootstrap `pnut-exe.sh` with `pnut-sh`
-3. `make bootstrap-pnut-exe-no-shell`: to bootstrap `pnut-exe` with `pnut-exe`
+3. `make bootstrap-pnut-exe BOOTSTRAP_SHELL=/bin/sh`: to bootstrap `pnut-exe` with `pnut-exe.sh`
+4. `make bootstrap-pnut-exe-no-shell`: to bootstrap `pnut-exe` with `pnut-exe`
 
 See `make bootstrap-help` for more details.
