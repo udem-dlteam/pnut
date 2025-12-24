@@ -13,7 +13,7 @@
 
 // To run the repl efficiently using pnut compile it using :
 //
-//  $ gcc -Dsh -DSUPPORT_INCLUDE -DSH_SAVE_VARS_WITH_SET -DSH_OPTIMIZE_LONG_LINES pnut.c -o pnut-sh.exe
+//  $ gcc -Dtarget_sh -DSUPPORT_INCLUDE -DSH_SAVE_VARS_WITH_SET -DSH_OPTIMIZE_LONG_LINES pnut.c -o pnut-sh.exe
 //
 // Then compile this file using pnut :
 //

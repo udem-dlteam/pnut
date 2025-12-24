@@ -24,7 +24,7 @@ fast=0
 one_pass=0
 compile_only=0
 create_golden_file=1 # Create golden files by default
-shell="$SHELL" # Use current shell as the default
+shell="/bin/sh" # Default to /bin/sh
 pattern=".*"
 while [ $# -gt 0 ]; do
   case $1 in
@@ -44,7 +44,7 @@ done
 case "$backend" in
   sh)
     ext="exe" # The extension doesn't matter for sh
-    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dsh"
+    PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dtarget_sh"
     ;;
   i386_linux | x86_64_linux | x86_64_mac)
     ext="exe"

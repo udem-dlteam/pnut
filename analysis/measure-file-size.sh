@@ -108,13 +108,13 @@ measure_size() { # $1 = output-name, $2 = options
 # Compile pnut in a mode that tokenizes the input and expands active #include directives
 gcc -o "$TEMP_DIR/pnut-includes" pnut.c -DDEBUG_EXPAND_INCLUDES
 # Compile pnut-sh
-gcc -o "$TEMP_DIR/pnut-sh" pnut.c -Dsh
+gcc -o "$TEMP_DIR/pnut-sh" pnut.c -Dtarget_sh
 # Compile pnut-sh-bootstrap
-gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dsh -DPNUT_BOOTSTRAP
+gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dtarget_sh -DPNUT_BOOTSTRAP
 
 # Measuring for pnut-sh
-measure_size "pnut-sh" "-Dsh"
-measure_size "pnut-minimal-sh" "-Dsh -DPNUT_BOOTSTRAP"
+measure_size "pnut-sh" "-Dtarget_sh"
+measure_size "pnut-minimal-sh" "-Dtarget_sh -DPNUT_BOOTSTRAP"
 
 # ...and for the other targets
 measure_size "pnut-i386_linux" "-Dtarget_i386_linux"

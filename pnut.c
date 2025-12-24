@@ -62,7 +62,7 @@
 // =============================================================================
 
 // Pnut-sh specific options
-#ifdef sh
+#ifdef target_sh
 
   // Toggles parsing literals with their base (octal, decimal or hexadecimal).
   // This is used by the shell code generator to output the literal in the correct base.
@@ -377,7 +377,7 @@ void putint(int n) {
   }
 }
 
-#ifdef sh
+#ifdef target_sh
 
 // Output unsigned integer in hex
 void puthex_unsigned(int n) {
@@ -864,7 +864,7 @@ ast new_ast4(const int op, const ast child0, const ast child1, const ast child2,
   return ast_result;
 }
 
-#ifndef sh
+#ifndef target_sh
 
 ast clone_ast(const ast orig) {
   int nb_children = get_nb_children(orig);
@@ -897,14 +897,14 @@ ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, ex
 #endif
 // void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
 void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
-#ifndef sh
+#ifndef target_sh
 ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
 ast list2(const int child0, const int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
 ast list3(const int child0, const int child1, const int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
 #endif
 #define tail(x) cdr_(LIST, x)
 
-#ifdef sh
+#ifdef target_sh
 // Returns the only element of a singleton list, if it is a singleton list.
 // Otherwise, returns 0.
 ast list_singleton(const ast list) {
@@ -955,7 +955,7 @@ void set_symbol_tag(const int symbol, const int tag) {
   heap[symbol + 4] = tag;
 }
 
-#ifdef sh
+#ifdef target_sh
 
 int symbol_defstr_index(const int symbol) {
   return heap[symbol + 5];
@@ -1053,7 +1053,7 @@ int end_symbol() {
   }
 
   // the symbol was not found, create a new one
-#ifdef sh
+#ifdef target_sh
   symbol = alloc_obj(6);
 #else
   symbol = alloc_obj(5);
@@ -1066,7 +1066,7 @@ int end_symbol() {
   heap[symbol + 2] = end_symbol_len;  // Length of the symbol
   heap[symbol + 3] = IDENTIFIER;      // Token type
   heap[symbol + 4] = 0;               // Token tag
-#ifdef sh
+#ifdef target_sh
   heap[symbol + 5] = 0;               // defstr index
 #endif
 
@@ -1693,7 +1693,7 @@ int NOT_SUPPORTED_ID;
 
 // We want to recognize certain identifers without having to do expensive string comparisons
 int MAIN_ID;
-#ifdef sh
+#ifdef target_sh
 int PUTCHAR_ID;
 int GETCHAR_ID;
 int EXIT_ID;
@@ -2295,7 +2295,7 @@ void init_ident_table() {
 
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
-#ifdef sh
+#ifdef target_sh
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
   GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
   EXIT_ID    = init_ident(IDENTIFIER, "exit");
@@ -2387,7 +2387,7 @@ void init_pnut_macros() {
   LINE__ID = init_builtin_int_macro("__LINE__", 0);
 #endif
 
-#if defined(sh)
+#if defined(target_sh)
 #ifdef SH_INCLUDE_C_CODE
   PNUT_SH_ID =
 #endif
@@ -3234,7 +3234,7 @@ ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
 }
 
-#ifndef sh
+#ifndef target_sh
 
 ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
@@ -3459,7 +3459,7 @@ ast parse_type_specifier() {
     case CHAR_KW:
     case INT_KW:
     case VOID_KW:
-#ifndef sh
+#ifndef target_sh
     case FLOAT_KW:
     case DOUBLE_KW:
 #endif
@@ -3479,7 +3479,7 @@ ast parse_type_specifier() {
       if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
       return type_specifier;
 
-#ifndef sh
+#ifndef target_sh
     case UNSIGNED_KW:
       get_tok();
       type_specifier = parse_type_specifier();
@@ -3492,7 +3492,7 @@ ast parse_type_specifier() {
 
     case LONG_KW:
       get_tok();
-#ifndef sh
+#ifndef target_sh
       if (tok == DOUBLE_KW) {
         get_tok();
         return new_ast0(DOUBLE_KW, 0);
@@ -3588,7 +3588,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         // Lookup type in the types table. It is stored in the tag of the
         // interned string object.
-#ifdef sh
+#ifdef target_sh
         // pnut-sh doesn't mutate the type nodes, so no need to clone them
         type_specifier = symbol_tag(val);
 #else
@@ -3822,7 +3822,7 @@ ast parse_initializer_list() {
   expect_tok('{');
 
   while (tok != '}' && tok != EOF) {
-#ifdef sh
+#ifdef target_sh
     if (tok == '{') syntax_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
@@ -3890,7 +3890,7 @@ void add_typedef(ast declarator) {
   int decl_ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, declarator, 0));
   ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
 
-#if defined(SUPPORT_STRUCT_UNION) && defined(sh)
+#if defined(SUPPORT_STRUCT_UNION) && defined(target_sh)
   // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
   // This is not correct, but it's a limitation of the current shell backend where we
   // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
@@ -4643,7 +4643,7 @@ ast parse_compound_statement() {
 // Select code generator
 
 #if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES) && !(defined DEBUG_PARSER) && !(defined DEBUG_GETCHAR)
-#ifdef sh
+#ifdef target_sh
 #include "sh.c"
 #endif
 
@@ -4804,7 +4804,7 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
-#ifndef sh
+#ifndef target_sh
         case 'o':
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]

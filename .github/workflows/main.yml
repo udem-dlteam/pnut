@@ -27,28 +27,19 @@ jobs:
         run: |
           set -e
 
+          export CFLAGS="-Wall -Werror"
           # Testing with gcc clang in case they have different warnings
-          gcc -Wall -Werror pnut.c -Dsh
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_mac
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_linux
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_linux -DONE_PASS_GENERATOR
-          gcc -Wall -Werror pnut.c -Dtarget_i386_linux
-          gcc -Wall -Werror pnut.c -Dtarget_i386_linux -DONE_PASS_GENERATOR
-          gcc -Wall -Werror pnut.c -Dsh -DSAFE_MODE -DNICE_UX
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_mac -DSAFE_MODE -DNICE_UX
-          gcc -Wall -Werror pnut.c -Dtarget_x86_64_linux -DSAFE_MODE -DNICE_UX
-          gcc -Wall -Werror pnut.c -Dtarget_i386_linux -DSAFE_MODE -DNICE_UX
-          # With clang
-          clang-14 -Wall -Werror  pnut.c -Dsh
-          clang-14 -Wall -Werror  pnut.c -Dtarget_x86_64_mac
-          clang-14 -Wall -Werror  pnut.c -Dtarget_x86_64_linux
-          clang-14 -Wall -Werror  pnut.c -Dtarget_x86_64_linux -DONE_PASS_GENERATOR
-          clang-14 -Wall -Werror  pnut.c -Dtarget_i386_linux
-          clang-14 -Wall -Werror  pnut.c -Dtarget_i386_linux -DONE_PASS_GENERATOR
-          clang-14 -Wall -Werror  pnut.c -Dsh -DSAFE_MODE -DNICE_UX
-          clang-14 -Wall -Werror  pnut.c -Dtarget_x86_64_mac -DSAFE_MODE -DNICE_UX
-          clang-14 -Wall -Werror  pnut.c -Dtarget_x86_64_linux -DSAFE_MODE -DNICE_UX
-          clang-14 -Wall -Werror pnut.c -Dtarget_i386_linux -DSAFE_MODE -DNICE_UX
+          for comp in gcc clang-14; do
+            make pnut-sh CC=$comp
+            make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=0
+            make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=1
+            make pnut-exe CC=$comp TARGET=Linux.i386 SAFE=1 NICE_UX=1
+            make pnut-exe CC=$comp TARGET=Linux.x86_64 EXE_ONE_PASS=0
+            make pnut-exe CC=$comp TARGET=Linux.x86_64 EXE_ONE_PASS=1
+            make pnut-exe CC=$comp TARGET=Linux.x86_64 SAFE=1 NICE_UX=1
+            make pnut-exe CC=$comp TARGET=Darwin.x86_64 EXE_ONE_PASS=0
+            make pnut-exe CC=$comp TARGET=Darwin.x86_64 SAFE=1 NICE_UX=1
+          done
 
   catch-bad-whitespace:
     runs-on: ubuntu-latest
@@ -185,27 +176,24 @@ jobs:
             sudo ./install
           fi
 
-      - name: Bootstrap minimal pnut-sh.sh on ${{ matrix.shell }}
-        run: |
-          set -e
-          ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }} --minimal-pnut
-
       - name: Bootstrap pnut-sh.sh on ${{ matrix.shell }}
         run: |
           set -e
-          ./bootstrap-pnut-sh.sh --shell ${{ matrix.shell }}
+          export BOOTSTRAP_SHELL=${{ matrix.shell }}
+          make bootstrap-pnut-sh MINIMAL=1
+          make bootstrap-pnut-sh MINIMAL=0
 
   bootstrap-pnut-exe:
     strategy:
       matrix:
         shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh", "osh"]
-        target: ["i386_linux", "x86_64_linux", "x86_64_mac"]
+        target: ["Linux.i386", "Linux.x86_64", "Darwin.x86_64"]
         include:
-          - target: i386_linux
+          - target: Linux.i386
             host: ubuntu-latest
-          - target: x86_64_linux
+          - target: Linux.x86_64
             host: ubuntu-latest
-          - target: x86_64_mac
+          - target: Darwin.x86_64
             host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
@@ -238,47 +226,57 @@ jobs:
             sudo ./install
           fi
 
-
-      - name: Bootstrap pnut-exe with ${{ matrix.target }} backend
-        run: |
-          set -e
-          ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
-          if [ ${{ matrix.host }} != "macos-latest" ]; then
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --stats
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --one-pass-generator --stats
-          fi
-
       - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on ${{ matrix.shell }}
         run: |
           set -e
-          # ksh is much faster so we can afford to run the full bootstrap for it
-          if [ ${{ matrix.shell }} = "ksh" ]; then
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }}
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --minimal-pnut
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --no-pnut-sh-bootstrap
-            if [ ${{ matrix.host }} != "macos-latest" ]; then
-              ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap
-              ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap --minimal-pnut
+          export BOOTSTRAP_SHELL=${{ matrix.shell }}
+          export TARGET=${{ matrix.target }}
+
+          do_bootstrap() {
+            one_pass=$1
+            minimal=$2
+            if [ ${{ matrix.host }} = "macos-latest" ] && [ $one_pass -eq 1 ]; then
+              # One pass generator is not supported on macOS
+              return
             fi
-          else
-            if [ ${{ matrix.host }} != "macos-latest" ]; then
-              ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap
-              ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --one-pass-generator --no-pnut-sh-bootstrap --minimal-pnut
-            fi
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --no-pnut-sh-bootstrap
-            ./bootstrap-pnut-exe.sh --backend ${{ matrix.target }} --shell ${{ matrix.shell }} --no-pnut-sh-bootstrap --minimal-pnut
-          fi
+            make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe-script EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+          }
+
+          # For fast shells (ksh, dash, bash), test both the one-pass and minimal options
+          case "${{ matrix.shell }}" in
+            "ksh"|"dash"|"bash")
+              for minimal in 0 1; do
+                for one_pass in 0 1; do
+                  do_bootstrap $one_pass $minimal
+                done
+              done
+              ;;
+            *)
+              # For slower shells (mksh, yash, zsh, osh), only test the standard
+              # bootstrap with the one-pass and minimal options, unless on macOS
+              minimal=1
+              if [ ${{ matrix.host }} = "macos-latest" ]; then
+                one_pass=0
+              else
+                one_pass=1
+              fi
+
+              do_bootstrap $one_pass $minimal
+              ;;
+          esac
 
   bootstrap-pnut-sh-with-pnut-exe:
     strategy:
       matrix:
-        target: ["i386_linux", "x86_64_linux", "x86_64_mac"]
+        target: ["Linux.i386", "Linux.x86_64", "Darwin.x86_64"]
         include:
-          - target: i386_linux
+          - target: Linux.i386
             host: ubuntu-latest
-          - target: x86_64_linux
+          - target: Linux.x86_64
             host: ubuntu-latest
-          - target: x86_64_mac
+          - target: Darwin.x86_64
             host: macos-latest
     runs-on: ${{ matrix.host }}
     steps:
@@ -297,8 +295,9 @@ jobs:
       - name: Bootstrap pnut-sh with pnut-exe on ${{ matrix.target }} backend
         run: |
           set -e
-          ./bootstrap-pnut-sh-by-pnut-exe.sh --backend ${{ matrix.target }}
-          ./bootstrap-pnut-sh-by-pnut-exe.sh --backend ${{ matrix.target }} --minimal-pnut
+          export TARGET=${{ matrix.target }}
+          make bootstrap-pnut-sh-with-pnut-exe MINIMAL=0
+          make bootstrap-pnut-sh-with-pnut-exe MINIMAL=1
 
   compile-in-safe-mode:
     runs-on: ubuntu-latest
@@ -314,17 +313,19 @@ jobs:
       - name: Compile pnut-sh, pnut-exe and tests in safe mode
         run: |
           set -e
-          ./bootstrap-pnut-sh.sh --safe --compile-only
-          ./bootstrap-pnut-sh.sh --safe --compile-only --minimal-pnut
-          # No compile-only flag for pnut-exe since it's fast enough
-          ./bootstrap-pnut-exe.sh --backend x86_64_linux --safe
-          ./bootstrap-pnut-exe.sh --backend x86_64_linux --safe --minimal-pnut
-          ./bootstrap-pnut-exe.sh --backend x86_64_linux --safe --one-pass-generator
-          ./bootstrap-pnut-exe.sh --backend x86_64_linux --safe --one-pass-generator --minimal-pnut
-          ./bootstrap-pnut-exe.sh --backend i386_linux   --safe
-          ./bootstrap-pnut-exe.sh --backend i386_linux   --safe --minimal-pnut
-          ./bootstrap-pnut-exe.sh --backend i386_linux   --safe --one-pass-generator
-          ./bootstrap-pnut-exe.sh --backend i386_linux   --safe --one-pass-generator --minimal-pnut
+          export SAFE=1
+
+          make pnut-sh.sh
+          make pnut-sh.sh MINIMAL=1
+
+          for target in Linux.x86_64 Linux.i386; do
+            for minimal in 0 1; do
+              for one_pass in 0 1; do
+                make pnut-exe TARGET=$target MINIMAL=$minimal EXE_ONE_PASS=$one_pass
+              done
+            done
+          done
+
           ./run-tests.sh sh --safe --compile-only
           ./run-tests.sh x86_64_linux --safe --compile-only
           ./run-tests.sh x86_64_linux --safe --one-pass-generator --compile-only
@@ -362,33 +363,40 @@ jobs:
           # __us_buf256="$__temp"
           COMPATIBILITY_OPTIONS="$COMPATIBILITY_OPTIONS -DSH_OPTIMIZE_LONG_LINES_NOT"
 
-          # Run tests with bash 2.05a
-          sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./run-tests.sh sh --shell bash"
+          # Multiline script to run inside the woody chroot
+          sudo chroot woody /bin/bash << EOF
+            set -e
 
-          # Run tests with bash 2.05a (fast)
-          # Keeping the fast option on bash 2.05a because its very slow otherwise
-          sudo chroot woody /bin/bash -c "cd pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./run-tests.sh sh --shell bash --fast"
+            cd pnut
 
-          # Bootstrap pnut-sh.sh with bash 2.05a
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-sh.sh --shell bash"
+            # Default make options for bash 2.05a
+            export PNUT_BUILD_OPT="$COMPATIBILITY_OPTIONS"
+            export TARGET=Linux.i386
+            export BOOTSTRAP_SHELL=bash
+            export EXE_ONE_PASS=1
+            export CFLAGS=" " # Clear -std=c99 flag which is not supported by woody's gcc
 
-          # Bootstrap pnut-sh.sh with bash 2.05a (minimal version)
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-sh.sh --shell bash --minimal-pnut"
+            # Run tests with bash 2.05a
+            PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./run-tests.sh sh --shell bash
 
-          # Bootstrap pnut-exe with bash 2.05a (no shell)
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux"
+            # Run tests with bash 2.05a (fast)
+            # Keeping the fast option on bash 2.05a because its very slow otherwise
+            PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./run-tests.sh sh --shell bash --fast
 
-          # Bootstrap pnut-exe with bash 2.05a (one-pass generator, minimal version)
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --one-pass-generator --minimal-pnut"
+            # Bootstrap pnut-sh.sh with bash 2.05a
+            make bootstrap-pnut-sh MINIMAL=1
+            make bootstrap-pnut-sh
 
-          # Bootstrap pnut-exe with bash 2.05a (one-pass generator)
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap --one-pass-generator"
+            # Bootstrap pnut-exe.sh with bash 2.05a
+            make bootstrap-pnut-exe-script MINIMAL=1
+            make bootstrap-pnut-exe-script
 
-          # Bootstrap pnut-exe with bash 2.05a (minimal version)
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --minimal-pnut"
-
-          # Bootstrap pnut-exe with bash 2.05a
-          sudo chroot woody /bin/bash -c "cd /pnut && PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./bootstrap-pnut-exe.sh --backend i386_linux --shell bash --no-pnut-sh-bootstrap"
+            # Bootstrap pnut-exe with bash 2.05a
+            make bootstrap-pnut-exe MINIMAL=1
+            make bootstrap-pnut-exe MINIMAL=0
+            make bootstrap-pnut-exe-no-shell MINIMAL=1
+            make bootstrap-pnut-exe-no-shell MINIMAL=0
+          EOF
 
   pnut-variants-run:
     runs-on: ubuntu-latest
@@ -402,7 +410,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y coreutils time ksh dash bash
 
-      - name: Build with warnings
+      - name: Run pnut reader, tokenizer and parser on different shells
         run: |
           set -e
           variants="reader tokenizer parser"
@@ -454,8 +462,6 @@ jobs:
       - name: Compile pnut-exe with M2-Planet
         run: |
           set -e
-
-          echo "pwd: $(pwd)"
 
           # Use the M2libc from mescc-tools and not the one from M2-Planet
           M2LIB="./M2-Planet/M2libc"
