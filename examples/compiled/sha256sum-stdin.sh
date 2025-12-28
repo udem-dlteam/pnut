@@ -165,18 +165,32 @@ _hex() { # byte: $2
   endlet $1 __t1
 }
 
-: $((h = n = fd = i = filename = 0))
-_process_file() { let filename $2
-  let i; let fd; let n; let h
+: $((c = n = size = buffer = 0))
+_read_stdin() { let buffer $2; let size $3
+  let n; let c
+  while [ $n -lt $size ]; do
+    _getchar c
+    if [ $c = $_EOF ] ; then
+      break
+    fi
+    : $((_$((buffer + n)) = c))
+    : $(((n += 1) - 1))
+  done
+  : $(($1 = n))
+  endlet $1 c n size buffer
+}
+
+: $((h = n = i = 0))
+_process_stdin() {
+  let i; let n; let h
   n=64
   _sha256_setup __
   _sha256_init __
-  _open fd $filename 0
   while [ $n = 64 ]; do
-    _read n $fd $_buf 64
+    _read_stdin n $_buf 64
     if [ $n -lt 0 ] ; then
       : $(($1 = 1))
-      endlet $1 h n fd i filename
+      endlet $1 h n i
       return
     fi
     : $((_nbits += (8 * n)))
@@ -204,7 +218,6 @@ _process_file() { let filename $2
     fi
     _sha256_add_block __ $_buf
   done
-  _close __ $fd
   i=0
   while [ $i -lt 8 ]; do
     h=$((_$((_hash + i))))
@@ -216,217 +229,24 @@ _process_file() { let filename $2
   done
   printf " "
   printf " "
-  while [ $((_$filename)) != 0 ]; do
-    printf \\$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
-    : $((filename += 1))
+  while [ $((_$_filename)) != 0 ]; do
+    printf \\$(((_$_filename)/64))$(((_$_filename)/8%8))$(((_$_filename)%8))
+    : $((_filename += 1))
   done
   printf "\n"
   : $(($1 = 0))
-  endlet $1 h n fd i filename
+  endlet $1 h n i
 }
 
-: $((__t1 = i = myargv = argc = 0))
-_main() { let argc $2; let myargv $3
-  let i; let __t1
-  i=1
-  while [ $i -lt $argc ]; do
-    if _process_file __t1 $((_$((myargv + i)))); [ $__t1 != 0 ] ; then
-      break
-    fi
-    : $((i += 1))
-  done
+_main() {
+  _process_stdin __
   : $(($1 = 0))
-  endlet $1 __t1 i myargv argc
 }
 
 #_ Character constants
 readonly __0__=48
 readonly __a__=97
 #_ Runtime library
-_free() { # $2 = object to free
-  __ptr=$(($2 - 1))          # Start of object
-  __end=$((__ptr + _$__ptr)) # End of object
-  while [ $__ptr -lt $__end ]; do
-    unset "_$__ptr"
-    : $((__ptr += 1))
-  done
-  : $(($1 = 0))              # Return 0
-}
-
-
-#_ Unpack a Shell string into an appropriately sized buffer
-unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
-  __buffer=$2
-  __ends_with_eof=${3:-1}
-  while [ ! -z "$__fgetc_buf" ]; do
-    __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
-    : $((_$__buffer = __c))
-    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
-    : $((__buffer += 1))              # Move to the next buffer position
-  done
-
-  if [ $__ends_with_eof -eq 0 ]; then # Ends with newline and not EOF?
-    : $((_$__buffer = 10))            # Line ends with newline
-    : $((__buffer += 1))
-  fi
-  : $((_$__buffer = 0))               # Then \0
-}
-
-refill_buffer() { # $1: fd
-  __fd=$1
-  __buffer=$((__buffer_fd$__fd))
-
-  IFS=
-  __ends_with_eof=0
-  read -r __temp_buf <&$__fd || __ends_with_eof=1
-
-  # Check that the buffer is large enough to unpack the line
-  __buflen=$((__buflen_fd$__fd - 2)) # Minus 2 to account for newline and \0
-  __len=${#__temp_buf}
-  if [ $__len -gt $__buflen ]; then
-    # Free buffer and reallocate a new one double the line size
-    __buflen=$((__len * 2))
-    _free __ $__buffer
-    _malloc __buffer $__buflen
-    : $((__buffer_fd$__fd = __buffer))
-    : $((__buflen_fd$__fd = __buflen))
-  fi
-  unpack_string_to_buf "$__temp_buf" $__buffer $__ends_with_eof
-}
-
-read_byte() { # $2: fd
-  __fd=$2
-  : $((__buffer=__buffer_fd$__fd))
-  : $((__cursor=__cursor_fd$__fd))
-  # The cursor is at the end of the buffer, we need to read the next line
-  if [ $((_$((__buffer + __cursor)))) -eq 0 ]; then
-    # Buffer has been read completely, read next line
-    refill_buffer $__fd
-    __cursor=0 # Reset cursor and reload buffer
-    : $((__buffer=__buffer_fd$__fd))
-    if [ $((_$((__buffer + __cursor)))) -eq 0 ]; then
-      : $(($1 = -1)) # EOF
-      return
-    fi
-  fi
-  : $(($1 = _$((__buffer + __cursor))))
-  : $((__cursor_fd$__fd = __cursor + 1))  # Increment cursor
-}
-
-_put_pstr() {
-  : $(($1 = 0)); shift # Return 0
-  __addr=$1; shift
-  while [ $((__c = _$__addr)) != 0 ]; do
-    printf \\$((__c/64))$((__c/8%8))$((__c%8))
-    : $((__addr += 1))
-  done
-}
-
-_malloc __buffer_fd0 1000   # Allocate buffer
-: $((_$__buffer_fd0 = 0))   # Init buffer to ""
-: $((__cursor_fd0 = 0))     # Make buffer empty
-: $((__buflen_fd0 = 1000))  # Init buffer length
-__state_fd0=0 # stdin
-__state_fd1=1 # stdout
-__state_fd2=2 # stderr
-__state_fd3=-1
-__state_fd4=-1
-__state_fd5=-1
-__state_fd6=-1
-__state_fd7=-1
-__state_fd8=-1
-__state_fd9=-1
-
-_open() { # $2: filename, $3: flags, $4: mode
-  # Get available fd
-  __fd=0
-  while [ $__fd -lt 10 ]; do
-    if [ $((__state_fd$__fd)) -lt 0 ]; then
-      break
-    fi
-    : $((__fd += 1))
-  done
-  if [ $__fd -gt 9 ] ; then
-    # Some shells don't support fd > 9
-    echo "No more file descriptors available to open $(_put_pstr __ $2)" ; exit 1
-  else
-    # Because the file must be read line-by-line, and string
-    # values can't be assigned to dynamic variables, each line
-    # is read and then unpacked in the buffer.
-    _malloc __addr 1000                 # Allocate buffer
-    : $((_$__addr = 0))                 # Init buffer to ""
-    : $((__buffer_fd$__fd = __addr))    # Buffer address
-    : $((__cursor_fd$__fd = 0))         # Buffer cursor
-    : $((__buflen_fd$__fd = 1000))      # Buffer length
-    : $((__state_fd$__fd = $3))         # Mark the fd as opened
-    __res=$(_put_pstr __ $2)
-    if [ $3 = 0 ] ; then
-      case $__fd in
-        0) exec 0< "$__res" ;; 1) exec 1< "$__res" ;; 2) exec 2< "$__res" ;;
-        3) exec 3< "$__res" ;; 4) exec 4< "$__res" ;; 5) exec 5< "$__res" ;;
-        6) exec 6< "$__res" ;; 7) exec 7< "$__res" ;; 8) exec 8< "$__res" ;;
-        9) exec 9< "$__res" ;;
-      esac
-    elif [ $3 = 1 ] ; then
-      case $__fd in
-        0) exec 0> "$__res" ;; 1) exec 1> "$__res" ;; 2) exec 2> "$__res" ;;
-        3) exec 3> "$__res" ;; 4) exec 4> "$__res" ;; 5) exec 5> "$__res" ;;
-        6) exec 6> "$__res" ;; 7) exec 7> "$__res" ;; 8) exec 8> "$__res" ;;
-        9) exec 9> "$__res" ;;
-      esac
-    elif [ $3 = 2 ] ; then
-      case $__fd in
-        0) exec 0>> "$__res" ;; 1) exec 1>> "$__res" ;; 2) exec 2>> "$__res" ;;
-        3) exec 3>> "$__res" ;; 4) exec 4>> "$__res" ;; 5) exec 5>> "$__res" ;;
-        6) exec 6>> "$__res" ;; 7) exec 7>> "$__res" ;; 8) exec 8>> "$__res" ;;
-        9) exec 9>> "$__res" ;;
-      esac
-    else
-      echo "Unknown file mode" ; exit 1
-    fi
-  fi
-  : $(($1 = __fd))
-}
-
-_read() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))
-  : $((__i = 0))
-  while [ $__i -lt $__count ] ; do
-    read_byte __byte $__fd
-    if [ $__byte -lt 0 ] ; then break; fi
-    : $((_$((__buf + __i)) = __byte))
-    : $((__i += 1))
-  done
-  : $(($1 = __i))
-}
-
-_close() { # $2: fd
-  __fd=$2
-  __buf=$((__buffer_fd$__fd))  # Get buffer
-  _free __ $__buf              # Release buffer
-  : $((__state_fd$__fd = -1))  # Mark the fd as closed
-  case $__fd in
-    0) exec 0<&- ;; 1) exec 1<&- ;; 2) exec 2<&- ;;
-    3) exec 3<&- ;; 4) exec 4<&- ;; 5) exec 5<&- ;;
-    6) exec 6<&- ;; 7) exec 7<&- ;; 8) exec 8<&- ;;
-    9) exec 9<&- ;;
-  esac
-  : $(($1 = 0))
-}
-
-make_argv() {
-  __argc=$1; shift;
-  _malloc __argv $__argc # Allocate enough space for all elements.
-  __argv_ptr=$__argv
-
-  while [ $# -ge 1 ]; do
-    _malloc _$__argv_ptr $((${#1} + 1))
-    unpack_string_to_buf "$1" $((_$__argv_ptr)) 1
-    : $((__argv_ptr += 1))
-    shift
-  done
-}
-
 #_ Local variables
 __=0
 __SP=0
@@ -445,7 +265,37 @@ endlet() { # $1: return variable
   : $(($__ret=__tmp))   # Restore return value
 }
 
+
+__stdin_buf=
+__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\n')
+_getchar() {
+  if [ -z "$__stdin_buf" ]; then          # need to get next line when buffer empty
+    if [ $__stdin_line_ending != 0 ]; then  # Line is empty, return line ending
+      : $(($1 = __stdin_line_ending))
+      __stdin_line_ending=0                  # Reset line ending for next getchar call
+      return
+    fi
+    IFS=                                            # don't split input
+    if read -r __stdin_buf ; then                   # read next line into $__stdin_buf
+      if [ -z "$__stdin_buf" ] ; then               # an empty line implies a newline character
+        : $(($1 = 10))                              # next getchar call will read next line
+        return
+      fi
+      __stdin_line_ending=10
+    else
+      if [ -z "$__stdin_buf" ] ; then               # EOF reached when read fails
+        : $(($1 = -1))
+        return
+      else
+        __stdin_line_ending=-1
+      fi
+    fi
+  fi
+  __c=$(printf "%d" "'${__stdin_buf%"${__stdin_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
+  : $(($1 = __c))
+    __stdin_buf="${__stdin_buf#?}"                  # remove the current char from $__stdin_buf
+}
+
 __code=0; # Exit code
-make_argv $(($# + 1)) "$0" "$@" # Setup argc/argv
-_main __code $(($# + 1)) $__argv
+_main __code
 exit $__code

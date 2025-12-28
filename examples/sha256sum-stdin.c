@@ -1,7 +1,7 @@
 /*
  * sha256sum.c: Compute the SHA-256 hash of files passed as arguments
  *
- * Usage: ./sha256sum.sh <files>
+ * Usage: ./sha256sum.sh < file
  */
 
 #include <stdio.h>
@@ -169,21 +169,33 @@ void hex(const int byte) {
   putchar(hex_nibble(byte));
 }
 
-int process_file(char *filename) {
+int read_stdin(char *buffer, int size) {
+  int n;
+
+  // Using getchar, read one character at a time
+  while (n < size) {
+    int c = getchar();
+    if (c == EOF) break; // End of input
+    buffer[n] = (char)c;
+    n++;
+  }
+
+  // Return the number of bytes read
+  return n;
+}
+
+int process_stdin() {
 
   int i;
-  int fd;
   int n = BLOCK_SIZE;
   int h;
 
   sha256_setup();
   sha256_init();
 
-  fd = open(filename, 0);
-
   while (n == BLOCK_SIZE) {
 
-    n = read(fd, buf, BLOCK_SIZE);
+    n = read_stdin(buf, BLOCK_SIZE);
 
     if (n < 0) return 1;
 
@@ -209,8 +221,6 @@ int process_file(char *filename) {
     sha256_add_block(buf);
   }
 
-  close(fd);
-
   for (i=0; i<8; ++i) {
     h = hash[i];
     hex(h >> 24);
@@ -232,13 +242,7 @@ int process_file(char *filename) {
   return 0;
 }
 
-int main(int argc, char **myargv) {
-
-  int i;
-
-  for (i=1; i<argc; ++i) {
-    if (process_file(myargv[i]) != 0) break;
-  }
-
+int main() {
+  process_stdin();
   return 0;
 }
