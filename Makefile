@@ -184,7 +184,7 @@ pnut-exe-bootstrapped: pnut-exe
 kit/bintools.c:
 	./utils/process-includes.sh kit/bintools/bintools-base.c > kit/bintools.c
 
-kit/jammed.sh: kit/bintools.c
+kit/jammed.sh: kit/bintools.c kit/make-jammed.sh
 	./kit/make-jammed.sh
 
 install: pnut-sh pnut-sh.sh
