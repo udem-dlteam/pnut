@@ -6,7 +6,6 @@
 
 void main() {
   int* arr = malloc(ARR_SIZE);
-  int sum = 0;
   int i = 0;
   for (i = 0; i < ARR_SIZE; i++) {
     arr[i] = 0;

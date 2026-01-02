@@ -60,3 +60,5 @@ print_time $PNUT_I386_COMPILED_BY_PNUT_I386_EXE_MS "for: pnut-i386-compiled-by-p
 if ! diff $TEMP_DIR/pnut-i386-compiled-pnut-i386-exe.exe $TEMP_DIR/pnut-i386-compiled-by-pnut-i386-sh.exe > /dev/null ; then
   echo "*** pnut-i386-compiled-pnut-i386-exe.exe != pnut-i386-compiled-by-pnut-i386-sh.exe"
 fi
+
+sha256sum "$TEMP_DIR/pnut-i386-compiled-pnut-i386-exe.exe"

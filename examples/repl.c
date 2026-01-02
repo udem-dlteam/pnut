@@ -38,7 +38,6 @@ typedef long FILE;
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <unistd.h>
 #endif
 
 #ifndef NULL
@@ -524,7 +523,7 @@ obj prim(int no) {
     buffer[0] = (char) NUM(x);
     success = write(NUM(y), buffer, 1);
     if (success != 1) {
-      perror("Cannot write to file.");
+      printf("Cannot write to file.");
     }
     push2(TRUE, PAIR_TAG);
   }
