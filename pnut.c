@@ -4735,7 +4735,9 @@ void handle_macro_D(char *opt) {
       start = opt;
       while (*opt != 0 && *opt != '"') opt += 1;
       if (*opt == 0) fatal_error("Unterminated string literal");
+      *opt = 0; // Temporarily terminate the string
       value_symbol = intern_str(start);
+      *opt = '"'; // Restore the quotes
       set_builtin_string_macro(macro_symbol, value_symbol);
     } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
       acc = 0;
