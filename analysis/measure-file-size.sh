@@ -22,6 +22,7 @@ set -e # Exit on error
 
 TEMP_DIR="build/measure"
 mkdir -p "$TEMP_DIR"
+mkdir -p "$TEMP_DIR/no-sys"
 
 expand_includes() { # $1 = output-name, $2 = options
   ./$TEMP_DIR/pnut-includes pnut.c $2 | \
@@ -60,19 +61,10 @@ expand_includes() { # $1 = output-name, $2 = options
     { echo "Error: $1.awk and $1-preincluded-canonical.awk differ"; exit 1; }
 }
 
-included_files() {
-  ./$TEMP_DIR/pnut-includes pnut.c $2 | \
-    # Filter lines ending with "// INCLUDED"
-    # Those lines correspond to #include directives that have been expanded
-    sed -n "/\/\/ INCLUDED$/p" | \
-    # Extract the file name from the line
-    sed -n "s/.*\"\(.*\)\".*/\1/p"
-}
-
 # C source files contain comments and other things that inflate the file size
 # without necessarily contributing to code size. This function removes these
 # comments and whitespace to get a more accurate measure of the code size.
-clean_file() { # $1 = input file
+clean_file() { # $1 = input file, $2 = output file
   cat "$1" | \
     # Remove comments
     sed "s/\/\/.*//g" | \
@@ -80,7 +72,7 @@ clean_file() { # $1 = input file
     # Remove trailing whitespace
     sed 's/[[:space:]]*$//g' | \
     # Remove empty lines
-    sed '/^[[:space:]]*$/d'
+    sed '/^[[:space:]]*$/d' > "$2"
 }
 
 lines_ratio() { # $1 = numerator, $2 = denominator
@@ -90,25 +82,41 @@ lines_ratio() { # $1 = numerator, $2 = denominator
 measure_size() { # $1 = output-name, $2 = options
   expand_includes "$1" "$2"
 
-  files="$(included_files "$1" "$2")"
-  files="pnut.c $files" # Add pnut.c because it's not included directly
+  files="$(gcc -MM pnut.c $2 | sed 's/^[^:]*: //')"
   cleaned_files=""
   for file in $files; do
-    clean_file "$file" > "$TEMP_DIR/$file"
+    # Make cleaned copy of the file, without comments or blank lines
+    clean_file "$file" "$TEMP_DIR/$file"
     cleaned_files="$cleaned_files $TEMP_DIR/$file"
+
+    # Make copies of the files without system includes, these will be passed to
+    # the gcc preprocessor to get a line count without system headers
+    sed '/#include </d' "$file" > "$TEMP_DIR/no-sys/$file"
   done
 
+  # Preprocess pnut.c using gcc, so we have a line count without any comments,
+  # blank lines, and preprocessor directives.
+  gcc -E -P "build/measure/no-sys/pnut.c" $2 > "$TEMP_DIR/$1-preprocessed.c"
+  preprocessed_lines=$(wc -l < "$TEMP_DIR/$1-preprocessed.c")
+  # Split file in 2 parts, before "#_ Character constants" and after
+  marker_line=$(grep -n "^#_ Character constants" "$TEMP_DIR/$1.sh" | cut -d: -f1)
+  tail -n +$marker_line "$TEMP_DIR/$1.sh" > "$TEMP_DIR/$1-runtime.sh"
+  head -n $((marker_line - 1)) "$TEMP_DIR/$1.sh" > "$TEMP_DIR/$1-decls.sh"
+
   printf "########## $1 ##########\n"
-  # echo "Files included in $1: $(echo $files | tr '\n' ' ')"
   printf "By file:\n"
-  # Measure the size of the cleaned files
   wc $files
   printf "By file (without comments or blank lines):\n"
   wc $cleaned_files
   printf "Expanded includes:\n"
-  wc "$TEMP_DIR/$1.c" "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk"
-  printf "Ratio (Original): "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l < $TEMP_DIR/$1.c)"
-  printf "Ratio (Cleaned):  "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')"
+  wc "$TEMP_DIR/$1.c" "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk" "$TEMP_DIR/$1-preprocessed.c" "$TEMP_DIR/$1-runtime.sh" "$TEMP_DIR/$1-decls.sh"
+
+  # Number of empty lines in $TEMP_DIR/$1.sh
+  printf "Ratio (Original):     "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l < $TEMP_DIR/$1.c)"
+  printf "Ratio (Cleaned):      "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')"
+  printf "Ratio (Preprocessed): "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$preprocessed_lines"
+  printf "Empty lines count:    %d\n" "$(grep -c '^[[:space:]]*$' "$TEMP_DIR/$1-decls.sh")"
+  printf "Runtime size:         %d\n" "$(wc -l < "$TEMP_DIR/$1-runtime.sh")"
 
   printf "\n"
 }
@@ -133,9 +141,9 @@ measure_size "pnut-awk" "-Dtarget_awk"
 measure_size "pnut-minimal-awk" "-Dtarget_awk -DPNUT_BOOTSTRAP"
 
 # ...and for the other targets
-measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
-measure_size "pnut-minimal-i386_linux" "-Dtarget_i386_linux -DPNUT_BOOTSTRAP"
-measure_size "pnut-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
+# measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
+# measure_size "pnut-minimal-i386_linux" "-Dtarget_i386_linux -DPNUT_BOOTSTRAP"
+# measure_size "pnut-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
 measure_size "pnut-minimal-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
-# measure_size "pnut-x86_64_linux" "-Dtarget_x86_64_linux"
-# measure_size "pnut-x86_64_mac" "-Dtarget_x86_64_mac"
+measure_size "pnut-minimal-x86_64_linux-one-pass" "-Dtarget_x86_64_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
+measure_size "pnut-minimal-x86_64_mac-one-pass" "-Dtarget_x86_64_mac -DPNUT_BOOTSTRAP"
