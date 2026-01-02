@@ -22,8 +22,7 @@ normalize_name() { # $1: name to normalize
 
 # POSIX shell implementation of the cat utility
 pcat() {
-  IFS=
-  while read -r line; do
+  while IFS= read -r line; do
     printf "%s\n" "$line"
   done
 }
@@ -32,8 +31,7 @@ pcat() {
 gen_pcat() {
   pcat << 'EOF'
 pcat() {
-  IFS=
-  while read -r line; do
+  while IFS= read -r line; do
     printf "%s\n" "$line"
   done
 }
@@ -52,7 +50,6 @@ process_file() { # $1: file to process, $2: path
 }
 
 process_dir() {
-  printf "Processing directory '$1'.\n"
   IFS=" "
   for file in "$1"/*; do
     if [ -f "$file" ]; then
@@ -62,6 +59,10 @@ process_dir() {
     fi
   done
 }
+
+# Generate header
+printf "#! /bin/sh\n\n"
+gen_pcat
 
 # For each file/directory argument, add its content to the archive
 for arg in "$@"; do
