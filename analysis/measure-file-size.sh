@@ -120,14 +120,12 @@ gcc -o "$TEMP_DIR/pnut-sh" pnut.c -Dtarget_sh
 # Compile pnut-sh-bootstrap
 gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dtarget_sh -DPNUT_BOOTSTRAP
 
-# Measuring for pnut-sh
-measure_size "pnut-sh" "-Dtarget_sh"
+# Measure the minimal pnut variants:
 measure_size "pnut-minimal-sh" "-Dtarget_sh -DPNUT_BOOTSTRAP"
-
-# ...and for the other targets
-# measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
-# measure_size "pnut-minimal-i386_linux" "-Dtarget_i386_linux -DPNUT_BOOTSTRAP"
-# measure_size "pnut-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
 measure_size "pnut-minimal-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
 measure_size "pnut-minimal-x86_64_linux-one-pass" "-Dtarget_x86_64_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
 measure_size "pnut-minimal-x86_64_mac-one-pass" "-Dtarget_x86_64_mac -DPNUT_BOOTSTRAP"
+
+# Measure the complete pnut variants:
+measure_size "pnut-complete-sh" "-Dtarget_sh"
+measure_size "pnut-complete-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
