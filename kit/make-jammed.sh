@@ -34,7 +34,7 @@ program_dependencies() {
   file="$1"
   comp_options="$2"
 
-  echo $(gcc -MM "$file" $comp_options | tr ':' '\n' | tr '\\' ' ' | sed '1d')
+  printf "%s\n" $(gcc -MM "$file" $comp_options | sed 's/^[^:]*: //')
 }
 
 # Prepare pnut-sh.sh
@@ -142,8 +142,8 @@ jammed_size=$(wc -c "$TEMP_DIR/jammed.sh" | awk '{print $1}')
 # Compare to the sum of each file
 files_size=$(wc -c $FILES | grep total | awk '{print $1}')
 
-echo "$TEMP_DIR/jammed.sh: $jammed_size bytes"
-echo "Individual files size: $files_size bytes"
-echo "Ratio: $(echo "scale=3; $jammed_size / $files_size" | bc -l)"
+printf "%s/jammed.sh: %d bytes\n" $TEMP_DIR $jammed_size
+printf "Individual files size: %d bytes\n" $files_size
+printf "Ratio: %s\n" "$(printf "scale=3; $jammed_size / $files_size\n" | bc -l)"
 
 # wc $FILES
