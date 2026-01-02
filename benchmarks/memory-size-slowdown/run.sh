@@ -23,7 +23,7 @@ with_size() {
   print_time $TIME_MS "for: $1 with $env_size"
 }
 
-sizes="1000 5000 10000 50000 100000 500000 1000000"
+sizes="10000 $((10000 * 2)) $((10000 * 4)) $((10000 * 8)) $((10000 * 16)) $((10000 * 32))"
 shells="ksh dash bash yash zsh"
 
 # Compile pnut with

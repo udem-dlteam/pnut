@@ -360,7 +360,7 @@ typedef int bool;
 //  - last_tok_column_number: column number of the last token read, used for error messages.
 //  - include_stack: the stack to save the state of the reader when including a file.
 
-FILE *fp = 0; // Current file pointer that's being read
+FILE *fp; // Current file pointer that's being read
 char* fp_filepath = 0; // The path of the current file being read
 char *fp_dirname = 0; // The directory of the current file being read
 char* include_search_path = 0; // Search path for include files
@@ -2929,6 +2929,11 @@ void get_tok() {
             tok = INTEGER_ULL;
             get_ch();
           }
+        } else if (ch == 'f' || ch == '.') {
+          get_ch();
+          tok = INTEGER;
+          while (accum_digit(10)); // Skip the fractional part
+          val = 0; // Force the value to be 0 for now. TODO: Convert to float
         }
       } else if (ch == 'l' || ch == 'L') {
         tok = INTEGER_L;

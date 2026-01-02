@@ -1,0 +1,9 @@
+static inline uint64_t read64le(unsigned char *p) {
+  return read32le(p) | (uint64_t)read32le(p + 4) << 32;
+}
+static inline void write64le(unsigned char *p, uint64_t x) {
+    write32le(p, x);  write32le(p + 4, x >> 32);
+}
+static inline void add64le(unsigned char *p, int64_t x) {
+    write64le(p, read64le(p) + x);
+}
