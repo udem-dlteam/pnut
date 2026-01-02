@@ -34,7 +34,7 @@ expand_includes() { # $1 = output-name, $2 = options
   gcc -o "$TEMP_DIR/$1" "$TEMP_DIR/$1.c" $2 -Wall -Werror
 
   # and that the result of pnut on the expanded file is the same as the result of pnut on the original file
-  # If the options contain -DBOOTSTRAP_PNUT, use pnut-sh-bootstrap instead
+  # If the options contain -DPNUT_BOOTSTRAP, use pnut-sh-bootstrap instead
   if echo "$2" | grep -q "\-DPNUT_BOOTSTRAP"; then
     ./$TEMP_DIR/pnut-sh-bootstrap pnut.c $2 > "$TEMP_DIR/$1.sh"
     ./$TEMP_DIR/pnut-sh-bootstrap "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"

@@ -19,11 +19,13 @@ readonly TEMP_DIR="kit"
 
 JAM_OPT=""
 INCLUDE_UTILS=0
+WITH_TAR_GZ=0
 
 while [ $# -gt 0 ]; do
   case $1 in
-    -b|--binary)     JAM_OPT="$JAM_OPT --binary"; shift 1 ;;
-    --include-utils) INCLUDE_UTILS=1;             shift 1 ;;
+    -b|--binary)        JAM_OPT="$JAM_OPT --binary"; shift 1 ;;
+    --include-utils)    INCLUDE_UTILS=1;             shift 1 ;;
+    --with-tcc-tar-gz)  WITH_TAR_GZ="1";             shift 1 ;;
     *)               error "Unknown option: $1"           ;;
   esac
 done
@@ -34,7 +36,7 @@ program_dependencies() {
   file="$1"
   comp_options="$2"
 
-  printf "%s\n" $(gcc -MM "$file" $comp_options | sed 's/^[^:]*: //')
+  echo $(gcc -MM "$file" $comp_options | tr ':' '\n' | tr '\\' ' ' | sed '1d')
 }
 
 # Prepare pnut-sh.sh
@@ -65,16 +67,38 @@ portable_libc/src/stdlib.c:stdlib.c
 portable_libc/src/string.c:string.c
 kit/bintools-libc.c:bintools-libc.c
 
+kit/bootstrap.sh:bootstrap.sh
+utils/cat.sh:cat.sh
+
 portable_libc/include
 portable_libc/src
 portable_libc/libc.c
 
-kit/bootstrap.sh:bootstrap.sh
+kit/tcc-patches/array_sizeof.before
+kit/tcc-patches/array_sizeof.after
+kit/tcc-patches/fix_stack_64_bit_operands_on_32_bit.before
+kit/tcc-patches/fix_stack_64_bit_operands_on_32_bit.after
+kit/tcc-patches/float_negation.before
+kit/tcc-patches/float_negation.after
+kit/tcc-patches/sscanf_TCC_VERSION.before
+kit/tcc-patches/sscanf_TCC_VERSION.after
+kit/tcc-patches/undefine_TCC_IS_NATIVE.before
+kit/tcc-patches/undefine_TCC_IS_NATIVE.after
+
+kit/libtcc1.c
+kit/config.h
 "
+
+if [ $WITH_TAR_GZ -eq 1 ]; then
+  FILES_TO_INCLUDE="$FILES_TO_INCLUDE kit/tcc-0.9.26.tar.gz"
+else
+  tar -xzf kit/tcc-0.9.26.tar.gz
+  touch tcc-0.9.26-1147-gee75a10c/config.h
+  FILES_TO_INCLUDE="$FILES_TO_INCLUDE $(program_dependencies "tcc-0.9.26-1147-gee75a10c/tcc.c" "-DONE_SOURCE")"
+fi
 
 if [ $INCLUDE_UTILS -eq 1 ]; then
 FILES_TO_INCLUDE="$FILES_TO_INCLUDE
-utils/cat.sh:cat.sh
 utils/ls.sh:ls.sh
 utils/touch.sh:touch.sh
 utils/wc.sh:wc.sh
