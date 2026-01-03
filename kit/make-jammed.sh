@@ -45,9 +45,11 @@ gcc -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
 ./$TEMP_DIR/pnut-sh $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
 
 FILES_TO_INCLUDE="
+utils/jam.sh
 $TEMP_DIR/pnut-sh.sh:pnut-sh.sh
 $(program_dependencies "pnut.c" "-Dtarget_i386_linux -DBOOTSTRAP_TCC")
 kit/bintools.c:bintools.c
+kit/bintools-libc.c:bintools-libc.c
 portable_libc/include/fcntl.h:fcntl.h
 portable_libc/include/math.h:math.h
 portable_libc/include/pnut_lib.h:pnut_lib.h
@@ -65,10 +67,10 @@ portable_libc/src/setjmp.c:setjmp.c
 portable_libc/src/stdio.c:stdio.c
 portable_libc/src/stdlib.c:stdlib.c
 portable_libc/src/string.c:string.c
-kit/bintools-libc.c:bintools-libc.c
 
 kit/bootstrap.sh:bootstrap.sh
 utils/cat.sh:cat.sh
+examples/compiled/sha256sum-stdin.sh:sha256sum.sh
 
 portable_libc/include
 portable_libc/src
