@@ -7,17 +7,16 @@ EOF_SEP="EOF3141592653"
 
 # Replace every non-alphanumeric character with _
 normalize_name() { # $1: name to normalize
-  name="${1}"
+  name="$1"
   normalized_name=""
   while [ -n "$name" ]; do
     char="${name%"${name#?}"}" # Get the first character
     name="${name#?}"           # Remove the first character
     case "$char" in
-      [a-zA-Z0-9]) normalized_name="${normalized_name}${char}" ;;
-      *)           normalized_name="${normalized_name}_" ;;
+      [!a-zA-Z0-9]) char="_" ;;
     esac
+    normalized_name="${normalized_name}${char}"
   done
-  printf "%s" "$normalized_name"
 }
 
 # POSIX shell implementation of the cat utility
@@ -40,13 +39,13 @@ EOF
 }
 
 process_file() { # $1: file to process, $2: path
-  normalized_name="$(normalize_name "$1")"
+  normalize_name "$1" # Returns in normalized_name variable
   printf "extract_%s() {\n" "$normalized_name"
   printf "  printf \"Extracting %s\\\\n\"\n" "$1"
   printf "  pcat << '%s' > %s\n" "$EOF_SEP" "$1"
   pcat "$1" < "$1"
   printf "%s\n}\n\n" "$EOF_SEP"
-  printf "extract_%s\n" "$normalized_name"
+  printf "extract_%s\n\n" "$normalized_name"
 }
 
 process_dir() {
