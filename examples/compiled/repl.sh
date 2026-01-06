@@ -628,8 +628,7 @@ _prim() { # no: $2
     : $((_$((buffer + 0)) = (x >> 1)))
     _write success $((y >> 1)) $buffer 1
     if [ $success != 1 ] ; then
-      defstr __str_1 "Cannot write to file."
-      _perror __ $__str_1
+      printf "Cannot write to file."
     fi
     _push2 __ $((_$((_FALSE + __field0)))) $(((0 << 1) | 1))
   elif [ $no = 3 ] ; then

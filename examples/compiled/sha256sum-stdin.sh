@@ -170,7 +170,7 @@ _read_stdin() { let buffer $2; let size $3
   let n; let c
   while [ $n -lt $size ]; do
     _getchar c
-    if [ $c = $_EOF ] ; then
+    if [ $c = -1 ] ; then
       break
     fi
     : $((_$((buffer + n)) = c))
@@ -229,10 +229,6 @@ _process_stdin() {
   done
   printf " "
   printf " "
-  while [ $((_$_filename)) != 0 ]; do
-    printf \\$(((_$_filename)/64))$(((_$_filename)/8%8))$(((_$_filename)%8))
-    : $((_filename += 1))
-  done
   printf "\n"
   : $(($1 = 0))
   endlet $1 h n i

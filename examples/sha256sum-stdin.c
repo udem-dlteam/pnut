@@ -175,7 +175,7 @@ int read_stdin(char *buffer, int size) {
   // Using getchar, read one character at a time
   while (n < size) {
     int c = getchar();
-    if (c == EOF) break; // End of input
+    if (c == -1) break; // End of input
     buffer[n] = (char)c;
     n++;
   }
@@ -231,11 +231,6 @@ int process_stdin() {
 
   putchar(' ');
   putchar(' ');
-
-  while (*filename) {
-    putchar(*filename);
-    ++filename;
-  }
 
   putchar('\n');
 
