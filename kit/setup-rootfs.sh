@@ -115,3 +115,5 @@ fi
 
 echo "Bootstrap environment setup. You can now chroot into $CHROOT_DIR_NAME and run the jammed script:"
 echo "  sudo chroot $CHROOT_DIR_NAME /bin/$BOOTSTRAP_SHELL"
+echo "  $ . jammed.sh"
+echo "  $ INSTALL_EXECS=1 BOOTSTRAP_SHELL=$BOOTSTRAP_SHELL . bootstrap.sh"
