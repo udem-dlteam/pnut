@@ -1,14 +1,16 @@
 # 🥜 Pnut: A Self-Compiling C Transpiler Targeting Human-Readable POSIX Shell
 
 Pnut compiles a reasonably large subset of C99 to human-readable POSIX shell
-scripts. It can be used to generate portable shell scripts without having to
-write shell. Try the [web version](https://pnut.sh/#demo)!
+scripts. It can be used to generate portable shell scripts without writing shell
+code.
+
+Try the web version at https://pnut.sh.
 
 Its main uses are:
 
 - As a transpiler to write portable shell scripts in C.
 - As a way to bootstrap a compiler written in C with an executable version that
-  is still human readable (See [reproducible builds](#reproducible-builds)).
+  is still human readable, for reproducible builds.
 
 Main features:
 
@@ -18,8 +20,7 @@ Main features:
 - A preprocessor (`#include`, `#ifdef`, `#if`, `#define MACRO ...`, `#define MACRO_F(x) ...`).
 - Integrates easily with [existing shell scripts](#mixing-c-and-shell-code).
 
-The [examples](examples/compiled) directory contains many examples.
-We invite you take a look!
+The [examples](examples/compiled) directory contains many examples. We invite you to take a look!
 
 Other than being able to compile itself, Pnut can also compile the [Ribbit
 Virtual Machine](https://github.com/udem-dlteam/ribbit) which can run a R4RS
@@ -30,7 +31,7 @@ Scheme Read-eval-print loop directly in shell. See
 
 Pnut can be distributed as the `pnut-sh.sh` shell script, or compiled to
 executable code using a C compiler. Pregenerated shell scripts can be found on
-the [GitHub releases page](https://github.com/udem-dlteam/pnut/releases).
+the GitHub releases page.
 
 To compile and install pnut:
 
@@ -42,26 +43,20 @@ To compile and install pnut:
 
 This installs both `pnut-sh.sh` and `pnut` to `/usr/local/bin/`.
 
-Pnut also support a native code backend that generates executable code (x86
+Pnut also supports a native code backend that generates executable code (x86
 Linux and MacOS for now), which we call `pnut-exe`. To install `pnut-exe` and
 its shell version `pnut-exe.sh`:
 
-```shell
 > sudo make install-pnut-exe DESTDIR=/usr/local
-```
 
 ### Compilation Options
 
 Compilation options can be used to change the generated shell script:
 
-- `ANNOTATE_C_CODE=1` includes the original C code in the generated shell
-  script.
-- `SH_COMPACT_RT=1` reduces the size of the runtime library at the
-  cost of reduced I/O performance.
-- `SH_FAST=1` make pnut-sh generate faster shell code by using a faster calling
-  convention.
-- `MINIMAL=1` support only the minimal set of C features required to bootstrap
-  pnut, reducing the size of `pnut-sh.sh` and `pnut-exe.sh`.
+- `ANNOTATE_C_CODE=1`: include the original C code in the generated shell script.
+- `SH_COMPACT_RT=1`: use compact runtime library (with reduced I/O performance).
+- `SH_FAST=1`: generate shell code using `set` for local variables.
+- `MINIMAL=1` include only the set of features required to bootstrap pnut.
 
 They can be set using `make install ANNOTATE_C_CODE=1 ...`.
 
