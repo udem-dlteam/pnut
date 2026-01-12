@@ -226,6 +226,7 @@ void mov_reg_mem64(int dst, int base, int offset);
 #endif
 
 void add_reg_imm(int dst, int imm);
+void sub_reg_imm(int dst, int imm);
 void add_reg_lbl(int dst, int lbl);
 void add_reg_reg(int dst, int src);
 void or_reg_reg (int dst, int src);
