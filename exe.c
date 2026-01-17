@@ -92,24 +92,43 @@ int get_fixup_code_ix(const int ix) {
   return fixups[ix + 2];
 }
 
+void set_i8(const char a, const int index, const int shift) {
+  code[index] = TERNARY(shift == 0, a, (code[index] & ~(0xff << shift)) | (a << shift));
+}
+
 void emit_i8(const int a) {
   if (code_alloc >= CODE_SIZE) {
     fatal_error("code buffer overflow");
   }
-  int index = code_alloc / 4;
-  int shift = (code_alloc % 4) * 8;
-  code[index] = (TERNARY(shift == 0, 0, code[index] & ~(0xff << shift))) | ((a & 0xff) << shift);
+
+  set_i8(a & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
   code_alloc += 1;
 }
 
 void emit_2_i8(const int a, const int b) {
-  emit_i8(a);
-  emit_i8(b);
+  if (code_alloc + 1 >= CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
+
+  set_i8(a & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(b & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
 }
 
 void emit_4_i8(const int a, const int b, const int c, const int d) {
-  emit_2_i8(a, b);
-  emit_2_i8(c, d);
+  if (code_alloc + 3 >= CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
+
+  set_i8(a & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(b & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(c & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(d & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
 }
 
 void emit_i32_le(const int n) {
