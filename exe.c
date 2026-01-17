@@ -27,9 +27,9 @@ void generate_exe();
 #if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
 #define CODE_SIZE 100000
 #else
-#define CODE_SIZE 5000000
+#define CODE_SIZE 1250000
 #endif
-int code[CODE_SIZE];
+int code[CODE_SIZE / 4];
 // Index of the next free byte in the code buffer
 int code_alloc = 0;
 // Total number of bytes emitted
@@ -96,7 +96,9 @@ void emit_i8(const int a) {
   if (code_alloc >= CODE_SIZE) {
     fatal_error("code buffer overflow");
   }
-  code[code_alloc] = (a & 0xff);
+  int index = code_alloc / 4;
+  int shift = (code_alloc % 4) * 8;
+  code[index] = (TERNARY(shift == 0, 0, code[index] & ~(0xff << shift))) | ((a & 0xff) << shift);
   code_alloc += 1;
 }
 

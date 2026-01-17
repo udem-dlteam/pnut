@@ -123,7 +123,8 @@ void generate_exe() {
   write_unix_thread();
 
   while (i < code_alloc) {
-    write_i8(code[i]);
+    int byte = (code[i / 4] >> ((i % 4) * 8)) & 0xff;
+    write_i8(byte);
     i += 1;
   }
 
