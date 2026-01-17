@@ -1,3 +1,4 @@
+// Frame size (in words)
 int cgc_fs = 0;
 // Function bindings that follows lexical scoping rules
 int cgc_locals = 0;
