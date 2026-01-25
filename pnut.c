@@ -2536,8 +2536,11 @@ void begin_macro_expansion(int ident, int tokens, int args) {
 // Search the macro stack to see if the macro is already expanding.
 bool macro_is_already_expanding(int ident) {
   int i = macro_stack_ix;
-  if (ident == 0 || macro_ident == 0) return false; // Unnamed macro or no macro is expanding
-  if (ident == macro_ident)           return true;  // The same macro is already expanding
+  // Unnamed macro (i.e. replaying tokens or playing a macro argument)
+  if (ident == 0)           return false;
+
+  // The macro is currently expanding
+  if (ident == macro_ident) return true;
 
   // Traverse the stack to see if the macro is already expanding
   while (i > 0) {
