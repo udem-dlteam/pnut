@@ -83,7 +83,7 @@ int cgc_add_local(const enum BINDING binding_type, const int ident, const ast ty
   return binding;
 }
 
-#ifdef target_sh
+#if defined(target_sh) || defined(target_awk)
 void cgc_add_local_var(const enum BINDING binding_type, const int ident, const ast type) {
   cgc_fs += 1;
   cgc_locals = cgc_add_local(binding_type, ident, type, cgc_locals);

@@ -907,7 +907,7 @@ ast list3(const int child0, const int child1, const int child2) { return new_ast
 #endif
 #define tail(x) cdr_(LIST, x)
 
-#ifdef target_sh
+#if defined(target_sh) || defined(target_awk)
 // Returns the only element of a singleton list, if it is a singleton list.
 // Otherwise, returns 0.
 ast list_singleton(const ast list) {
@@ -1110,7 +1110,7 @@ void dump_ident(int symbol) {
 void dump_node(ast node) {
   putstr("op=");
   putint(get_op(node));
-  putstr(" with #children =");
+  putstr(" with #children=");
   putint(get_nb_children(node));
   putchar('\n');
 }
@@ -1696,7 +1696,7 @@ int NOT_SUPPORTED_ID;
 
 // We want to recognize certain identifers without having to do expensive string comparisons
 int MAIN_ID;
-#ifdef target_sh
+#if defined(target_sh) || defined(target_awk)
 int PUTCHAR_ID;
 int GETCHAR_ID;
 int EXIT_ID;
@@ -2298,7 +2298,7 @@ void init_ident_table() {
 
   MAIN_ID = init_ident(IDENTIFIER, "main");
 
-#ifdef target_sh
+#if defined(target_sh) || defined(target_awk)
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
   GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
   EXIT_ID    = init_ident(IDENTIFIER, "exit");
@@ -4650,6 +4650,10 @@ ast parse_compound_statement() {
 #include "sh.c"
 #endif
 
+#ifdef target_awk
+#include "awk.c"
+#endif
+
 #ifdef target_i386_linux
 #include "x86.c"
 #endif
@@ -4795,6 +4799,8 @@ void extract_c_code_from_sh_file(char *filename) {
 int main(int argc, char **argv) {
   int i;
   ast decl;
+
+  set_builtin_empty_macro(intern_str("target_awk")); // to avoid warnings when compiling pnut-sh as pnut-awk
 
 #ifdef HANDLE_SIGNALS
   signal(SIGINT, signal_callback_handler);

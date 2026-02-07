@@ -1,5 +1,5 @@
 .PHONY: \
-	pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh pnut-exe pnut-exe.sh pnut-exe-bootstrapped \
+	pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh pnut-awk pnut-exe pnut-exe.sh pnut-exe-bootstrapped \
 	install uninstall clean \
 	test-sh test-i386-linux test-x86_64-linux test-x86_64-mac \
 	pnut-artifact-x86 pnut-artifact-arm \
@@ -130,6 +130,7 @@ ifeq ($(EXE_ONE_PASS),1)
 endif
 
 BUILD_OPT_SH = -Dtarget_sh $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
+BUILD_OPT_AWK = -Dtarget_awk $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
 BUILD_OPT_EXE += $(BOOTSTRAP_FLAGS)
 
 build:
@@ -137,6 +138,9 @@ build:
 
 pnut-sh: build pnut.c sh.c sh-runtime.c
 	$(CC) $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
+
+pnut-awk: build pnut.c awk.c
+	$(CC) $(CFLAGS) $(BUILD_OPT_AWK) pnut.c -o $(BUILD_DIR)/pnut-awk
 
 pnut-sh.sh: pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
