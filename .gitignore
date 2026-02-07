@@ -4,8 +4,10 @@
 # Tests artifacts
 tests/*.sh
 tests/**/*.exe
+tests/**/*.sh
 tests/**/*.err
 tests/**/*.output
+tests/**/*-gcc
 # Build artifacts
 build/*
 artifact/*

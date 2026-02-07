@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <stdlib.h>
+
 void putstring(char *s) {
   while (*s) {
     putchar(*s);

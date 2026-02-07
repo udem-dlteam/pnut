@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 void putstring(char *s) {
   while (*s) {
     putchar(*s);

@@ -7,7 +7,7 @@ void putstring(char * s) {
 }
 
 int main(int argc, char ** args) {
-  int i = 0;
+  int i = 1; // Skip the program name that changes across test platforms.
   putstring("Number of arguments: ");
   putchar(48 + argc);
   putchar('\n');
