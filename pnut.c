@@ -70,7 +70,7 @@
 
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
-    #define SH_MINIMAL_RUNTIME
+    #define MINIMAL_RUNTIME
     #define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
     // Remove support for complex printf specifiers (flags, width, precision).
     // This results in smaller code for the compiler.
@@ -177,6 +177,30 @@
   #undef SH_OPTIMIZE_LONG_LINES
   #undef RT_USE_LOOKUP_TABLE
   #endif
+
+#elif defined(target_awk)
+
+  #ifdef PNUT_BOOTSTRAP
+    #define ALLOW_RECURSIVE_MACROS
+    #define MINIMAL_RUNTIME
+  #else
+    // Enable all C features for general pnut usage
+    #define SUPPORT_ALL_C_FEATURES
+    // Pnut-awk specific features
+    #define AWK_SUPPORT_ADDRESS_OF
+  #endif
+
+  // Shell code generation options
+  #ifndef AWK_INLINE_PRINTF_NOT
+  // Inline printf calls with literal string for smaller and faster code
+  #define AWK_INLINE_PRINTF
+  #endif
+  #ifndef AWK_INLINE_PUTCHAR_NOT
+  // Inline putchar calls for smaller and faster code
+  #define AWK_INLINE_PUTCHAR
+  #endif
+  // Inline exit calls for smaller code
+  #define AWK_INLINE_EXIT
 
 #elif defined(target_i386_linux) || defined (target_x86_64_linux) || defined (target_x86_64_mac)
 
@@ -401,7 +425,7 @@ void putoct_unsigned(int n) {
 
 #ifdef NICE_ERR_MSG
 
-#if defined(SH_MINIMAL_RUNTIME) || defined(NO_COLOR)
+#if defined(MINIMAL_RUNTIME) || defined(NO_COLOR)
 
 // No isatty support in minimal runtime
 #define change_color(color)
@@ -1712,7 +1736,7 @@ int READ_ID;
 int WRITE_ID;
 int OPEN_ID;
 int CLOSE_ID;
-#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
 int ISATTY_ID;
 #endif
 
@@ -2314,7 +2338,7 @@ void init_ident_table() {
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
-#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
 #endif
 
@@ -4799,8 +4823,6 @@ void extract_c_code_from_sh_file(char *filename) {
 int main(int argc, char **argv) {
   int i;
   ast decl;
-
-  set_builtin_empty_macro(intern_str("target_awk")); // to avoid warnings when compiling pnut-sh as pnut-awk
 
 #ifdef HANDLE_SIGNALS
   signal(SIGINT, signal_callback_handler);

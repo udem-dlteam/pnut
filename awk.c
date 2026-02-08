@@ -1,5 +1,7 @@
 // AWK codegen
 
+#include "awk-runtime.c"
+
 // Memory stats
 
 #ifdef PRINT_MEMORY_STATS
@@ -20,7 +22,6 @@ int cumul_text_alloc = 0;
 
 // Codegen context
 bool main_defined = false;          // If the main function is defined
-bool runtime_use_make_argv = false;
 bool init_block_open = false; // If we're inside an initialization block
 int  init_block_id = 0; // Identifier of the current initialization block
 
@@ -72,11 +73,11 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 }
 
 text global_var(int ident_symbol) {
-  return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
+  return string_concat3(wrap_char('_'), wrap_char('_'), wrap_str_pool(ident_symbol));
 }
 
 text local_var(int ident_symbol) {
-  return wrap_str_pool(ident_symbol);
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
 }
 
 text env_var(ast ident) {
@@ -105,7 +106,56 @@ text function_name(int ident_tok) {
   return string_concat(wrap_char('_'), wrap_str_pool(ident_tok));
 }
 
-// NOTE: Same as sh.c, except with _$(( )) replaced by _[  ]
+#ifdef AWK_SUPPORT_ADDRESS_OF
+
+// Unlike in the native backend, there are 2 ways to compile a lvalue.
+//
+// The first (comp_lvalue) returns the variable that represent the memory
+// location, this is useful when we're assigning to the lvalue.
+// The second (comp_lvalue_address) produces the address of the memory location.
+// This is mostly used to implement &.
+//
+// This difference is important as local variables don't have a memory location
+// so we can't take their address and so their lvalue is just their name.
+text comp_lvalue_address(ast node) {
+  int op = get_op(node);
+  text sub1;
+  text sub2;
+
+  if (op == IDENTIFIER) {
+    // This is currently not supported because we treat as globals the enums
+    // and other hardcoded constants which is not what we want.
+    //
+    // We need to integrate the bindings local used in the exe backend here so
+    // we can know more about variables other than "it's local" and "it's not
+    // local so it must be global".
+    fatal_error("comp_rvalue_go: can't take the address of variable");
+    return 0;
+  } else if (op == '[') {
+    sub1 = comp_rvalue(get_child_('[', node, 0));
+    sub2 = comp_rvalue(get_child_('[', node, 1));
+    return string_concat3(sub1, wrap_str_lit(" + "), sub2);
+  } else if (op == '*') {
+    return comp_rvalue(get_child_('*', node, 0));
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (op == ARROW) {
+    sub1 = comp_rvalue(get_child_(ARROW, node, 0));
+    sub2 = struct_member_var(get_child_(ARROW, node, 1));
+    return string_concat3(sub1, wrap_str_lit(" + "), sub2);
+  }
+#endif
+  else if (op == CAST) {
+    return comp_lvalue_address(get_child_(CAST, node, 1));
+  } else {
+    dump_node(node);
+    fatal_error("comp_lvalue_address: unknown lvalue");
+    return 0;
+  }
+}
+
+#endif
+
 text comp_lvalue(ast node) {
   int op = get_op(node);
   text sub1;
@@ -119,7 +169,7 @@ text comp_lvalue(ast node) {
     return string_concat5(wrap_str_lit("_["), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("]"));
   } else if (op == '*') {
     sub1 = comp_rvalue(get_child_('*', node, 0));
-    return string_concat(wrap_char('_'), sub1);
+    return string_concat3(wrap_str_lit("_[ "), sub1, wrap_str_lit(" ]"));
   }
 #ifdef SUPPORT_STRUCT_UNION
   else if (op == ARROW) {
@@ -163,16 +213,31 @@ text op_to_str(int op) {
 }
 
 // '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT
-text bitwise_op_to_str(int op) {
-       if (op == '&' || op == AMP_EQ)       return wrap_str_lit("and");
-  else if (op == '|' || op == BAR_EQ)       return wrap_str_lit("or");
-  else if (op == '^' || op == CARET_EQ)     return wrap_str_lit("xor");
-  else if (op == '~')                       return wrap_str_lit("compl");
-  else if (op == LSHIFT || op == LSHIFT_EQ) return wrap_str_lit("lshift");
-  else if (op == RSHIFT || op == RSHIFT_EQ) return wrap_str_lit("rshift");
-  else {
+text function_op_to_str(int op) {
+  if (op == '&' || op == AMP_EQ) {
+    runtime_use_and = true;
+    return wrap_str_lit("and");
+  } else if (op == '|' || op == BAR_EQ) {
+    runtime_use_or = true;
+    return wrap_str_lit("or");
+  } else if (op == '^' || op == CARET_EQ) {
+    runtime_use_xor = true;
+    return wrap_str_lit("xor");
+  } else if (op == '~') {
+    runtime_use_compl = true;
+    return wrap_str_lit("compl");
+  } else if (op == LSHIFT || op == LSHIFT_EQ) {
+    runtime_use_lshift = true;
+    return wrap_str_lit("lshift");
+  } else if (op == RSHIFT || op == RSHIFT_EQ) {
+    runtime_use_rshift = true;
+    return wrap_str_lit("rshift");
+  } else if (op == ',') {
+    runtime_use_comma = true;
+    return wrap_str_lit("comma");
+  } else {
     dump_op(op);
-    fatal_error("bitwise_op_to_str: unexpected operator");
+    fatal_error("function_op_to_str: unexpected operator");
     return 0;
   }
 }
@@ -205,6 +270,7 @@ text comp_assignment(ast lvalue, ast rvalue) {
 }
 
 text comp_rvalue_go(ast node, int outer_op) {
+  if (node == 0) return 0;
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   text sub1, sub2, sub3;
@@ -223,11 +289,11 @@ text comp_rvalue_go(ast node, int outer_op) {
       return wrap_integer(1, node);
     }
     else if (op == CHARACTER) {
-      // For characters, return ord['c']:
-      // FIXME: This likely only works for printable characters.
-      return string_concat3(wrap_str_lit("ord["), wrap_char(get_val_(CHARACTER, node)), wrap_str_lit("]"));
+      // For characters, return ord["c"]:
+      return string_concat3(wrap_str_lit("ord[\""), escape_text(wrap_char(get_val_(CHARACTER, node)), false), wrap_str_lit("\"]"));
     } else if (op == STRING) {
       // For string, call defstr("...") to define the string and return its identifier
+      runtime_use_defstr = true;
       return string_concat3(wrap_str_lit("defstr(\""), escape_text(wrap_str_pool(get_val_(STRING, node)), false), wrap_str_lit("\")"));
     } else if (op == IDENTIFIER) {
       return env_var(node);
@@ -258,19 +324,19 @@ text comp_rvalue_go(ast node, int outer_op) {
     } else if (op == '~') {
       // Complement operator is a function in AWK
       sub1 = comp_rvalue_go(child0, op);
-      return string_concat3(wrap_str_lit("compl("), sub1, wrap_char(')'));
+      return string_concat3(string_concat(function_op_to_str(op), wrap_char('(')), sub1, wrap_char(')'));
     } else if (op == MINUS_MINUS_PRE) {
       sub1 = comp_lvalue(child0);
-      return string_concat(sub1, wrap_str_lit("--"));
+      return string_concat(wrap_str_lit("--"), sub1);
     } else if (op == PLUS_PLUS_PRE) {
       sub1 = comp_lvalue(child0);
-      return string_concat(sub1, wrap_str_lit("++"));
+      return string_concat(wrap_str_lit("++"), sub1);
     } else if (op == MINUS_MINUS_POST) {
       sub1 = comp_lvalue(child0);
-      return string_concat(wrap_str_lit("--"), sub1);
+      return string_concat(sub1, wrap_str_lit("--"));
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(child0);
-      return string_concat(wrap_str_lit("++"), sub1);
+      return string_concat(sub1, wrap_str_lit("++"));
     }
 #ifdef SUPPORT_SIZEOF
     else if (op == SIZEOF_KW) {
@@ -304,7 +370,7 @@ text comp_rvalue_go(ast node, int outer_op) {
       }
     }
 #endif // SUPPORT_SIZEOF
-#ifdef SH_SUPPORT_ADDRESS_OF
+#ifdef AWK_SUPPORT_ADDRESS_OF
     else if (op == '&') {
       return comp_lvalue_address(child0);
     }
@@ -318,14 +384,19 @@ text comp_rvalue_go(ast node, int outer_op) {
     if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%') { // TODO: op == ','
       sub1 = comp_rvalue_go(child0, op);
       sub2 = comp_rvalue_go(child1, op);
-      return wrap_if_needed(string_concat3(sub1, op_to_str(op), sub2), outer_op, op);
-    } else if (op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT) {
+      sub2 = string_concat3(sub1, op_to_str(op), sub2);
+      if (op == '/') {
+        // Division in AWK is floating point, so we need to cast to int
+        sub2 = string_concat3(wrap_str_lit("int("), sub2, wrap_char(')'));
+      }
+      return wrap_if_needed(sub2, outer_op, op);
+    } else if (op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == ',') {
       // These operators are functions in AWK
       sub1 = comp_rvalue_go(child0, op);
       sub2 = comp_rvalue_go(child1, op);
       return wrap_if_needed(
               string_concat(
-                bitwise_op_to_str(op),
+                function_op_to_str(op),
                 string_concat5(wrap_char('('), sub1, wrap_str_lit(", "), sub2, wrap_char(')'))), outer_op, op);
     } else if (op == '=' || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == SLASH_EQ || op == STAR_EQ) {
       sub1 = comp_lvalue(child0);
@@ -336,7 +407,7 @@ text comp_rvalue_go(ast node, int outer_op) {
       sub2 = comp_rvalue_go(child1, op);
       return wrap_if_needed(
               string_concat(
-                string_concat3(sub1, wrap_str_lit(" = "), bitwise_op_to_str(op)),
+                string_concat3(sub1, wrap_str_lit(" = "), function_op_to_str(op)),
                 string_concat5(wrap_char('('), sub1, wrap_str_lit(", "), sub2, wrap_char(')'))),
               outer_op, '=');
     } else if (op == '[') { // array indexing
@@ -348,7 +419,7 @@ text comp_rvalue_go(ast node, int outer_op) {
     else if (op == ARROW) { // member access is implemented like array access
       sub1 = comp_rvalue_go(child0, op);
       sub2 = struct_member_var(child1);
-      return string_concat5(wrap_str_lit("_$(("), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit("))"));
+      return string_concat5(wrap_str_lit("_[ "), sub1, wrap_str_lit(" + "), sub2, wrap_str_lit(" ]"));
     }
 #endif
     else if (op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '<' || op == '>') {
@@ -384,6 +455,236 @@ text comp_rvalue_go(ast node, int outer_op) {
     fatal_error("comp_rvalue_go: unknown rvalue");
     return 0;
   }
+}
+#if defined(AWK_INLINE_PUTCHAR) || defined(AWK_INLINE_PRINTF)
+text comp_putchar_inline(ast param) {
+  text res;
+  ast ident;
+  char c;
+
+  if (get_op(param) == CHARACTER) {
+    c = get_val_(CHARACTER, param);
+    if ((c >= 32 && c <= 126) || c == '\n') { // Printable ASCII characters + newline
+      return string_concat3(wrap_str_lit("printf(\""), escape_text(wrap_char(c), true), wrap_str_lit("\")"));
+    }
+  }
+
+  res = comp_rvalue(param);
+  return string_concat3(wrap_str_lit("printf(\"%c\", "), res, wrap_char(')'));
+}
+#endif
+
+#ifdef AWK_INLINE_PRINTF
+// format_str is from the string pool so immutable
+text printf_call(char *format_str, char *format_str_end, text params_text, bool escape) {
+  if (format_str == format_str_end) {
+    return 0;
+  } else {
+    return string_concat3(wrap_str_lit("printf(\""),
+                          concatenate_strings_with(
+                            escape_text(wrap_str_imm(format_str, format_str_end), escape),
+                            params_text,
+                            wrap_str_lit(", ")),
+                          wrap_str_lit("\")"));
+  }
+}
+
+enum PRINTF_STATE {
+  PRINTF_STATE_FLAGS,
+  PRINTF_STATE_WIDTH,
+  PRINTF_STATE_PRECISION,
+  PRINTF_STATE_SPECIFIER
+};
+
+// _printf pulls a lot of dependencies from the runtime. In most cases the
+// format string is known at compile time, and we can avoid calling printf by
+// using the shell's printf instead. This function generates a sequence of shell
+// printf and put_pstr equivalent to the given printf call.
+void handle_printf_call(char *format_str, ast params) {
+  ast param = 0; // Next parameter, if any
+  char *format_start = format_str;
+  char *specifier_start;
+  // compiled parameters to be passed to printf
+  text params_text = 0, width_text = 0, precision_text = 0;
+
+  bool mod = false;
+  bool has_width = false;
+  bool has_precision = false;
+
+  enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
+
+  while (*format_str != '\0') {
+    // Param is consumed, get the next one
+    if (param == 0 && params != 0) {
+      param = car(params);
+      params = tail(params);
+    }
+
+    if (mod) {
+      switch (*format_str) {
+        case ' ': case '#': case '+': case '-': case '0': // Flags
+          // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
+          // 16 bits meaning we can easily convert char -> bit if we wanted to.
+          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
+          break;
+
+        // Width or precision literal
+        case '1': case '2': case '3':
+        case '4': case '5': case '6':
+        case '7': case '8': case '9':
+          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
+          while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
+          has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
+          has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
+          state += 1;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+          format_str -= 1; // Reprocess non-numeric character
+          break;
+
+        // Precision
+        case '.':
+          if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
+          state = PRINTF_STATE_PRECISION;
+          break;
+
+        case '*':
+          if (param == 0) fatal_error("printf: not enough parameters");
+          if (state == PRINTF_STATE_FLAGS) {
+            width_text = comp_rvalue(param);
+            has_width = true;
+          } else if (state == PRINTF_STATE_PRECISION) {
+            precision_text = comp_rvalue(param);
+            has_precision = true;
+          } else {
+            fatal_error("printf: width or precision already specified");
+          }
+          param = 0;
+          break;
+
+        case '%':
+          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
+          mod = false;
+          break;
+
+        // The following options are the same between the shell's printf and C's printf
+        case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X': case 'c':
+          if (*format_str == 'l') {
+            while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
+            if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
+              dump_string("format_str = ", specifier_start);
+              fatal_error("printf: unsupported format specifier");
+            }
+          }
+
+          if (param == 0) fatal_error("printf: not enough parameters");
+          params_text = concatenate_strings_with(params_text, width_text, wrap_str_lit(", "));     // Add width param if needed
+          params_text = concatenate_strings_with(params_text, precision_text, wrap_str_lit(", ")); // Add precision param if needed
+          params_text = concatenate_strings_with(params_text, comp_rvalue(param), wrap_str_lit(", ")); // Add the parameter
+          param = 0; // Consume param
+          mod = false;
+          break;
+
+        // We can't a string to printf directly, it needs to be unpacked first.
+        case 's':
+          if (param == 0) fatal_error("printf: not enough parameters");
+          runtime_use_put_pstr = true;
+          // If the format specifier has width or precision, we have to pack the string and call then printf.
+          // Otherwise, we can call _put_pstr directly and avoid the subshell.
+          if (has_width || has_precision) {
+            fatal_error("printf: width and precision for strings not supported");
+          } else {
+            // Generate printf call with what we have so far
+            append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+            // New format string starts after the %
+            format_start = format_str + 1;
+            // Compile printf("...%s...", str) to _put_pstr str
+            append_glo_decl(string_concat3(wrap_str_lit("_put_pstr("), comp_rvalue(param), wrap_char(')')));
+          }
+          param = 0; // Consume param
+          mod = false;
+          break;
+
+        default:
+          dump_string("format_str = ", specifier_start);
+          fatal_error("printf: unsupported format specifier");
+      }
+    } else if (*format_str == '%') {
+      mod = true;
+      specifier_start = format_str;
+      // Reset the state machine
+      width_text = precision_text = has_width = has_precision = 0;
+      state = PRINTF_STATE_FLAGS;
+    }
+
+    // Keep accumulating the format string
+    format_str += 1;
+  }
+
+  // Dump the remaining format string
+  append_glo_decl(printf_call(format_start, format_str, params_text, false));
+}
+#endif
+
+text comp_fun_call(ast name, ast params) {
+  if (get_op(name) != IDENTIFIER) {
+    dump_node(name);
+    fatal_error("comp_rvalue_go: function name must be an identifier");
+  }
+  int name_id = get_val_(IDENTIFIER, name);
+  text code_params = 0;
+  ast param;
+
+#ifdef AWK_INLINE_PRINTF
+  if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
+      && (param = list_singleton(params)) != 0
+      && get_op(param) == STRING)) { // puts("..."), putstr("..."), printf("...")
+    return printf_call(symbol_buf(get_val_(STRING, param)), 0, 0, true);
+  } else if (name_id == PRINTF_ID && params != 0 && get_op(car(params)) == STRING) { // printf("...", ...)
+    handle_printf_call(symbol_buf(get_val_(STRING, car(params))), tail(params));
+    return 0;
+  }
+#ifdef AWK_INLINE_PUTCHAR
+  else if (name_id == PUTCHAR_ID && (param = list_singleton(params)) != 0) { // putchar with 1 param
+    return comp_putchar_inline(param);
+  }
+#endif
+#ifdef AWK_INLINE_EXIT
+  else if (name_id == EXIT_ID && (param = list_singleton(params)) != 0) { // exit with 1 param
+    return string_concat3(wrap_str_lit("exit("), comp_rvalue(param), wrap_str_lit(")"));
+  }
+#endif
+#endif
+
+       if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
+  else if (name_id == FREE_ID)    { runtime_use_free = true; }
+  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
+  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
+  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
+  else if (name_id == READ_ID)    { runtime_use_read = true; }
+  else if (name_id == WRITE_ID)   { runtime_use_write = true; }
+  else if (name_id == OPEN_ID)    { runtime_use_open = true; }
+  else if (name_id == CLOSE_ID)   { runtime_use_close = true; }
+#ifndef AWK_INLINE_PUTCHAR
+  else if (name_id == PUTCHAR_ID) { runtime_use_putchar = true; }
+#endif
+#ifndef AWK_INLINE_EXIT
+  else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
+#endif
+#ifndef MINIMAL_RUNTIME
+  else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+#endif
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+  else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
+#endif
+
+  while (params != 0) {
+    code_params = concatenate_strings_with(code_params, comp_rvalue(car(params)), wrap_str_lit(", "));
+    params = tail(params);
+  }
+
+  return string_concat4( function_name(get_val_(IDENTIFIER, name))
+                       , wrap_char('(')
+                       , code_params
+                       , wrap_char(')'));
 }
 
 bool comp_body(ast node, STMT_CTX stmt_ctx) {
@@ -430,7 +731,7 @@ text make_switch_pattern(ast statement, text scrutinee_text) {
       default:
         if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
         last_stmt = statement;
-        return string_concat(str, wrap_char(')'));
+        return str;
     }
   }
 }
@@ -496,7 +797,6 @@ bool comp_switch(ast node) {
     }
 
     nest_level -= 1;
-    append_glo_decl(wrap_str_lit(";;"));
   }
 
   nest_level -= 1;
@@ -517,9 +817,9 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
   stmt_ctx = stmt_ctx & ~STMT_CTX_ELSE_IF; // Clear STMT_CTX_ELSE_IF bit to not pass it to the next if statement
 
   append_glo_decl(string_concat3(
-          wrap_str_lit(else_if ? "else if (" : "if ("),
+          wrap_str_lit(else_if ? "} else if (" : "if ("),
           comp_rvalue(get_child_(IF_KW, node, 0)),
-          wrap_str_lit(")")
+          wrap_str_lit(") {")
         ));
 
   nest_level += 1;
@@ -532,7 +832,7 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
     if (get_op(get_child_(IF_KW, node, 2)) == IF_KW) {
       termination_rhs = comp_if(get_child_(IF_KW, node, 2), stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
     } else {
-      append_glo_decl(wrap_str_lit("else"));
+      append_glo_decl(wrap_str_lit("} else {"));
       nest_level += 1;
       start_glo_decl_idx = glo_decl_ix;
       termination_rhs = comp_statement(get_child_(IF_KW, node, 2), stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
@@ -540,7 +840,7 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
       nest_level -= 1;
     }
   }
-  if (!else_if) append_glo_decl(wrap_str_lit("fi"));
+  if (!else_if) append_glo_decl(wrap_str_lit("}"));
 
   if (stmt_ctx & STMT_CTX_SWITCH && termination_lhs ^ termination_rhs) {
     fatal_error("Early break out of a switch case is unsupported");
@@ -647,6 +947,7 @@ void comp_var_decls(ast node) {
 bool comp_statement(ast node, STMT_CTX stmt_ctx) {
   int op;
   text str;
+  int start_cgc_locals = cgc_locals;
 
   if (node == 0) return false; // Empty statement never returns
 
@@ -663,6 +964,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     comp_statement(get_child_(WHILE_KW, node, 1), stmt_ctx);
     nest_level -= 1;
     append_glo_decl(wrap_str_lit("}"));
+    cgc_locals = start_cgc_locals;
     return false;
 #ifdef SUPPORT_DO_WHILE
   } else if (op == DO_KW) {
@@ -674,6 +976,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     append_glo_decl(string_concat3(wrap_str_lit("} while ("),
                                    comp_rvalue(get_child_(DO_KW, node, 1)),
                                    wrap_str_lit(");")));
+    cgc_locals = start_cgc_locals;
     return false;
 #endif
   } else if (op == FOR_KW) {
@@ -690,6 +993,7 @@ bool comp_statement(ast node, STMT_CTX stmt_ctx) {
     comp_statement(get_child_(FOR_KW, node, 3), stmt_ctx);
     nest_level -= 1;
     append_glo_decl(wrap_str_lit("}"));
+    cgc_locals = start_cgc_locals;
     return false;
   } else if (op == SWITCH_KW) {
     return comp_switch(node);
@@ -811,12 +1115,16 @@ void comp_glo_var_decl(ast node) {
 
     if (arr_len == 0) {
       fatal_error("Array declaration without size or initializer list");
+    } else if (init != 0) {
+      fatal_error("Array declaration with initializer list not supported");
     }
+
+    runtime_use_malloc = true;
 
     append_glo_decl(
       string_concat4(
         global_var(get_val_(IDENTIFIER, name)),
-        wrap_str_lit(" = malloc("),
+        wrap_str_lit(" = _malloc("),
         wrap_int(arr_len),
         wrap_str_lit(")")
       ));
@@ -1041,13 +1349,22 @@ void codegen_glo_decl(ast decl) {
 
 void codegen_end() {
   // Output main runtime
-  putstr("function malloc(size) {\n");
-  putstr("  return (__ALLOC += size) - size;\n");
-  putstr("}\n");
-  putstr("\n");
+  produce_runtime();
+
   putstr("BEGIN {\n");
   putstr("  __ALLOC=1 # Allocation pointer\n");
-  putstr("  _main()\n");
+  putstr("  __next_fd=3\n");
+  putstr("  __rt_file[0]=\"/dev/stdin\"; __rt_file[1]=\"/dev/stdout\"; __rt_file[2]=\"/dev/stderr\"\n");
+  putstr("  for (i = 0; i < 256; i++) ord[sprintf(\"%c\", i)] = i\n");
+  if (init_block_id > 0) {
+    putstr("  setup_"); putint(init_block_id); putstr("()\n");
+  }
+  if (runtime_use_make_argv) {
+    putstr("  __argc = ARGC; __argv = make_argv(); ARGC = 1\n");
+    putstr("  _main(__argc, __argv)\n");
+  } else {
+    putstr("  _main()\n");
+  }
   putstr("  exit 0\n");
   putstr("}\n");
 }

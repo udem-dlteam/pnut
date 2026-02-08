@@ -1563,11 +1563,11 @@ text comp_fun_call_code(ast node, ast assign_to) {
 #ifndef SH_INLINE_EXIT
   else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
 #endif
-#ifndef SH_MINIMAL_RUNTIME
+#ifndef MINIMAL_RUNTIME
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
   else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
 #endif
-#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
 #endif
 

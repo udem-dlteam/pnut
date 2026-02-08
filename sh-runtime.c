@@ -572,7 +572,7 @@ void runtime_putchar() {
 }
 #endif // SH_INLINE_PUTCHAR
 
-#ifndef SH_MINIMAL_RUNTIME
+#ifndef MINIMAL_RUNTIME
 
 bool runtime_use_getchar = DEFAULT_USE;
 bool runtime_getchar_defined = false;
@@ -628,7 +628,7 @@ void runtime_getchar() {
   putstr("\n");
 }
 
-#endif // SH_MINIMAL_RUNTIME
+#endif // MINIMAL_RUNTIME
 
 // An implementation of puts, used to replace printf("%s", ...) calls.
 bool runtime_use_put_pstr = DEFAULT_USE;
@@ -646,7 +646,7 @@ void runtime_put_pstr() {
   putstr("\n");
 }
 
-#ifndef SH_MINIMAL_RUNTIME
+#ifndef MINIMAL_RUNTIME
 
 // POSIX shell printf documentation: https://web.archive.org/web/20240829022722/https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
 // C printf documentation: ISO/IEC 9899:1999 - 7.19.6 Formatted input/output functions (page 273)
@@ -783,9 +783,9 @@ void runtime_unpack_string() {
   putstr("\n");
 }
 
-#endif // !SH_MINIMAL_RUNTIME
+#endif // !MINIMAL_RUNTIME
 
-#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
 
 bool runtime_use_isatty = DEFAULT_USE;
 bool runtime_isatty_defined = false;
@@ -796,7 +796,7 @@ void runtime_isatty() {
   putstr("}\n\n");
 }
 
-#endif // !SH_MINIMAL_RUNTIME || SUPPORT_STDIN_INPUT
+#endif // !MINIMAL_RUNTIME || SUPPORT_STDIN_INPUT
 
 bool runtime_use_open = DEFAULT_USE;
 bool runtime_open_defined = false;
@@ -1042,12 +1042,12 @@ void produce_runtime() {
   if (runtime_use_exit)                 runtime_exit();
 #endif
 
-#ifndef SH_MINIMAL_RUNTIME
+#ifndef MINIMAL_RUNTIME
   if (runtime_use_getchar)              runtime_getchar();
   if (runtime_use_printf)               runtime_printf();
   if (runtime_use_unpack_string)        runtime_unpack_string();
 #endif
-#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   if (runtime_use_isatty)               runtime_isatty();
 #endif
 }
