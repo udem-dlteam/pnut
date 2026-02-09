@@ -73,11 +73,11 @@ void add_var_to_local_env(ast decl, enum BINDING kind) {
 }
 
 text global_var(int ident_symbol) {
-  return string_concat3(wrap_char('_'), wrap_char('_'), wrap_str_pool(ident_symbol));
+  return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
 }
 
 text local_var(int ident_symbol) {
-  return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
+  return wrap_str_pool(ident_symbol);
 }
 
 text env_var(ast ident) {
@@ -480,12 +480,12 @@ text printf_call(char *format_str, char *format_str_end, text params_text, bool 
   if (format_str == format_str_end) {
     return 0;
   } else {
-    return string_concat3(wrap_str_lit("printf(\""),
+    return string_concat3(wrap_str_lit("printf("),
                           concatenate_strings_with(
-                            escape_text(wrap_str_imm(format_str, format_str_end), escape),
+                            string_concat3(wrap_char('"'), escape_text(wrap_str_imm(format_str, format_str_end), escape), wrap_char('"')),
                             params_text,
                             wrap_str_lit(", ")),
-                          wrap_str_lit("\")"));
+                          wrap_str_lit(")"));
   }
 }
 
@@ -755,7 +755,8 @@ bool comp_switch(ast node) {
       break;
     default:
       // Otherwise, evaluate the scrutinee into a temporary variable
-      scrutinee_text = string_concat(wrap_str_lit("__scrutinee="), scrutinee_text);
+      append_glo_decl(string_concat(wrap_str_lit("__scrutinee = "), scrutinee_text));
+      scrutinee_text = wrap_str_lit("__scrutinee");
   }
 
   cgc_add_enclosing_switch(false);
@@ -1348,10 +1349,15 @@ void codegen_glo_decl(ast decl) {
 }
 
 void codegen_end() {
+#ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
+  print_glo_decls();
+#endif
+
   // Output main runtime
   produce_runtime();
 
   putstr("BEGIN {\n");
+  putstr("  LC_ALL=C\n");
   putstr("  __ALLOC=1 # Allocation pointer\n");
   putstr("  __next_fd=3\n");
   putstr("  __rt_file[0]=\"/dev/stdin\"; __rt_file[1]=\"/dev/stdout\"; __rt_file[2]=\"/dev/stderr\"\n");

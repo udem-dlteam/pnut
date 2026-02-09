@@ -20,6 +20,7 @@ endif
 
 # Bootstrap targets with integrated options
 BOOTSTRAP_SHELL ?= /bin/sh
+BOOTSTRAP_AWK ?= awk
 
 # Targets for pnut-exe: auto, Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64
 TARGET ?= auto
@@ -139,9 +140,6 @@ build:
 pnut-sh: build pnut.c sh.c sh-runtime.c
 	$(CC) $(CFLAGS) $(BUILD_OPT_SH) pnut.c -o $(BUILD_DIR)/pnut-sh
 
-pnut-awk: build pnut.c awk.c
-	$(CC) $(CFLAGS) $(BUILD_OPT_AWK) pnut.c -o $(BUILD_DIR)/pnut-awk
-
 pnut-sh.sh: pnut-sh
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh.sh
 	@chmod +x $(BUILD_DIR)/pnut-sh.sh
@@ -150,6 +148,13 @@ pnut-sh-bootstrapped.sh: pnut-sh.sh
 	$(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	@chmod +x $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
+
+pnut-awk: build pnut.c awk.c
+	$(CC) $(CFLAGS) $(BUILD_OPT_AWK) pnut.c -o $(BUILD_DIR)/pnut-awk
+
+pnut-awk.awk: pnut-awk
+	./$(BUILD_DIR)/pnut-awk $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk.awk
+	@chmod +x $(BUILD_DIR)/pnut-awk.awk
 
 pnut-exe: build pnut.c x86.c exe.c elf.c mach-o.c
 	$(CC) $(CFLAGS) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
@@ -239,6 +244,16 @@ bootstrap-pnut-sh: pnut-sh.sh
 	@echo "Bootstrapping pnut-sh.sh from pnut-sh.sh..."
 	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# Bootstrap pnut-sh with pnut-sh.sh (obtained using $(CC)).
+bootstrap-pnut-awk: pnut-awk.awk
+	@echo "Bootstrapping pnut-awk.awk from pnut-awk.awk..."
+	$(TIMEC) $(BOOTSTRAP_AWK) -f $(BUILD_DIR)/pnut-awk.awk -- $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk-bootstrapped.awk
+	@if ! diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-bootstrapped.awk >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
 	fi
