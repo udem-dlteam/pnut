@@ -116,6 +116,10 @@ gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dtarget_sh -DPNUT_BOOTSTRAP
 measure_size "pnut-sh" "-Dtarget_sh"
 measure_size "pnut-minimal-sh" "-Dtarget_sh -DPNUT_BOOTSTRAP"
 
+# Measuring for pnut-awk
+measure_size "pnut-awk" "-Dtarget_awk"
+measure_size "pnut-minimal-awk" "-Dtarget_awk -DPNUT_BOOTSTRAP"
+
 # ...and for the other targets
 measure_size "pnut-i386_linux" "-Dtarget_i386_linux"
 measure_size "pnut-minimal-i386_linux" "-Dtarget_i386_linux -DPNUT_BOOTSTRAP"

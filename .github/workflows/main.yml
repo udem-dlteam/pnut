@@ -31,6 +31,7 @@ jobs:
           # Testing with gcc clang in case they have different warnings
           for comp in gcc clang-14; do
             make pnut-sh CC=$comp
+            make pnut-awk CC=$comp
             make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=0
             make pnut-exe CC=$comp TARGET=Linux.i386 EXE_ONE_PASS=1
             make pnut-exe CC=$comp TARGET=Linux.i386 SAFE=1 NICE_UX=1
@@ -69,6 +70,42 @@ jobs:
           check_dir "*.c" . 1         # Check pnut source files
           check_dir "*.c" tests       # and the tests directory recursively
           check_dir "*.c" examples 1  # and examples
+
+  compile-in-safe-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y coreutils time
+
+      - name: Compile pnut-sh, pnut-exe and tests in safe mode
+        run: |
+          set -e
+          export SAFE=1
+
+          make pnut-sh.sh
+          make pnut-sh.sh MINIMAL=1
+
+          make pnut-awk.awk
+          make pnut-awk.awk MINIMAL=1
+
+          for target in Linux.x86_64 Linux.i386; do
+            for minimal in 0 1; do
+              for one_pass in 0 1; do
+                make pnut-exe TARGET=$target MINIMAL=$minimal EXE_ONE_PASS=$one_pass
+              done
+            done
+          done
+
+          ./run-tests.sh sh --safe --compile-only
+          ./run-tests.sh x86_64_linux --safe --compile-only
+          ./run-tests.sh x86_64_linux --safe --one-pass-generator --compile-only
+          ./run-tests.sh i386_linux   --safe --compile-only
+          ./run-tests.sh i386_linux   --safe --one-pass-generator --compile-only
 
   tests-exe: # Run tests for pnut-exe on all supported platforms and architectures
     strategy:
@@ -183,7 +220,34 @@ jobs:
           make bootstrap-pnut-sh MINIMAL=1
           make bootstrap-pnut-sh MINIMAL=0
 
-  bootstrap-pnut-exe:
+  bootstrap-pnut-awk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install AWK and dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y coreutils time gawk mawk
+
+      - name: Bootstrap pnut-awk with AWK
+        run: |
+          set -e
+          for awk_impl in gawk mawk; do
+            export BOOTSTRAP_AWK="$awk_impl --posix"
+            # For mawk, only test with MINIMAL=0 because it fails to parse the
+            # larger file (hitting some internal limit of mawk?).
+            if [ $awk_impl = "mawk" ]; then
+              make bootstrap-pnut-awk MINIMAL=1
+            else
+              make bootstrap-pnut-awk MINIMAL=1
+              make bootstrap-pnut-awk MINIMAL=0
+            fi
+          done
+
+  bootstrap-pnut-exe-on-shell:
     strategy:
       matrix:
         shell: ["bash", "dash", "ksh", "mksh", "yash", "zsh", "osh"]
@@ -239,9 +303,9 @@ jobs:
               # One pass generator is not supported on macOS
               return
             fi
-            make bootstrap-pnut-exe-no-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
-            make bootstrap-pnut-exe-script EXE_ONE_PASS=$one_pass MINIMAL=$minimal
             make bootstrap-pnut-exe EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe-from-pnut-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe-from-shell EXE_ONE_PASS=$one_pass MINIMAL=$minimal
           }
 
           # For fast shells (ksh, dash, bash), test both the one-pass and minimal options
@@ -267,7 +331,65 @@ jobs:
               ;;
           esac
 
-  bootstrap-pnut-sh-with-pnut-exe:
+  bootstrap-pnut-exe-on-awk:
+    strategy:
+      matrix:
+        target: ["Linux.i386", "Linux.x86_64", "Darwin.x86_64"]
+        include:
+          - target: Linux.i386
+            host: ubuntu-latest
+          - target: Linux.x86_64
+            host: ubuntu-latest
+          - target: Darwin.x86_64
+            host: macos-latest
+    runs-on: ${{ matrix.host }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install AWK and dependencies
+        run: |
+          set -e
+          if [ ${{ matrix.host }} = "macos-latest" ]; then
+            brew install coreutils gawk mawk
+          else
+            sudo apt-get update
+            sudo apt-get install -y coreutils time build-essential gawk mawk
+          fi
+
+      - name: Bootstrap pnut-exe with ${{ matrix.target }} backend on AWK
+        run: |
+          set -e
+          export BOOTSTRAP_AWK=awk
+          export TARGET=${{ matrix.target }}
+
+          do_bootstrap() {
+            one_pass=$1
+            minimal=$2
+            if [ ${{ matrix.host }} = "macos-latest" ] && [ $one_pass -eq 1 ]; then
+              # One pass generator is not supported on macOS
+              return
+            fi
+            make bootstrap-pnut-exe EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe-from-pnut-awk EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+            make bootstrap-pnut-exe-from-awk EXE_ONE_PASS=$one_pass MINIMAL=$minimal
+          }
+
+          for awk_impl in gawk mawk; do
+            export BOOTSTRAP_AWK="$awk_impl --posix"
+            for minimal in 0 1; do
+              if [ $awk_impl = "mawk" ] && [ $minimal -eq 0 ]; then
+                # For mawk, only test with MINIMAL=0 because it fails to parse
+                # the larger file (hitting some internal limit of mawk?).
+                continue
+              fi
+              for one_pass in 0 1; do
+                do_bootstrap $one_pass $minimal
+              done
+            done
+          done
+
+  bootstrap-pnut-sh-awk-with-pnut-exe:
     strategy:
       matrix:
         target: ["Linux.i386", "Linux.x86_64", "Darwin.x86_64"]
@@ -299,38 +421,8 @@ jobs:
           make bootstrap-pnut-sh-with-pnut-exe MINIMAL=0
           make bootstrap-pnut-sh-with-pnut-exe MINIMAL=1
 
-  compile-in-safe-mode:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y coreutils time
-
-      - name: Compile pnut-sh, pnut-exe and tests in safe mode
-        run: |
-          set -e
-          export SAFE=1
-
-          make pnut-sh.sh
-          make pnut-sh.sh MINIMAL=1
-
-          for target in Linux.x86_64 Linux.i386; do
-            for minimal in 0 1; do
-              for one_pass in 0 1; do
-                make pnut-exe TARGET=$target MINIMAL=$minimal EXE_ONE_PASS=$one_pass
-              done
-            done
-          done
-
-          ./run-tests.sh sh --safe --compile-only
-          ./run-tests.sh x86_64_linux --safe --compile-only
-          ./run-tests.sh x86_64_linux --safe --one-pass-generator --compile-only
-          ./run-tests.sh i386_linux   --safe --compile-only
-          ./run-tests.sh i386_linux   --safe --one-pass-generator --compile-only
+          make bootstrap-pnut-awk-with-pnut-exe MINIMAL=0
+          make bootstrap-pnut-awk-with-pnut-exe MINIMAL=1
 
   bootstrap-bash-2_05a:
     runs-on: ubuntu-latest
@@ -383,19 +475,21 @@ jobs:
             # Keeping the fast option on bash 2.05a because its very slow otherwise
             PNUT_OPTIONS='$COMPATIBILITY_OPTIONS' ./run-tests.sh sh --shell bash --fast
 
+            # Bootstrap pnut-exe with pnut-exe with bash 2.05a (fastest step)
+            make bootstrap-pnut-exe MINIMAL=1
+            make bootstrap-pnut-exe MINIMAL=0
+
             # Bootstrap pnut-sh.sh with bash 2.05a
             make bootstrap-pnut-sh MINIMAL=1
             make bootstrap-pnut-sh
 
             # Bootstrap pnut-exe.sh with bash 2.05a
-            make bootstrap-pnut-exe-script MINIMAL=1
-            make bootstrap-pnut-exe-script
+            make bootstrap-pnut-exe-from-pnut-shell MINIMAL=1
+            make bootstrap-pnut-exe-from-pnut-shell MINIMAL=0
 
             # Bootstrap pnut-exe with bash 2.05a
-            make bootstrap-pnut-exe MINIMAL=1
-            make bootstrap-pnut-exe MINIMAL=0
-            make bootstrap-pnut-exe-no-shell MINIMAL=1
-            make bootstrap-pnut-exe-no-shell MINIMAL=0
+            make bootstrap-pnut-exe-from-shell MINIMAL=1
+            make bootstrap-pnut-exe-from-shell MINIMAL=0
           EOF
 
   pnut-variants-run:
@@ -494,13 +588,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build-without-warnings
            , catch-bad-whitespace
+           , compile-in-safe-mode
            , tests-exe
            , tests-shell
            , bootstrap-pnut-sh
-           , bootstrap-pnut-exe
-           , bootstrap-pnut-sh-with-pnut-exe
+           , bootstrap-pnut-awk
+           , bootstrap-pnut-exe-on-shell
+           , bootstrap-pnut-exe-on-awk
+           , bootstrap-pnut-sh-awk-with-pnut-exe
            , bootstrap-bash-2_05a
            , pnut-variants-run
+           , compile-with-M2-Planet
            ]
 
     steps:
