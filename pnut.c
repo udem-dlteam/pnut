@@ -72,6 +72,9 @@
     #define ALLOW_RECURSIVE_MACROS
     #define SH_MINIMAL_RUNTIME
     #define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
+    // Remove support for complex printf specifiers (flags, width, precision).
+    // This results in smaller code for the compiler.
+    #define SH_MINIMAL_PRINTF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES

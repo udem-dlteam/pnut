@@ -80,6 +80,8 @@ SH_ANNOTATE    	?= 0
 SH_COMPACT_RT  	?= 0
 # Shell scripts count memory usage (for development/debugging)
 SH_PROFILE_MEM 	?= 0
+# Minimal printf support in pnut-sh
+SH_MIN_PRINTF   ?= 0
 
 ########################## pnut-exe specific options ###########################
 # Use one-pass code generator (default enabled)
@@ -118,6 +120,9 @@ ifeq ($(SH_COMPACT_RT),1)
 endif
 ifeq ($(SH_PROFILE_MEM),1)
 	BOOTSTRAP_FLAGS += -DSH_PROFILE_MEMORY
+endif
+ifeq ($(SH_MIN_PRINTF),1)
+	BOOTSTRAP_FLAGS += -DSH_MINIMAL_PRINTF
 endif
 
 ifeq ($(EXE_ONE_PASS),1)
