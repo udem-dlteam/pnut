@@ -215,7 +215,7 @@ void runtime_open() {
   putstr("  __rt_file[fd] = path\n");
   putstr("  if (flags == 1) { # O_WRONLY\n");
   putstr("    __rt_mode[fd] = \"w\"\n");
-  putstr("    printf \"\" > path # Truncate\n");
+  putstr("    printf(\"\") > path # Truncate\n");
   putstr("  } else if (flags == 2) { # O_RDWR (not really supported, using append)\n");
   putstr("    __rt_mode[fd] = \"a\"\n");
   putstr("  } else {\n");
@@ -243,13 +243,15 @@ bool runtime_use_write = DEFAULT_USE;
 bool runtime_write_defined = false;
 void runtime_write() {
   if (runtime_write_defined++) return;
-  putstr("function _write(fd, buf_ptr, count,    path, s, i) {\n");
+  putstr("function _write(fd, buf_ptr, count,    path, i) {\n");
   putstr("  path = __rt_file[fd]\n");
-  putstr("  s = \"\"\n");
-  putstr("  for (i = 0; i < count; i++) s = s sprintf(\"%c\", _[buf_ptr + i])\n");
-  putstr("  if (fd == 1) printf \"%s\", s\n");
-  putstr("  else if (fd == 2) printf \"%s\", s > \"/dev/stderr\"\n");
-  putstr("  else printf \"%s\", s >> path\n");
+  putstr("  if (fd == 1) {\n");
+  putstr("    for (i = 0; i < count; i++) printf(\"%c\", _[buf_ptr + i])\n");
+  putstr("  } else if (fd == 2) {\n");
+  putstr("    for (i = 0; i < count; i++) printf(\"%c\", _[buf_ptr + i]) > \"/dev/stderr\"\n");
+  putstr("  } else {\n");
+  putstr("    for (i = 0; i < count; i++) printf(\"%c\", _[buf_ptr + i]) > path\n");
+  putstr("  }\n");
   putstr("  return count\n");
   putstr("}\n\n");
 }

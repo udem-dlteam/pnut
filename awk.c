@@ -1355,13 +1355,17 @@ void codegen_end() {
 
   // Output main runtime
   produce_runtime();
-
   putstr("BEGIN {\n");
-  putstr("  LC_ALL=C\n");
+  putstr("  if (ENVIRON[\"LC_ALL\"] != \"C\") {\n");
+  putstr("    printf(\"Script must be executed with LC_ALL=C\\n\")\n");
+  putstr("    exit 1\n");
+  putstr("  }\n");
   putstr("  __ALLOC=1 # Allocation pointer\n");
-  putstr("  __next_fd=3\n");
-  putstr("  __rt_file[0]=\"/dev/stdin\"; __rt_file[1]=\"/dev/stdout\"; __rt_file[2]=\"/dev/stderr\"\n");
-  putstr("  for (i = 0; i < 256; i++) ord[sprintf(\"%c\", i)] = i\n");
+  if (runtime_use_open || runtime_use_close || runtime_use_write || runtime_use_fgetc || runtime_use_read || runtime_use_fopen || runtime_use_fclose) {
+    putstr("  __next_fd=3 # Next available file descriptor\n");
+    putstr("  __rt_file[0]=\"/dev/stdin\"; __rt_file[1]=\"/dev/stdout\"; __rt_file[2]=\"/dev/stderr\"\n");
+  }
+  putstr("  for (i = 0; i < 256; i++) ord[sprintf(\"%c\", i)] = i # Initialize characters table\n");
   if (init_block_id > 0) {
     putstr("  setup_"); putint(init_block_id); putstr("()\n");
   }
