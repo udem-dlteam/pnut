@@ -1726,12 +1726,14 @@ text printf_call(char *format_str, char *format_str_end, text params_text, bool 
   }
 }
 
+#ifndef SH_MINIMAL_PRINTF
 enum PRINTF_STATE {
   PRINTF_STATE_FLAGS,
   PRINTF_STATE_WIDTH,
   PRINTF_STATE_PRECISION,
   PRINTF_STATE_SPECIFIER
 };
+#endif
 
 // _printf pulls a lot of dependencies from the runtime. In most cases the
 // format string is known at compile time, and we can avoid calling printf by
@@ -1742,13 +1744,14 @@ void handle_printf_call(char *format_str, ast params) {
   char *format_start = format_str;
   char *specifier_start;
   // compiled parameters to be passed to printf
-  text params_text = 0, width_text = 0, precision_text = 0;
-
+  text params_text = 0;
   bool mod = false;
-  bool has_width = false;
-  bool has_precision = false;
 
+#ifndef SH_MINIMAL_PRINTF
+  text width_text = 0, precision_text = 0;
+  bool has_width = false, has_precision = false;
   enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
+#endif
 
   while (*format_str != '\0') {
     // Param is consumed, get the next one
@@ -1759,6 +1762,7 @@ void handle_printf_call(char *format_str, ast params) {
 
     if (mod) {
       switch (*format_str) {
+#ifndef SH_MINIMAL_PRINTF
         case ' ': case '#': case '+': case '-': case '0': // Flags
           // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
           // 16 bits meaning we can easily convert char -> bit if we wanted to.
@@ -1796,9 +1800,12 @@ void handle_printf_call(char *format_str, ast params) {
           }
           param = 0;
           break;
+#endif
 
         case '%':
+#ifndef SH_MINIMAL_PRINTF
           if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
+#endif
           mod = false;
           break;
 
@@ -1813,8 +1820,10 @@ void handle_printf_call(char *format_str, ast params) {
           }
 
           if (param == 0) fatal_error("printf: not enough parameters");
+#ifndef SH_MINIMAL_PRINTF
           params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
           params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+#endif
           params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
           param = 0; // Consume param
           mod = false;
@@ -1827,7 +1836,9 @@ void handle_printf_call(char *format_str, ast params) {
         case 'c':
           if (param == 0) fatal_error("printf: not enough parameters");
           // TODO: Find way to support width that's not too verbose
+#ifndef SH_MINIMAL_PRINTF
           if (has_width) fatal_error("printf: width not supported for %c");
+#endif
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
           // New format string starts after the %
@@ -1845,11 +1856,14 @@ void handle_printf_call(char *format_str, ast params) {
           runtime_use_put_pstr = true;
           // If the format specifier has width or precision, we have to pack the string and call then printf.
           // Otherwise, we can call _put_pstr directly and avoid the subshell.
+#ifndef SH_MINIMAL_PRINTF
           if (has_width || has_precision) {
             params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
             params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
             params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("\"$(_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE), wrap_str_lit(")\"")), wrap_char(' ')); // Add the parameter
-          } else {
+          } else
+#endif
+          {
             // Generate printf call with what we have so far
             append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
             // New format string starts after the %
@@ -1869,8 +1883,10 @@ void handle_printf_call(char *format_str, ast params) {
       mod = true;
       specifier_start = format_str;
       // Reset the state machine
+#ifndef SH_MINIMAL_PRINTF
       width_text = precision_text = has_width = has_precision = 0;
       state = PRINTF_STATE_FLAGS;
+#endif
     }
 
     // Keep accumulating the format string
