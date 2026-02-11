@@ -7,7 +7,7 @@ void compile(bool annotate, char* file) {
   int i;
   ast decl;
 
-#ifdef SH_INCLUDE_C_CODE
+#ifdef ANNOTATE_WITH_C_CODE
   code_annotations_quiet_mode = !annotate;
 #endif
 
@@ -24,7 +24,7 @@ void compile(bool annotate, char* file) {
 
   while (tok != EOF) {
     decl = parse_declaration(false);
-#ifdef SH_INCLUDE_C_CODE
+#ifdef ANNOTATE_WITH_C_CODE
     if (!code_annotations_quiet_mode) {
       output_declaration_c_code();
     }

@@ -61,7 +61,7 @@ endif
 # Bootstrap script options that can be passed via make variables
 # Examples:
 #		make pnut-sh.sh  MINIMAL=1 							 # Build minimal pnut-sh.sh
-#		make pnut-sh.sh  MINIMAL=1 SH_ANNOTATE=1 # Build minimal annotated pnut-sh.sh
+#		make pnut-sh.sh  MINIMAL=1 ANNOTATE_C_CODE=1 # Build minimal annotated pnut-sh.sh
 #		make pnut-exe TARGET=Linux.x86_64 EXE_ONE_PASS=1 # Build exe for Linux x86_64 with one-pass generator
 
 # Include only features used to bootstrap pnut
@@ -81,7 +81,7 @@ STATS 					?= 0
 # Generate faster shell code that's less readable
 SH_FAST 			 	?= 0
 # Annotate generated shell code with comments
-SH_ANNOTATE    	?= 0
+ANNOTATE_C_CODE ?= 0
 # Use compact runtime library in shell scripts
 SH_COMPACT_RT  	?= 0
 # Shell scripts count memory usage (for development/debugging)
@@ -118,8 +118,8 @@ endif
 ifeq ($(SH_FAST),1)
   BOOTSTRAP_FLAGS += -DSH_SAVE_VARS_WITH_SET
 endif
-ifeq ($(SH_ANNOTATE),1)
-	BOOTSTRAP_FLAGS += -DSH_INCLUDE_C_CODE
+ifeq ($(ANNOTATE_C_CODE),1)
+	BOOTSTRAP_FLAGS += -DANNOTATE_WITH_C_CODE
 endif
 ifeq ($(SH_COMPACT_RT),1)
 	BOOTSTRAP_FLAGS += -DRT_COMPACT
