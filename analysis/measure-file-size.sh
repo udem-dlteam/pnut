@@ -37,19 +37,27 @@ expand_includes() { # $1 = output-name, $2 = options
   if echo "$2" | grep -q "\-DPNUT_BOOTSTRAP"; then
     ./$TEMP_DIR/pnut-sh-bootstrap pnut.c $2 > "$TEMP_DIR/$1.sh"
     ./$TEMP_DIR/pnut-sh-bootstrap "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"
+    ./$TEMP_DIR/pnut-awk-bootstrap pnut.c $2 > "$TEMP_DIR/$1.awk"
+    ./$TEMP_DIR/pnut-awk-bootstrap "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.awk"
   else
     ./$TEMP_DIR/pnut-sh pnut.c $2 > "$TEMP_DIR/$1.sh"
     ./$TEMP_DIR/pnut-sh "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.sh"
+    ./$TEMP_DIR/pnut-awk pnut.c $2 > "$TEMP_DIR/$1.awk"
+    ./$TEMP_DIR/pnut-awk "$TEMP_DIR/$1.c" $2 > "$TEMP_DIR/$1-preincluded.awk"
   fi
 
   # Because we use the __FILE__ macro in pnut, the preincluded.sh file will have
   # a different path than the original file. We need to replace the path in the
   # preincluded file with the path of the original file.
   # Note: | is used as the delimiter because the path contains /
-  cat "$TEMP_DIR/$1-preincluded.sh" | sed "s|$TEMP_DIR/$1.c|pnut.c|" > "$TEMP_DIR/$1-preincluded-canonical.sh"
+  cat "$TEMP_DIR/$1-preincluded.sh"  | sed "s|$TEMP_DIR/$1.c|pnut.c|" > "$TEMP_DIR/$1-preincluded-canonical.sh"
+  cat "$TEMP_DIR/$1-preincluded.awk" | sed "s|$TEMP_DIR/$1.c|pnut.c|" > "$TEMP_DIR/$1-preincluded-canonical.awk"
 
   diff -q "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1-preincluded-canonical.sh" || \
     { echo "Error: $1.sh and $1-preincluded-canonical.sh differ"; exit 1; }
+
+  diff -q "$TEMP_DIR/$1.awk" "$TEMP_DIR/$1-preincluded-canonical.awk" || \
+    { echo "Error: $1.awk and $1-preincluded-canonical.awk differ"; exit 1; }
 }
 
 included_files() {
@@ -98,7 +106,7 @@ measure_size() { # $1 = output-name, $2 = options
   printf "By file (without comments or blank lines):\n"
   wc $cleaned_files
   printf "Expanded includes:\n"
-  wc "$TEMP_DIR/$1.c" "$TEMP_DIR/$1.sh"
+  wc "$TEMP_DIR/$1.c" "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk"
   printf "Ratio (Original): "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l < $TEMP_DIR/$1.c)"
   printf "Ratio (Cleaned):  "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')"
 
@@ -111,10 +119,18 @@ gcc -o "$TEMP_DIR/pnut-includes" pnut.c -DDEBUG_EXPAND_INCLUDES
 gcc -o "$TEMP_DIR/pnut-sh" pnut.c -Dtarget_sh
 # Compile pnut-sh-bootstrap
 gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dtarget_sh -DPNUT_BOOTSTRAP
+# Compile pnut-awk
+gcc -o "$TEMP_DIR/pnut-awk" pnut.c -Dtarget_awk
+# Compile pnut-awk-bootstrap
+gcc -o "$TEMP_DIR/pnut-awk-bootstrap" pnut.c -Dtarget_awk -DPNUT_BOOTSTRAP
 
 # Measuring for pnut-sh
 measure_size "pnut-sh" "-Dtarget_sh"
 measure_size "pnut-minimal-sh" "-Dtarget_sh -DPNUT_BOOTSTRAP"
+
+# Measuring for pnut-awk
+measure_size "pnut-awk" "-Dtarget_awk"
+measure_size "pnut-minimal-awk" "-Dtarget_awk -DPNUT_BOOTSTRAP"
 
 # ...and for the other targets
 measure_size "pnut-i386_linux" "-Dtarget_i386_linux"

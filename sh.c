@@ -29,22 +29,8 @@ int cumul_text_alloc = 0;
 
 // codegen
 
-#define text int
-#define TEXT_POOL_SIZE 1000000
-intptr_t text_pool[TEXT_POOL_SIZE];
-int text_alloc = 1; // Start at 1 because 0 is the empty text
-
-// Text pool nodes
-enum TEXT_NODES {
-  TEXT_TREE,        // Concatenation of texts
-  TEXT_INTEGER,     // Integer to be printed in decimal
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-  TEXT_INTEGER_HEX, // Integer to be printed in hexadecimal
-  TEXT_INTEGER_OCT, // Integer to be printed in octal
-#endif
-  TEXT_STRING,      // Pointer to immutable string
-  TEXT_ESCAPED      // Escaped string, used for printf
-};
+// Rope-like text representation
+#include "text.c"
 
 // Place prototype of mutually recursive functions here
 
@@ -71,284 +57,7 @@ void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
 
-// Because concatenating strings is very expensive and a common operation, we
-// use a tree structure to represent the concatenated strings. That way, the
-// concatenation can be done in O(1).
-// At the end of the codegen process, the tree will be flattened into a single
-// string.
-
-// A few macros to help us change the representation of text objects
-#define TEXT_FROM_INT(i)  i
-#define TEXT_FROM_CHAR(i) i
-#define TEXT_FROM_PTR(p)  ((intptr_t) (p))
-#define TEXT_TO_INT(p)    ((int)      (p))
-#define TEXT_TO_CHAR(p)   ((char)     (p))
-
-#define wrap_char(c) (-c)
-
-text wrap_int(const int i) {
-  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
-  return (text_alloc += 2) - 2;
-}
-
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-
-text wrap_int_hex(const int i) {
-  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_HEX);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
-  return (text_alloc += 2) - 2;
-}
-
-text wrap_int_oct(const int i) {
-  if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_OCT);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
-  return (text_alloc += 2) - 2;
-}
-
-text wrap_integer(const int multiply, const int obj) {
-  switch (get_op(obj)) {
-    case INTEGER:
-      return wrap_int(multiply * -get_val_(INTEGER, obj));
-    case INTEGER_HEX:
-      return wrap_int_hex(multiply * -get_val_(INTEGER_HEX, obj));
-    case INTEGER_OCT:
-      return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
-    default:
-      fatal_error("wrap_integer: unknown integer type");
-      return 0;
-  }
-}
-#else
-#define wrap_integer(multiply, obj) wrap_int(multiply * -get_val_(INTEGER, obj))
-#endif
-
-text escape_text(const text t, const bool for_printf) {
-  if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_ESCAPED);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(t);
-  text_pool[text_alloc + 2] = TEXT_FROM_INT(for_printf);
-  return (text_alloc += 3) - 3;
-}
-
-text string_concat(const text t1, const text t2) {
-  if (text_alloc + 4 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(2);
-  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
-  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
-  return (text_alloc += 4) - 4;
-}
-
-text string_concat3(const text t1, const text t2, const text t3) {
-  if (text_alloc + 5 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(3);
-  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
-  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
-  text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
-  return (text_alloc += 5) - 5;
-}
-
-text string_concat4(const text t1, const text t2, const text t3, const text t4) {
-  if (text_alloc + 6 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(4);
-  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
-  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
-  text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
-  text_pool[text_alloc + 5] = TEXT_FROM_INT(t4);
-  return (text_alloc += 6) - 6;
-}
-
-text string_concat5(const text t1, const text t2, const text t3, const text t4, const text t5) {
-  if (text_alloc + 7 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_TREE);
-  text_pool[text_alloc + 1] = TEXT_FROM_INT(5);
-  text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
-  text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
-  text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
-  text_pool[text_alloc + 5] = TEXT_FROM_INT(t4);
-  text_pool[text_alloc + 6] = TEXT_FROM_INT(t5);
-  return (text_alloc += 7) - 7;
-}
-
-// Dead code but keeping it around in case we need to wrap mutable strings
-// text wrap_str(char * const s) {
-//   int i = 0;
-//   int result = text_alloc;
-//
-//   text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
-//   text_alloc += 2;
-//   while (s[i] != 0) {
-//     text_pool[text_alloc] = wrap_char(s[i]);
-//     text_alloc += 1;
-//     i += 1;
-//   }
-//
-//   text_pool[result + 1] = TEXT_FROM_INT(i);
-//
-//   return result;
-// }
-
-// Like wrap_str, but assumes that the string is immutable and doesn't need to be copied
-text wrap_str_imm(char * const s, char * const end) {
-  if (text_alloc + 3 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
-  text_pool[text_alloc] = TEXT_FROM_INT(TEXT_STRING);
-  text_pool[text_alloc + 1] = TEXT_FROM_PTR(s);
-  text_pool[text_alloc + 2] = TEXT_FROM_PTR(end); // end of string address. 0 for null-terminated strings
-  return (text_alloc += 3) - 3;
-}
-
-text wrap_str_lit(char * const s) {
-  return wrap_str_imm(s, 0);
-}
-
-text wrap_str_pool(const int ident_symbol) {
-  return wrap_str_imm(symbol_buf(ident_symbol), 0);
-}
-
-text concatenate_strings_with(const text t1, const text t2, const text sep) {
-  if (t1 == 0) return t2;
-  if (t2 == 0) return t1;
-  return string_concat3(t1, sep, t2);
-}
-
-void print_escaped_char(char c, int for_printf) {
-  // C escape sequences
-  if      (c == '\0') { putchar('\\');  putchar('0'); }
-  else if (c == '\a') { putchar('\\');  putchar('a'); }
-  else if (c == '\b') { putchar('\\');  putchar('b'); }
-  else if (c == '\f') { putchar('\\');  putchar('f'); }
-  else if (c == '\n') { putchar('\\');  putchar('n'); }
-  else if (c == '\r') { putchar('\\');  putchar('r'); }
-  else if (c == '\t') { putchar('\\');  putchar('t'); }
-  else if (c == '\v') { putchar('\\');  putchar('v'); }
-  // backslashes are escaped twice, first by the shell and then by def_str
-  else if (c == '\\') { putchar('\\');  putchar('\\'); putchar('\\'); putchar('\\'); }
-  // Shell special characters: $, `, ", ', ?, and newline
-  // Note that ' and ? are not escaped properly by dash, but that's ok because
-  // we use double quotes and ' and ? can be left as is.
-  else if (c == '$')  { putchar('\\'); putchar('$');  }
-  else if (c == '`')  { putchar('\\'); putchar('`');  }
-  else if (c == '"')  { putchar('\\'); putchar('"');  }
-  // else if (c == '\'') { putchar('\\'); putchar('\''); }
-  // else if (c == '?')  { putchar('\\'); putchar('?');  }
-  // when we're escaping a string for shell's printf, % must be escaped
-  else if (c == '%'  && for_printf) { putchar('%'); putchar('%'); }
-  else                putchar(c);
-}
-
-void print_escaped_string(char *string_start, char *string_end, int for_printf) {
-  if (string_end) {
-    while (string_start < string_end) {
-      print_escaped_char(*string_start, for_printf);
-      string_start += 1;
-    }
-  } else {
-    while (*string_start != 0) {
-      print_escaped_char(*string_start, for_printf);
-      string_start += 1;
-    }
-  }
-}
-
-void print_escaped_text(text t, bool for_printf) {
-  int i;
-
-  if (t == 0) return;
-
-  if (t < 0) { // it's a character
-    print_escaped_char(-t, for_printf);
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_TREE)) {
-    i = 0;
-    while (TEXT_FROM_INT(i) < text_pool[t + 1]) {
-      if (text_pool[t + i + 2] < 0) {
-        print_escaped_char(-TEXT_TO_CHAR(text_pool[t + i + 2]), for_printf);
-      } else {
-        print_escaped_text(TEXT_TO_INT(text_pool[t + i + 2]), for_printf);
-      }
-      i += 1;
-    }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
-    putint(TEXT_TO_INT(text_pool[t + 1]));
-  }
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-  else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
-    putchar('0'); putchar('x');
-    puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
-    putchar('0'); // Note: This is not supported by zsh by default
-    putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  }
-#endif
-  else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
-    print_escaped_string((char*) text_pool[t + 1],  (char*) text_pool[t + 2], for_printf);
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
-    fatal_error("Cannot escape a string that is already escaped");
-  } else {
-    fatal_error("print_escaped_text: unexpected string tree node");
-  }
-}
-
-void print_text(text t) {
-  int i;
-  char *s;
-
-  if (t == 0) return;
-
-  if (t < 0) { // it's a character
-    putchar(-t);
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_TREE)) {
-    i = 0;
-    while (TEXT_FROM_INT(i) < text_pool[t + 1]) {
-      if (text_pool[t + i + 2] < 0) {
-        putchar(-TEXT_TO_CHAR(text_pool[t + i + 2]));
-      } else {
-        print_text(TEXT_TO_INT(text_pool[t + i + 2]));
-      }
-      i += 1;
-    }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
-    putint(TEXT_TO_INT(text_pool[t + 1]));
-  }
-#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-  else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
-    putchar('0'); putchar('x');
-    puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
-    putchar('0'); // Note: This is not supported by zsh by default
-    putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
-  }
-#endif
-  else if (text_pool[t] == TEXT_FROM_INT(TEXT_STRING)) {
-    if (TEXT_TO_INT(text_pool[t + 2]) == 0) { // null-terminated string
-      putstr((char*) text_pool[t + 1]);
-    } else { // string ends at the address in text_pool[t + 2]
-      s = (char*) text_pool[t + 1]; // start
-      while (s < (char*) text_pool[t + 2] || *s != 0) {
-        putchar(*s);
-        s += 1;
-      }
-    }
-  } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
-    print_escaped_text(TEXT_TO_INT(text_pool[t + 1]), TEXT_TO_INT(text_pool[t + 2]));
-  } else {
-    fatal_error("print_text: unexpected string tree node");
-  }
-}
-
 // Codegen context
-
-#define GLO_DECL_SIZE 100000
-#define GLO_DECL_ENTRY_SIZE 3
-text glo_decls[GLO_DECL_SIZE];  // Generated code
-int glo_decl_ix = 0;            // Index of last generated line of code
-int nest_level = 0;             // Current level of indentation
 int in_tail_position = false;   // Is the current statement in tail position?
 int gensym_ix = 0;              // Counter for fresh_ident
 int fun_gensym_ix = 0;          // Maximum value of gensym_ix for the current function
@@ -408,98 +117,8 @@ void init_comp_context() {
   }
 }
 
-void append_glo_decl(text decl) {
-  if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
-  glo_decls[glo_decl_ix] = nest_level;
-  glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
-  glo_decls[glo_decl_ix + 2] = decl;
-  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
-}
-
-// Fixups are represented as negative nest levels (-1, -2, ...). The actual
-// nest level is obtained by negating the value and subtracting 1.
-int append_glo_decl_fixup() {
-  if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
-  glo_decls[glo_decl_ix] = - (nest_level + 1);
-  glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
-  glo_decls[glo_decl_ix + 2] = 0;
-  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
-  return glo_decl_ix - GLO_DECL_ENTRY_SIZE;
-}
-
-void fixup_glo_decl(int fixup_ix, text decl) {
-  if (glo_decls[fixup_ix] >= 0) fatal_error("fixup_glo_decl: invalid fixup");
-
-  glo_decls[fixup_ix] = -glo_decls[fixup_ix] - 1; // Make nest level positive
-  glo_decls[fixup_ix + 2] = decl;
-}
-
-// Remove the n last declarations by decrementing the active field.
-// A non-positive active value means that the declaration is active,
-// A 0 value means that the declaration was unset once.
-// A negative value means that the declaration was unset multiple times.
-// Because undone declarations are generally replayed, declarations with negative
-// values are ignored when replayed since they have already been replayed before.
-// This is useful to compile some code at a different time than it is used.
-void undo_glo_decls(int start) {
-  while (start < glo_decl_ix) {
-    glo_decls[start + 1] -= 1; // To support nested undone declarations
-    start += GLO_DECL_ENTRY_SIZE;
-  }
-}
-
-// Check if there are any active and non-empty declarations since the start index.
-// This is used to determine if a ':' statement must be added to the current block.
-bool any_active_glo_decls(int start) {
-  while (start < glo_decl_ix) {
-    if (glo_decls[start + 1] && glo_decls[start + 2] != 0) return true;
-    start += GLO_DECL_ENTRY_SIZE;
-  }
-  return false;
-}
-
-// Replay the declarations betwee start and end. Replayed declarations must first
-// be undone with undo_glo_decls.
-void replay_glo_decls(int start, int end) {
-  while (start < end) {
-    if (glo_decls[start + 1] == 0) { // Skip inactive declarations that are at the current level
-      append_glo_decl(glo_decls[start + 2]);
-    }
-    start += GLO_DECL_ENTRY_SIZE;
-  }
-}
-
-text replay_glo_decls_inline(int start, int end) {
-  text res = 0;
-  while (start < end) {
-    if (glo_decls[start + 1] == 0) { // Skip inactive declarations
-      res = concatenate_strings_with(res, glo_decls[start + 2], wrap_str_lit("; "));
-    }
-    start += GLO_DECL_ENTRY_SIZE;
-  }
-  if (res != 0) { res = string_concat(res, wrap_str_lit("; ")); }
-
-  return res;
-}
-
-void print_glo_decls() {
-  int i = 0;
-  int level;
-  while (i < glo_decl_ix) {
-    if (glo_decls[i + 1] == 1) { // Skip inactive declarations
-      if (glo_decls[i + 2] != 0) {
-        level = glo_decls[i];
-        while (level > 0) {
-          putchar(' '); putchar(' ');
-          level -= 1;
-        }
-        print_text(glo_decls[i + 2]);
-        putchar('\n');
-      }
-    }
-    i += GLO_DECL_ENTRY_SIZE;
-  }
-}
+// Line formatter for global declarations
+#include "glo_decls.c"
 
 // Environment tracking
 #include "env.c"
@@ -1404,7 +1023,7 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       return wrap_if_needed(true, context, test_side_effects, string_concat(sub1, wrap_str_lit(" += 1")), outer_op, op);
     } else if (op == MINUS_MINUS_POST) {
       sub1 = comp_lvalue(child0);
-      return wrap_if_needed(false, context, test_side_effects,string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
+      return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" -= 1)"), wrap_str_lit(" + 1")), outer_op, '+');
     } else if (op == PLUS_PLUS_POST) {
       sub1 = comp_lvalue(child0);
       return wrap_if_needed(false, context, test_side_effects, string_concat4(wrap_char('('), sub1, wrap_str_lit(" += 1)"), wrap_str_lit(" - 1")), outer_op, '-');
@@ -1853,9 +1472,9 @@ void handle_printf_call(char *format_str, ast params) {
         // We can't a string to printf directly, it needs to be unpacked first.
         case 's':
           if (param == 0) fatal_error("printf: not enough parameters");
-          runtime_use_put_pstr = true;
           // If the format specifier has width or precision, we have to pack the string and call then printf.
           // Otherwise, we can call _put_pstr directly and avoid the subshell.
+          runtime_use_put_pstr = true;
 #ifndef SH_MINIMAL_PRINTF
           if (has_width || has_precision) {
             params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
@@ -1944,11 +1563,11 @@ text comp_fun_call_code(ast node, ast assign_to) {
 #ifndef SH_INLINE_EXIT
   else if (name_id == EXIT_ID)    { runtime_use_exit = true; }
 #endif
-#ifndef SH_MINIMAL_RUNTIME
+#ifndef MINIMAL_RUNTIME
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
   else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
 #endif
-#if !defined(SH_MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
+#if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
 #endif
 
@@ -2668,9 +2287,7 @@ void comp_glo_decl(ast node) {
   int op = get_op(node);
   fun_gensym_ix = 0;
 
-  if (op == '=') { // Assignments
-   comp_assignment(get_child_('=', node, 0), get_child_('=', node, 1));
-  } else if (op == DECLS) { // Variable declarations
+  if (op == DECLS) { // Variable declarations
     // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
     // storage class for global variables since pnut-sh only supports 1
     // translation unit.

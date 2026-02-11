@@ -64,6 +64,13 @@ case "$backend" in
     test_folders="tests/_all tests/_sh tests/_bug"
     [ "$fast" -eq 1 ] && pnut_target_flag="$pnut_target_flag -DSH_SAVE_VARS_WITH_SET"
     ;;
+  awk)
+    ext="awk"
+    pnut_target_flag="-Dtarget_awk"
+    executor="awk --posix -f"
+    # Reusing _sh tests for awk as well since they support the same subset of features.
+    test_folders="tests/_all tests/_sh tests/_bug"
+    ;;
   i386_linux|x86_64_linux|x86_64_mac)
     ext="exe"
     pnut_target_flag="-Dtarget_$backend"

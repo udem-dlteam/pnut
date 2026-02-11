@@ -54,7 +54,7 @@ its shell version `pnut-exe.sh`:
 
 Compilation options can be used to change the generated shell script:
 
-- `SH_ANNOTATE=1` includes the original C code in the generated shell
+- `ANNOTATE_C_CODE=1` includes the original C code in the generated shell
   script.
 - `SH_COMPACT_RT=1` reduces the size of the runtime library at the
   cost of reduced I/O performance.
@@ -63,7 +63,7 @@ Compilation options can be used to change the generated shell script:
 - `MINIMAL=1` support only the minimal set of C features required to bootstrap
   pnut, reducing the size of `pnut-sh.sh` and `pnut-exe.sh`.
 
-They can be set using `make install SH_ANNOTATE=1 ...`.
+They can be set using `make install ANNOTATE_C_CODE=1 ...`.
 
 ## How to Use
 
@@ -161,8 +161,8 @@ the bootstrap script to include TCC and GCC is ongoing.
 ### Annotated Shell Scripts
 
 `pnut-sh` can include C code annotations in the generated shell scripts (with
-the `SH_ANNOTATE=1` makefile option) to make them self-contained and easier to
-audit. These annotations correspond to the original C source code, with the
+the `ANNOTATE_C_CODE=1` makefile option) to make them self-contained and easier
+to audit. These annotations correspond to the original C source code, with the
 lines inside inactive `#if`/`#ifdef` blocks removed, with each top-level shell
 declaration prefixed with its corresponding C code as comment.
 
@@ -174,7 +174,7 @@ matches the embedded C code. This can be done with the following commands:
 
 ```shell
 # Generate pnut-sh.sh with annotations
-> make pnut-sh.sh SH_ANNOTATE=1
+> make pnut-sh.sh ANNOTATE_C_CODE=1
 # Extract C code
 > /bin/sh build/pnut-sh.sh -C build/pnut-sh.sh > build/pnut-sh.c
 # Recompile C code
@@ -188,7 +188,7 @@ executable version of `pnut-exe`:
 
 ```shell
 # Generate pnut-exe.sh with annotations
-> make pnut-exe.sh SH_ANNOTATE=1
+> make pnut-exe.sh ANNOTATE_C_CODE=1
 # Extract C code
 > /bin/sh build/pnut-exe.sh -C build/pnut-exe.sh > build/pnut-exe.c
 # Recompile C

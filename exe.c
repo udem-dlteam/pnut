@@ -609,7 +609,7 @@ void def_label(int lbl) {
 
   int addr = heap[lbl + 1];
   int label_addr = code_alloc;
-  int next;
+  int next_addr;
 
 #ifdef SAFE_MODE
   if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
@@ -634,10 +634,10 @@ void def_label(int lbl) {
   } else {
     heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
-      next = code[addr - 1]; // get pointer to next patch address before we overwrite it
+      next_addr = code[addr - 1]; // get pointer to next patch address before we overwrite it
       code_alloc = addr - 4; // place code pointer to where use_label was called
       emit_i32_le(label_addr - addr); // replace placeholder with relative address
-      addr = next;
+      addr = next_addr;
     }
     code_alloc = label_addr;
   }
@@ -682,7 +682,7 @@ void def_goto_label(int lbl) {
 
   int addr = heap[lbl + 1];
   int label_addr = code_alloc;
-  int next;
+  int next_addr;
   int goto_fs;
   int start_code_alloc;
 
@@ -696,7 +696,7 @@ void def_goto_label(int lbl) {
     heap[lbl + 1] = -label_addr; // define label's address
     heap[lbl + 2] = cgc_fs;      // define label's frame size
     while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
+      next_addr = code[addr-1]; // get pointer to next patch address
       goto_fs = code[addr-2]; // get frame size at goto instruction
       code_alloc = code[addr-3]; // reset code pointer to start of jump_to_goto_label instruction
       grow_stack(cgc_fs - goto_fs); // adjust stack
@@ -705,7 +705,7 @@ void def_goto_label(int lbl) {
       addr = label_addr - code_alloc; // compute relative address
       code_alloc = start_code_alloc;
       jump_rel(addr);
-      addr = next;
+      addr = next_addr;
     }
     code_alloc = label_addr;
   }

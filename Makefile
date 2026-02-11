@@ -1,12 +1,17 @@
 .PHONY: \
-	pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh pnut-exe pnut-exe.sh pnut-exe-bootstrapped \
-	install uninstall clean \
-	test-sh test-i386-linux test-x86_64-linux test-x86_64-mac \
+	pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh \
+	pnut-awk pnut-awk.awk pnut-awk-bootstrapped.awk \
+	pnut-exe pnut-exe.sh pnut-exe.awk pnut-exe-bootstrapped \
+	install install-pnut-awk install-pnut-exe \
+	uninstall clean \
+	test-sh test-awk test-i386-linux test-x86_64-linux test-x86_64-mac \
 	pnut-artifact-x86 pnut-artifact-arm \
-	bootstrap-pnut-sh bootstrap-pnut-exe-script bootstrap-pnut-exe \
-	bootstrap-pnut-exe-no-shell bootstrap-pnut-sh-with-pnut-exe
+	bootstrap-pnut-sh bootstrap-pnut-exe-from-pnut-shell bootstrap-pnut-exe-from-shell \
+	bootstrap-pnut-awk bootstrap-pnut-exe-from-pnut-awk bootstrap-pnut-exe-from-awk \
+	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe
 
 BUILD_DIR = build
+export LC_ALL=C
 
 # PNUT_BUILD_OPT can be used to pass additional compilation flags to pnut
 ifeq ($(CFLAGS),)
@@ -20,6 +25,7 @@ endif
 
 # Bootstrap targets with integrated options
 BOOTSTRAP_SHELL ?= /bin/sh
+BOOTSTRAP_AWK ?= awk
 
 # Targets for pnut-exe: auto, Linux.i386, Linux.x86_64, Darwin.x86_64, Darwin.arm64
 TARGET ?= auto
@@ -55,7 +61,7 @@ endif
 # Bootstrap script options that can be passed via make variables
 # Examples:
 #		make pnut-sh.sh  MINIMAL=1 							 # Build minimal pnut-sh.sh
-#		make pnut-sh.sh  MINIMAL=1 SH_ANNOTATE=1 # Build minimal annotated pnut-sh.sh
+#		make pnut-sh.sh  MINIMAL=1 ANNOTATE_C_CODE=1 # Build minimal annotated pnut-sh.sh
 #		make pnut-exe TARGET=Linux.x86_64 EXE_ONE_PASS=1 # Build exe for Linux x86_64 with one-pass generator
 
 # Include only features used to bootstrap pnut
@@ -75,7 +81,7 @@ STATS 					?= 0
 # Generate faster shell code that's less readable
 SH_FAST 			 	?= 0
 # Annotate generated shell code with comments
-SH_ANNOTATE    	?= 0
+ANNOTATE_C_CODE ?= 0
 # Use compact runtime library in shell scripts
 SH_COMPACT_RT  	?= 0
 # Shell scripts count memory usage (for development/debugging)
@@ -112,8 +118,8 @@ endif
 ifeq ($(SH_FAST),1)
   BOOTSTRAP_FLAGS += -DSH_SAVE_VARS_WITH_SET
 endif
-ifeq ($(SH_ANNOTATE),1)
-	BOOTSTRAP_FLAGS += -DSH_INCLUDE_C_CODE
+ifeq ($(ANNOTATE_C_CODE),1)
+	BOOTSTRAP_FLAGS += -DANNOTATE_WITH_C_CODE
 endif
 ifeq ($(SH_COMPACT_RT),1)
 	BOOTSTRAP_FLAGS += -DRT_COMPACT
@@ -130,6 +136,7 @@ ifeq ($(EXE_ONE_PASS),1)
 endif
 
 BUILD_OPT_SH = -Dtarget_sh $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
+BUILD_OPT_AWK = -Dtarget_awk $(PNUT_BUILD_OPT) $(BOOTSTRAP_FLAGS)
 BUILD_OPT_EXE += $(BOOTSTRAP_FLAGS)
 
 build:
@@ -147,12 +154,28 @@ pnut-sh-bootstrapped.sh: pnut-sh.sh
 	@chmod +x $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 	diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-bootstrapped.sh
 
+pnut-awk: build pnut.c awk.c
+	$(CC) $(CFLAGS) $(BUILD_OPT_AWK) pnut.c -o $(BUILD_DIR)/pnut-awk
+
+pnut-awk.awk: pnut-awk
+	./$(BUILD_DIR)/pnut-awk $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk.awk
+	@chmod +x $(BUILD_DIR)/pnut-awk.awk
+
+pnut-awk-bootstrapped.awk: pnut-awk.awk
+	$(BOOTSTRAP_AWK) -f $(BUILD_DIR)/pnut-awk.awk -- $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk-bootstrapped.awk
+	@chmod +x $(BUILD_DIR)/pnut-awk-bootstrapped.awk
+	diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-bootstrapped.awk
+
 pnut-exe: build pnut.c x86.c exe.c elf.c mach-o.c
 	$(CC) $(CFLAGS) $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe
 
 pnut-exe.sh: pnut-sh pnut.c x86.c exe.c elf.c mach-o.c
 	./$(BUILD_DIR)/pnut-sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.sh
 	@chmod +x $(BUILD_DIR)/pnut-exe.sh
+
+pnut-exe.awk: pnut-awk pnut.c x86.c exe.c elf.c mach-o.c
+	./$(BUILD_DIR)/pnut-awk $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe.awk
+	@chmod +x $(BUILD_DIR)/pnut-exe.awk
 
 pnut-exe-bootstrapped: pnut-exe
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped
@@ -168,15 +191,21 @@ install: pnut-sh pnut-sh.sh
 	cp $(BUILD_DIR)/pnut-sh $(DESTDIR)$(PREFIX)/bin/pnut
 	cp $(BUILD_DIR)/pnut-sh.sh $(DESTDIR)$(PREFIX)/bin/pnut-sh.sh
 
-install-pnut-exe: pnut-exe pnut-exe.sh
+install-pnut-awk: pnut-awk pnut-awk.awk
+	cp $(BUILD_DIR)/pnut-awk $(DESTDIR)$(PREFIX)/bin/pnut-awk
+	cp $(BUILD_DIR)/pnut-awk.awk $(DESTDIR)$(PREFIX)/bin/pnut-awk.awk
+
+install-pnut-exe: pnut-exe pnut-exe.sh pnut-exe.awk
 	cp $(BUILD_DIR)/pnut-exe $(DESTDIR)$(PREFIX)/bin/pnut-exe
 	cp $(BUILD_DIR)/pnut-exe.sh $(DESTDIR)$(PREFIX)/bin/pnut-exe.sh
+	cp $(BUILD_DIR)/pnut-exe.awk $(DESTDIR)$(PREFIX)/bin/pnut-exe.awk
 
 uninstall:
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-sh.sh
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe
 	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe.sh
+	$(RM) $(DESTDIR)$(PREFIX)/bin/pnut-exe.awk
 
 clean:
 	$(RM) -r $(BUILD_DIR)
@@ -188,6 +217,9 @@ clean:
 
 test-sh:
 	./run-tests.sh "sh"
+
+test-awk:
+	./run-tests.sh "awk"
 
 test-i386-linux:
 	./run-tests.sh "i386_linux"
@@ -210,11 +242,16 @@ process to allow each part to be tested individually. The **bootstrap test**
 is used to verify that the step output is in a good enough state to recompile
 and reproduce itself bit-for-bit.
 
-The bootstrap steps are:
+The shell bootstrap steps are:
 1) Bootstrap pnut-sh.sh from pnut-sh.sh:  bootstrap-pnut-sh
-2) Bootstrap pnut-exe.sh from pnut-sh.sh: bootstrap-pnut-exe-script
-3) Bootstrap pnut-exe from pnut-exe.sh:   bootstrap-pnut-exe
-4) Bootstrap pnut-exe from pnut-exe:      bootstrap-pnut-exe-no-shell
+2) Bootstrap pnut-exe.sh from pnut-sh.sh: bootstrap-pnut-exe-from-pnut-shell
+3) Bootstrap pnut-exe from pnut-exe.sh:   bootstrap-pnut-exe-from-shell
+4) Bootstrap pnut-exe from pnut-exe:      bootstrap-pnut-exe
+
+The same can be done for AWK with the following steps:
+1) Bootstrap pnut-awk.awk from pnut-awk.awk:  bootstrap-pnut-awk
+2) Bootstrap pnut-exe.awk from pnut-awk.awk: 	bootstrap-pnut-exe-from-pnut-awk
+3) Bootstrap pnut-exe from pnut-exe.awk:      bootstrap-pnut-exe-from-awk
 
 In principle, these steps depend on the output of the previous step. However,
 to speed up testing, the bootstrap compiler of each step is produced using the
@@ -240,8 +277,18 @@ bootstrap-pnut-sh: pnut-sh.sh
 	fi
 	@echo "Success!"
 
+# Bootstrap pnut-sh with pnut-sh.sh (obtained using $(CC)).
+bootstrap-pnut-awk: pnut-awk.awk
+	@echo "Bootstrapping pnut-awk.awk from pnut-awk.awk..."
+	$(TIMEC) $(BOOTSTRAP_AWK) -f $(BUILD_DIR)/pnut-awk.awk -- $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk-bootstrapped.awk
+	@if ! diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-bootstrapped.awk >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
 # Bootstrap pnut-exe.sh with pnut-sh.sh (obtained using $(CC)).
-bootstrap-pnut-exe-script: pnut-sh.sh pnut-exe.sh
+bootstrap-pnut-exe-from-pnut-shell: pnut-sh.sh pnut-exe.sh
 	@echo "Bootstrapping pnut-exe.sh from pnut-sh.sh..."
 	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped.sh
 	@if ! diff $(BUILD_DIR)/pnut-exe.sh $(BUILD_DIR)/pnut-exe-bootstrapped.sh >/dev/null 2>&1; then \
@@ -250,8 +297,18 @@ bootstrap-pnut-exe-script: pnut-sh.sh pnut-exe.sh
 	fi
 	@echo "Success!"
 
-# Bootstrap pnut-exe from pnut-exe (by $(CC)).
-bootstrap-pnut-exe: pnut-exe.sh pnut-exe-bootstrapped
+# Bootstrap pnut-exe.awk with pnut-sh.awk (obtained using $(CC)).
+bootstrap-pnut-exe-from-pnut-awk: pnut-awk.awk pnut-exe.awk
+	@echo "Bootstrapping pnut-exe.awk from pnut-awk.awk..."
+	$(TIMEC) $(BOOTSTRAP_AWK) -f $(BUILD_DIR)/pnut-awk.awk -- $(BUILD_OPT_EXE) pnut.c > $(BUILD_DIR)/pnut-exe-bootstrapped.awk
+	@if ! diff $(BUILD_DIR)/pnut-exe.awk $(BUILD_DIR)/pnut-exe-bootstrapped.awk >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# Bootstrap pnut-exe from pnut-exe.sh
+bootstrap-pnut-exe-from-shell: pnut-exe.sh pnut-exe-bootstrapped
 	@echo "Bootstrapping pnut-exe from pnut-exe.sh..."
 	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-exe.sh $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
 	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
@@ -260,7 +317,17 @@ bootstrap-pnut-exe: pnut-exe.sh pnut-exe-bootstrapped
 	fi
 	@echo "Success!"
 
-bootstrap-pnut-exe-no-shell: pnut-exe-bootstrapped
+# Bootstrap pnut-exe from pnut-exe.awk
+bootstrap-pnut-exe-from-awk: pnut-exe.awk pnut-exe-bootstrapped
+	@echo "Bootstrapping pnut-exe from pnut-exe.awk..."
+	$(TIMEC) $(BOOTSTRAP_AWK) -f $(BUILD_DIR)/pnut-exe.awk -- $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
+	@if ! diff $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_DIR)/pnut-exe-bootstrapped-again >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap executables differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+bootstrap-pnut-exe: pnut-exe-bootstrapped
 	@echo "Bootstrapping pnut-exe from pnut-exe..."
 	@$(RM) $(BUILD_DIR)/pnut-exe-bootstrapped-again # MacOS behaves differently if the file exists
 	$(TIMEC) $(BUILD_DIR)/pnut-exe-bootstrapped $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped-again
@@ -279,6 +346,20 @@ bootstrap-pnut-sh-with-pnut-exe: pnut-exe-bootstrapped pnut-sh.sh
 	@chmod +x $(BUILD_DIR)/pnut-sh-from-pnut-exe
 	$(BUILD_DIR)/pnut-sh-from-pnut-exe $(BUILD_OPT_SH) pnut.c > $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-from-pnut-exe-again.sh >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# For completeness, bootstrap pnut-sh from pnut-exe, then recompile pnut-sh from
+# the bootstrapped pnut-sh.
+bootstrap-pnut-awk-with-pnut-exe: pnut-exe-bootstrapped pnut-awk.awk
+	@echo "Bootstrapping pnut-awk from pnut-exe..."
+	@$(RM) $(BUILD_DIR)/pnut-awk-from-pnut-exe # MacOS behaves differently if the file exists
+	$(TIMEC) $(BUILD_DIR)/pnut-exe $(BUILD_OPT_AWK) pnut.c -o $(BUILD_DIR)/pnut-awk-from-pnut-exe
+	@chmod +x $(BUILD_DIR)/pnut-awk-from-pnut-exe
+	$(BUILD_DIR)/pnut-awk-from-pnut-exe $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk-from-pnut-exe-again.awk
+	@if ! diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-from-pnut-exe-again.awk >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
 	fi
