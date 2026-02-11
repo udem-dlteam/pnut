@@ -27,9 +27,9 @@ void generate_exe();
 #if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
 #define CODE_SIZE 100000
 #else
-#define CODE_SIZE 5000000
+#define CODE_SIZE 1250000
 #endif
-int code[CODE_SIZE];
+int code[CODE_SIZE / 4];
 // Index of the next free byte in the code buffer
 int code_alloc = 0;
 // Total number of bytes emitted
@@ -38,94 +38,97 @@ int code_address_base = 0;
 #ifdef PRINT_MEMORY_STATS
 // Maximum size of the code buffer, used for debugging
 int code_alloc_max = 0;
+int fixups_alloc_max = 0;
 #endif
 
-/* ONE_PASS_GENERATOR option:
+// If the main function returns a value
+bool main_returns = false;
 
-    Makes the code generator one-pass.
+// Environment tracking
+#include "env.c"
 
-    If set, the machine code is written to the output at the end of each
-    function definition. This significantly reduces the required size of the
-    code buffer (240k to 15k when compiling pnut-exe), but introduces extra
-    complexity to the code generation since fixups can only be done for code
-    that is still in the buffer. The difficulties come in 2 variants:
+void grow_fs(const int words) {
+  cgc_fs += words;
+}
 
-      1. Forward jumps to labels that are not yet defined.
+#ifdef ONE_PASS_GENERATOR
+#define FIXUP_BUFFER_SIZE 10000
+#else
+#define FIXUP_BUFFER_SIZE 500000
+#endif
 
-      2. Certain constants must be placed at the beginning of the code, but
-         their value is only known at the end of the program.
-
-    Here are some concrete examples of such problems:
-
-      1. Calls to functions that are defined later in the code cannot be done
-         directly.
-
-      2. The initialization of global variables is interspersed with the rest of
-         the code, with forward jumps from the N^th initialization to the N+1^th
-         initialization. This means that at any time, the init_next_lbl label is
-         undefined.
-
-      3. Allocating space for global variables must be done at the beginning of
-         the program where the size of the globals is not known yet. More
-         generally, transfering control from the beginning of the program to the
-         end in 1 jump is not possible. This makes transfering information from
-         the end of the program to the beginning much more difficult.
-
-      4. The ELF header contains the size of the code, which is not known until
-         the end of the program.
-
-    And how they are solved:
-
-      1. The code generator maintains a jump table with all functions of the
-         program. When the function is declared, the code generator adds an
-         entry to the globals to store the address of the function, which will
-         be initialized with the address of the function during program
-         initialization when the address is known. This makes forward function
-         calls more expensive as they go through the jump table. This motivated
-         moving the definition of the built-in functions to the beginning of the
-         program to speed them up.
-
-      2. To be able to output the code after a function definition, all jumps in
-         the code must be resolved. Fortunately, non-call jumps inside a
-         function are all resolved at the end of the function, this leaves
-         init_next_lbl as the only unresolved label. Because function definition
-         is followed by the initialization of its jump table entry, the
-         init_next_lbl label is temporarily resolved, at which point all labels
-         are resolved and the code can be flushed.
-         See init_forward_jump_table for more details.
-
-      3. The size of the global variables is set assumed to be up under a
-         certain hardcoded limit. If the limit is exceeded, the code generator
-         will emit a fatal error at the end.
-
-      4. On certain platforms, the size of the program in the ELF header doesn't
-         need to be equal to the actual size of the code. As long as the
-         declared size is greater than the actual size, the program will run.
-*/
+int fixups[FIXUP_BUFFER_SIZE];
+int fixups_alloc = 1;
 
 #ifdef ONE_PASS_GENERATOR
 void reset_code_buffer() {
   code_address_base += code_alloc;
   code_alloc = 0;
+  fixups_alloc = 1;
 }
 #endif
+
+int push_fixup(const int next_addr, const int fixup_code_ix) {
+  int fixup = fixups_alloc;
+  if (fixups_alloc + 3 > FIXUP_BUFFER_SIZE) {
+    fatal_error("fixup buffer overflow");
+  }
+  fixups[fixups_alloc] = next_addr;
+  fixups[fixups_alloc + 1] = cgc_fs;
+  fixups[fixups_alloc + 2] = fixup_code_ix;
+  fixups_alloc += 3;
+  return fixup;
+}
+
+int get_fixup_next(const int ix) {
+  return fixups[ix];
+}
+
+int get_fixup_fs(const int ix) {
+  return fixups[ix + 1];
+}
+
+int get_fixup_code_ix(const int ix) {
+  return fixups[ix + 2];
+}
+
+void set_i8(const char a, const int index, const int shift) {
+  code[index] = TERNARY(shift == 0, a, (code[index] & ~(0xff << shift)) | (a << shift));
+}
 
 void emit_i8(const int a) {
   if (code_alloc >= CODE_SIZE) {
     fatal_error("code buffer overflow");
   }
-  code[code_alloc] = (a & 0xff);
+
+  set_i8(a & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
   code_alloc += 1;
 }
 
 void emit_2_i8(const int a, const int b) {
-  emit_i8(a);
-  emit_i8(b);
+  if (code_alloc + 1 >= CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
+
+  set_i8(a & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(b & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
 }
 
 void emit_4_i8(const int a, const int b, const int c, const int d) {
-  emit_2_i8(a, b);
-  emit_2_i8(c, d);
+  if (code_alloc + 3 >= CODE_SIZE) {
+    fatal_error("code buffer overflow");
+  }
+
+  set_i8(a & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(b & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(c & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
+  set_i8(d & 0xff, code_alloc / 4, (code_alloc % 4) * 8);
+  code_alloc += 1;
 }
 
 void emit_i32_le(const int n) {
@@ -181,16 +184,6 @@ void write_4_i8(const int a, const int b, const int c, const int d) {
 
 void write_i32_le(const int n) {
   write_4_i8(n, n >> 8, n >> 16, n >> 24);
-}
-
-// If the main function returns a value
-bool main_returns = false;
-
-// Environment tracking
-#include "env.c"
-
-void grow_fs(const int words) {
-  cgc_fs += words;
 }
 
 const int reg_X;
@@ -600,8 +593,7 @@ void use_label(int lbl) {
     // | ...
     // |-----------------------------------------------
     emit_i32_le(0); // 32 bit placeholder for distance
-    code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl + 1] = code_alloc;
+    heap[lbl + 1] = push_fixup(addr, code_alloc); // next fixup address, patch address
   }
 }
 
@@ -634,9 +626,10 @@ void def_label(int lbl) {
   } else {
     heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
-      next = code[addr - 1]; // get pointer to next patch address before we overwrite it
-      code_alloc = addr - 4; // place code pointer to where use_label was called
-      emit_i32_le(label_addr - addr); // replace placeholder with relative address
+      int patch_addr = get_fixup_code_ix(addr);
+      next = get_fixup_next(addr); // get pointer to next patch address before we overwrite it
+      code_alloc = patch_addr - 4; // place code pointer to where use_label was called
+      emit_i32_le(label_addr - patch_addr); // replace placeholder with relative address
       addr = next;
     }
     code_alloc = label_addr;
@@ -671,10 +664,7 @@ void jump_to_goto_label(int lbl) {
     // placeholders for when we know the destination address and frame size
     grow_stack(0);
     jump_rel(0);
-    code[code_alloc-1] = addr; // chain with previous patch address
-    code[code_alloc-2] = cgc_fs; // save current frame size
-    code[code_alloc-3] = start_code_alloc; // track initial code alloc so we can come back
-    heap[lbl + 1] = code_alloc;
+    heap[lbl + 1] = push_fixup(addr, start_code_alloc); // chain, start_code_alloc. cgc_fs saved implicitly
   }
 }
 
@@ -696,9 +686,9 @@ void def_goto_label(int lbl) {
     heap[lbl + 1] = -label_addr; // define label's address
     heap[lbl + 2] = cgc_fs;      // define label's frame size
     while (addr != 0) {
-      next = code[addr-1]; // get pointer to next patch address
-      goto_fs = code[addr-2]; // get frame size at goto instruction
-      code_alloc = code[addr-3]; // reset code pointer to start of jump_to_goto_label instruction
+      next = get_fixup_next(addr); // get pointer to next patch address
+      goto_fs = get_fixup_fs(addr); // get frame size at goto instruction
+      code_alloc = get_fixup_code_ix(addr); // reset code pointer to start of jump_to_goto_label instruction
       grow_stack(cgc_fs - goto_fs); // adjust stack
       start_code_alloc = code_alloc;
       jump_rel(0); // Generate dummy jump instruction to get instruction length
@@ -2652,6 +2642,7 @@ void init_forward_jump_table(int binding) {
   assert_all_labels_defined(0); // In SAFE_MODE, this checks that all labels are defined
 #ifdef PRINT_MEMORY_STATS
   code_alloc_max = TERNARY(code_alloc > code_alloc_max, code_alloc, code_alloc_max);
+  fixups_alloc_max = TERNARY(fixups_alloc > fixups_alloc_max, fixups_alloc, fixups_alloc_max);
 #endif
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   generate_exe();
@@ -3146,6 +3137,7 @@ void codegen_end() {
 #endif
 
 #ifdef PRINT_MEMORY_STATS
-  printf("# string_pool_alloc=%d heap_alloc=%d code_alloc=%d code_alloc_max=%d\n", string_pool_alloc, heap_alloc, code_alloc, code_alloc_max);
+  printf("# string_pool_alloc=%d heap_alloc=%d code_alloc=%d code_alloc_max=%d fixups_alloc_max=%d\n",
+         string_pool_alloc, heap_alloc, code_alloc, code_alloc_max, fixups_alloc_max);
 #endif
 }
