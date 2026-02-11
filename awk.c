@@ -459,7 +459,6 @@ text comp_rvalue_go(ast node, int outer_op) {
 #if defined(AWK_INLINE_PUTCHAR) || defined(AWK_INLINE_PRINTF)
 text comp_putchar_inline(ast param) {
   text res;
-  ast ident;
   char c;
 
   if (get_op(param) == CHARACTER) {
@@ -1036,7 +1035,6 @@ text comp_local_variables() {
   // parameters.
   text params_text = 0;
   int env = cgc_locals_fun;
-  int i;
   while (env != 0) {
     params_text = concatenate_strings_with( local_var(binding_ident(env))
                                           , params_text
@@ -1062,9 +1060,7 @@ void comp_glo_fun_decl(ast node) {
   ast name_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, fun_decl, 0));
   ast fun_type = get_child__(DECL, '(', fun_decl, 1);
   ast params = get_child_opt_('(', LIST, fun_type, 1);
-  text local_vars_text = 0;
   int local_vars_decl_fixup;
-  ast decl;
 
   if (body == -1) return; // ignore forward declarations
 
@@ -1101,8 +1097,7 @@ void comp_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
-  int arr_len, init_len;
-  text args = 0;
+  int arr_len;
 
   if (get_op(type) == '(') return; // Ignore function declarations
 
