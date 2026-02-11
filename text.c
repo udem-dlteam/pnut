@@ -165,32 +165,26 @@ text concatenate_strings_with(const text t1, const text t2, const text sep) {
 
 void print_escaped_char(char c, int for_printf) {
   // C escape sequences
-  if      (c == '\0') { printf("\\0"); }
-  else if (c == '\a') { printf("\\a"); }
-  else if (c == '\b') { printf("\\b"); }
-  else if (c == '\f') { printf("\\f"); }
-  else if (c == '\n') { printf("\\n"); }
-  else if (c == '\r') { printf("\\r"); }
-  else if (c == '\t') { printf("\\t"); }
-  else if (c == '\v') { printf("\\v"); }
+  if      (c == '\0') { putchar('\\'); putchar('0'); }
+  else if (c == '\a') { putchar('\\'); putchar('a'); }
+  else if (c == '\b') { putchar('\\'); putchar('b'); }
+  else if (c == '\f') { putchar('\\'); putchar('f'); }
+  else if (c == '\n') { putchar('\\'); putchar('n'); }
+  else if (c == '\r') { putchar('\\'); putchar('r'); }
+  else if (c == '\t') { putchar('\\'); putchar('t'); }
+  else if (c == '\v') { putchar('\\'); putchar('v'); }
   // Shell special characters: $, `, ", ', ?, and newline
-  // Note that ' and ? are not escaped properly by dash, but that's ok because
-  // we use double quotes and ' and ? can be left as is.
 #ifdef target_sh
-  else if (c == '$')  { printf("\\$"); }
-  else if (c == '`')  { printf("\\`"); }
+  else if (c == '$')  { putchar('\\'); putchar('$'); }
+  else if (c == '`')  { putchar('\\'); putchar('`'); }
+  // backslashes are escaped twice, first by the shell and then by def_str
+  else if (c == '\\') { putchar('\\'); putchar('\\'); putchar('\\'); putchar('\\'); }
+#else
+  else if (c == '\\') { putchar('\\'); putchar('\\'); }
 #endif
-  else if (c == '"')  { printf("\\\""); }
-  // else if (c == '\'') { putchar('\\'); putchar('\''); }
-  // else if (c == '?')  { putchar('\\'); putchar('?');  }
+  else if (c == '"')  { putchar('\\'); putchar('"'); }
   // when we're escaping a string for shell's printf, % must be escaped
   else if (c == '%'  && for_printf)  { putchar('%'); putchar('%'); }
-
-  // backslashes are escaped twice, first by the shell and then by def_str
-#ifdef target_sh
-  else if (c == '\\' && for_printf) { printf("\\\\\\\\"); }
-#endif
-  else if (c == '\\') { printf("\\\\"); }
   else                putchar(c);
 }
 
