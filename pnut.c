@@ -2170,13 +2170,13 @@ void handle_preprocessor_directive() {
       while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
         last_newline_ix -= 1;
       }
-      int newline_before_directive_ix = hash_code_buf_ix - 1;
-      while (newline_before_directive_ix > 0 && code_char_buf[newline_before_directive_ix] != '\n') {
-        newline_before_directive_ix -= 1;
+      int directive_line_start_ix = hash_code_buf_ix;
+      while (directive_line_start_ix > 0 && code_char_buf[directive_line_start_ix - 1] != '\n') {
+        directive_line_start_ix -= 1;
       }
 
       // Remove between the end of the directive and the last newline
-      remove_c_code_substr(newline_before_directive_ix + 1, last_newline_ix);
+      remove_c_code_substr(directive_line_start_ix, last_newline_ix);
     }
 #endif
 
