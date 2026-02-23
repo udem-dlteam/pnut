@@ -1,3 +1,7 @@
+#ifdef ANNOTATE_WITH_C_CODE
+#include "doc/c_to_shell_translation.c"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
