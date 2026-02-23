@@ -1561,11 +1561,11 @@ void u64_mul_u32(int *x, int y) {
   int xhi = I32_LOGICAL_RSHIFT_16(x[0]);
   int ylo = y & 0xffff;
   int yhi = I32_LOGICAL_RSHIFT_16(y);
-  int lo = xlo * ylo; /* 0 .. 0xfffe0001 */
-  int m1 = xlo * yhi + (lo >> 16); /* 0 .. 0xfffeffff */
-  int m2 = xhi * ylo; /* 0 .. 0xfffe0001 */
-  int m3 = (m1 & 0xffff) + (m2 & 0xffff); /* 0 .. 0x1fffe */
-  int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); /* 0 .. 0xfffffffe */
+  int lo = xlo * ylo; // 0 .. 0xfffe0001
+  int m1 = xlo * yhi + (lo >> 16); // 0 .. 0xfffeffff
+  int m2 = xhi * ylo; // 0 .. 0xfffe0001
+  int m3 = (m1 & 0xffff) + (m2 & 0xffff); // 0 .. 0x1fffe
+  int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); // 0 .. 0xfffffffe */
   x[0] = ((m3 & 0xffff) << 16) + (lo & 0xffff);
   x[1] = x[1] * y + hi;
 }

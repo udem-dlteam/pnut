@@ -685,7 +685,7 @@ ast handle_side_effects_go(ast node, bool executes_conditionally) {
       ) {
       return node;
     } else if (op == STRING) {
-      /* We must initialize strings before the expression */
+      // We must initialize strings before the expression
       sub2 = fresh_string_ident(get_val_(STRING, node));
       sub1 = new_ast2('=', sub2, get_val_(STRING, node));
       sub1 = cons(sub1, 0);
