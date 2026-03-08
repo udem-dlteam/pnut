@@ -1,0 +1,1 @@
+    fd = open(filename, O_RDONLY | O_BINARY);

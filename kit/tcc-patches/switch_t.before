@@ -1,0 +1,7 @@
+ST_DATA struct switch_t {
+    struct case_t {
+        int64_t v1, v2;
+	int sym;
+    } **p; int n; /* list of case ranges */
+    int def_sym; /* default symbol */
+} *cur_switch; /* current switch */

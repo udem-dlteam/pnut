@@ -4,7 +4,12 @@
 // than the size of the program. In that case, we can set the size to some big
 // value and output the header at the beginning of the compilation process.
 #ifdef ONE_PASS_GENERATOR
-#define PROGRAM_SIZE MAX_CODE_SIZE
+// M2-Planet doesn't support recursive macros, so hard coding MAX_CODE_SIZE here
+// and checking that it's set correctly.
+#if MAX_CODE_SIZE != 1000000
+#error "When using ONE_PASS_GENERATOR, MAX_CODE_SIZE must be 1000000"
+#endif
+#define PROGRAM_SIZE 1000000
 #else
 #define PROGRAM_SIZE code_alloc
 #endif

@@ -1,0 +1,6 @@
+typedef struct ExprValue {
+    uint32_t v;
+    uint32_t v_padding;
+    Sym *sym;
+    int pcrel;
+} ExprValue;
