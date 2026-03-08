@@ -524,7 +524,7 @@ obj prim(int no) {
     buffer[0] = (char) NUM(x);
     success = write(NUM(y), buffer, 1);
     if (success != 1) {
-      perror("Cannot write to file.");
+      putstr("Cannot write to file.");
     }
     push2(TRUE, PAIR_TAG);
   }
