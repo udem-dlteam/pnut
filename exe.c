@@ -1385,6 +1385,38 @@ int codegen_params(ast params) {
   return fs;
 }
 
+void emit_function_call(ast fun, int binding) {
+  // Generate a fast path for direct calls
+  if (binding != 0) {
+#ifdef ONE_PASS_GENERATOR
+    // When compiling in one pass mode, forward jumps must go through the jump table
+    if (is_label_defined(fun_binding_lbl(binding))) {
+      call(fun_binding_lbl(binding));
+    } else {
+      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#ifdef SAFE_MODE
+      // In safe mode, we check that the indirect call location is initialized
+      mov_reg_imm(reg_Y, 0);
+      int good_lbl = alloc_label(0);
+      // Check if reg_X == 0 and call debug_interrupt otherwise
+      jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
+      debug_interrupt();
+      def_label(good_lbl);
+#endif
+      call_reg(reg_X);
+    }
+#else
+    call(fun_binding_lbl(binding));
+#endif
+  } else {
+    // Otherwise we go through the function pointer
+    codegen_rvalue(fun);
+    pop_reg(reg_X);
+    grow_fs(-1);
+    call_reg(reg_X);
+  }
+}
+
 void codegen_call(ast node) {
   ast fun = get_child_('(', node, 0);
   ast params = get_child_('(', node, 1);
@@ -1420,35 +1452,7 @@ void codegen_call(ast node) {
   nb_params = codegen_params(params);
 #endif
 
-  // Generate a fast path for direct calls
-  if (binding != 0) {
-#ifdef ONE_PASS_GENERATOR
-    // When compiling in one pass mode, forward jumps must go through the jump table
-    if (is_label_defined(fun_binding_lbl(binding))) {
-      call(fun_binding_lbl(binding));
-    } else {
-      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
-#ifdef SAFE_MODE
-      // In safe mode, we check that the indirect call location is initialized
-      mov_reg_imm(reg_Y, 0);
-      int good_lbl = alloc_label(0);
-      // Check if reg_X == 0 and call debug_interrupt otherwise
-      jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
-      debug_interrupt();
-      def_label(good_lbl);
-#endif
-      call_reg(reg_X);
-    }
-#else
-    call(fun_binding_lbl(binding));
-#endif
-  } else {
-    // Otherwise we go through the function pointer
-    codegen_rvalue(fun);
-    pop_reg(reg_X);
-    grow_fs(-1);
-    call_reg(reg_X);
-  }
+  emit_function_call(fun, binding);
 
   grow_stack(-nb_params);
   grow_fs(-nb_params);
