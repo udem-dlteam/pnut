@@ -36,6 +36,16 @@ lines_ratio() { # $1 = numerator, $2 = denominator
 }
 
 measure_size() { # $1 = output-name, $2 = options
+  # and that the result of pnut on the expanded file is the same as the result of pnut on the original file
+  # If the options contain -DBOOTSTRAP_PNUT, use pnut-sh-bootstrap instead
+  if echo "$2" | grep -q "\-DPNUT_BOOTSTRAP"; then
+    ./$TEMP_DIR/pnut-sh-bootstrap pnut.c $2 > "$TEMP_DIR/$1.sh"
+    ./$TEMP_DIR/pnut-awk-bootstrap pnut.c $2 > "$TEMP_DIR/$1.awk"
+  else
+    ./$TEMP_DIR/pnut-sh pnut.c $2 > "$TEMP_DIR/$1.sh"
+    ./$TEMP_DIR/pnut-awk pnut.c $2 > "$TEMP_DIR/$1.awk"
+  fi
+
   files="$(gcc -MM pnut.c $2 | sed 's/^[^:]*: //')"
   cleaned_files=""
   for file in $files; do
@@ -51,7 +61,6 @@ measure_size() { # $1 = output-name, $2 = options
   # Preprocess pnut.c using gcc, so we have a line count without any comments,
   # blank lines, and preprocessor directives.
   gcc -E -P "build/measure/no-sys/pnut.c" $2 > "$TEMP_DIR/$1-preprocessed.c"
-  preprocessed_lines=$(wc -l < "$TEMP_DIR/$1-preprocessed.c")
   # Split file in 2 parts, before "#_ Character constants" and after
   marker_line=$(grep -n "^#_ Character constants" "$TEMP_DIR/$1.sh" | cut -d: -f1)
   tail -n +$marker_line "$TEMP_DIR/$1.sh" > "$TEMP_DIR/$1-runtime.sh"
@@ -63,12 +72,17 @@ measure_size() { # $1 = output-name, $2 = options
   printf "By file (without comments or blank lines):\n"
   wc $cleaned_files
   printf "Preprocessed (gcc -E -P without system includes):\n"
-  wc "$TEMP_DIR/$1.c" "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk" "$TEMP_DIR/$1-preprocessed.c" "$TEMP_DIR/$1-runtime.sh" "$TEMP_DIR/$1-decls.sh"
+  wc "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk" "$TEMP_DIR/$1-preprocessed.c" "$TEMP_DIR/$1-runtime.sh" "$TEMP_DIR/$1-decls.sh"
 
   # Number of empty lines in $TEMP_DIR/$1.sh
-  printf "Ratio (Original):     "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l < $TEMP_DIR/$1.c)"
-  printf "Ratio (Cleaned):      "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')"
-  printf "Ratio (Preprocessed): "; lines_ratio "$(wc -l < $TEMP_DIR/$1.sh)" "$preprocessed_lines"
+  sh_lines=$(wc -l < "$TEMP_DIR/$1.sh")
+  c_lines=$(wc -l $files | tail -n 1 | awk '{print $1}')
+  cleaned_lines=$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')
+  preprocessed_lines=$(wc -l < "$TEMP_DIR/$1-preprocessed.c")
+
+  printf "Ratio (Original):     "; lines_ratio "$sh_lines" "$c_lines"
+  printf "Ratio (Cleaned):      "; lines_ratio "$sh_lines" "$cleaned_lines"
+  printf "Ratio (Preprocessed): "; lines_ratio "$sh_lines" "$preprocessed_lines"
   printf "Empty lines count:    %d\n" "$(grep -c '^[[:space:]]*$' "$TEMP_DIR/$1-decls.sh")"
   printf "Runtime size:         %d\n" "$(wc -l < "$TEMP_DIR/$1-runtime.sh")"
 
@@ -89,8 +103,8 @@ gcc -o "$TEMP_DIR/pnut-awk-bootstrap" pnut.c -Dtarget_awk -DPNUT_BOOTSTRAP
 measure_size "pnut-minimal-sh" "-Dtarget_sh -DPNUT_BOOTSTRAP"
 measure_size "pnut-minimal-awk" "-Dtarget_awk -DPNUT_BOOTSTRAP"
 measure_size "pnut-minimal-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
-measure_size "pnut-minimal-x86_64_linux-one-pass" "-Dtarget_x86_64_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
-measure_size "pnut-minimal-x86_64_mac-one-pass" "-Dtarget_x86_64_mac -DPNUT_BOOTSTRAP"
+# measure_size "pnut-minimal-x86_64_linux-one-pass" "-Dtarget_x86_64_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
+# measure_size "pnut-minimal-x86_64_mac-one-pass" "-Dtarget_x86_64_mac -DPNUT_BOOTSTRAP"
 
 # Measure the complete pnut variants:
 measure_size "pnut-complete-sh" "-Dtarget_sh"
