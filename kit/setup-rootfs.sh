@@ -96,6 +96,8 @@ if [ $INCLUDE_UTILS -eq 1 ]; then
   cp utils/ls.sh    "$CHROOT_DIR_NAME/ls.sh"
   cp utils/touch.sh "$CHROOT_DIR_NAME/touch.sh"
   cp utils/wc.sh    "$CHROOT_DIR_NAME/wc.sh"
+  cp utils/sift.sh  "$CHROOT_DIR_NAME/sift.sh"
+  cp utils/more.sh  "$CHROOT_DIR_NAME/more.sh"
 fi
 
 if [ $SKIP_SHELL_BOOTSTRAP -eq 1 ]; then
@@ -107,7 +109,7 @@ if [ $SKIP_SHELL_BOOTSTRAP -eq 1 ]; then
     $PNUT_EXE_OPTIONS \
     -o $TEMP_DIR/pnut-exe-by-gcc
 
-  ./$TEMP_DIR/pnut-exe pnut.c \
+  ./$TEMP_DIR/pnut-exe-by-gcc pnut.c \
      -DBOOTSTRAP_TCC \
      $PNUT_EXE_OPTIONS \
      -o "$CHROOT_DIR_NAME/pnut-exe"
@@ -115,3 +117,5 @@ fi
 
 echo "Bootstrap environment setup. You can now chroot into $CHROOT_DIR_NAME and run the jammed script:"
 echo "  sudo chroot $CHROOT_DIR_NAME /bin/$BOOTSTRAP_SHELL"
+echo "  $ . jammed.sh"
+echo "  $ INSTALL_EXECS=1 BOOTSTRAP_SHELL=$BOOTSTRAP_SHELL . bootstrap.sh"
