@@ -2616,7 +2616,19 @@ void codegen_statement(ast node) {
   }
 }
 
-void add_params(ast params) {
+#ifdef SUPPORT_STRUCT_UNION
+// If the function returns a struct/union, we need to add a hidden parameter for
+// the return value address and store the return type in a global variable so we
+// can access it in the return statement.
+void add_function_hidden_params(ast fun_return_type) {
+  current_fun_return_type = fun_return_type;
+  if (is_struct_or_union_type(fun_return_type)) {
+    cgc_add_local_param(0, 1, pointer_type(fun_return_type, false));
+  }
+}
+#endif // SUPPORT_STRUCT_UNION
+
+void add_function_params(ast params) {
   ast decl, type;
   int ident;
 
@@ -2628,7 +2640,7 @@ void add_params(ast params) {
     // Array to pointer decay
     if (get_op(type) == '[') { type = pointer_type(dereference_type(type), false); }
 
-    if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
+    if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_function_params: duplicate parameter");
 
     cgc_add_local_param(ident, type_width(type, false, true) / WORD_SIZE, type);
     params = tail(params);
@@ -2675,8 +2687,8 @@ void codegen_glo_fun_decl(ast node) {
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
-  if (is_aggregate_type(fun_return_type)) {
-    fatal_error("Returning arrays or structs from function not supported");
+  if (get_op(fun_return_type) == '[') {
+    fatal_error("Returning arrays from function not supported");
   }
 
   binding = cgc_lookup_fun(name_symbol, cgc_globals);
@@ -2690,7 +2702,16 @@ void codegen_glo_fun_decl(ast node) {
   if (name_symbol == MAIN_ID) {
     main_lbl = fun_binding_lbl(binding);
     // Check if main returns an exit code.
-    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
+    switch (get_op(fun_return_type)) {
+      case VOID_KW:
+        main_returns = false;
+        break;
+      case INT_KW:
+        main_returns = true;
+        break;
+      default:
+         fatal_error("main has unsupported return type");
+    }
   }
 
   // Poor man's debug info
@@ -2710,7 +2731,10 @@ void codegen_glo_fun_decl(ast node) {
 
   cgc_fs = -1; // space for return address
   cgc_locals = 0;
-  add_params(params);
+#ifdef SUPPORT_STRUCT_UNION
+  add_function_hidden_params(fun_return_type);
+#endif
+  add_function_params(params);
   cgc_fs = 0;
 
   codegen_body(body);
