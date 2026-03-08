@@ -90,12 +90,11 @@ gen_header() {
 
   printf "# Detect mkdir availability\n"
   printf "mkdir -p . && : \$((MKDIR_EXISTS = 1)) || : \$((MKDIR_EXISTS = 0))\n"
-  printf "[ \$MKDIR_EXISTS == 0 ] && printf \"Warning: expanding only top-level files because mkdir is not available\\\\n\"\n\n"
+  printf "[ \$MKDIR_EXISTS = 0 ] && printf \"Warning: expanding only top-level files because mkdir is not available\\\\n\"\n\n"
 }
 
 pcat() {
-  IFS=
-  while read -r line; do
+  while IFS= read -r line; do
     printf "%s\n" "$line"
   done
 
@@ -108,8 +107,7 @@ pcat() {
 gen_pcat() {
   pcat << 'EOF'
 pcat() {
-  IFS=
-  while read -r line; do
+  while IFS= read -r line; do
     printf "%s\n" "$line"
   done
   if [ -n "$line" ]; then
@@ -181,7 +179,7 @@ extract_fun_start() { # $1: file name, $2: normalized file name
   printf "extract_%s() {\n" "$2"
   file_path="${1%/*}" # Remove everything after the last slash, if any
   if [ -n "$file_path" ] && [ "$1" != "$file_path" ]; then
-    printf "  [ \$MKDIR_EXISTS == 0 ] && { printf \"Skipping %s (no mkdir)\\\\n\"; return; }\n" "$1"
+    printf "  [ \$MKDIR_EXISTS = 0 ] && { printf \"Skipping %s (no mkdir)\\\\n\"; return; }\n" "$1"
     printf "  mkdir -p '%s'\n" "$file_path"
   fi
   # Check if file already exists

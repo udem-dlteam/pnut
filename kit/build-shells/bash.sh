@@ -4,6 +4,7 @@
 set -e -u
 
 BUILD_DIR="build/bash-static"
+START_DIR=$(pwd)
 
 # Create build directory
 mkdir -p "$BUILD_DIR"
@@ -18,7 +19,7 @@ if [ ! -f "$BUILD_DIR/bash" ]; then
     ./configure --enable-static-link
     make
     echo "Statically linked bash created at $BUILD_DIR/bash"
-    cd .. # Return to previous directory
+    cd "$START_DIR" # Return to initial directory
   } >&2
 fi
 
