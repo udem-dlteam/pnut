@@ -1,0 +1,2 @@
+# define NORETURN
+# define ALIGNED(x)

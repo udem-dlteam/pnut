@@ -1,0 +1,13 @@
+#if HAVE_LONG_LONG
+        if (ov)
+            tcc_warning("integer constant overflow");
+
+        tok = TOK_CINT;
+	if (lcount) {
+            tok = TOK_CLONG;
+            if (lcount == 2)
+                tok = TOK_CLLONG;
+	}
+#else
+    tok = TOK_CINT;
+#endif

@@ -1,0 +1,11 @@
+typedef union CValue {
+    long double ld;
+    double d;
+    float f;
+    uint64_t i;
+    struct {
+        int size;
+        const void *data;
+    } str;
+    int tab[LDOUBLE_SIZE/4];
+} CValue;
