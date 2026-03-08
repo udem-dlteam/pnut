@@ -1,0 +1,4 @@
+        char buffer[32]; int a,b,c;
+        // sscanf(TCC_VERSION, "%d.%d.%d", &a, &b, &c);
+        a = 0; b = 9; c = 27;
+        sprintf(buffer, "%d", a*10000 + b*100 + c);

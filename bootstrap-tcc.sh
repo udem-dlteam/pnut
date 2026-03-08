@@ -3,8 +3,14 @@
 set -e
 
 TEMP_DIR=build/tcc
-TCC_DIR=../tcc-0.9.26-delete-me-maybe
-MES_DIR=../mes-0.27
+TCC_ARCHIVE=kit/tcc-0.9.26.tar.gz
+TCC_ARCHIVE_DIRNAME=tcc-0.9.26-1147-gee75a10c
+TCC_DIR=$TEMP_DIR/$TCC_ARCHIVE_DIRNAME
+TCC_PATCHES_DIR=kit/tcc-patches
+TCC_VERSIONED_PATCHES_DIR=$TCC_PATCHES_DIR/0.9.26
+MES_ARCHIVE=kit/mes-0.27.tar.gz
+MES_ARCHIVE_DIRNAME=mes-0.27
+MES_DIR=$TEMP_DIR/$MES_ARCHIVE_DIRNAME
 
 MES_ARCH=x86
 TCC_TARGET_ARCH=I386
@@ -17,6 +23,72 @@ PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dtarget_sh"
 PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
 if [ ! -d "$TEMP_DIR" ]; then mkdir -p "$TEMP_DIR"; fi
+
+if [ ! -f "$TCC_ARCHIVE" ]; then
+  echo "Error: TCC archive not found: $TCC_ARCHIVE" >&2
+  exit 1
+fi
+
+if [ ! -f "$MES_ARCHIVE" ]; then
+  echo "Error: Mes archive not found: $MES_ARCHIVE" >&2
+  exit 1
+fi
+
+if [ ! -d "$TCC_PATCHES_DIR" ]; then
+  echo "Error: TCC patches directory not found: $TCC_PATCHES_DIR" >&2
+  exit 1
+fi
+
+rm -rf "$TCC_DIR"
+rm -rf "$MES_DIR"
+tar -xzf "$TCC_ARCHIVE" -C "$TEMP_DIR"
+tar -xzf "$MES_ARCHIVE" -C "$TEMP_DIR"
+
+
+BINTOOLS_EXE="$TEMP_DIR/bintools"
+gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-libc.c -o "$BINTOOLS_EXE"
+
+apply_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
+  target_file="$TCC_DIR/$1"
+  patch_name="$2"
+  patch_dir="$3"
+
+  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_dir/$patch_name.before" "$patch_dir/$patch_name.after" \
+    || { echo "Failed to apply patch $patch_name to $target_file" >&2; exit 1; }
+}
+
+apply_tcc_patches() {
+  cp kit/config.h "$TCC_DIR/config.h"
+
+  apply_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
+
+  apply_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch libtcc.c sscanf_TCC_VERSION                     "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch tcc.h    undefine_TCC_IS_NATIVE                 "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch tccpp.c  tccpp-parse-integer                    "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit    "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch tccgen.c float_negation                         "$TCC_VERSIONED_PATCHES_DIR"
+}
+
+revert_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
+  target_file="$TCC_DIR/$1"
+  patch_name="$2"
+  patch_dir="$3"
+
+  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_dir/$patch_name.after" "$patch_dir/$patch_name.before" \
+    || { echo "Failed to revert patch $patch_name on $target_file" >&2; exit 1; }
+}
+
+revert_tcc_patches() {
+  revert_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit    "$TCC_VERSIONED_PATCHES_DIR"
+  revert_tcc_patch tccpp.c  tccpp-parse-integer                    "$TCC_VERSIONED_PATCHES_DIR"
+  revert_tcc_patch tcc.h    undefine_TCC_IS_NATIVE                 "$TCC_VERSIONED_PATCHES_DIR"
+  revert_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
+  revert_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
+}
+
+# Compile bintools for simple-patch
+apply_tcc_patches
 
 # Parse the arguments
 
@@ -68,7 +140,6 @@ if [ $mes_libc -eq 1 ]; then
 
   # Create config.h
   touch ${MES_DIR}/include/mes/config.h
-  touch ${TCC_DIR}/config.h
 
   cp mes-config.h $MES_DIR/include/mes/config.h
 
@@ -96,6 +167,7 @@ make_tcc_pnut() { # $1: C compiler to use, $2: additional options
   $CC                                                                          \
     -I portable_libc/include/                                                  \
     -D BOOTSTRAP=1                                                             \
+    -D PNUT_CC=1                                                               \
     -D HAVE_LONG_LONG=0                                                        \
     -D TCC_TARGET_${TCC_TARGET_ARCH}=1                                         \
     -D CONFIG_SYSROOT=\"/\"                                                    \
@@ -150,8 +222,11 @@ if [ $use_gcc -eq 0 ]; then
 else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc.
-  make_tcc_pnut "gcc"
+  make_tcc_pnut "gcc" "-D __intptr_t_defined=1"
 fi
+
+# Revert TCC source patches after producing the initial pnut-built compiler.
+revert_tcc_patches
 
 go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $2 if empty)
   CC="$1"

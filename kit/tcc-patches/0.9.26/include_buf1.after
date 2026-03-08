@@ -1,0 +1,7 @@
+        for (; i < n; ++i) {
+#ifdef PNUT_CC
+            char buf1[1024];
+#else
+            char buf1[sizeof file->filename];
+#endif
+            CachedInclude *e;

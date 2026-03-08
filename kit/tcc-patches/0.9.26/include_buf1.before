@@ -1,0 +1,3 @@
+        for (; i < n; ++i) {
+            char buf1[sizeof file->filename];
+            CachedInclude *e;
