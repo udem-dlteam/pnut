@@ -263,7 +263,6 @@
   // Options that turns Pnut into a C preprocessor or some variant of it
   // DEBUG_GETCHAR: Read and print the input character by character.
   // DEBUG_CPP: Run preprocessor like gcc -E. This can be useful for debugging the preprocessor.
-  // DEBUG_EXPAND_INCLUDES: Reads the input file and includes the contents of the included files.
   // DEBUG_PARSER: Runs the tokenizer on the input. Outputs nothing.
 
   // Enable all C features in the frontend
@@ -673,9 +672,6 @@ enum {
 // tokenizer
 
 int ch;
-#ifdef DEBUG_EXPAND_INCLUDES
-int prev_ch = EOF;
-#endif
 int tok;
 int val;
 
@@ -1431,14 +1427,6 @@ void get_ch() {
     fatal_error("C code buffer overflow");
   }
 #endif
-#ifdef DEBUG_EXPAND_INCLUDES
-  // Because ch is always 1 character ahead of the token, we print the character
-  // with a 1 character delay to match this delay. This makes it easy to
-  // annotate certain preprocessor directives so they can be removed in a later
-  // step.
-  if (prev_ch != EOF) putchar(prev_ch);
-  prev_ch = ch;
-#endif
 }
 
 void skip_to_end_of_line() {
@@ -2035,12 +2023,6 @@ bool handle_include() {
       handle_shell_include();
     }
 #endif
-#ifdef DEBUG_EXPAND_INCLUDES
-    // When running pnut in "expand includes" mode, we want to annotate the
-    // #include directives that were expanded with a comment so we can remove
-    // them later.
-    putstr(" // INCLUDED");
-#endif
     get_tok_macro(); // Skip the string
     return false;
   } else if (tok == '<') {
@@ -2140,7 +2122,6 @@ void handle_preprocessor_directive() {
       }
   #ifdef FULL_PREPROCESSOR_SUPPORT
       else if (tok == IDENTIFIER && (val == WARNING_ID || val == ERROR_ID)) {
-  #ifndef DEBUG_EXPAND_INCLUDES
         temp = val;
         putstr(TERNARY(temp == WARNING_ID, "warning: ", "error: "));
         // Print the rest of the line, it does not support \ at the end of the line but that's ok
@@ -2150,9 +2131,6 @@ void handle_preprocessor_directive() {
         putchar('\n');
         tok = '\n';
         if (temp == ERROR_ID) exit(1);
-  #else
-        tok = '\n';
-  #endif // DEBUG_EXPAND_INCLUDES
       }
   #endif // FULL_PREPROCESSOR_SUPPORT
       else {
@@ -3212,7 +3190,7 @@ void get_tok() {
 }
 
 // parser
-#if defined DEBUG_CPP || defined DEBUG_EXPAND_INCLUDES || defined NICE_ERR_MSG || defined HANDLE_SIGNALS || defined DEBUG_PARSER_SEXP
+#if defined DEBUG_CPP || defined NICE_ERR_MSG || defined HANDLE_SIGNALS || defined DEBUG_PARSER_SEXP
 #include "debug.c"
 #endif
 
@@ -4677,7 +4655,7 @@ ast parse_compound_statement() {
 
 // Select code generator
 
-#if !(defined DEBUG_CPP) && !(defined DEBUG_EXPAND_INCLUDES) && !(defined DEBUG_PARSER) && !(defined DEBUG_GETCHAR)
+#if !(defined DEBUG_CPP) && !(defined DEBUG_PARSER) && !(defined DEBUG_GETCHAR)
 #ifdef target_sh
 #include "sh.c"
 #endif
@@ -4953,7 +4931,7 @@ int main(int argc, char **argv) {
   while (ch != EOF) {
     get_ch();
   }
-#elif defined DEBUG_EXPAND_INCLUDES || defined DEBUG_CPP // Tokenize input, output tokens
+#elif defined DEBUG_CPP // Tokenize input, output tokens
   get_tok();
 
   while (tok != EOF) {
