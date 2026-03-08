@@ -1,0 +1,5 @@
+typedef struct ExprValue {
+    uint64_t v;
+    Sym *sym;
+    int pcrel;
+} ExprValue;

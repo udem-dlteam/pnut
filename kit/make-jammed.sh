@@ -15,27 +15,44 @@ error() {
   exit 1
 }
 
-readonly TEMP_DIR="kit"
+readonly TEMP_DIR="build/kit"
+readonly TCC_ARCHIVE="kit/tcc-0.9.26.tar.gz"
+readonly TCC_ARCHIVE_DIR="$TEMP_DIR/tcc-0.9.26-1147-gee75a10c"
+readonly JAM_OUTPUT="kit/jammed.sh"
+
+mkdir -p "$TEMP_DIR"
 
 : ${PNUT_OPTIONS:=} # Default to empty options
 JAM_OPT=""
 INCLUDE_UTILS=0
+WITH_TAR_GZ=0
 
 while [ $# -gt 0 ]; do
   case $1 in
-    -b|--binary)     JAM_OPT="$JAM_OPT --binary"; shift 1 ;;
-    --include-utils) INCLUDE_UTILS=1;             shift 1 ;;
+    -b|--binary)        JAM_OPT="$JAM_OPT --binary"; shift 1 ;;
+    --include-utils)    INCLUDE_UTILS=1;             shift 1 ;;
+    --with-tcc-tar-gz)  WITH_TAR_GZ="1";             shift 1 ;;
     *)               error "Unknown option: $1"           ;;
   esac
 done
 
-mkdir -p "$TEMP_DIR"
-
-program_dependencies() {
+# Compute the list of files needed to compile program, given compilation options
+program_dependencies() { # $1: file, $2: compile options
   file="$1"
   comp_options="$2"
 
   echo $(gcc -MM "$file" $comp_options | tr ':' '\n' | tr '\\' ' ' | sed '1d')
+}
+
+strip_path_prefix() { # $1: prefix to strip, $2: path
+  prefix=$1
+  path=$2
+
+  if [ "${path#"$prefix"}" != "$path" ]; then
+    echo "${path}:${path#"$prefix"}"
+  else
+    error "Path '$path' does not start with prefix '$prefix'"
+  fi
 }
 
 # Prepare pnut-sh.sh
@@ -47,9 +64,11 @@ gcc -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
 make kit/bintools.c
 
 FILES_TO_INCLUDE="
+utils/jam.sh
 $TEMP_DIR/pnut-sh.sh:pnut-sh.sh
 $(program_dependencies "pnut.c" "-Dtarget_i386_linux -DBOOTSTRAP_TCC")
 kit/bintools.c:bintools.c
+kit/bintools-libc.c:bintools-libc.c
 portable_libc/include/fcntl.h:fcntl.h
 portable_libc/include/math.h:math.h
 portable_libc/include/pnut_lib.h:pnut_lib.h
@@ -67,18 +86,43 @@ portable_libc/src/setjmp.c:setjmp.c
 portable_libc/src/stdio.c:stdio.c
 portable_libc/src/stdlib.c:stdlib.c
 portable_libc/src/string.c:string.c
-kit/bintools-libc.c:bintools-libc.c
+
+kit/bootstrap.sh:bootstrap.sh
+utils/cat.sh:cat.sh
+examples/compiled/sha256sum-stdin.sh:sha256sum.sh
 
 portable_libc/include
 portable_libc/src
 portable_libc/libc.c
 
-kit/bootstrap.sh:bootstrap.sh
+kit/tcc-patches/array_sizeof.before
+kit/tcc-patches/array_sizeof.after
+kit/tcc-patches/fix_stack_64_bit_operands_on_32_bit.before
+kit/tcc-patches/fix_stack_64_bit_operands_on_32_bit.after
+kit/tcc-patches/float_negation.before
+kit/tcc-patches/float_negation.after
+kit/tcc-patches/sscanf_TCC_VERSION.before
+kit/tcc-patches/sscanf_TCC_VERSION.after
+kit/tcc-patches/undefine_TCC_IS_NATIVE.before
+kit/tcc-patches/undefine_TCC_IS_NATIVE.after
+
+kit/libtcc1.c
+kit/config.h
 "
+
+if [ $WITH_TAR_GZ -eq 1 ]; then
+  FILES_TO_INCLUDE="$FILES_TO_INCLUDE $TCC_ARCHIVE"
+else
+  tar -xzf $TCC_ARCHIVE -C "$TEMP_DIR"
+  touch "$TCC_ARCHIVE_DIR/config.h"
+  deps=$(program_dependencies "$TCC_ARCHIVE_DIR/tcc.c" "-DONE_SOURCE")
+  for dep in $deps; do
+    FILES_TO_INCLUDE="$FILES_TO_INCLUDE $(strip_path_prefix "$TEMP_DIR/" "$dep")"
+  done
+fi
 
 if [ $INCLUDE_UTILS -eq 1 ]; then
 FILES_TO_INCLUDE="$FILES_TO_INCLUDE
-utils/cat.sh:cat.sh
 utils/ls.sh:ls.sh
 utils/touch.sh:touch.sh
 utils/wc.sh:wc.sh
@@ -122,7 +166,7 @@ for file in $FILES_TO_INCLUDE; do
   fi
 done
 
-cat << 'EOF' > "$TEMP_DIR/jammed.sh"
+cat << 'EOF' > "$JAM_OUTPUT"
 #! /bin/sh
 #
 # Check that the script is executable.
@@ -138,16 +182,16 @@ fi
 
 EOF
 
-./utils/jam.sh $JAM_OPT $JAM_ARGS >> "$TEMP_DIR/jammed.sh"
+./utils/jam.sh $JAM_OPT $JAM_ARGS >> "$JAM_OUTPUT"
 
 # Evaluate disk usage:
-jammed_size=$(wc -c "$TEMP_DIR/jammed.sh" | awk '{print $1}')
+jammed_size=$(wc -c "$JAM_OUTPUT" | awk '{print $1}')
 
 # Compare to the sum of each file
 files_size=$(wc -c $FILES | grep total | awk '{print $1}')
 
-echo "$TEMP_DIR/jammed.sh: $jammed_size bytes"
-echo "Individual files size: $files_size bytes"
-echo "Ratio: $(echo "scale=3; $jammed_size / $files_size" | bc -l)"
+printf "%s/jammed.sh: %d bytes\n" $TEMP_DIR $jammed_size
+printf "Individual files size: %d bytes\n" $files_size
+printf "Ratio: %s\n" "$(printf "scale=3; $jammed_size / $files_size\n" | bc -l)"
 
 # wc $FILES
