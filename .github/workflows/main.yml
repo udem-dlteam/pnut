@@ -529,7 +529,7 @@ jobs:
       - name: Install M2-Planet
         run: |
           set -e
-          git clone https://github.com/oriansj/M2-Planet.git M2-Planet --depth 1 --recursive
+          git clone https://github.com/oriansj/M2-Planet.git M2-Planet --recursive
           # cee2359694740a7c1b5a85a16b0f96f5aa74e1ac is from Nov 5th 2025
           cd M2-Planet
           git checkout cee2359694740a7c1b5a85a16b0f96f5aa74e1ac
