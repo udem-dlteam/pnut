@@ -1,0 +1,7 @@
+#if HAVE_LONG_LONG
+        /* Whether 64 bits are needed to hold the constant's value */
+        if (must_64bit || ((unsigned int) (n >> 32)) != 0) {
+            tok = TOK_CLLONG;
+            n1 = n >> 32;
+	} else
+#endif
