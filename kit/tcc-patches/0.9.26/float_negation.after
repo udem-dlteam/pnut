@@ -1,0 +1,35 @@
+#if HAVE_FLOAT
+	    vtop->c.i = 0x1;
+	    if (t == VT_FLOAT)
+	        vtop->c.i <<= 31; /* CValue.i */
+	    else if (t == VT_DOUBLE)
+	        vtop->c.i <<= 63; /* CValue.i */
+	    else
+	        vtop->c.i = 0x8000000000000000ULL; /* CValue.ld */
+// #if HAVE_FLOAT
+// 	    if (t == VT_FLOAT)
+// 	        vtop->c.f = 0x80000000;
+// 	    else if (t == VT_DOUBLE)
+// #if HAVE_LONG_LONG
+//             vtop->c.i = 0x8000000000000000ULL;
+// #else
+//             vtop->c.i = 0x80000000;
+//             vtop->c.i = vtop->c.i << 32;
+// #endif
+// 	    else
+// 	        vtop->c.ld = -1.0 * 0.0;
+// #else
+//         if (t == VT_FLOAT) {
+//             vtop->c.i = 0x80000000;
+//         } else if (t == VT_DOUBLE) {
+// #if HAVE_LONG_LONG
+//             vtop->c.i = 0x8000000000000000ULL;
+// #else
+//             vtop->c.i = 0x80000000;
+//             vtop->c.i = vtop->c.i << 32;
+// #endif
+//         } else {
+//             // tcc_error("long double not supported");
+//         }
+// #endif
+#endif

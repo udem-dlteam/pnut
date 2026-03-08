@@ -1,0 +1,8 @@
+#endif
+
+#ifdef PNUT_CC
+#undef TCC_IS_NATIVE
+#endif
+
+#if defined TCC_IS_NATIVE && !defined CONFIG_TCCBOOT
+# define CONFIG_TCC_BACKTRACE
