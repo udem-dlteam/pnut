@@ -1,0 +1,1 @@
+tests/_exe/checks/aggregate-member-of-temp.c:24:0: Aggregate member access of temporary struct/union not supported

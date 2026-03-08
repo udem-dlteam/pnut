@@ -185,6 +185,10 @@ void write_i32_le(const int n) {
 
 // If the main function returns a value
 bool main_returns = false;
+#ifdef SUPPORT_STRUCT_UNION
+// Return type of the current function, used when returning a struct or union
+ast current_fun_return_type = 0;
+#endif
 
 // Environment tracking
 #include "env.c"
@@ -463,6 +467,11 @@ void grow_stack(int words) {
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
   add_reg_imm(reg_SP, -word_size_align(bytes));
+}
+
+void drop_stack_words(int words) {
+  grow_fs(-words);
+  grow_stack(-words);
 }
 
 void rt_debug(char* msg);
@@ -744,6 +753,7 @@ ast function_return_type(ast type) {
 
 // Type, structure and union handling
 int struct_union_size(ast struct_type);
+ast value_type(ast node);
 
 // A pointer type is either an array type or a type with at least one star
 bool is_pointer_type(ast type) {
@@ -765,6 +775,26 @@ bool is_struct_or_union_type(ast type) {
   int op = get_op(type);
   return op == STRUCT_KW || op == UNION_KW;
 }
+
+// Whether a function returns a struct or union
+bool returns_via_hidden_pointer(ast type) {
+  ast return_type;
+
+  if (!is_function_type(type)) return false;
+
+  return_type = function_return_type(type);
+  if (get_op(return_type) == '[') {
+    fatal_error("Returning arrays from function not supported");
+  }
+
+  return is_struct_or_union_type(return_type);
+}
+
+// Whether the node is a call to a function that returns a struct or union.
+bool is_aggregate_returning_call(ast node) {
+  return get_op(node) == '(' && is_struct_or_union_type(value_type(node));
+}
+
 
 #endif // SUPPORT_STRUCT_UNION
 
@@ -1327,7 +1357,8 @@ void codegen_binop(int op, ast lhs, ast rhs) {
 
 void codegen_rvalue(ast node);
 void codegen_statement(ast node);
-int codegen_lvalue(ast node);
+int  codegen_lvalue(ast node);
+void codegen_copy_aggregate_expr(ast expr, int dst_base, int dst_offset, int width);
 
 int codegen_param(ast param) {
   int type = value_type(param);
@@ -1336,12 +1367,10 @@ int codegen_param(ast param) {
   int left_width;
 
   if (is_struct_or_union_type(type)) {
-    left_width = codegen_lvalue(param);
-    pop_reg(reg_X);
-    grow_fs(-1);
-    grow_stack_bytes(word_size_align(left_width));
-    grow_fs(word_size_align(left_width) / WORD_SIZE);
-    copy_obj(reg_SP, 0, reg_X, 0, left_width);
+    left_width = type_width(type, true, true);
+    grow_stack_bytes(left_width);
+    grow_fs(left_width / WORD_SIZE);
+    codegen_copy_aggregate_expr(param, reg_SP, 0, left_width);
   } else
 #endif
   {
@@ -1385,6 +1414,47 @@ int codegen_params(ast params) {
   return fs;
 }
 
+int resolve_call_binding(ast fun) {
+  int binding = 0;
+
+  if (get_op(fun) == IDENTIFIER) {
+    binding = resolve_identifier(get_val_(IDENTIFIER, fun));
+    if (binding_kind(binding) != BINDING_FUN) binding = 0;
+  }
+
+  return binding;
+}
+
+#ifdef SAFE_MODE
+ast checked_call_fun_type(ast fun) {
+  ast type = value_type(fun);
+
+  // Make sure fun has a type that can be called, either a function pointer or a function.
+  if (!is_function_type(type)) {
+    dump_node(type);
+    fatal_error("Not a function or function pointer");
+  }
+
+  // Dereference function pointer if needed
+  if (get_op(type) == '*') type = get_child_('*', type, 1);
+
+  return type;
+}
+#endif
+
+int codegen_call_params(ast fun, ast params, int binding) {
+#ifdef SAFE_MODE
+  ast type = checked_call_fun_type(fun);
+  bool allow_extra_params = binding == 0;
+
+  // allow_extra_params is true if the function is called indirectly or if the function is variadic
+  if (get_child_('(', type, 2)) allow_extra_params = true;
+  return codegen_params(params, get_child_('(', type, 1), allow_extra_params);
+#else
+  return codegen_params(params);
+#endif
+}
+
 void emit_function_call(ast fun, int binding) {
   // Generate a fast path for direct calls
   if (binding != 0) {
@@ -1417,45 +1487,116 @@ void emit_function_call(ast fun, int binding) {
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+
+// Generate a call to an aggregate-returning function, pushing the hidden return
+// pointer as a first argument and cleaning it up after the call.
+void codegen_aggregate_call(ast node, int base_reg, int base_offset) {
+  ast fun = get_child_('(', node, 0);
+  ast params = get_child_('(', node, 1);
+  ast nb_params;
+  int binding = resolve_call_binding(fun);
+
+  // Save hidden pointer so it's not overwritten when evaluating the params.
+  if (base_offset != 0) {
+    mov_reg_reg(reg_X, base_reg);
+    add_reg_imm(reg_X, base_offset);
+    push_reg(reg_X);
+  } else {
+    push_reg(base_reg);
+  }
+  grow_fs(1);
+
+  nb_params = codegen_call_params(fun, params, binding);
+
+  // Duplicate the saved hidden return address so it becomes the first argument.
+  mov_reg_mem(reg_X, reg_SP, nb_params * WORD_SIZE);
+  push_reg(reg_X);
+  grow_fs(1);
+
+  emit_function_call(fun, binding);
+
+  // Remove user arguments and hidden return pointer argument (2 copies).
+  drop_stack_words(nb_params + 2);
+}
+
+// Similar to codegen_lvalue but for aggregate-returning calls, which don't have
+// a real lvalue but we still need to get their address in some cases (e.g. when
+// passing them as arguments to another function).
+int codegen_aggregate_addr(ast node) {
+  int width;
+
+  if (is_aggregate_returning_call(node)) {
+    width = type_width(value_type(node), true, true) / WORD_SIZE;
+    grow_stack(width);
+    grow_fs(width);
+    codegen_aggregate_call(node, reg_SP, 0);
+    push_reg(reg_SP);
+    grow_fs(1);
+    return width;
+  } else {
+    codegen_lvalue(node);
+    return 0;
+  }
+}
+
+// Generate code to copy the value of an aggregate expression (struct/union or
+// array) from the address of its hidden return pointer to the destination
+// address specified by dst_base and dst_offset. The width of the aggregate in
+// bytes is also provided.
+void codegen_copy_aggregate_expr(ast expr, int dst_base, int dst_offset, int width) {
+  if (!is_aggregate_type(value_type(expr))) {
+    fatal_error("codegen_copy_aggregate_expr: non-aggregate expression");
+  }
+
+  if (is_aggregate_returning_call(expr)) {
+    codegen_aggregate_call(expr, dst_base, dst_offset);
+  } else {
+    if (dst_offset != 0) {
+      mov_reg_reg(reg_Y, dst_base);
+      add_reg_imm(reg_Y, dst_offset);
+      push_reg(reg_Y);
+    } else {
+      push_reg(dst_base);
+    }
+    grow_fs(1);
+    codegen_lvalue(expr);
+    pop_reg(reg_X); // src address
+    pop_reg(reg_Y); // dst address
+    grow_fs(-2);
+    copy_obj(reg_Y, 0, reg_X, 0, width);
+  }
+}
+
+#endif // SUPPORT_STRUCT_UNION
+
 void codegen_call(ast node) {
   ast fun = get_child_('(', node, 0);
   ast params = get_child_('(', node, 1);
   ast nb_params;
-  int binding = 0;
+  int binding = resolve_call_binding(fun);
+
+#ifdef SUPPORT_STRUCT_UNION
+  if (is_aggregate_returning_call(node)) {
+    fatal_error("Aggregate-returning call must be used in an aggregate context");
+  }
+#endif
 
   // Check if the function is a direct call, find the binding if it is
+#ifdef ENABLE_PNUT_INLINE_INTERRUPT
   if (get_op(fun) == IDENTIFIER) {
-    #ifdef ENABLE_PNUT_INLINE_INTERRUPT
     if (get_val_(IDENTIFIER, fun) == intern_str("PNUT_INLINE_INTERRUPT")) {
       debug_interrupt();
       push_reg(reg_X); // Dummy push to keep the stack balanced
       return;
     }
-    #endif
-    binding = resolve_identifier(get_val_(IDENTIFIER, fun));
-    if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }
+#endif // ENABLE_PNUT_INLINE_INTERRUPT
 
-#ifdef SAFE_MODE
-  // Make sure fun has a type that can be called, either a function pointer or a function
-  ast type = value_type(fun);
-  if (!is_function_type(type)) {
-    dump_node(type);
-    fatal_error("Not a function or function pointer");
-  }
-  if (get_op(type) == '*') type = get_child_('*', type, 1); // Dereference function pointer
-  // allow_extra_params is true if the function is called indirectly or if the function is variadic
-  bool allow_extra_params = binding == 0;
-  if (get_child_('(', type, 2)) allow_extra_params = true;
-  nb_params = codegen_params(params, get_child_('(', type, 1), allow_extra_params);
-#else
-  nb_params = codegen_params(params);
-#endif
-
+  nb_params = codegen_call_params(fun, params, binding);
   emit_function_call(fun, binding);
 
-  grow_stack(-nb_params);
-  grow_fs(-nb_params);
+  drop_stack_words(nb_params);
 
   push_reg(reg_X);
 }
@@ -1842,11 +1983,10 @@ void codegen_rvalue(ast node) {
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type1)) {
         // Struct assignment, we copy the struct.
-        codegen_lvalue(child1);
+        mov_reg_mem(reg_Y, reg_SP, 0);
+        codegen_copy_aggregate_expr(child1, reg_Y, 0, left_width);
         pop_reg(reg_X);
-        pop_reg(reg_Y);
-        grow_fs(-2);
-        copy_obj(reg_Y, 0, reg_X, 0, left_width);
+        grow_fs(-1);
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
@@ -1883,6 +2023,11 @@ void codegen_rvalue(ast node) {
       grow_fs(-1);
       def_label(lbl1);
     } else if (op == '(') {
+#ifdef SUPPORT_STRUCT_UNION
+      if (is_aggregate_returning_call(node)) {
+        fatal_error("Aggregate-returning call must be used in an aggregate context");
+      }
+#endif
       codegen_call(node);
     }
 #ifdef SUPPORT_STRUCT_UNION
@@ -1890,7 +2035,8 @@ void codegen_rvalue(ast node) {
       type1 = value_type(child0);
       if (is_struct_or_union_type(type1)) {
         type2 = get_child_(DECL, struct_member(type1, child1), 1);
-        codegen_lvalue(child0);
+        // left_width == 0 => child0 is not an aggregate-returning call
+        left_width = codegen_aggregate_addr(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
         // union members are at the same offset: 0
@@ -1899,6 +2045,16 @@ void codegen_rvalue(ast node) {
         }
         if (!is_aggregate_type(type2)) {
           load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
+        }
+        if (left_width != 0) {
+          // Because we clean the temporary struct/union after the expression,
+          // only immediate members of the temporary struct/union can be accessed,
+          // since those can be saved before cleaning.
+          if (is_aggregate_type(type2)) {
+            fatal_error("Aggregate member access of temporary struct/union not supported");
+          }
+          // Clean the temporary struct/union
+          drop_stack_words(left_width);
         }
         push_reg(reg_Y);
       } else {
@@ -2162,11 +2318,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
     default:
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
-        // Struct assignment, we copy the struct.
-        codegen_lvalue(init);
-        pop_reg(reg_X);
-        grow_fs(-1);
-        copy_obj(base_reg, offset, reg_X, 0, type_width(type, true, true));
+        codegen_copy_aggregate_expr(init, base_reg, offset, type_width(type, true, true));
       } else
 #endif // SUPPORT_STRUCT_UNION
       if (get_op(type) != '[') {
@@ -2510,8 +2662,7 @@ void codegen_statement(ast node) {
 
     // If we fell through the switch, we need to remove the switch operand.
     // This is done before lbl1 because the stack is adjusted before the break statement.
-    grow_stack(-1);
-    grow_fs(-1);
+    drop_stack_words(1);
 
     def_label(lbl1); // End of switch label
 
@@ -2579,11 +2730,21 @@ void codegen_statement(ast node) {
     }
 
   } else if (op == RETURN_KW) {
-
-    if (get_child_(RETURN_KW, node, 0) != 0) {
-      codegen_rvalue(get_child_(RETURN_KW, node, 0));
-      pop_reg(reg_X);
-      grow_fs(-1);
+    if (get_child_(RETURN_KW, node, 0) != 0) { // return with a value
+#ifdef SUPPORT_STRUCT_UNION
+    if (is_struct_or_union_type(current_fun_return_type)) {
+      mov_reg_imm(reg_Y, (cgc_fs + 1) * WORD_SIZE);
+      add_reg_reg(reg_Y, reg_SP);
+      load_mem_location(reg_Y, reg_Y, 0, WORD_SIZE, false);
+      codegen_copy_aggregate_expr(get_child_(RETURN_KW, node, 0), reg_Y, 0, type_width(current_fun_return_type, true, false));
+    }
+    else
+#endif
+      {
+        codegen_rvalue(get_child_(RETURN_KW, node, 0));
+        pop_reg(reg_X);
+        grow_fs(-1);
+      }
     }
 
     grow_stack(-cgc_fs);
@@ -2611,7 +2772,13 @@ void codegen_statement(ast node) {
 
     codegen_goto(node);
 #endif
-  } else {
+  }
+#ifdef SUPPORT_STRUCT_UNION
+  else if (op == '(' && is_aggregate_returning_call(node)) {
+    drop_stack_words(codegen_aggregate_addr(node));
+  }
+#endif
+  else {
 
     codegen_rvalue(node);
     pop_reg(reg_X);
@@ -2743,8 +2910,7 @@ void codegen_glo_fun_decl(ast node) {
 
   codegen_body(body);
 
-  grow_stack(-cgc_fs);
-  cgc_fs = 0;
+  drop_stack_words(cgc_fs);
 
   ret();
 

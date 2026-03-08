@@ -1,0 +1,22 @@
+# direct return
+a: 1 2
+# nested return
+b: 3 4
+# branch return
+c: 5 6
+# init from return
+d: 7 8
+# indirect return
+e: 13 14
+# indirect nested return
+f: 15 16
+# field from temporary
+22
+# tiny return
+65
+# non-power-of-2 return
+21 22 23
+# large return
+31 32 33 34 35
+# array field return
+90 41 42 43
