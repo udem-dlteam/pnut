@@ -107,6 +107,25 @@ jobs:
           ./run-tests.sh i386_linux   --safe --compile-only
           ./run-tests.sh i386_linux   --safe --one-pass-generator --compile-only
 
+  portable-libc-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Portable-libc tests
+        run: |
+          set -e
+
+          cd portable_libc
+          make test
+
+
   tests-exe: # Run tests for pnut-exe on all supported platforms and architectures
     strategy:
       matrix:
@@ -589,6 +608,7 @@ jobs:
     needs: [ build-without-warnings
            , catch-bad-whitespace
            , compile-in-safe-mode
+           , portable-libc-tests
            , tests-exe
            , tests-shell
            , bootstrap-pnut-sh
