@@ -58,7 +58,7 @@ FILE *fdopen(int fd, const char *mode) {
 }
 
 FILE *fopen(const char *pathname, const char *mode) {
-  int fd = open(pathname, fopen_flags(mode), 0666); // 0666 is t
+  int fd = open(pathname, fopen_flags(mode), 0666);
   if (fd <= 0) {
     return 0;
   } else {
