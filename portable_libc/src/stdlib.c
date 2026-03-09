@@ -224,12 +224,9 @@ size_t qpartition(void *base, size_t count, size_t size, int (*compare) (void co
   size_t j;
   for (j = 0; j < count; j++) {
     int c = compare(base + j * size, p);
-    if (c < 0) {
-      // j^th element < pivot => swap it with i^th element
+    if (c <= 0) {
+      // j^th element <= pivot => swap it with i^th element
       qswap (base + i * size, base + j * size, size);
-      i++;
-    } else if (c == 0) {
-      // Small optimization, no need to swap when equal
       i++;
     }
   }

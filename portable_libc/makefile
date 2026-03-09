@@ -1,39 +1,33 @@
 all: test
+.PHONY: all test clean pnut-exe
 
 .SUFFIXES:
 
-#CC=clang -Wno-incompatible-pointer-types-discards-qualifiers
-CC=gcc-13 -Wno-discarded-qualifiers
-TCC=tcc -nostdlib
-#TCC_VERSION=08a4c52de39b202f02d1ec525c64336d11ad9ccf
-#TCC_VERSION=1b57560502d04cbc2e410a960d965765d7f3d635
-#TCC=/part/01/feeley/tcc/builds/${TCC_VERSION}/tinycc/tcc
+PNUT_SRC=../pnut.c
+PNUT_TARGET=-Dtarget_x86_64_linux -DONE_PASS_GENERATOR -DSAFE_MODE -DNO_BUILTIN_LIBC
 
-#test: test_with_gcc test_with_gcc_using_portable_libc test_with_tcc_using_portable_libc test_with_pnut_using_portable_libc
-test: test_with_gcc test_with_gcc_using_portable_libc test_with_pnut_using_portable_libc
+# pnut-exe built with NO_BUILTIN_LIBC provides only OS primitives: exit, read,
+# write, open, close, lseek. The portable_libc provides everything else: malloc,
+# printf, fopen, etc. on top of pnut's OS builtins.
+pnut-exe: ${PNUT_SRC}
+	${CC} -std=c99 ${PNUT_TARGET} ${PNUT_SRC} -o pnut-exe
 
-test_with_gcc:
-	@echo ======================== gcc
-	${CC} test.c
-	./a.out abcdef ; echo $$?
+LIBC_FILES=src/crt1.c libc.c
+PNUT_FLAGS=-DUSE_PORTABLE_LIBC -DADD_LIBC_STUB -Iinclude/
 
-test_with_gcc_using_portable_libc:
-	@echo ======================== gcc with portable_libc
-	cat src/crt1.c src/crti.c portable_libc.c test.c > test-with-libc.c
-	${CC} -DUSE_PORTABLE_LIBC -I. -nostdlib -lSystem test-with-libc.c
-	./a.out abcdef ; echo $$?
+test: test_libc_with_gcc test_libc_with_pnut_exe
 
-test_with_tcc_using_portable_libc:
-	@echo ======================== tcc with portable_libc
-	cat src/crt1.c src/crti.c portable_libc.c test.c > test-with-libc.c
-	${TCC} -m32 -DUSE_PORTABLE_LIBC -I. -static test-with-libc.c
-	./a.out abcdef ; echo $$?
+# Test with system libc (validates tests are correct)
+test_libc_with_gcc:
+	@echo ======================== gcc \(test-libc.c with system libc\)
+	${CC} test-libc.c -o test-libc-gcc
+	./test-libc-gcc
 
-test_with_pnut_using_portable_libc:
-	@echo ======================== pnut with portable_libc
-	cat src/crt1.c src/crti.c portable_libc.c test.c > test-with-libc.c
-	ksh ../build/pnut-sh.sh -DUSE_PORTABLE_LIBC test-with-libc.c > test.sh
-	ksh test.sh abcdef ; echo $$?
+# Test with portable_libc via pnut-exe
+test_libc_with_pnut_exe: pnut-exe
+	@echo ======================== pnut-exe with portable_libc \(test-libc.c\)
+	./pnut-exe ${PNUT_FLAGS} ${LIBC_FILES} test-libc.c -o test-libc-pnut
+	./test-libc-pnut
 
 clean:
-	rm -f a.out test.sh test-with-libc.c
+	rm -f pnut-exe test-libc-gcc test-libc-pnut
