@@ -1,4 +1,4 @@
-// ########################## C to shell translation ##########################
+//########################### C to shell translation ###########################
 //
 // This block of comments is a short tutorial on how to read pnut-sh-generated
 // shell code, describing the mapping of C constructs used in pnut's source code
@@ -22,10 +22,10 @@
 //
 // Features that don't have a direct mapping to shell (goto, switch
 // fall-through, floating point numbers), or that are not used in pnut's source
-// code, are not not covered in this document. Refer to
-// https://doi.org/10.1145/3687997.3695639 for more details.
+// code, are not not covered in this document.
+// Refer to https://doi.org/10.1145/3687997.3695639 for more details.
 //
-// ------------------------------- Name mangling -------------------------------
+//-------------------------------- Name mangling -------------------------------
 //
 // POSIX shell variables and functions all share the same namespace, and thus a
 // naming convention is used to avoid collisions between variables and
@@ -42,7 +42,7 @@
 // Because underscore (_) is used to avoid collisions, C variables and functions
 // with leading underscores are not supported.
 //
-// --------------------------- C Heap and arithmetic ---------------------------
+//---------------------------- C Heap and arithmetic ---------------------------
 //
 // A heap is usually implemented using an array of byte, but since POSIX shell
 // doesn't offer arrays, arrays are simulated using shell variables.
@@ -57,7 +57,7 @@
 // management, using a simple bump allocator, is handled by the runtime
 // functions.
 //
-// --------------------------------- Function ----------------------------------
+//---------------------------------- Function ----------------------------------
 //
 // Shell functions are more like procedures in that they don't have a return
 // value (other than exit code), and do not have local variables. Additionally,
@@ -83,7 +83,7 @@
 // local variables. To make the bookkeeping of local variables easy to read, it
 // is abstracted using the let and endlet runtime functions.
 //
-// ----------------------- Character and string literals -----------------------
+//------------------------ Character and string literals -----------------------
 //
 // POSIX shell does not have a built-in way to represent character literals. To
 // avoid the use of magic numbers in the shell code, character literals are
@@ -102,3 +102,4 @@
 // For example, `putchar("0123456789abcdef"[n & 15])` maps to:
 //   defstr __str_0 "0123456789abcdef"
 //   putchar __ $((__str_0 + (n & 15)))
+//
