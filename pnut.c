@@ -1290,8 +1290,12 @@ void adjust_for_trailing_comment() {
 }
 
 // Output the C code corresponding to the last declaration parsed.
+// Every line is prefixed with '#' so they are treated as comments by the shell.
+// An additional '#' is added for lines that are already comments in the
+// original C code, replacing the '//' so the indentation of the original
+// comment is preserved in the output.
+// Otherwise, a space is added after '#' to preserve the alignments.
 void output_declaration_c_code() {
-
   int i = 0;
 
   if (code_annotations_quiet_mode) {
@@ -1306,13 +1310,31 @@ void output_declaration_c_code() {
   while (code_char_buf[i] == '\n') i += 1;
 
   putchar('#');
-  putchar(' ');
+  if (i + 2 < last_tok_code_buf_ix
+    && code_char_buf[i] == '/'
+    && code_char_buf[i + 1] == '/') {
+    // If the next 2 characters are "//", use "##" instead of "# //" to
+    // preserve the indentation of the original comment.
+    putchar('#');
+    i += 2;
+  } else {
+    putchar(' ');
+  }
 
   for (; i < last_tok_code_buf_ix; i += 1) {
     if (code_char_buf[i] == '\n') {
       putchar('\n');
       putchar('#');
-      putchar(' ');
+      if ( i + 2 < last_tok_code_buf_ix
+        && code_char_buf[i + 1] == '/'
+        && code_char_buf[i + 2] == '/') {
+        // If the next 2 characters are "//", use "##" instead of "# //" to
+        // preserve the indentation of the original comment.
+        putchar('#');
+        i += 2;
+      } else {
+        putchar(' ');
+      }
     } else {
       putchar(code_char_buf[i]);
     }
@@ -1331,13 +1353,12 @@ void output_defined_cli_macros() {
   ast macro_tokens;
   int macro_tok;
   int macro_val;
-  if (cli_macros != 0) putstr("# // Macros defined from the command line\n");
+  if (cli_macros != 0) putstr("## Macros defined from the command line:\n");
 
   while (macros != 0) {
     ast macro = car(macros);
     putstr(symbol_type(macro) == MACRO ? "# #define " : "# #undef ");
     putstr(symbol_buf(macro));
-    // cons(cons(STRING, value_symb), 0)
     // For macros with a single value token, we print it on the same line
     macro_tokens = car(symbol_tag(macro));
     if (macro_tokens != 0 && tail(macro_tokens) == 0) {
@@ -4757,19 +4778,26 @@ void handle_macro_U(char *opt) {
 // only emit them when a non-newline character is output.
 int newline_accumulated = 0;
 
-void output_rest_of_line(FILE *fp) {
+void drop_rest_of_line(FILE * const fp) {
+  int c;
+  while ((c = fgetc(fp)) != EOF && c != '\n');
+  newline_accumulated = 0;
+}
+
+void output_rest_of_line(FILE * const fp, char *prefix) {
   int c;
   while (newline_accumulated > 0) {
     putchar('\n');
     newline_accumulated -= 1;
   }
+  if (prefix) putstr(prefix);
   while ((c = fgetc(fp)) != EOF && c != '\n') {
     putchar(c);
   }
   if (c == '\n') putchar('\n');
 }
 
-void extract_c_code_from_annotated_file(char *filename) {
+void extract_c_code_from_annotated_file(char * const filename) {
   int c;
   FILE *sh_fp = fopen(filename, "r");
 
@@ -4779,32 +4807,34 @@ void extract_c_code_from_annotated_file(char *filename) {
     return;
   }
 
-  // Skip first line (shebang)
-  while ((c = fgetc(sh_fp)) != EOF && c != '\n');
+  // Skip first line (#! ...)
+  drop_rest_of_line(sh_fp);
 
   // Process the rest of the file:
-  // - Empty lines are kept as is.
-  // - Lines starting with "# " have it removed (these are C code lines)
-  // - Ignore other lines (which are shell commands or shell comments starting with "#_")
+  // - Empty lines are kept as is
+  // - Lines starting with "# " are printed without "# " (C code lines)
+  // - Lines starting with "##" are printed with "//" instead (C comments lines)
+  // - Other lines are ignored (shell commands or shell comments starting with "#_")
   while ((c = fgetc(sh_fp)) != EOF) {
     if (c == '\n') {
       newline_accumulated += 1;
-      continue;
     } else if (c == '#') {
-      if ((c = fgetc(sh_fp)) == ' ') {
-        output_rest_of_line(sh_fp);
-        continue;
+      c = fgetc(sh_fp);
+      if (c == ' ') {
+        output_rest_of_line(sh_fp, 0);
+      } else if (c == '#') {
+        // Line starting with "##", replace with "//"
+        output_rest_of_line(sh_fp, "//");
+        if (c == '\n') putchar('\n');
       } else if (c == '\n') {
         // Line with only '#', keep as empty line
         putchar('\n');
-        continue;
+      } else {
+        drop_rest_of_line(sh_fp);
       }
+    } else {
+      drop_rest_of_line(sh_fp);
     }
-
-    // Not a C code line, skip to end of line
-    while ((c = fgetc(sh_fp)) != EOF && c != '\n');
-    // Reset accumulated newlines so newlines between shell lines are not output
-    newline_accumulated = 0;
   }
 
   fclose(sh_fp);
