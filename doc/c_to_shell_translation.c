@@ -39,8 +39,8 @@
 // - How functions (local variables, parameters, return values) are implemented.
 // - Character and string literals.
 //
-// Importantly, this is done without the use dynamic code evaluation (`eval`
-// command) that would make the code more difficult to read and audit.
+// Importantly, this is done without dynamic code evaluation (`eval` command)
+// that would make the code more difficult to read and audit.
 //
 // Features that don't have a direct mapping to shell (goto, switch
 // fall-through, floating point numbers), or that are not used in pnut's source
@@ -54,28 +54,28 @@
 // functions, and with internal variables and functions used by the generated
 // shell code. The convention is as follows:
 // - Local variables are named as-is, with no mangling.
-// - Global variables are prefixed with _ to avoid collisions with local
+// - Global variables are prefixed with `_` to avoid collisions with local
 //   variables.
-// - Functions are prefixed with _ to avoid collisions with other functions.
-// - Internal variables and functions used by the generated shell code are
-//   prefixed with __ to avoid collisions with user-defined variables and
-//   functions.
+// - Internal variables used by the generated shell code are prefixed with `__`
+//   to avoid collisions with user-defined variables.
+// - Functions are prefixed with `_` to avoid collisions with internal
+//   functions, which are named without the underscore prefix.
 //
-// Because underscore (_) is used to avoid collisions, C variables and functions
-// with leading underscores are not supported.
+// Because underscore (`_`) is used to avoid collisions between variables, C
+// variables with leading underscores are not allowed.
 //
 //---------------------------- C Heap and arithmetic ---------------------------
 //
 // A heap is usually implemented using an array of byte, but since POSIX shell
-// doesn't offer arrays, arrays are simulated using shell variables.
-// Specificaly, _{address} is used to store the value at a memory address, and
-// arithmetic expansions can be used to dynamically refer to memory locations.
-// For example, the C expression `*(p + 1)` is translated to `_$((p + 1))`.
-// Arithmetic expansion can also be nested, and are expanded inside-out, with
-// `arr[i] = 42;` mapping to `: $((_$((arr + i)) = 42))`. Notice the `:` builtin
-// command, used to ignore the output of the assignment.
+// doesn't offer an array data-structure, arrays are simulated using shell
+// variables. Specificaly, `_{address}` is used to store the value at a memory
+// address, and arithmetic expansions can be used to dynamically refer to memory
+// locations. For example, the C expression `*(p + 1)` is translated to
+// `_$((p + 1))`. Arithmetic expansion can also be nested, and are expanded
+// inside-out, with `arr[i] = 42;` mapping to `: $((_$((arr + i)) = 42))`.
+// Notice the `:` builtin command, used to ignore the output of the assignment.
 //
-// Malloc and free are implemented on top of this heap, and the memory
+// `malloc` and `free` are implemented on top of this heap, and the memory
 // management, using a simple bump allocator, is handled by the runtime
 // functions.
 //
@@ -83,36 +83,39 @@
 //
 // Shell functions are more like procedures in that they don't have a return
 // value (other than exit code), and do not have local variables. Additionally,
-// their parameters are passed as positional parameters ($1, $2, ...), and not
-// as named variables.
+// their parameters are passed as positional parameters (`$1`, `$2`, ...), and
+// not as named variables.
 //
 // In general, shell functions can return values by assigning to global
-// variables, which can then be read by the function's caller. Since arithmetic
-// expansion can be used to assign to variables dynamically, functions take as
+// variables, which can then be read by the caller of the function. Because
+// arithmetic expansion can assign to variables dynamically, functions take as
 // their first argument the name of the variable that receives the result (the
 // "return variable"). Returning a value from a function is then done by
-// assigning to this return variable like so: `:$(($1 = result))`.
+// assigning to this return variable like so: `: $(($1 = result))`.
 //
 // We use the term local variable to refer to a programmer-declared local
 // variable or parameter, or a compiler-introduced temporary. Since POSIX shell
 // offers only globally scoped variables, local scoping of variables is achieved
 // with a shallow binding approach. For this, we use a callee-save calling
 // convention. Every function begins by saving its local variables to a stack so
-// that the function is free to use them. The variables get restored from the
-// stack when the function returns. Unlike the traditional C stack
-// implementation, this stack is used solely for saving local variables and is
-// not used for control flow, meaning no stack space is used when there are no
-// local variables. To make the bookkeeping of local variables easy to read, it
-// is abstracted using the let and endlet runtime functions.
+// that the function is free to clobber them. The variables are then restored to
+// their original values when the function returns. Unlike the traditional C
+// stack implementation, this stack is used solely for saving local variables
+// values, and is not used for control flow, meaning no stack space is used by
+// functions with no local variables. To keep the bookkeeping of local variables
+// out of the way, it is abstracted using the `let` and `endlet` runtime
+// functions.
 //
 //------------------------ Character and string literals -----------------------
 //
-// POSIX shell does not have a built-in way to represent character literals. To
-// avoid the use of magic numbers in the shell code, character literals are
-// replaced by readonly variables initialized to the character's ASCII code,
-// named after the character. For example, 'a' is replaced with `__a__`, which
-// is initialized to 97. Non-alphanumeric characters are replaced with
-// descriptive names, for example ' ' is replaced with `__space__`.
+// POSIX shell does not have character literals like C, where character literals
+// are represented as integers corresponding to the character's ASCII code.
+// To avoid the use of such ASCII code directly in the shell code, which would
+// be difficult to read, character literals are replaced by readonly variables
+// initialized to the character's ASCII code, named after the character. For
+// example, 'a' is replaced with `__a__`, which is initialized to 97.
+// Non-alphanumeric characters are replaced with descriptive names, for example
+// ' ' is replaced with `__space__`.
 //
 // In shell, string values can be modified only using the provided interface.
 // This interface is limited, being primarily useful for concatenating, cutting,
@@ -122,6 +125,7 @@
 // This is done by the `defstr` function, which takes a string literal and a
 // variable name, and initializes the variable to point to the unpacked string.
 // For example, `putchar("0123456789abcdef"[n & 15])` maps to:
-//   defstr __str_0 "0123456789abcdef"
-//   putchar __ $((__str_0 + (n & 15)))
+//    defstr __str_0 "0123456789abcdef"
+//    putchar __ $((__str_0 + (n & 15)))
 //
+//-------------------- Here begins the actual implementation -------------------
