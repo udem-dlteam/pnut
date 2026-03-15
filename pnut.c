@@ -563,7 +563,7 @@ void restore_include_context() {
 }
 
 // Tokens and AST nodes
-enum {
+enum TOKEN {
   // C keywords
   KEYWORDS_START = 300,
   BREAK_KW,
