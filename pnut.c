@@ -1006,13 +1006,13 @@ void set_symbol_defstr_index(const int symbol, const int index) {
 
 #endif
 
-void begin_string() {
+void begin_symbol() {
   string_start = string_pool_alloc;
   hash = 0;
 }
 
 // Append the current character (ch) to the string under construction in the pool
-void accum_string(const char c) {
+void accum_symbol_char(const char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
   string_pool_alloc += 1;
@@ -1022,31 +1022,31 @@ void accum_string(const char c) {
 }
 
 // Append a string from the string_pool to the string under construction
-void accum_string_string(const int string_symbol) {
+void accum_symbol_string(const int string_symbol) {
   char *string_start = symbol_buf(string_symbol);
   char *string_end = string_start + symbol_len(string_symbol);
   while (string_start < string_end) {
-    accum_string(*string_start);
+    accum_symbol_char(*string_start);
     string_start += 1;
   }
 }
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
 
-// Similar to accum_string_string, but writes an integer to the string pool
+// Similar to accum_symbol_string, but writes an integer to the string pool
 // Note that this function only supports small integers, represented as positive number.
-void accum_string_integer(int n) {
+void accum_symbol_integer(int n) {
 #ifdef SUPPORT_64_BIT_LITERALS
-  if (n < 0) syntax_error("accum_string_integer: Only small integers can be pasted");
+  if (n < 0) syntax_error("accum_symbol_integer: Only small integers can be pasted");
 #else
   if (n < 0) {
-    accum_string('-');
-    accum_string_integer(-n);
+    accum_symbol_char('-');
+    accum_symbol_integer(-n);
   } else
 #endif
   {
-    if (n > 9) accum_string_integer(n / 10);
-    accum_string('0' + n % 10);
+    if (n > 9) accum_symbol_integer(n / 10);
+    accum_symbol_char('0' + n % 10);
   }
 }
 
@@ -1715,7 +1715,7 @@ void get_string_char() {
 void accum_string_until(char end) {
   while (ch != end && ch != EOF) {
     get_string_char();
-    accum_string(val);
+    accum_symbol_char(val);
   }
   if (ch != end) {
     syntax_error("unterminated string literal");
@@ -2237,13 +2237,13 @@ void handle_preprocessor_directive() {
 
 void get_ident() {
 
-  begin_string();
+  begin_symbol();
 
   while (('A' <= ch && ch <= 'Z') ||
          ('a' <= ch && ch <= 'z') ||
          ('0' <= ch && ch <= '9') ||
          (ch == '_')) {
-    accum_string(ch);
+    accum_symbol_char(ch);
     get_ch();
   }
 
@@ -2252,10 +2252,10 @@ void get_ident() {
 }
 
 int intern_str(char* name) {
-  begin_string();
+  begin_symbol();
 
   while (*name != 0) {
-    accum_string(*name);
+    accum_symbol_char(*name);
     name += 1;
   }
 
@@ -2703,12 +2703,12 @@ void paste_tokens(int left_tok, int left_val) {
   if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO
     || (KEYWORDS_START <= left_tok && left_tok <= KEYWORDS_END)) {
     // Something that starts with an identifier can only be an identifier
-    begin_string();
-    accum_string_string(left_val);
+    begin_symbol();
+    accum_symbol_string(left_val);
 
     if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO
      || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
-      accum_string_string(right_val);
+      accum_symbol_string(right_val);
     } else if (right_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
@@ -2717,7 +2717,7 @@ void paste_tokens(int left_tok, int left_val) {
             || right_tok == INTEGER_L || right_tok == INTEGER_LL || right_tok == INTEGER_U || right_tok == INTEGER_UL || right_tok == INTEGER_ULL
 #endif
               ) {
-      accum_string_integer(-right_val);
+      accum_symbol_integer(-right_val);
     } else {
       dump_ident(left_val);
       dump_tok(right_tok);
@@ -2745,9 +2745,9 @@ void paste_tokens(int left_tok, int left_val) {
       val = -paste_integers(-left_val, -right_val);
     } else if (right_tok == IDENTIFIER || right_tok == MACRO
             || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
-      begin_string();
-      accum_string_integer(-left_val);
-      accum_string_string(right_val);
+      begin_symbol();
+      accum_symbol_integer(-left_val);
+      accum_symbol_string(right_val);
 
       val = end_symbol();
       tok = symbol_type(val); // The kind of the identifier
@@ -2976,7 +2976,7 @@ void get_tok() {
 
       get_ch();
 
-      begin_string();
+      begin_symbol();
       accum_string_until('\"');
 
       val = end_symbol();
@@ -4068,10 +4068,10 @@ ast parse_primary_expression() {
       }
 
       // Unpack the list of strings into a single string
-      begin_string();
+      begin_symbol();
 
       while (result != 0) {
-        accum_string_string(car(result));
+        accum_symbol_string(car(result));
         result = cdr(result);
       }
 
@@ -4724,10 +4724,10 @@ void handle_macro_D(char *opt) {
   int value_symbol;
   int acc;
 
-  begin_string();
+  begin_symbol();
 
   while (*opt != 0 && *opt != '=') {
-    accum_string(*opt);
+    accum_symbol_char(*opt);
     opt += 1;
   }
 
