@@ -259,8 +259,12 @@
   // Use stack allocation for global variables instead of heap allocation.
   // #define USE_STACK_FOR_GLOBALS
 
-  // Pnut-exe doesn't support generating annotated code.
+  // Pnut-exe doesn't support generating annotated code, but we still want to be
+  // able to extract the original C source code from the generated pnut-exe.sh
+  #ifdef ANNOTATE_WITH_C_CODE
+  #define SUPPORT_EXTRACT_C_ANNOTATIONS
   #undef ANNOTATE_WITH_C_CODE
+  #endif
 
 #else
   // Frontend-only variants of pnut (e.g. for running reader, tokenizer or parser)
