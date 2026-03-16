@@ -428,7 +428,7 @@ void runtime_make_argv() {
   runtime_unpack_string_to_buf();
   putstr("make_argv() {\n");
   putstr("  __argc=$1; shift;\n");
-  putstr("  _malloc __argv $__argc # Allocate enough space for all elements.\n");
+  putstr("  _malloc __argv $((__argc + 1)) # Allocate enough space for all elements and null terminator.\n");
   putstr("  __argv_ptr=$__argv\n");
   putstr("\n");
   putstr("  while [ $# -ge 1 ]; do\n");
@@ -437,6 +437,7 @@ void runtime_make_argv() {
   putstr("    : $((__argv_ptr += 1))\n");
   putstr("    shift\n");
   putstr("  done\n");
+  putstr("  : $((_$__argv_ptr = 0)) # Null-terminate the argv array\n");
   putstr("}\n");
   putstr("\n");
 }

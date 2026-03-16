@@ -1,3 +1,8 @@
+#ifdef ANNOTATE_WITH_C_CODE
+#include "doc/c_to_shell_translation.c"
+#include "doc/architecture_of_pnut.c"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +11,7 @@
 #include <unistd.h> // for write
 #include <unistd.h> // for isatty
 
+#if 0 // Removed from C annotations
 // =========================== configuration options ===========================
 //
 // Pnut has many compilation options to change the features supported by
@@ -60,6 +66,7 @@
 // runtime checks and better error messages.
 //
 // =============================================================================
+#endif
 
 // Pnut-sh specific options
 #ifdef target_sh
@@ -255,8 +262,12 @@
   // Use stack allocation for global variables instead of heap allocation.
   // #define USE_STACK_FOR_GLOBALS
 
-  // Pnut-exe doesn't support generating annotated code.
+  // Pnut-exe doesn't support generating annotated code, but we still want to be
+  // able to extract the original C source code from the generated pnut-exe.sh
+  #ifdef ANNOTATE_WITH_C_CODE
+  #define SUPPORT_EXTRACT_C_ANNOTATIONS
   #undef ANNOTATE_WITH_C_CODE
+  #endif
 
 #else
   // Frontend-only variants of pnut (e.g. for running reader, tokenizer or parser)
@@ -267,6 +278,10 @@
 
   // Enable all C features in the frontend
   #define SUPPORT_ALL_C_FEATURES
+#endif
+
+#ifdef ANNOTATE_WITH_C_CODE
+#define SUPPORT_EXTRACT_C_ANNOTATIONS
 #endif
 
 #ifdef SUPPORT_ALL_C_FEATURES
@@ -551,7 +566,7 @@ void restore_include_context() {
 }
 
 // Tokens and AST nodes
-enum {
+enum TOKEN {
   // C keywords
   KEYWORDS_START = 300,
   BREAK_KW,
@@ -994,13 +1009,13 @@ void set_symbol_defstr_index(const int symbol, const int index) {
 
 #endif
 
-void begin_string() {
+void begin_symbol() {
   string_start = string_pool_alloc;
   hash = 0;
 }
 
 // Append the current character (ch) to the string under construction in the pool
-void accum_string(const char c) {
+void accum_symbol_char(const char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
   string_pool_alloc += 1;
@@ -1010,31 +1025,31 @@ void accum_string(const char c) {
 }
 
 // Append a string from the string_pool to the string under construction
-void accum_string_string(const int string_symbol) {
+void accum_symbol_string(const int string_symbol) {
   char *string_start = symbol_buf(string_symbol);
   char *string_end = string_start + symbol_len(string_symbol);
   while (string_start < string_end) {
-    accum_string(*string_start);
+    accum_symbol_char(*string_start);
     string_start += 1;
   }
 }
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
 
-// Similar to accum_string_string, but writes an integer to the string pool
+// Similar to accum_symbol_string, but writes an integer to the string pool
 // Note that this function only supports small integers, represented as positive number.
-void accum_string_integer(int n) {
+void accum_symbol_integer(int n) {
 #ifdef SUPPORT_64_BIT_LITERALS
-  if (n < 0) syntax_error("accum_string_integer: Only small integers can be pasted");
+  if (n < 0) syntax_error("accum_symbol_integer: Only small integers can be pasted");
 #else
   if (n < 0) {
-    accum_string('-');
-    accum_string_integer(-n);
+    accum_symbol_char('-');
+    accum_symbol_integer(-n);
   } else
 #endif
   {
-    if (n > 9) accum_string_integer(n / 10);
-    accum_string('0' + n % 10);
+    if (n > 9) accum_symbol_integer(n / 10);
+    accum_symbol_char('0' + n % 10);
   }
 }
 
@@ -1286,8 +1301,12 @@ void adjust_for_trailing_comment() {
 }
 
 // Output the C code corresponding to the last declaration parsed.
+// Every line is prefixed with '#' so they are treated as comments by the shell.
+// An additional '#' is added for lines that are already comments in the
+// original C code, replacing the '//' so the indentation of the original
+// comment is preserved in the output.
+// Otherwise, a space is added after '#' to preserve the alignments.
 void output_declaration_c_code() {
-
   int i = 0;
 
   if (code_annotations_quiet_mode) {
@@ -1302,13 +1321,31 @@ void output_declaration_c_code() {
   while (code_char_buf[i] == '\n') i += 1;
 
   putchar('#');
-  putchar(' ');
+  if (i + 2 < last_tok_code_buf_ix
+    && code_char_buf[i] == '/'
+    && code_char_buf[i + 1] == '/') {
+    // If the next 2 characters are "//", use "##" instead of "# //" to
+    // preserve the indentation of the original comment.
+    putchar('#');
+    i += 2;
+  } else {
+    putchar(' ');
+  }
 
   for (; i < last_tok_code_buf_ix; i += 1) {
     if (code_char_buf[i] == '\n') {
       putchar('\n');
       putchar('#');
-      putchar(' ');
+      if ( i + 2 < last_tok_code_buf_ix
+        && code_char_buf[i + 1] == '/'
+        && code_char_buf[i + 2] == '/') {
+        // If the next 2 characters are "//", use "##" instead of "# //" to
+        // preserve the indentation of the original comment.
+        putchar('#');
+        i += 2;
+      } else {
+        putchar(' ');
+      }
     } else {
       putchar(code_char_buf[i]);
     }
@@ -1327,13 +1364,12 @@ void output_defined_cli_macros() {
   ast macro_tokens;
   int macro_tok;
   int macro_val;
-  if (cli_macros != 0) putstr("# // Macros defined from the command line\n");
+  if (cli_macros != 0) putstr("## Macros defined from the command line:\n");
 
   while (macros != 0) {
     ast macro = car(macros);
     putstr(symbol_type(macro) == MACRO ? "# #define " : "# #undef ");
     putstr(symbol_buf(macro));
-    // cons(cons(STRING, value_symb), 0)
     // For macros with a single value token, we print it on the same line
     macro_tokens = car(symbol_tag(macro));
     if (macro_tokens != 0 && tail(macro_tokens) == 0) {
@@ -1561,11 +1597,11 @@ void u64_mul_u32(int *x, int y) {
   int xhi = I32_LOGICAL_RSHIFT_16(x[0]);
   int ylo = y & 0xffff;
   int yhi = I32_LOGICAL_RSHIFT_16(y);
-  int lo = xlo * ylo; /* 0 .. 0xfffe0001 */
-  int m1 = xlo * yhi + (lo >> 16); /* 0 .. 0xfffeffff */
-  int m2 = xhi * ylo; /* 0 .. 0xfffe0001 */
-  int m3 = (m1 & 0xffff) + (m2 & 0xffff); /* 0 .. 0x1fffe */
-  int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); /* 0 .. 0xfffffffe */
+  int lo = xlo * ylo; // 0 .. 0xfffe0001
+  int m1 = xlo * yhi + (lo >> 16); // 0 .. 0xfffeffff
+  int m2 = xhi * ylo; // 0 .. 0xfffe0001
+  int m3 = (m1 & 0xffff) + (m2 & 0xffff); // 0 .. 0x1fffe
+  int hi = xhi * yhi + I32_LOGICAL_RSHIFT_16(m1) + I32_LOGICAL_RSHIFT_16(m2) + I32_LOGICAL_RSHIFT_16(m3); // 0 .. 0xfffffffe */
   x[0] = ((m3 & 0xffff) << 16) + (lo & 0xffff);
   x[1] = x[1] * y + hi;
 }
@@ -1682,7 +1718,7 @@ void get_string_char() {
 void accum_string_until(char end) {
   while (ch != end && ch != EOF) {
     get_string_char();
-    accum_string(val);
+    accum_symbol_char(val);
   }
   if (ch != end) {
     syntax_error("unterminated string literal");
@@ -2166,13 +2202,13 @@ void handle_preprocessor_directive() {
       while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
         last_newline_ix -= 1;
       }
-      int newline_before_directive_ix = hash_code_buf_ix - 1;
-      while (newline_before_directive_ix > 0 && code_char_buf[newline_before_directive_ix] != '\n') {
-        newline_before_directive_ix -= 1;
+      int directive_line_start_ix = hash_code_buf_ix;
+      while (directive_line_start_ix > 0 && code_char_buf[directive_line_start_ix - 1] != '\n') {
+        directive_line_start_ix -= 1;
       }
 
       // Remove between the end of the directive and the last newline
-      remove_c_code_substr(newline_before_directive_ix + 1, last_newline_ix);
+      remove_c_code_substr(directive_line_start_ix, last_newline_ix);
     }
 #endif
 
@@ -2204,13 +2240,13 @@ void handle_preprocessor_directive() {
 
 void get_ident() {
 
-  begin_string();
+  begin_symbol();
 
   while (('A' <= ch && ch <= 'Z') ||
          ('a' <= ch && ch <= 'z') ||
          ('0' <= ch && ch <= '9') ||
          (ch == '_')) {
-    accum_string(ch);
+    accum_symbol_char(ch);
     get_ch();
   }
 
@@ -2219,10 +2255,10 @@ void get_ident() {
 }
 
 int intern_str(char* name) {
-  begin_string();
+  begin_symbol();
 
   while (*name != 0) {
-    accum_string(*name);
+    accum_symbol_char(*name);
     name += 1;
   }
 
@@ -2670,12 +2706,12 @@ void paste_tokens(int left_tok, int left_val) {
   if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO
     || (KEYWORDS_START <= left_tok && left_tok <= KEYWORDS_END)) {
     // Something that starts with an identifier can only be an identifier
-    begin_string();
-    accum_string_string(left_val);
+    begin_symbol();
+    accum_symbol_string(left_val);
 
     if (right_tok == IDENTIFIER || right_tok == TYPE || right_tok == MACRO
      || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
-      accum_string_string(right_val);
+      accum_symbol_string(right_val);
     } else if (right_tok == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
             || right_tok == INTEGER_HEX || right_tok == INTEGER_OCT
@@ -2684,7 +2720,7 @@ void paste_tokens(int left_tok, int left_val) {
             || right_tok == INTEGER_L || right_tok == INTEGER_LL || right_tok == INTEGER_U || right_tok == INTEGER_UL || right_tok == INTEGER_ULL
 #endif
               ) {
-      accum_string_integer(-right_val);
+      accum_symbol_integer(-right_val);
     } else {
       dump_ident(left_val);
       dump_tok(right_tok);
@@ -2712,9 +2748,9 @@ void paste_tokens(int left_tok, int left_val) {
       val = -paste_integers(-left_val, -right_val);
     } else if (right_tok == IDENTIFIER || right_tok == MACRO
             || (KEYWORDS_START <= right_tok && right_tok <= KEYWORDS_END)) {
-      begin_string();
-      accum_string_integer(-left_val);
-      accum_string_string(right_val);
+      begin_symbol();
+      accum_symbol_integer(-left_val);
+      accum_symbol_string(right_val);
 
       val = end_symbol();
       tok = symbol_type(val); // The kind of the identifier
@@ -2943,7 +2979,7 @@ void get_tok() {
 
       get_ch();
 
-      begin_string();
+      begin_symbol();
       accum_string_until('\"');
 
       val = end_symbol();
@@ -4035,10 +4071,10 @@ ast parse_primary_expression() {
       }
 
       // Unpack the list of strings into a single string
-      begin_string();
+      begin_symbol();
 
       while (result != 0) {
-        accum_string_string(car(result));
+        accum_symbol_string(car(result));
         result = cdr(result);
       }
 
@@ -4129,7 +4165,7 @@ ast parse_postfix_expression(ast result) {
 // stream and calling parse_unary_expression.
 //
 // Having to push back tokens on the stream consumes memory and means our parser
-// isn't truely one-pass. To avoid having to push back the '(' token, we can
+// isn't truly one-pass. To avoid having to push back the '(' token, we can
 // instead call the parse_parenthesized_expression function directly, followed
 // by the parse_unary_expression function. These 2 function calls correspond to
 // the functions that would be called if we had pushed back the '(' token and
@@ -4691,10 +4727,10 @@ void handle_macro_D(char *opt) {
   int value_symbol;
   int acc;
 
-  begin_string();
+  begin_symbol();
 
   while (*opt != 0 && *opt != '=') {
-    accum_string(*opt);
+    accum_symbol_char(*opt);
     opt += 1;
   }
 
@@ -4753,19 +4789,26 @@ void handle_macro_U(char *opt) {
 // only emit them when a non-newline character is output.
 int newline_accumulated = 0;
 
-void output_rest_of_line(FILE *fp) {
+void drop_rest_of_line(FILE * const fp) {
+  int c;
+  while ((c = fgetc(fp)) != EOF && c != '\n');
+  newline_accumulated = 0;
+}
+
+void output_rest_of_line(FILE * const fp, char *prefix) {
   int c;
   while (newline_accumulated > 0) {
     putchar('\n');
     newline_accumulated -= 1;
   }
+  if (prefix) putstr(prefix);
   while ((c = fgetc(fp)) != EOF && c != '\n') {
     putchar(c);
   }
   if (c == '\n') putchar('\n');
 }
 
-void extract_c_code_from_annotated_file(char *filename) {
+void extract_c_code_from_annotated_file(char * const filename) {
   int c;
   FILE *sh_fp = fopen(filename, "r");
 
@@ -4775,32 +4818,34 @@ void extract_c_code_from_annotated_file(char *filename) {
     return;
   }
 
-  // Skip first line (shebang)
-  while ((c = fgetc(sh_fp)) != EOF && c != '\n');
+  // Skip first line (#! ...)
+  drop_rest_of_line(sh_fp);
 
   // Process the rest of the file:
-  // - Empty lines are kept as is.
-  // - Lines starting with "# " have it removed (these are C code lines)
-  // - Ignore other lines (which are shell commands or shell comments starting with "#_")
+  // - Empty lines are kept as is
+  // - Lines starting with "# " are printed without "# " (C code lines)
+  // - Lines starting with "##" are printed with "//" instead (C comments lines)
+  // - Other lines are ignored (shell commands or shell comments starting with "#_")
   while ((c = fgetc(sh_fp)) != EOF) {
     if (c == '\n') {
       newline_accumulated += 1;
-      continue;
     } else if (c == '#') {
-      if ((c = fgetc(sh_fp)) == ' ') {
-        output_rest_of_line(sh_fp);
-        continue;
+      c = fgetc(sh_fp);
+      if (c == ' ') {
+        output_rest_of_line(sh_fp, 0);
+      } else if (c == '#') {
+        // Line starting with "##", replace with "//"
+        output_rest_of_line(sh_fp, "//");
+        if (c == '\n') putchar('\n');
       } else if (c == '\n') {
         // Line with only '#', keep as empty line
         putchar('\n');
-        continue;
+      } else {
+        drop_rest_of_line(sh_fp);
       }
+    } else {
+      drop_rest_of_line(sh_fp);
     }
-
-    // Not a C code line, skip to end of line
-    while ((c = fgetc(sh_fp)) != EOF && c != '\n');
-    // Reset accumulated newlines so newlines between shell lines are not output
-    newline_accumulated = 0;
   }
 
   fclose(sh_fp);
