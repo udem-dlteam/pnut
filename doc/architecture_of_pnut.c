@@ -1,8 +1,8 @@
 //############################ Architecture of pnut ############################
 //
 // This comment block describes the architecture of pnut, covering its design
-// and implementation. For each parts of the compiler, the relevant functions
-// and variables are mentioned to help the reader navigate the codebase.
+// and implementation. For each part of the compiler, the relevant functions and
+// variables are mentioned to help the reader navigate the codebase.
 //
 // Pnut features two compiler backends: one targeting human-readable POSIX shell
 // code and another generating machine code (x86 only). Since both backends are
@@ -23,7 +23,7 @@
 // takes to get to the executable pnut-exe is to generate code more efficiently,
 // rather than generating faster code.
 //
-// Because the execution time of shell scripts is correlated with the numbers of
+// Because the execution time of shell scripts is correlated with the number of
 // variables they define, pnut is designed using a one-pass architecture that
 // processes one top-level declaration at a time, maintaining a small state to
 // keep track of the global scope, which includes functions, global variables,
@@ -33,7 +33,7 @@
 // the steps of compilation, from preprocessing to machine code generation and
 // linking.
 //
-//############################### Step 1: Reader ###############################
+//------------------------------- Step 1: Reader -------------------------------
 //
 // For the reader, the entire file is read character by character as the memory
 // usage from reading the whole file at once would overwhelm certain shells. To
@@ -58,7 +58,7 @@
 //  - save_include_context(): saves the reader state before including a file
 //  - restore_include_context(): restores the reader state after reading file
 //
-//############################## Step 2: Tokenizer #############################
+//------------------------------ Step 2: Tokenizer -----------------------------
 //
 // Next, the tokenizer consumes each character and produces a stream of tokens
 // representing C language keywords, identifiers, operators and literals.
@@ -73,8 +73,7 @@
 //
 // Relevant variables and functions (symbol table):
 //  - heap: array of objects allocated by tokenizer (symbols) and parser (AST)
-//  - string_pool: array of interned strings, where value of symbols are stored
-//
+//  - string_pool: array of interned strings, where values of symbols are stored
 //  - alloc_obj(): allocates an object in the heap and returns its index
 //  - begin_symbol(): init interning context, start accumulating chars of symbol
 //  - end_symbol(): intern the accumulated chars and return its symbol id
@@ -107,7 +106,7 @@
 // remains relatively stable.
 //
 // Relevant types, variables and functions (tokenizer):
-//  - enum TOKEN: of token types, including keywords, operators and literals.
+//  - enum TOKEN: token types, including keywords, operators and literals.
 //    Token values in the ASCII range are reserved for single-character tokens
 //  - tok: current token type, represented as an integer
 //  - val: value of the current token, integer if number literal, symbol id for
@@ -135,7 +134,7 @@
 //  - begin_macro_expansion/return_to_parent_macro(): manage expansion context
 //  - attempt_macro_expansion(): starts expansion when a macro token is found
 //
-//################################### Parser ###################################
+//----------------------------------- Parser -----------------------------------
 //
 // The parser is a simple recursive descent parser supporting a large subset of
 // C99. Like the reader and tokenizer, the parser is hand-written, so its
@@ -164,16 +163,16 @@
 //  - parse_statement(): entry point for parsing a statement
 //
 #ifdef target_sh
-//############################ Shell Code Generator ############################
+//---------------------------- Shell Code Generator ----------------------------
 //
 // POSIX shell allows forward references to functions and variables that are not
-// yet defined or declared are allowed. This simplifies the implementation of a
-// one-pass compiler as it eliminates the need for many fixups and indirections.
-// As a result, the challenges in implementing a POSIX shell code generator come
-// from other constraints, such as generating human-readable code. To be
-// human-readable, the shell code must be appropriately indented and shims that
-// are introduced by the shell code generation must be seamlessly integrated
-// with the rest of the code.
+// yet declared. This simplifies the implementation of a one-pass compiler as it
+// eliminates the need for many fixups and indirections. As a result, the
+// challenges in implementing a POSIX shell code generator come from other
+// constraints, such as generating human-readable code. To be human-readable,
+// the shell code must be appropriately indented and shims that are introduced
+// by the shell code generation must be seamlessly integrated with the rest of
+// the code.
 //
 // Pnut-sh compiles the statements of functions one after the other, each
 // mapping to a few lines of shell code. Constructing each line of shell code is
@@ -224,27 +223,29 @@
 //  - codegen_end(): finalization of code generator (called once)
 //  - codegen_glo_decl(): entry point for compiling top-level declaration
 //
-// statements:
+// Relevant functions and variables (statements):
 //  - enum STMT_CTX: current statement compilation context (else if, switch)
 //  - comp_glo_fun_decl(): compiles a function declaration
 //  - comp_glo_var_decl(): compiles a global variable declaration
 //  - comp_statement(): entry point for compiling a statement
 //  - comp_body(): compiles a scoped block (function/loop/conditional {...})
 //
-// expressions:
+// Relevant functions and variables (expressions):
 //  - enum VALUE_CTX: current expression compilation context ($((..)), cond)
 //  - comp_rvalue(): entry point for compiling a C expression
 //  - comp_lvalue(): entry point for compiling a C lvalue
 //  - handle_side_effects(): lifts and handles side effects of a C expression
-//  - character_ident(): map characters to their corresponding variable names
-//  - fresh_string_ident(): map string literals to a unique variable names
+//  - character_ident(): maps a character to its corresponding variable name
+//  - fresh_string_ident(): maps a string literal to a unique variable name
 //  - fresh_ident(): generates a fresh variable name for temporary variables
 //
-// environment:
+// Relevant functions and variables (environment):
+//  - enum BINDING: env binding type (function, variables, loop, switch, label)
 //  - main_defined: tracks if main() is defined, to generate the entry point
 //  - in_tail_position: tracks if the current statement is in tail position
 //  - rest_loc_var_fixups: list of `endlet {local variables}` fixups
 //  - cgc_fs: Number of local variables defined in the current function
+//  - cgc_locals: locally-scoped environment, used for local variables
 //  - cgc_locals_fun: function-scoped environment
 //  - cgc_globals: globally-scoped environment
 //
@@ -260,7 +261,7 @@
 //  - runtime_{rt_function}(): prints implementation of the runtime function
 //  - produce_runtime(): prints implementations of required runtime functions
 //
-// The majority of the runtime library code are printf calls outputting a
+// The majority of the runtime library code is printf calls outputting a
 // constant string. Since POSIX shell already includes a printf built-in
 // function, it is often possible to reuse the shell's built-in printf if the
 // format string is known at compile time. By doing so, the conversion of the
@@ -274,9 +275,202 @@
 //
 #endif
 #if defined(target_i386_linux) || defined (target_x86_64_linux) || defined (target_x86_64_mac)
-//########################### Machine Code Generator ###########################
+//--------------------------- Machine Code Generator ---------------------------
 //
-// TODO
+// Pnut-exe generates machine code directly from the AST produced by the parser,
+// outputting a position-independent executable that is statically linked to the
+// built-in C library. Pnut-exe supports 32-bit (i386) and 64-bit (amd64) x86
+// architectures, and the ELF and Mach-O executable formats for compatibility
+// with Linux and macOS. The ELF and Mach-O files generated are very minimal,
+// containing the smallest header possible, followed directly by the binary code
+// in a single .text section. Constant data, such as string literals, are
+// located directly in the .text section, ensuring they are read-only.
+// Statically allocated memory is allocated either on the stack or in a
+// memory-mapped region (configurable with build options), and initialized at
+// runtime by the program.
+//
+// To simplify the code generation, pnut-exe generates code for a stack machine,
+// where the operands of every expression are kept on the stack. The stack is
+// also used to pass the function call arguments, using the cdecl calling
+// convention. Most of the code generation logic operates over an abstract
+// machine that defines basic operations such as push/pop, arithmetic operations
+// and memory access over these registers:
+//  - reg_X: temporary register X
+//  - reg_Y: temporary register Y
+//  - reg_Z: temporary register Z
+//  - reg_SP: stack pointer
+//  - reg_glo: global variables table, used to access global variables
+// for the following operations (non-exhaustive list):
+//  - push(reg): pushes the value of reg on the stack
+//  - pop(reg): pops the value on top of the stack into reg
+//  - mov_reg_reg(dest, src): dest = src
+//  - mov_mem_reg(base, offset, src): dest[base + offset] = src
+//  - mov_reg_mem(dst, base, offset): dst = src[base + offset]
+//  - mov_reg_imm(dest, imm): dest = imm
+//  - add_reg_imm(dest, imm): dest += imm
+//  - {op}_reg_reg(dest, src): dest = dest `op` src
+//  - jump(lbl): jump to lbl
+//  - jump_cond_reg_reg(cond, lbl, reg1, reg2): jump to lbl if reg1 `cond` reg2
+//  - call(lbl), call_reg(reg): call function at lbl or at address in reg
+//  - ret(): return from function
+//
+// The x86-specific instruction encoding then simply implements the abstract
+// machine operations using x86 instructions, emitting raw machine code bytes.
+//
+//-------------------------- One-Pass Code Generation --------------------------
+//
+// Pnut-exe generates code in one pass, processing each top-level declaration
+// before outputting its machine code, reusing the same small code buffer
+// between declarations. This cuts down by half the memory usage when compiling
+// programs, which has a significant impact on the performance on the slowest
+// shell implementations.
+//
+// However, the one-pass generation of machine code introduces additional
+// complexity, since machine code inherently requires local fixups that can only
+// be performed on code that is still in memory. The difficulties arise from:
+// - Forward jumps to functions that are not yet defined.
+// - The size of specific structures is needed before they are known.
+//
+// Forward jumps are solved using a global offset table (GOT), which is a table
+// of addresses that is initialized at runtime, and can be used to perform
+// indirect jumps to functions. The GOT is part of the global variables table,
+// and is initialized in the setup code of each function, and is accessed using
+// the reg_glo register.
+//
+// Allocating enough space for global variables can also be a challenge since
+// the total space they occupy is unknown to the compiler, but their allocation
+// must be done before any initialization code is executed. To solve this
+// problem, global variables are assumed to be under a hardcoded limit, and the
+// global variables table is allocated with that size.
+//
+// Finally, ELF and Mach-O executable file headers require the length of the
+// executable to be present at the beginning of the file. The `ELF Header
+// Layout` section below shows the 32-bit ELF header generated by pnut-exe.
+// Fortunately, on Linux, the p_filesz and p_memsz fields only need to be
+// greater or equal than the actual size of the program, so they can be set to a
+// hardcoded limit. However, on macOS, the size in the Mach-O header must match
+// the actual size of the program, preventing the code generator from being
+// truly one-pass, or requires precomputing the program size.
+//
+// To be able to output the code after a function definition, the destination of
+// all jumps must be known. Fortunately, local jumps inside a function are all
+// resolved at the end of the function, leaving the label of the next
+// initialization block as the only unresolved jump destination. Because the
+// function definition is followed by the initialization of its global offset
+// table entry, the setup label is temporarily resolved. At this point, all
+// labels are resolved and the code can be written out.
+//
+//------------------------------ ELF Header Layout -----------------------------
+//
+// The following is the layout of the ELF header generated by pnut-exe, showing
+// the different fields and their values. The p_filesz and p_memsz fields, which
+// represent the size of the program, can only be computed at the end of the
+// program, but they are needed at the beginning of the file. The Mach-O header
+// follows a similar structure.
+//
+// ehdr:                       ; Elf32_Ehdr
+//     db    0x7F, "ELF"       ;   e_ident
+//     db    1, 1, 1, 0        ;   e_ident (cont)
+// times 8 db      0
+//     dw    2                 ;   e_type
+//     dw    3                 ;   e_machine
+//     dd    1                 ;   e_version
+//     dd    _start            ;   e_entry (entry_point_address)
+//     dd    phdr - $$         ;   e_phoff
+//     dd    0, 0              ;   e_shoff, e_flags
+//     dw    ehdrsize          ;   e_ehsize
+//     dw    phdrsize          ;   e_phentsize
+//     dw    1, 0, 0, 0        ;   e_phnum, e_shentsize, e_shnum, e_shstrndx
+//
+// ehdrsize  equ    $ - ehdr   ; Compute header size
+//
+// phdr:                       ; Elf32_Phdr
+//     dd    1, 0              ;   p_type, p_offset
+//     dd    $$                ;   p_vaddr
+//     dd    $$                ;   p_paddr
+//     dd    filesize          ;   p_filesz (program_size)
+//     dd    filesize          ;   p_memsz  (program_size)
+//     dd    5, 0x1000         ;   p_flags, p_align
+//
+// phdrsize  equ    $ - phdr   ; Compute program header size
+//
+// _start:
+//   ... program code...
+//
+// filesize  equ    $ - $$     ; Compute program size
+//
+//------------------------ Generated Machine code layout -----------------------
+//
+// The following is the layout of the machine code generated by pnut-exe,
+// showing how the different functions and global variable initializers are
+// interspersed, and how forward jumps to functions that are not yet defined are
+// resolved using a global offset table (GOT).
+//
+// _start: // Program entry point
+//   GOT = [0, 0, ..., 0] // Global offset table, initialized with 0s
+//   goto odd_setup
+//
+// odd(n):
+//   if (n != 0)
+//     return GOT[even_offset](n - 1) // Forward function call!
+//   else
+//     return 0 // Return false
+//
+// odd_setup:
+//   GOT[odd_offset] = &odd
+//   goto even_setup
+//
+// even:
+//   if (n != 0)
+//     return odd(n - 1) // The address of odd is known here
+//   else
+//     return 1 // Return true
+//
+// even_setup:
+//   GOT[even_offset] = &even
+//   goto next_setup
+//
+// main:
+//   return odd(5)
+//
+// next_setup: // No more setup, start execution
+//   exit(main())
+//------------------------------------------------------------------------------
+//
+// Relevant functions and variables (code generator):
+//  - code: generated machine code buffer
+//  - code_alloc: index of next free byte in code
+//  - code_address_base: position of current code relative to start
+//  - emit_i8/emit_2_i8/emit_4_i8/emit_i32_le: append bytes to code buffer
+//  - codegen_begin(): initialization of code generator (called once)
+//  - codegen_end(): finalization of code generator (called once)
+//  - codegen_glo_decl(): entry point for compiling top-level declaration
+//  - generate_exe(): output headers and code to produce executable file
+//
+// Relevant functions and variables (statements):
+//  - codegen_glo_fun_decl(): compiles a function declaration
+//  - codegen_glo_var_decl(): compiles a global variable declaration
+//  - codegen_statement(): entry point for compiling a statement
+//  - codegen_body(): compiles a scoped block (function/loop/conditional {...})
+//
+// Relevant functions and variables (expressions):
+//  - codegen_rvalue(): entry point for compiling a C expression
+//  - codegen_lvalue(): entry point for compiling a C lvalue
+//  - codegen_binop(): compiles a binary arithmetic operation
+//  - codegen_string(): compiles a string literal, storing it among the code
+//
+// Relevant functions and variables (environment):
+//  - enum BINDING: env binding type (function, variables, loop, switch, label)
+//  - cgc_fs: Number of local variables defined in the current function
+//  - cgc_locals: locally-scoped environment, used for variable and label lookup
+//  - cgc_locals_fun: function-scoped environment
+//  - cgc_globals: globally-scoped environment
+//  - cgc_global_alloc: size of global variables allocated so far
+//  - main_returns: if main returns a value, to generate the entry point code
+//
+// Relevant functions and variables (labels):
+//  - use_label(): Emit distance to label, or add fixup if label is not defined
+//  - def_label(): Define label at current code position and resolve fixups
 //
 #endif
 //-------------------- Here begins the actual implementation -------------------
