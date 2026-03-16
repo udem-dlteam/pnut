@@ -11,6 +11,7 @@
 #include <unistd.h> // for write
 #include <unistd.h> // for isatty
 
+#if 0 // Removed from C annotations
 // =========================== configuration options ===========================
 //
 // Pnut has many compilation options to change the features supported by
@@ -65,6 +66,7 @@
 // runtime checks and better error messages.
 //
 // =============================================================================
+#endif
 
 // Pnut-sh specific options
 #ifdef target_sh
