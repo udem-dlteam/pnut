@@ -4163,7 +4163,7 @@ ast parse_postfix_expression(ast result) {
 // stream and calling parse_unary_expression.
 //
 // Having to push back tokens on the stream consumes memory and means our parser
-// isn't truely one-pass. To avoid having to push back the '(' token, we can
+// isn't truly one-pass. To avoid having to push back the '(' token, we can
 // instead call the parse_parenthesized_expression function directly, followed
 // by the parse_unary_expression function. These 2 function calls correspond to
 // the functions that would be called if we had pushed back the '(' token and

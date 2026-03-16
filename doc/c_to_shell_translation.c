@@ -47,7 +47,7 @@
 //
 // Features that don't have a direct mapping to shell (goto, switch
 // fall-through, floating point numbers), or that are not used in pnut's source
-// code, are not not covered in this document.
+// code, are not covered in this document.
 // Refer to https://doi.org/10.1145/3687997.3695639 for more details.
 //
 //-------------------------------- Name mangling -------------------------------
@@ -69,12 +69,12 @@
 //
 //---------------------------- C Heap and arithmetic ---------------------------
 //
-// A heap is usually implemented using an array of byte, but since POSIX shell
+// A heap is usually implemented using an array of bytes, but since POSIX shell
 // doesn't offer an array data-structure, arrays are simulated using shell
-// variables. Specificaly, `_{address}` is used to store the value at a memory
+// variables. Specifically, `_{address}` is used to store the value at a memory
 // address, and arithmetic expansions can be used to dynamically refer to memory
 // locations. For example, the C expression `*(p + 1)` is translated to
-// `_$((p + 1))`. Arithmetic expansion can also be nested, and are expanded
+// `_$((p + 1))`. Arithmetic expansions can also be nested, and are expanded
 // inside-out, with `arr[i] = 42;` mapping to `: $((_$((arr + i)) = 42))`.
 // Notice the `:` builtin command, used to ignore the output of the assignment.
 //
@@ -82,7 +82,7 @@
 // management, using a simple bump allocator, is handled by the runtime
 // functions.
 //
-//---------------------------------- Function ----------------------------------
+//---------------------------------- Functions ---------------------------------
 //
 // Shell functions are more like procedures in that they don't have a return
 // value (other than exit code), and do not have local variables. Additionally,
@@ -94,7 +94,9 @@
 // arithmetic expansion can assign to variables dynamically, functions take as
 // their first argument the name of the variable that receives the result (the
 // "return variable"). Returning a value from a function is then done by
-// assigning to this return variable like so: `: $(($1 = result))`.
+// assigning to this return variable like so: `: $(($1 = result))`. When
+// ignoring the result of a function, the `__` return variable is used by
+// convention.
 //
 // We use the term local variable to refer to a programmer-declared local
 // variable or parameter, or a compiler-introduced temporary. Since POSIX shell
@@ -103,7 +105,7 @@
 // convention. Every function begins by saving its local variables to a stack so
 // that the function is free to clobber them. The variables are then restored to
 // their original values when the function returns. Unlike the traditional C
-// stack implementation, this stack is used solely for saving local variables
+// stack implementation, this stack is used solely for saving local variable
 // values, and is not used for control flow, meaning no stack space is used by
 // functions with no local variables. To keep the bookkeeping of local variables
 // out of the way, it is abstracted using the `let` and `endlet` runtime
@@ -113,7 +115,7 @@
 //
 // POSIX shell does not have character literals like C, where character literals
 // are represented as integers corresponding to the character's ASCII code.
-// To avoid the use of such ASCII code directly in the shell code, which would
+// To avoid the use of such ASCII codes directly in the shell code, which would
 // be difficult to read, character literals are replaced by readonly variables
 // initialized to the character's ASCII code, named after the character. For
 // example, 'a' is replaced with `__a__`, which is initialized to 97.
@@ -124,11 +126,10 @@
 // This interface is limited, being primarily useful for concatenating, cutting,
 // and comparing strings, and it does not allow random access to characters --
 // one of the most common access patterns used in C programs. As a result, shell
-// literals must be unpacked into arrays of characters before they can be used.
+// strings must be unpacked into arrays of characters before they can be used.
 // This is done by the `defstr` function, which takes a string literal and a
 // variable name, and initializes the variable to point to the unpacked string.
 // For example, `putchar("0123456789abcdef"[n & 15])` maps to:
 //    defstr __str_0 "0123456789abcdef"
 //    putchar __ $((__str_0 + (n & 15)))
 //
-//-------------------- Here begins the actual implementation -------------------
