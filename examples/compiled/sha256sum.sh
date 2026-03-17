@@ -416,7 +416,7 @@ _close() { # $2: fd
 
 make_argv() {
   __argc=$1; shift;
-  _malloc __argv $__argc # Allocate enough space for all elements.
+  _malloc __argv $((__argc + 1)) # Allocate enough space for all elements and null terminator.
   __argv_ptr=$__argv
 
   while [ $# -ge 1 ]; do
@@ -425,6 +425,7 @@ make_argv() {
     : $((__argv_ptr += 1))
     shift
   done
+  : $((_$__argv_ptr = 0)) # Null-terminate the argv array
 }
 
 #_ Local variables

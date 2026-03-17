@@ -337,6 +337,39 @@ bootstrap-pnut-exe: pnut-exe-bootstrapped
 	fi
 	@echo "Success!"
 
+# Bootstrap pnut-sh from the C annotations embedded in pnut-sh.sh. This verifies
+# that the embedded C annotations are correct and can reproduce pnut-sh.sh.
+bootstrap-pnut-sh-from-annotations: pnut-sh.sh
+	@if [ "$(ANNOTATE_C_CODE)" != "1" ]; then echo "Error: This target requires ANNOTATE_C_CODE=1. Run: make $@ ANNOTATE_C_CODE=1"; exit 1; fi
+	@echo "Bootstrapping pnut-sh.sh from C annotations..."
+	$(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh -C $(BUILD_DIR)/pnut-sh.sh > $(BUILD_DIR)/pnut-sh-extracted.c
+	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-extracted.c > $(BUILD_DIR)/pnut-sh-from-annotations.sh
+	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-from-annotations.sh >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# Bootstrap pnut-exe from the C annotations embedded in pnut-exe.sh. This verifies
+# that the embedded C annotations are correct and can be used to bootstrap
+# pnut-exe.
+bootstrap-pnut-exe-from-annotations: pnut-exe.sh
+	@if [ "$(ANNOTATE_C_CODE)" != "1" ]; then echo "Error: This target requires ANNOTATE_C_CODE=1. Run: make $@ ANNOTATE_C_CODE=1"; exit 1; fi
+	@echo "Extracting C source from annotated pnut-exe.sh..."
+	$(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-exe.sh -C $(BUILD_DIR)/pnut-exe.sh > $(BUILD_DIR)/pnut-exe-extracted.c
+	@echo "Compiling extracted C to executable using pnut-exe.sh..."
+	@$(RM) $(BUILD_DIR)/pnut-exe-from-annotations
+	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-exe.sh $(BUILD_OPT_EXE) $(BUILD_DIR)/pnut-exe-extracted.c -o $(BUILD_DIR)/pnut-exe-from-annotations
+	@chmod +x $(BUILD_DIR)/pnut-exe-from-annotations
+	@echo "Recompiling with itself to check fixed point..."
+	@$(RM) $(BUILD_DIR)/pnut-exe-from-annotations-again
+	$(TIMEC) $(BUILD_DIR)/pnut-exe-from-annotations $(BUILD_OPT_EXE) $(BUILD_DIR)/pnut-exe-extracted.c -o $(BUILD_DIR)/pnut-exe-from-annotations-again
+	@if ! diff $(BUILD_DIR)/pnut-exe-from-annotations $(BUILD_DIR)/pnut-exe-from-annotations-again >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap executables differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
 # For completeness, bootstrap pnut-sh from pnut-exe, then recompile pnut-sh from
 # the bootstrapped pnut-sh.
 bootstrap-pnut-sh-with-pnut-exe: pnut-exe-bootstrapped pnut-sh.sh
