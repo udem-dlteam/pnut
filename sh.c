@@ -1,5 +1,16 @@
 // POSIX shell codegen
 
+#ifdef SH_PRINTF_PERCENT_B_COMPAT
+// Some shells don't support the %b \\0ooo format to print arbitrary bytes,
+// while other shells don't support the "\\ooo" format.
+// We define a macro to abstract this difference.
+// Modern shell implementations all support the %b format, so we can at least
+// distribute a version of pnut that's compatible with most shells.
+#define PRINTF_OCTAL_PATTERN "\\\\"
+#else
+#define PRINTF_OCTAL_PATTERN "%b \\\\0"
+#endif
+
 #include "sh-runtime.c"
 
 #ifdef SH_SUPPORT_SHELL_INCLUDE
@@ -1327,7 +1338,7 @@ text comp_putchar_inline(ast param) {
       string_concat3(wrap_str_lit("$(("), res, wrap_str_lit("/8%8))")),
       string_concat3(wrap_str_lit("$(("), res, wrap_str_lit("%8))")));
 
-  return string_concat(wrap_str_lit("printf \\\\"), res);
+  return string_concat(wrap_str_lit("printf " PRINTF_OCTAL_PATTERN), res);
 }
 #endif
 
@@ -1449,8 +1460,6 @@ void handle_printf_call(char *format_str, ast params) {
           break;
 
         // We can't pass characters to printf directly because %c has a different meaning.
-        // We could use the %b format specifier, but it can't emit \0 character on some older
-        // shells, so we make a separate printf call using the \\ooo format.
         // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
         case 'c':
           if (param == 0) fatal_error("printf: not enough parameters");
