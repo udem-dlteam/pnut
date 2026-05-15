@@ -1492,7 +1492,8 @@ int codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
+          lvalue_width = cgc_fs - heap[binding+3];
+          mov_reg_imm(reg_X, lvalue_width * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           push_reg(reg_X);
           break;
@@ -1671,7 +1672,8 @@ void codegen_rvalue(ast node) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
+          left_width = cgc_fs - heap[binding+3];
+          mov_reg_imm(reg_X, left_width * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // structs/unions are allocated on the stack, so no need to dereference
           // For arrays, we need to dereference the pointer since they are passed as pointers
@@ -1686,7 +1688,8 @@ void codegen_rvalue(ast node) {
           break;
 
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
+          left_width = cgc_fs - heap[binding+3];
+          mov_reg_imm(reg_X, left_width * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           // local arrays/structs/unions are allocated on the stack, so no need to dereference
           if (get_op(heap[binding+4]) != '['

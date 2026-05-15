@@ -1324,11 +1324,20 @@ text comp_putchar_inline(ast param) {
 
   res = comp_rvalue(param, RVALUE_CTX_ARITH_EXPANSION);
 
+#ifdef SH_SHORT_PRINTF_LINES
+  // If the parameter has side effects, we need to store it in a temporary
+  // variable to avoid duplicating the side effects when we compute the
+  // different parts of the output. This can lead to long lines, which breaks
+  // dash's 0.5.5's parser.
+  if (1) {
+#else
   if (contains_side_effects) {
+#endif
     ident = fresh_ident();
     append_glo_decl(string_concat4(comp_lvalue(ident), wrap_str_lit("=$(("), res, wrap_str_lit("))")));
     res = comp_lvalue(ident);
-  } else if (get_op(param) != IDENTIFIER) {
+  } else
+  if (get_op(param) != IDENTIFIER) {
     res = string_concat3(wrap_char('('), res, wrap_char(')')); // Wrap in parentheses to avoid priority of operations issues
   }
 
@@ -1349,7 +1358,7 @@ text printf_call(char *format_str, char *format_str_end, text params_text, bool 
     return 0;
   } else {
     // Some shells interpret leading - as options. In that case, we add -- in front of the format string.
-    return string_concat3(wrap_str_lit(format_str[0] == '-' ? "printf -- \"" : "printf \""),
+    return string_concat3(wrap_str_lit(*format_str == '-' ? "printf -- \"" : "printf \""),
                           escape_text(wrap_str_imm(format_str, format_str_end), escape),
                           concatenate_strings_with(wrap_char('\"'), params_text, wrap_char(' '))
                           );
