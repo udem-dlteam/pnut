@@ -550,8 +550,10 @@ jobs:
           EOF
 
           sudo chroot "$ROOTFS_DIR" /pnut-exe /tmp/hello.c -o /tmp/hello
+          set +e
           sudo chroot "$ROOTFS_DIR" /tmp/hello
           EXIT_CODE=$?
+          set -e
           if [ $EXIT_CODE -ne 42 ]; then
             echo "Unexpected exit code: $EXIT_CODE (expected 42)"
             exit 1
