@@ -562,7 +562,7 @@ jobs:
       - name: Install mescc-tools
         run: |
           set -e
-          git clone https://github.com/oriansj/mescc-tools.git mescc-tools --depth 1 --recursive
+          git clone https://github.com/oriansj/mescc-tools.git mescc-tools --recursive
           cd mescc-tools
           # 9b1375115f9175d876c360dbbfd7e231dd9f2a2f is from Oct 9th 2025
           git checkout 9b1375115f9175d876c360dbbfd7e231dd9f2a2f
