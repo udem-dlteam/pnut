@@ -43,6 +43,9 @@ PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dtarget_sh -DPNUT_BOOTSTRAP"
 gcc -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
 ./$TEMP_DIR/pnut-sh $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
 
+# Prepare bintools
+make kit/bintools.c
+
 FILES_TO_INCLUDE="
 $TEMP_DIR/pnut-sh.sh:pnut-sh.sh
 $(program_dependencies "pnut.c" "-Dtarget_i386_linux -DBOOTSTRAP_TCC")
