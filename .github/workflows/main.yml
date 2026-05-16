@@ -513,6 +513,50 @@ jobs:
             make bootstrap-pnut-exe-from-shell MINIMAL=0
           EOF
 
+  bootstrap-pnut-exe-on-scavenged-shell:
+    strategy:
+      matrix:
+        bootstrap-shell: ["bash-i386-woody", "dash-i386-lenny", "ksh-i386-sarge", "zsh-i386-sarge"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils coreutils time
+
+      - name: Bootstrap pnut-exe inside rootfs with ${{ matrix.bootstrap-shell }}
+        run: |
+          set -e
+
+          ROOTFS_DIR="build/rootfs-${{ matrix.bootstrap-shell }}"
+          rm -rf "$ROOTFS_DIR"
+
+          ./kit/setup-rootfs.sh \
+            --dir "$ROOTFS_DIR" \
+            --bootstrap-shell "${{ matrix.bootstrap-shell }}" \
+            --execute-bootstrap
+
+          if [ ! -x "$ROOTFS_DIR/pnut-exe" ]; then
+            echo "Missing or non-executable /pnut-exe in $ROOTFS_DIR"
+            exit 1
+          fi
+
+          cat > "$ROOTFS_DIR/tmp/hello.c" << 'EOF'
+          int main(void) { return 42; }
+          EOF
+
+          sudo chroot "$ROOTFS_DIR" /pnut-exe /tmp/hello.c -o /tmp/hello
+          sudo chroot "$ROOTFS_DIR" /tmp/hello
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -ne 42 ]; then
+            echo "Unexpected exit code: $EXIT_CODE (expected 42)"
+            exit 1
+          fi
+
   pnut-variants-run:
     runs-on: ubuntu-latest
     steps:
@@ -643,6 +687,7 @@ jobs:
            , bootstrap-pnut-exe-on-awk
            , bootstrap-pnut-sh-awk-with-pnut-exe
            , bootstrap-bash-2_05a
+           , bootstrap-pnut-exe-on-scavenged-shell
            , pnut-variants-run
            , compile-with-M2-Planet
            , bootstrap-from-annotations
