@@ -473,6 +473,8 @@ jobs:
           # __us_buf16="${__us_buf256%"$__temp"}"
           # __us_buf256="$__temp"
           COMPATIBILITY_OPTIONS="$COMPATIBILITY_OPTIONS -DSH_OPTIMIZE_LONG_LINES_NOT"
+          # Use printf \\ooo instead of printf %b
+          COMPATIBILITY_OPTIONS="$COMPATIBILITY_OPTIONS -DSH_PRINTF_PERCENT_B_COMPAT"
 
           # Multiline script to run inside the woody chroot
           sudo chroot woody /bin/bash << EOF
