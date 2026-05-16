@@ -1446,14 +1446,14 @@ _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
   while [ $((__c = _$__addr)) != 0 ]; do
-    printf \\$((__c/64))$((__c/8%8))$((__c%8))
+    printf %b \\0$((__c/64))$((__c/8%8))$((__c%8))
     : $((__addr += 1))
   done
 }
 
 #_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
+  __fgetc_buf="$1"
   __buffer=$2
   __ends_with_eof=${3:-1}
   __fgetc_buf16=
@@ -1506,7 +1506,7 @@ unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
           : $((_$__buffer = __c))
           ;;
       esac
-      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character
+      __fgetc_buf16="${__fgetc_buf16#?}"  # Remove the first character
       : $((__buffer += 1))              # Move to the next buffer position
     done
   done
@@ -1720,8 +1720,8 @@ _printf() { # $1 = printf format string, $2... = printf args
         'c')
           case "$__flags" in
             *'-'*)
-              printf \\$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;
-            *) pad ${__width:-0}; printf \\$(($1/64))$(($1/8%8))$(($1%8)) ;;
+              printf %b \\0$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;
+            *) pad ${__width:-0}; printf %b \\0$(($1/64))$(($1/8%8))$(($1%8)) ;;
           esac
           shift
           printf_reset
@@ -1769,7 +1769,7 @@ _printf() { # $1 = printf format string, $2... = printf args
     elif [ $__head = 37 ]; then # 37 == '%'
       __mod=1; __mod_start=$__fmt_ptr
     else
-      printf \\$(($__head/64))$(($__head/8%8))$(($__head%8))
+      printf %b \\0$(($__head/64))$(($__head/8%8))$(($__head%8))
     fi
   done
 }

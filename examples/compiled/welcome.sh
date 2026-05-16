@@ -34,7 +34,7 @@ _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
   while [ $((__c = _$__addr)) != 0 ]; do
-    printf \\$((__c/64))$((__c/8%8))$((__c%8))
+    printf %b \\0$((__c/64))$((__c/8%8))$((__c%8))
     : $((__addr += 1))
   done
 }

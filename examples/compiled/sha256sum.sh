@@ -159,9 +159,9 @@ _hex_nibble() { # byte: $2
 _hex() { # byte: $2
   let __t1
   _hex_nibble __t1 $(($2 >> 4))
-  printf \\$(((__t1)/64))$(((__t1)/8%8))$(((__t1)%8))
+  printf %b \\0$(((__t1)/64))$(((__t1)/8%8))$(((__t1)%8))
   _hex_nibble __t1 $2
-  printf \\$(((__t1)/64))$(((__t1)/8%8))$(((__t1)%8))
+  printf %b \\0$(((__t1)/64))$(((__t1)/8%8))$(((__t1)%8))
   endlet $1 __t1
 }
 
@@ -217,7 +217,7 @@ _process_file() { let filename $2
   printf " "
   printf " "
   while [ $((_$filename)) != 0 ]; do
-    printf \\$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
+    printf %b \\0$(((_$filename)/64))$(((_$filename)/8%8))$(((_$filename)%8))
     : $((filename += 1))
   done
   printf "\n"
@@ -256,13 +256,13 @@ _free() { # $2 = object to free
 
 #_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
+  __fgetc_buf="$1"
   __buffer=$2
   __ends_with_eof=${3:-1}
   while [ ! -z "$__fgetc_buf" ]; do
     __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
     : $((_$__buffer = __c))
-    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    __fgetc_buf="${__fgetc_buf#?}"    # Remove the first character
     : $((__buffer += 1))              # Move to the next buffer position
   done
 
@@ -318,7 +318,7 @@ _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
   while [ $((__c = _$__addr)) != 0 ]; do
-    printf \\$((__c/64))$((__c/8%8))$((__c%8))
+    printf %b \\0$((__c/64))$((__c/8%8))$((__c%8))
     : $((__addr += 1))
   done
 }

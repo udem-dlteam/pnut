@@ -79,22 +79,22 @@ _encode() {
       break
     fi
     _getchar b2
-    printf \\$(((_$((_codes + (b1 >> 2))))/64))$(((_$((_codes + (b1 >> 2))))/8%8))$(((_$((_codes + (b1 >> 2))))%8))
+    printf %b \\0$(((_$((_codes + (b1 >> 2))))/64))$(((_$((_codes + (b1 >> 2))))/8%8))$(((_$((_codes + (b1 >> 2))))%8))
     if [ $b2 -lt 0 ] ; then
-      printf \\$(((_$((_codes + (0x3f & (b1 << 4)))))/64))$(((_$((_codes + (0x3f & (b1 << 4)))))/8%8))$(((_$((_codes + (0x3f & (b1 << 4)))))%8))
+      printf %b \\0$(((_$((_codes + (0x3f & (b1 << 4)))))/64))$(((_$((_codes + (0x3f & (b1 << 4)))))/8%8))$(((_$((_codes + (0x3f & (b1 << 4)))))%8))
       printf "="
       printf "="
       break
     else
-      printf \\$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))/64))$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))/8%8))$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))%8))
+      printf %b \\0$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))/64))$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))/8%8))$(((_$((_codes + (0x3f & ((b1 << 4) | (b2 >> 4))))))%8))
       _getchar b3
       if [ $b3 -lt 0 ] ; then
-        printf \\$(((_$((_codes + (0x3f & (b2 << 2)))))/64))$(((_$((_codes + (0x3f & (b2 << 2)))))/8%8))$(((_$((_codes + (0x3f & (b2 << 2)))))%8))
+        printf %b \\0$(((_$((_codes + (0x3f & (b2 << 2)))))/64))$(((_$((_codes + (0x3f & (b2 << 2)))))/8%8))$(((_$((_codes + (0x3f & (b2 << 2)))))%8))
         printf "="
         break
       else
-        printf \\$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))/64))$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))/8%8))$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))%8))
-        printf \\$(((_$((_codes + (0x3f & b3))))/64))$(((_$((_codes + (0x3f & b3))))/8%8))$(((_$((_codes + (0x3f & b3))))%8))
+        printf %b \\0$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))/64))$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))/8%8))$(((_$((_codes + (0x3f & ((b2 << 2) | (b3 >> 6))))))%8))
+        printf %b \\0$(((_$((_codes + (0x3f & b3))))/64))$(((_$((_codes + (0x3f & b3))))/8%8))$(((_$((_codes + (0x3f & b3))))%8))
       fi
     fi
   done
@@ -132,15 +132,15 @@ _decode() {
     if _get c2; [ $c2 -lt 0 ] ; then
       exit 1
     fi
-    printf \\$((((c1 << 2) | (c2 >> 4))/64))$((((c1 << 2) | (c2 >> 4))/8%8))$((((c1 << 2) | (c2 >> 4))%8))
+    printf %b \\0$((((c1 << 2) | (c2 >> 4))/64))$((((c1 << 2) | (c2 >> 4))/8%8))$((((c1 << 2) | (c2 >> 4))%8))
     if _get c3; [ $c3 -lt 0 ] ; then
       break
     fi
-    printf \\$(((0xff & ((c2 << 4) | (c3 >> 2)))/64))$(((0xff & ((c2 << 4) | (c3 >> 2)))/8%8))$(((0xff & ((c2 << 4) | (c3 >> 2)))%8))
+    printf %b \\0$(((0xff & ((c2 << 4) | (c3 >> 2)))/64))$(((0xff & ((c2 << 4) | (c3 >> 2)))/8%8))$(((0xff & ((c2 << 4) | (c3 >> 2)))%8))
     if _get c4; [ $c4 -lt 0 ] ; then
       break
     fi
-    printf \\$(((0xff & ((c3 << 6) | c4))/64))$(((0xff & ((c3 << 6) | c4))/8%8))$(((0xff & ((c3 << 6) | c4))%8))
+    printf %b \\0$(((0xff & ((c3 << 6) | c4))/64))$(((0xff & ((c3 << 6) | c4))/8%8))$(((0xff & ((c3 << 6) | c4))%8))
   done
   endlet $1 c4 c3 c2 c1 i
 }
@@ -165,13 +165,13 @@ readonly __d__=100
 #_ Runtime library
 #_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
+  __fgetc_buf="$1"
   __buffer=$2
   __ends_with_eof=${3:-1}
   while [ ! -z "$__fgetc_buf" ]; do
     __c=$(printf "%d" "'${__fgetc_buf%"${__fgetc_buf#?}"}"); __c=$((__c > 0 ? __c : 256 + __c))
     : $((_$__buffer = __c))
-    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character
+    __fgetc_buf="${__fgetc_buf#?}"    # Remove the first character
     : $((__buffer += 1))              # Move to the next buffer position
   done
 
