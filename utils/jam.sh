@@ -89,7 +89,7 @@ gen_header() {
   printf "set -u\n\n"
 
   printf "# Detect mkdir availability\n"
-  printf "mkdir -p . && : \$((MKDIR_EXISTS = 1)) || : \$((MKDIR_EXISTS = 0))\n"
+  printf "mkdir -p .; MKDIR_EXISTS=\$(( ! \$? )) # Capture the exit code of mkdir\n"
   printf "[ \$MKDIR_EXISTS = 0 ] && printf \"Warning: expanding only top-level files because mkdir is not available\\\\n\"\n\n"
 }
 
