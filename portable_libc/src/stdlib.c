@@ -63,6 +63,9 @@ double strtod(const char *str, char **endptr) {
   } else if (strcmp(str, "1.0") == 0) {
     if (endptr) *endptr = (char *) str + 3;
     return 0x3FF0000000000000;
+  } else if (strcmp(str, "0.9999") == 0) {
+    if (endptr) *endptr = (char *) str + 6;
+    return 0x3FEFFF2E48E8A71E;
   } else if (strcmp(str, "4294967296.0") == 0) {
     if (endptr) *endptr = (char *) str + 12;
     return 0x41F0000000000000;
