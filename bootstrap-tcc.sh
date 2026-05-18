@@ -44,9 +44,9 @@ rm -rf "$MES_DIR"
 tar -xzf "$TCC_ARCHIVE" -C "$TEMP_DIR"
 tar -xzf "$MES_ARCHIVE" -C "$TEMP_DIR"
 
-
+# Compile bintools for simple-patch
 BINTOOLS_EXE="$TEMP_DIR/bintools"
-gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-libc.c -o "$BINTOOLS_EXE"
+gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-libc.c -o "$BINTOOLS_EXE" 2> /dev/null
 
 apply_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
   target_file="$TCC_DIR/$1"
@@ -87,7 +87,6 @@ revert_tcc_patches() {
   revert_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
 }
 
-# Compile bintools for simple-patch
 apply_tcc_patches
 
 # Parse the arguments
@@ -164,8 +163,17 @@ fi
 
 make_tcc_pnut() { # $1: C compiler to use, $2: additional options
   CC="$1"
+  if [ "$CC" = "gcc" ]; then
+    echo "Bootstrapping TCC with gcc"
+    LIBC_OPTS=""
+  else
+    echo "Bootstrapping TCC with $CC"
+    LIBC_OPTS="               \
+    -I portable_libc/include/ \
+    portable_libc/libc.c      \
+    "
+  fi
   $CC                                                                          \
-    -I portable_libc/include/                                                  \
     -D BOOTSTRAP=1                                                             \
     -D PNUT_CC=1                                                               \
     -D HAVE_LONG_LONG=0                                                        \
@@ -183,7 +191,7 @@ make_tcc_pnut() { # $1: C compiler to use, $2: additional options
     -D ONE_SOURCE=1                                                            \
     -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"                               \
     $TCC_DIR/tcc.c                                                             \
-    portable_libc/libc.c                                                       \
+    $LIBC_OPTS                                                                 \
     $2                                                                         \
     -o $TEMP_DIR/tcc-pnut
 
@@ -222,7 +230,7 @@ if [ $use_gcc -eq 0 ]; then
 else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc.
-  make_tcc_pnut "gcc" "-D __intptr_t_defined=1"
+  make_tcc_pnut "gcc"
 fi
 
 # Revert TCC source patches after producing the initial pnut-built compiler.
