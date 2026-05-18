@@ -15,7 +15,7 @@ _main() {
     [ $n = $__0__ ] || [ $((!((n >= __0__) && (n <= __9__)))) != 0 ] || break
   done
   printf "You entered "
-  printf \\$((n/64))$((n/8%8))$((n%8))
+  printf %b \\0$((n/64))$((n/8%8))$((n%8))
   printf ": bye bye!\r\n"
   endlet $1 __t1 n
 }

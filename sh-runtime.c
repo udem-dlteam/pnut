@@ -288,13 +288,13 @@ void runtime_unpack_string_to_buf() {
   runtime_char_to_int();
   putstr("#_ Unpack a Shell string into an appropriately sized buffer\n");
   putstr("unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
-  putstr("  __fgetc_buf=$1\n");
+  putstr("  __fgetc_buf=\"$1\"\n");
   putstr("  __buffer=$2\n");
   putstr("  __ends_with_eof=${3:-1}\n");
 #ifndef SH_OPTIMIZE_LONG_LINES
   putstr("  while [ ! -z \"$__fgetc_buf\" ]; do\n");
   extract_first_char("  ", "__fgetc_buf", "_$__buffer")
-  putstr("    __fgetc_buf=${__fgetc_buf#?}      # Remove the first character\n");
+  putstr("    __fgetc_buf=\"${__fgetc_buf#?}\"    # Remove the first character\n");
   putstr("    : $((__buffer += 1))              # Move to the next buffer position\n");
 #else
   putstr("  __fgetc_buf16=\n");
@@ -305,7 +305,7 @@ void runtime_unpack_string_to_buf() {
   extract_line_head("    ", "__fgetc_buf16", "__stdin_buf256",  ANY_STRING_16,  "16", "        __continue=0\n")
   putstr("    while [ ! -z \"$__fgetc_buf16\" ]; do\n");
   extract_first_char("    ", "__fgetc_buf16", "_$__buffer")
-  putstr("      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character\n");
+  putstr("      __fgetc_buf16=\"${__fgetc_buf16#?}\"  # Remove the first character\n");
   putstr("      : $((__buffer += 1))              # Move to the next buffer position\n");
   putstr("    done\n");
 #endif
@@ -567,7 +567,7 @@ void runtime_putchar() {
   if (runtime_putchar_defined++) return;
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
-  putstr("  printf \\\\$(($1/64))$(($1/8%8))$(($1%8))\n");
+  putstr("  printf " PRINTF_OCTAL_PATTERN "$(($1/64))$(($1/8%8))$(($1%8))\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -640,7 +640,7 @@ void runtime_put_pstr() {
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
   putstr("  while [ $((__c = _$__addr)) != 0 ]; do\n");
-  putstr("    printf \\\\$((__c/64))$((__c/8%8))$((__c%8))\n");
+  putstr("    printf " PRINTF_OCTAL_PATTERN "$((__c/64))$((__c/8%8))$((__c%8))\n");
   putstr("    : $((__addr += 1))\n");
   putstr("  done\n");
   putstr("}\n");
@@ -713,8 +713,8 @@ void runtime_printf() {
   //                "\\ooo" to print the character or vice versa if '-' is set.
   putstr("          case \"$__flags\" in\n");
   putstr("            *'-'*)\n");
-  putstr("              printf \\\\$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;\n");
-  putstr("            *) pad ${__width:-0}; printf \\\\$(($1/64))$(($1/8%8))$(($1%8)) ;;\n");
+  putstr("              printf " PRINTF_OCTAL_PATTERN "$(($1/64))$(($1/8%8))$(($1%8)); pad ${__width:-0} ;;\n");
+  putstr("            *) pad ${__width:-0}; printf " PRINTF_OCTAL_PATTERN "$(($1/64))$(($1/8%8))$(($1%8)) ;;\n");
   putstr("          esac\n");
   putstr("          shift\n");
   putstr("          printf_reset\n");
@@ -762,7 +762,7 @@ void runtime_printf() {
   putstr("    elif [ $__head = 37 ]; then # 37 == '%'\n");
   putstr("      __mod=1; __mod_start=$__fmt_ptr\n");
   putstr("    else\n");
-  putstr("      printf \\\\$(($__head/64))$(($__head/8%8))$(($__head%8))\n");
+  putstr("      printf " PRINTF_OCTAL_PATTERN "$(($__head/64))$(($__head/8%8))$(($__head%8))\n");
   putstr("    fi\n");
   putstr("  done\n");
   putstr("}\n");
@@ -952,7 +952,7 @@ void runtime_write() {
   putstr("  : $((__i = 0))\n");
   putstr("  while [ $__i -lt $__count ] ; do\n");
   putstr("    : $((__byte = _$((__buf+__i))))\n");
-  putstr("    printf \\\\$(($__byte/64))$(($__byte/8%8))$(($__byte%8)) >&$__fd\n");
+  putstr("    printf " PRINTF_OCTAL_PATTERN "$(($__byte/64))$(($__byte/8%8))$(($__byte%8)) >&$__fd\n");
   putstr("    : $((__i += 1))\n");
   putstr("  done\n");
   putstr("  : $(($1 = __count))\n");

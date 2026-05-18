@@ -202,7 +202,7 @@ _putstr() { # s: $2
   set -- $@ $s
   s=$2
   while [ $((_$s)) != 0 ]; do
-    printf \\$(((_$s)/64))$(((_$s)/8%8))$(((_$s)%8))
+    printf %b \\0$(((_$s)/64))$(((_$s)/8%8))$(((_$s)%8))
     : $(((s += 1) - 1))
   done
   : $((__tmp = $1)) $((s = $3)) $(($1 = __tmp))
@@ -923,7 +923,7 @@ _free() { # $2 = object to free
 
 #_ Unpack a Shell string into an appropriately sized buffer
 unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
-  __fgetc_buf=$1
+  __fgetc_buf="$1"
   __buffer=$2
   __ends_with_eof=${3:-1}
   __fgetc_buf16=
@@ -976,7 +976,7 @@ unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?
           : $((_$__buffer = __c))
           ;;
       esac
-      __fgetc_buf16=${__fgetc_buf16#?}  # Remove the first character
+      __fgetc_buf16="${__fgetc_buf16#?}"  # Remove the first character
       : $((__buffer += 1))              # Move to the next buffer position
     done
   done
@@ -1033,7 +1033,7 @@ _put_pstr() {
   : $(($1 = 0)); shift # Return 0
   __addr=$1; shift
   while [ $((__c = _$__addr)) != 0 ]; do
-    printf \\$((__c/64))$((__c/8%8))$((__c%8))
+    printf %b \\0$((__c/64))$((__c/8%8))$((__c%8))
     : $((__addr += 1))
   done
 }
@@ -1119,7 +1119,7 @@ _write() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))
   : $((__i = 0))
   while [ $__i -lt $__count ] ; do
     : $((__byte = _$((__buf+__i))))
-    printf \\$(($__byte/64))$(($__byte/8%8))$(($__byte%8)) >&$__fd
+    printf %b \\0$(($__byte/64))$(($__byte/8%8))$(($__byte%8)) >&$__fd
     : $((__i += 1))
   done
   : $(($1 = __count))

@@ -473,6 +473,8 @@ jobs:
           # __us_buf16="${__us_buf256%"$__temp"}"
           # __us_buf256="$__temp"
           COMPATIBILITY_OPTIONS="$COMPATIBILITY_OPTIONS -DSH_OPTIMIZE_LONG_LINES_NOT"
+          # Use printf \\ooo instead of printf %b
+          COMPATIBILITY_OPTIONS="$COMPATIBILITY_OPTIONS -DSH_PRINTF_PERCENT_B_COMPAT"
 
           # Multiline script to run inside the woody chroot
           sudo chroot woody /bin/bash << EOF
@@ -510,6 +512,52 @@ jobs:
             make bootstrap-pnut-exe-from-shell MINIMAL=1
             make bootstrap-pnut-exe-from-shell MINIMAL=0
           EOF
+
+  bootstrap-pnut-exe-on-scavenged-shell:
+    strategy:
+      matrix:
+        bootstrap-shell: ["bash-i386-woody", "dash-i386-lenny", "ksh-i386-sarge", "zsh-i386-sarge"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils coreutils time
+
+      - name: Bootstrap pnut-exe inside rootfs with ${{ matrix.bootstrap-shell }}
+        run: |
+          set -e
+
+          ROOTFS_DIR="build/rootfs-${{ matrix.bootstrap-shell }}"
+          rm -rf "$ROOTFS_DIR"
+
+          ./kit/setup-rootfs.sh \
+            --dir "$ROOTFS_DIR" \
+            --bootstrap-shell "${{ matrix.bootstrap-shell }}" \
+            --execute-bootstrap
+
+          if [ ! -x "$ROOTFS_DIR/pnut-exe" ]; then
+            echo "Missing or non-executable /pnut-exe in $ROOTFS_DIR"
+            exit 1
+          fi
+
+          cat > "$ROOTFS_DIR/tmp/hello.c" << 'EOF'
+          int main(void) { return 42; }
+          EOF
+
+          sudo chroot "$ROOTFS_DIR" /pnut-exe /tmp/hello.c -o /tmp/hello
+          set +e
+          sudo chroot "$ROOTFS_DIR" /tmp/hello
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 42 ]; then
+            echo "Unexpected exit code: $EXIT_CODE (expected 42)"
+            exit 1
+          fi
 
   pnut-variants-run:
     runs-on: ubuntu-latest
@@ -560,7 +608,7 @@ jobs:
       - name: Install mescc-tools
         run: |
           set -e
-          git clone https://github.com/oriansj/mescc-tools.git mescc-tools --depth 1 --recursive
+          git clone https://github.com/oriansj/mescc-tools.git mescc-tools --recursive
           cd mescc-tools
           # 9b1375115f9175d876c360dbbfd7e231dd9f2a2f is from Oct 9th 2025
           git checkout 9b1375115f9175d876c360dbbfd7e231dd9f2a2f
@@ -641,6 +689,7 @@ jobs:
            , bootstrap-pnut-exe-on-awk
            , bootstrap-pnut-sh-awk-with-pnut-exe
            , bootstrap-bash-2_05a
+           , bootstrap-pnut-exe-on-scavenged-shell
            , pnut-variants-run
            , compile-with-M2-Planet
            , bootstrap-from-annotations
