@@ -1,0 +1,27 @@
+name: license-files-are-present
+
+on:
+  pull_request: # Should trigger on pull requests for all branches
+    branches:
+      - '**'  # Matches all branches
+
+jobs:
+  licnese-files-are-present:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install gcc and clang
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y reuse
+
+      - name: Ensure license files are present
+        run: |
+          reuse lint
+          if [ $? -ne 0 ]; then
+            echo "Some files don't have valid license headers"
+            exit 1
+          fi
