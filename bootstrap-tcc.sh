@@ -60,12 +60,14 @@ apply_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch di
 apply_tcc_patches() {
   cp kit/config.h "$TCC_DIR/config.h"
 
-  apply_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
-
-  apply_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
+  # Patches for libc compatibility
   apply_tcc_patch libtcc.c sscanf_TCC_VERSION                     "$TCC_VERSIONED_PATCHES_DIR"
+
+  # Patches for pnut compatibility
+  apply_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
+  apply_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
   apply_tcc_patch tcc.h    undefine_TCC_IS_NATIVE                 "$TCC_VERSIONED_PATCHES_DIR"
-  apply_tcc_patch tccpp.c  tccpp-parse-integer                    "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch tccpp.c  long_long_parser                       "$TCC_VERSIONED_PATCHES_DIR"
   apply_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit    "$TCC_VERSIONED_PATCHES_DIR"
   apply_tcc_patch tccgen.c float_negation                         "$TCC_VERSIONED_PATCHES_DIR"
 }
@@ -80,8 +82,9 @@ revert_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch d
 }
 
 revert_tcc_patches() {
+  revert_tcc_patch tccgen.c float_negation                         "$TCC_VERSIONED_PATCHES_DIR"
   revert_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit    "$TCC_VERSIONED_PATCHES_DIR"
-  revert_tcc_patch tccpp.c  tccpp-parse-integer                    "$TCC_VERSIONED_PATCHES_DIR"
+  revert_tcc_patch tccpp.c  long_long_parser                       "$TCC_VERSIONED_PATCHES_DIR"
   revert_tcc_patch tcc.h    undefine_TCC_IS_NATIVE                 "$TCC_VERSIONED_PATCHES_DIR"
   revert_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
   revert_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
