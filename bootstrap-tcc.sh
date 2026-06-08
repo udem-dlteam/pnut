@@ -206,7 +206,7 @@ if [ $use_gcc -eq 0 ]; then
     # Let's assume we have a premade pnut-sh.sh script
     # In a normal bootstrap, we'd have a precompiled pnut-sh.sh script.
     # Here, let's create it using gcc
-    gcc -o $TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c
+    gcc -std=c99 -o $TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c
     ./$TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh
     $shell $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh
     $shell $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
@@ -217,7 +217,7 @@ if [ $use_gcc -eq 0 ]; then
     # We know that these 2 methods reach the same executable, so no need to use
     # the slow method when developing.
 
-    gcc pnut.c $PNUT_EXE_OPTIONS -o $TEMP_DIR/pnut-exe-for-pnut-exe 2> /dev/null
+    gcc -std=c99 pnut.c $PNUT_EXE_OPTIONS -o $TEMP_DIR/pnut-exe-for-pnut-exe 2> /dev/null
     ./$TEMP_DIR/pnut-exe-for-pnut-exe $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
 
   fi
@@ -230,7 +230,7 @@ if [ $use_gcc -eq 0 ]; then
 else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc.
-  make_tcc_pnut "gcc"
+  make_tcc_pnut "gcc -std=c99"
 fi
 
 # Revert TCC source patches after producing the initial pnut-built compiler.
