@@ -1,16 +1,19 @@
 #! /bin/sh
-# This script bootstraps TCC using pnut. It creates a root filesystem with only a few utilities and the bootstrap shell, then compiles TCC with pnut and uses the resulting TCC to compile itself until reaching a fixed point.
+#
+# This script bootstraps TCC using pnut. It compiles TCC with pnut and uses the
+# resulting TCC to recompile itself until reaching a fixed point.
 set -e
 
+TCC_VERSION=0.9.26
 TEMP_DIR=build/tcc
 TCC_ARCHIVE=kit/tcc-0.9.26.tar.gz
 TCC_ARCHIVE_DIRNAME=tcc-0.9.26-1147-gee75a10c
-TCC_DIR=$TEMP_DIR/$TCC_ARCHIVE_DIRNAME
+TCC_DIR="$TEMP_DIR/$TCC_ARCHIVE_DIRNAME"
 TCC_PATCHES_DIR=kit/tcc-patches
-TCC_VERSIONED_PATCHES_DIR=$TCC_PATCHES_DIR/0.9.26
+TCC_VERSIONED_PATCHES_DIR="$TCC_PATCHES_DIR/$TCC_VERSION"
 MES_ARCHIVE=kit/mes-0.27.tar.gz
 MES_ARCHIVE_DIRNAME=mes-0.27
-MES_DIR=$TEMP_DIR/$MES_ARCHIVE_DIRNAME
+MES_DIR="$TEMP_DIR/$MES_ARCHIVE_DIRNAME"
 
 MES_ARCH=x86
 TCC_TARGET_ARCH=I386
@@ -48,63 +51,74 @@ tar -xzf "$MES_ARCHIVE" -C "$TEMP_DIR"
 BINTOOLS_EXE="$TEMP_DIR/bintools"
 gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-libc.c -o "$BINTOOLS_EXE" 2> /dev/null
 
+find_patch_file() {
+  # Look in kit/tcc-patches/$TCC_VERSION for a patch named $1.before and
+  # $1.after, and return the path if found. Otherwise, look in kit/tcc-patches/
+  # for the patch.
+  if [ -f "$TCC_VERSIONED_PATCHES_DIR/$1.before" ] &&
+     [ -f "$TCC_VERSIONED_PATCHES_DIR/$1.after" ]; then
+    echo "$TCC_VERSIONED_PATCHES_DIR/$1"
+  elif [ -f "$TCC_PATCHES_DIR/$1.before" ] &&
+       [ -f "$TCC_PATCHES_DIR/$1.after" ]; then
+    echo "$TCC_PATCHES_DIR/$1"
+  else
+    echo "Error: Patch files not found for $1" >&2
+    exit 1
+  fi
+}
+
 apply_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
   target_file="$TCC_DIR/$1"
-  patch_name="$2"
-  patch_dir="$3"
+  patch_file_base="$(find_patch_file "$2")"
 
-  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_dir/$patch_name.before" "$patch_dir/$patch_name.after" \
-    || { echo "Failed to apply patch $patch_name to $target_file" >&2; exit 1; }
+  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_file_base.before" "$patch_file_base.after" \
+    || { echo "Failed to apply patch $2 to $target_file" >&2; exit 1; }
 }
 
 apply_tcc_patches() {
   cp kit/config.h "$TCC_DIR/config.h"
 
   # Patches for libc compatibility
-  apply_tcc_patch libtcc.c sscanf_TCC_VERSION                     "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch libtcc.c sscanf_TCC_VERSION
 
   # Patches for pnut compatibility
-  apply_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
-  apply_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
-  apply_tcc_patch tcc.h    undefine_TCC_IS_NATIVE                 "$TCC_VERSIONED_PATCHES_DIR"
-  apply_tcc_patch tccpp.c  long_long_parser                       "$TCC_VERSIONED_PATCHES_DIR"
-  apply_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit    "$TCC_VERSIONED_PATCHES_DIR"
-  apply_tcc_patch tccgen.c float_negation                         "$TCC_VERSIONED_PATCHES_DIR"
+  apply_tcc_patch tccpp.c  array_sizeof
+  apply_tcc_patch libtcc.c error_set_jmp_enabled
+  apply_tcc_patch tcc.h    undefine_TCC_IS_NATIVE
+  apply_tcc_patch tccpp.c  long_long_parser
+  apply_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit
+  apply_tcc_patch tccgen.c float_negation
 }
 
 revert_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
   target_file="$TCC_DIR/$1"
-  patch_name="$2"
-  patch_dir="$3"
+  patch_file_base="$(find_patch_file "$2")"
 
-  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_dir/$patch_name.after" "$patch_dir/$patch_name.before" \
-    || { echo "Failed to revert patch $patch_name on $target_file" >&2; exit 1; }
+  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_file_base.after" "$patch_file_base.before" \
+    || { echo "Failed to revert patch $2 on $target_file" >&2; exit 1; }
 }
 
 revert_tcc_patches() {
-  revert_tcc_patch tccgen.c float_negation                         "$TCC_VERSIONED_PATCHES_DIR"
-  revert_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit    "$TCC_VERSIONED_PATCHES_DIR"
-  revert_tcc_patch tccpp.c  long_long_parser                       "$TCC_VERSIONED_PATCHES_DIR"
-  revert_tcc_patch tcc.h    undefine_TCC_IS_NATIVE                 "$TCC_VERSIONED_PATCHES_DIR"
-  revert_tcc_patch libtcc.c error_set_jmp_enabled                  "$TCC_VERSIONED_PATCHES_DIR"
-  revert_tcc_patch tccpp.c  array_sizeof                           "$TCC_PATCHES_DIR"
+  revert_tcc_patch tccgen.c float_negation
+  revert_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit
+  revert_tcc_patch tccpp.c  long_long_parser
+  revert_tcc_patch tcc.h    undefine_TCC_IS_NATIVE
+  revert_tcc_patch libtcc.c error_set_jmp_enabled
+  revert_tcc_patch tccpp.c  array_sizeof
 }
 
 apply_tcc_patches
 
 # Parse the arguments
-
 use_gcc=0               # Whether to use gcc to compile the first version of TCC, pnut-exe is used otherwise
 shell=                  # Defined if doing the full bootstrap using pnut.sh on Posix shell. Otherwise, we use gcc to compile pnut.
 safe=0                  # Whether to use safe mode when compiling pnut (adds checks at run time)
-fast=0                  # Whether to use fast mode when compiling pnut (faster shell code)
 mes_libc=0              # Use the mes libc instead of pnut's portable libc
 
 while [ $# -gt 0 ]; do
   case $1 in
     --gcc)      use_gcc=1;                               shift 1 ;;
     --shell)    shell="$2";                              shift 2 ;;
-    --fast)     PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"; shift 1 ;;
     --safe)     safe=1;                                  shift 1 ;;
     --mes-libc) mes_libc=1;                              shift 1 ;;
     *) echo "Unknown option: $1"; exit 1;;
@@ -113,22 +127,15 @@ done
 
 # Check that --gcc and --shell are not used together
 if [ $use_gcc -eq 1 ] && [ -n "$shell" ]; then
-  echo "Cannot use --gcc and --shell at the same time"
-  exit 1
+  echo "Cannot use --gcc and --shell at the same time" >&2; exit 1
 fi
 
 if [ $safe -eq 1 ]; then
   # Safe mode adds checks at run time to make sure the AST is well constructed
   # and no out-of-bounds access are done. This is mainly useful for debugging.
-  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE";
-  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DSAFE_MODE";
-  PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS_FAST -DSAFE_MODE";
-fi
-
-if [ $fast -eq 1 ]; then
-  # Fast mode disables some checks at run time to make the code run faster.
-  # This is mainly useful for production code.
-  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS_FAST"
+  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE -DNICE_UX";
+  PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DSAFE_MODE -DNICE_UX";
+  PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS_FAST -DSAFE_MODE -DNICE_UX";
 fi
 
 if [ $mes_libc -eq 1 ]; then
