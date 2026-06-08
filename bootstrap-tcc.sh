@@ -6,8 +6,15 @@ set -e
 
 TCC_VERSION=0.9.26
 TEMP_DIR=build/tcc
-TCC_ARCHIVE=kit/tcc-0.9.26.tar.gz
-TCC_ARCHIVE_DIRNAME=tcc-0.9.26-1147-gee75a10c
+if [ $TCC_VERSION = 0.9.27 ]; then
+  TCC_ARCHIVE=kit/tcc-0.9.27.tar.gz
+  TCC_ARCHIVE_DIRNAME=tcc-0.9.27
+elif [ $TCC_VERSION = 0.9.26 ]; then
+  TCC_ARCHIVE=kit/tcc-0.9.26.tar.gz
+  TCC_ARCHIVE_DIRNAME=tcc-0.9.26-1147-gee75a10c
+else
+  echo "Unsupported TCC version: $TCC_VERSION" >&2; exit 1
+fi
 TCC_DIR="$TEMP_DIR/$TCC_ARCHIVE_DIRNAME"
 TCC_PATCHES_DIR=kit/tcc-patches
 TCC_VERSIONED_PATCHES_DIR="$TCC_PATCHES_DIR/$TCC_VERSION"
@@ -197,7 +204,7 @@ make_tcc_pnut() { # $1: C compiler to use, $2: additional options
     -D CONFIG_TCCBOOT=1                                                        \
     -D CONFIG_TCC_STATIC=1                                                     \
     -D CONFIG_USE_LIBGCC=1                                                     \
-    -D TCC_VERSION=\"0.9.26\"                                                  \
+    -D TCC_VERSION=\"$TCC_VERSION\"                                            \
     -D ONE_SOURCE=1                                                            \
     -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"                               \
     $TCC_DIR/tcc.c                                                             \
@@ -244,7 +251,7 @@ else
 fi
 
 # Revert TCC source patches after producing the initial pnut-built compiler.
-revert_tcc_patches
+revert_tcc_patches $(echo $TCC_0_9_26_PATCHES | tr " " "\n" | tac)
 
 go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $2 if empty)
   CC="$1"
@@ -318,7 +325,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -D CONFIG_TCCBOOT=1 \
       -D CONFIG_TCC_STATIC=1 \
       -D CONFIG_USE_LIBGCC=1 \
-      -D TCC_VERSION=\"0.9.26\" \
+      -D TCC_VERSION=\"${TCC_VERSION}\" \
       -D ONE_SOURCE=1 \
       -L $LIB_PATH \
       $TCC_DIR/tcc.c
@@ -336,7 +343,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -D HAVE_BITFIELD=1 \
       -D HAVE_LONG_LONG=1 \
       -D HAVE_SETJMP=1 \
-      -I $MES_DIR/include \
+      -I $INCLUDE_DIR \
       -D TCC_TARGET_${TCC_TARGET_ARCH}=1 \
       -D CONFIG_TCCDIR=\"$LIB_PATH/tcc\" \
       -D CONFIG_TCC_CRTPREFIX=\"$LIB_PATH\" \
@@ -348,7 +355,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -D CONFIG_TCCBOOT=1 \
       -D CONFIG_TCC_STATIC=1 \
       -D CONFIG_USE_LIBGCC=1 \
-      -D TCC_VERSION=\"0.9.26\" \
+      -D TCC_VERSION=\"${TCC_VERSION}\" \
       -D ONE_SOURCE=1 \
       -L $LIB_PATH \
       $TCC_DIR/tcc.c
