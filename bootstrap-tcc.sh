@@ -44,77 +44,6 @@ if [ ! -f "$MES_ARCHIVE" ]; then
   exit 1
 fi
 
-if [ ! -d "$TCC_PATCHES_DIR" ]; then
-  echo "Error: TCC patches directory not found: $TCC_PATCHES_DIR" >&2
-  exit 1
-fi
-
-rm -rf "$TCC_DIR"
-rm -rf "$MES_DIR"
-tar -xzf "$TCC_ARCHIVE" -C "$TEMP_DIR"
-tar -xzf "$MES_ARCHIVE" -C "$TEMP_DIR"
-
-# Compile bintools for simple-patch
-BINTOOLS_EXE="$TEMP_DIR/bintools"
-gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-libc.c -o "$BINTOOLS_EXE" 2> /dev/null
-
-find_patch_file() {
-  # Look in kit/tcc-patches/$TCC_VERSION for a patch named $1.before and
-  # $1.after, and return the path if found. Otherwise, look in kit/tcc-patches/
-  # for the patch.
-  if [ -f "$TCC_VERSIONED_PATCHES_DIR/$1.before" ] &&
-     [ -f "$TCC_VERSIONED_PATCHES_DIR/$1.after" ]; then
-    echo "$TCC_VERSIONED_PATCHES_DIR/$1"
-  elif [ -f "$TCC_PATCHES_DIR/$1.before" ] &&
-       [ -f "$TCC_PATCHES_DIR/$1.after" ]; then
-    echo "$TCC_PATCHES_DIR/$1"
-  else
-    echo "Error: Patch files not found for $1" >&2
-    exit 1
-  fi
-}
-
-apply_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
-  target_file="$TCC_DIR/$1"
-  patch_file_base="$(find_patch_file "$2")"
-
-  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_file_base.before" "$patch_file_base.after" \
-    || { echo "Failed to apply patch $2 to $target_file" >&2; exit 1; }
-}
-
-apply_tcc_patches() {
-  cp kit/config.h "$TCC_DIR/config.h"
-
-  # Patches for libc compatibility
-  apply_tcc_patch libtcc.c sscanf_TCC_VERSION
-
-  # Patches for pnut compatibility
-  apply_tcc_patch tccpp.c  array_sizeof
-  apply_tcc_patch libtcc.c error_set_jmp_enabled
-  apply_tcc_patch tcc.h    undefine_TCC_IS_NATIVE
-  apply_tcc_patch tccpp.c  long_long_parser
-  apply_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit
-  apply_tcc_patch tccgen.c float_negation
-}
-
-revert_tcc_patch() { # $1: relative target file, $2: patch basename, $3: patch directory
-  target_file="$TCC_DIR/$1"
-  patch_file_base="$(find_patch_file "$2")"
-
-  "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_file_base.after" "$patch_file_base.before" \
-    || { echo "Failed to revert patch $2 on $target_file" >&2; exit 1; }
-}
-
-revert_tcc_patches() {
-  revert_tcc_patch tccgen.c float_negation
-  revert_tcc_patch tccgen.c fix_stack_64_bit_operands_on_32_bit
-  revert_tcc_patch tccpp.c  long_long_parser
-  revert_tcc_patch tcc.h    undefine_TCC_IS_NATIVE
-  revert_tcc_patch libtcc.c error_set_jmp_enabled
-  revert_tcc_patch tccpp.c  array_sizeof
-}
-
-apply_tcc_patches
 
 # Parse the arguments
 use_gcc=0               # Whether to use gcc to compile the first version of TCC, pnut-exe is used otherwise
@@ -144,6 +73,69 @@ if [ $safe -eq 1 ]; then
   PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DSAFE_MODE -DNICE_UX";
   PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS_FAST -DSAFE_MODE -DNICE_UX";
 fi
+
+find_patch_file() {
+  # Look in kit/tcc-patches/$TCC_VERSION for a patch named $1.before and
+  # $1.after, and return the path if found. Otherwise, look in kit/tcc-patches/
+  # for the patch.
+  if [ -f "$TCC_VERSIONED_PATCHES_DIR/$1.before" ] &&
+     [ -f "$TCC_VERSIONED_PATCHES_DIR/$1.after" ]; then
+    echo "$TCC_VERSIONED_PATCHES_DIR/$1"
+  elif [ -f "$TCC_PATCHES_DIR/$1.before" ] &&
+       [ -f "$TCC_PATCHES_DIR/$1.after" ]; then
+    echo "$TCC_PATCHES_DIR/$1"
+  else
+    echo "Error: Patch files not found for $1" >&2
+    exit 1
+  fi
+}
+
+apply_tcc_patches() { # $1..: patches list
+  while [ $# -gt 0 ]; do
+    target_file="$TCC_DIR/$1"
+    patch_file_base="$(find_patch_file "$2")"
+    "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_file_base.before" "$patch_file_base.after" \
+      || { echo "Failed to apply patch $patch_name to $target_file" >&2; exit 1; }
+    shift 2
+  done
+}
+
+revert_tcc_patches() { # $1..: patches list
+  while [ $# -gt 0 ]; do
+    target_file="$TCC_DIR/$2"
+    patch_file_base="$(find_patch_file "$1")"
+
+    "$BINTOOLS_EXE" simple-patch "$target_file" "$patch_file_base.after" "$patch_file_base.before" \
+      || { echo "Failed to revert patch $patch_name on $target_file" >&2; exit 1; }
+    shift 2
+  done
+}
+
+LIBC_PATCHES="
+libtcc.c sscanf_TCC_VERSION
+"
+
+TCC_0_9_26_PATCHES="
+tccpp.c  array_sizeof
+libtcc.c error_set_jmp_enabled
+tcc.h    undefine_TCC_IS_NATIVE
+tccpp.c  long_long_parser
+tccgen.c fix_stack_64_bit_operands_on_32_bit
+tccgen.c float_negation
+"
+
+# Unpack and prepare TCC and Mes libc source code
+rm -rf "$TCC_DIR" && tar -xzf "$TCC_ARCHIVE" -C "$TEMP_DIR"
+rm -rf "$MES_DIR" && tar -xzf "$MES_ARCHIVE" -C "$TEMP_DIR"
+
+# Compile bintools for simple-patch
+BINTOOLS_EXE="$TEMP_DIR/bintools"
+gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-libc.c -o "$BINTOOLS_EXE" 2> /dev/null
+
+cp kit/config.h "$TCC_DIR/config.h"
+
+apply_tcc_patches $LIBC_PATCHES
+apply_tcc_patches $TCC_0_9_26_PATCHES
 
 if [ $mes_libc -eq 1 ]; then
   INCLUDE_PATH="$MES_DIR/include"
