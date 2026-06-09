@@ -174,7 +174,7 @@ compile_pnut() { # extra pnut compilation options: $1, expect_failed_compilation
   pnut_exe_backend="./tests/pnut${extra_opts_suffix}.$ext"
 
   if [ ! -f "$pnut_exe" ]; then
-    gcc "$PNUT_SOURCE" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" \
+    gcc -std=c99 "$PNUT_SOURCE" $PNUT_EXE_OPTIONS $extra_opts -o "$pnut_exe" \
       || fail "Error: gcc failed to compile $PNUT_SOURCE"
   fi
 
@@ -243,7 +243,7 @@ run_test() { # file_to_test: $1
 
     if [ "$comp_exit" -eq 0 ] && [ "$expect_failed_comp" -eq 0 ]; then
       # Generate golden file using GCC output as reference
-      gcc "$file" $(test_comp_options "$file") -o "$gcc_bin" 2> "$gcc_err"
+      gcc -std=c99 "$file" $(test_comp_options "$file") -o "$gcc_bin" 2> "$gcc_err"
       if [ $? -ne 0 ]; then
         echo "❌ Failed to compile with GCC:"
         cat "$gcc_err"
