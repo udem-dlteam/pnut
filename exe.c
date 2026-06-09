@@ -468,6 +468,11 @@ void grow_stack_bytes(int bytes) {
   add_reg_imm(reg_SP, -word_size_align(bytes));
 }
 
+void drop_stack_words(int words) {
+  grow_fs(-words);
+  grow_stack(-words);
+}
+
 void rt_debug(char* msg);
 void rt_crash(char* msg);
 
@@ -1379,11 +1384,11 @@ int codegen_params(ast params) {
 #endif
     fs += codegen_param(car(params));
   }
-  #ifdef SAFE_MODE
+#ifdef SAFE_MODE
   else if (params_type != 0) {
     fatal_error("codegen_params: Function expects more parameters than provided");
   }
-  #endif
+#endif
 
   return fs;
 }
@@ -2363,8 +2368,8 @@ void codegen_body(ast node) {
 void codegen_statement(ast node) {
   int op;
   int lbl1, lbl2, lbl3;
-  int save_fs;
-  int save_locals;
+  int save_fs = cgc_fs;
+  int save_locals = cgc_locals;
   int binding;
 
   if (node == 0) return;
@@ -2391,9 +2396,6 @@ void codegen_statement(ast node) {
     lbl1 = alloc_label(0); // while statement start
     lbl2 = alloc_label(0); // join point after while
 
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
-
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
 
     def_label(lbl1);
@@ -2406,17 +2408,11 @@ void codegen_statement(ast node) {
     jump(lbl1);
     def_label(lbl2);
 
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
-
   } else if (op == FOR_KW) {
 
     lbl1 = alloc_label(0); // while statement start
     lbl2 = alloc_label(0); // join point after while
     lbl3 = alloc_label(0); // initial loop starting point
-
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
 
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
 
@@ -2438,18 +2434,12 @@ void codegen_statement(ast node) {
     jump(lbl1);
     def_label(lbl2);
 
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
-
 #ifdef SUPPORT_DO_WHILE
 
   } else if (op == DO_KW) {
 
     lbl1 = alloc_label(0); // do statement start
     lbl2 = alloc_label(0); // break point
-
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
 
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
     def_label(lbl1);
@@ -2462,15 +2452,9 @@ void codegen_statement(ast node) {
 
     def_label(lbl2);
 
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
-
 #endif // SUPPORT_DO_WHILE
 
   } else if (op == SWITCH_KW) {
-
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
 
     lbl1 = alloc_label(0); // lbl1: end of switch
     lbl2 = alloc_label(0); // lbl2: next case
@@ -2521,9 +2505,6 @@ void codegen_statement(ast node) {
 
     def_label(lbl1); // End of switch label
 
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
-
   } else if (op == CASE_KW) {
 
     binding = cgc_lookup_enclosing_switch(cgc_locals);
@@ -2568,8 +2549,9 @@ void codegen_statement(ast node) {
 
     binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
+      // adjust stack and jump to break label
       grow_stack(heap[binding+2] - cgc_fs);
-      jump(heap[binding+3]); // jump to break label
+      jump(heap[binding+3]);
     } else {
       fatal_error("break is not in the body of a loop");
     }
@@ -2578,8 +2560,9 @@ void codegen_statement(ast node) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
     if (binding != 0 && heap[binding+4] != 0) {
+      // adjust stack and jump to continue label
       grow_stack(heap[binding+2] - cgc_fs);
-      jump(heap[binding+4]); // jump to continue label
+      jump(heap[binding+4]);
     } else {
       fatal_error("continue is not in the body of a loop");
     }
@@ -2592,6 +2575,7 @@ void codegen_statement(ast node) {
       grow_fs(-1);
     }
 
+    // The cleanup code at the bottom isn't hit because of the ret, so cleaning here.
     grow_stack(-cgc_fs);
 
     ret();
@@ -2620,10 +2604,11 @@ void codegen_statement(ast node) {
   } else {
 
     codegen_rvalue(node);
-    pop_reg(reg_X);
-    grow_fs(-1);
 
   }
+
+  drop_stack_words(cgc_fs - save_fs);
+  cgc_locals = save_locals;
 }
 
 #ifdef SUPPORT_STRUCT_UNION
