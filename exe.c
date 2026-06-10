@@ -1794,6 +1794,14 @@ int codegen_lvalue(ast node) {
       } else {
         fatal_error("codegen_lvalue: function call does not return a struct/union");
       }
+    } else if (op == ',') {
+      // A comma expression is only an lvalue when the rhs is an aggregate,
+      // whose "lvalue" is the address of its value. The lhs value word stays
+      // buried below the rhs temporaries and is freed at the end of the full
+      // expression.
+      codegen_rvalue_and_drop_temps(child0);
+      lvalue_width = codegen_lvalue(child1);
+      grow_fs(-1); // nets the rhs lvalue word with the final grow_fs(1)
     }
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
