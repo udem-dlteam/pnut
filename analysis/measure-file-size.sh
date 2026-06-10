@@ -46,7 +46,7 @@ measure_size() { # $1 = output-name, $2 = options
     ./$TEMP_DIR/pnut-awk pnut.c $2 > "$TEMP_DIR/$1.awk"
   fi
 
-  files="$(gcc -MM pnut.c $2 | sed 's/^[^:]*: //')"
+  files="$(gcc -std=c99 -MM pnut.c $2 | sed 's/^[^:]*: //')"
   cleaned_files=""
   for file in $files; do
     # Make cleaned copy of the file, without comments or blank lines
@@ -60,7 +60,7 @@ measure_size() { # $1 = output-name, $2 = options
 
   # Preprocess pnut.c using gcc, so we have a line count without any comments,
   # blank lines, and preprocessor directives.
-  gcc -E -P "build/measure/no-sys/pnut.c" $2 > "$TEMP_DIR/$1-preprocessed.c"
+  gcc -std=c99 -E -P "build/measure/no-sys/pnut.c" $2 > "$TEMP_DIR/$1-preprocessed.c"
   # Split file in 2 parts, before "#_ Character constants" and after
   marker_line=$(grep -n "^#_ Character constants" "$TEMP_DIR/$1.sh" | cut -d: -f1)
   tail -n +$marker_line "$TEMP_DIR/$1.sh" > "$TEMP_DIR/$1-runtime.sh"
@@ -71,7 +71,7 @@ measure_size() { # $1 = output-name, $2 = options
   wc $files
   printf "By file (without comments or blank lines):\n"
   wc $cleaned_files
-  printf "Preprocessed (gcc -E -P without system includes):\n"
+  printf "Preprocessed (gcc -std=c99 -E -P without system includes):\n"
   wc "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk" "$TEMP_DIR/$1-preprocessed.c" "$TEMP_DIR/$1-runtime.sh" "$TEMP_DIR/$1-decls.sh"
 
   # Number of empty lines in $TEMP_DIR/$1.sh
@@ -90,13 +90,13 @@ measure_size() { # $1 = output-name, $2 = options
 }
 
 # Compile pnut-sh
-gcc -o "$TEMP_DIR/pnut-sh" pnut.c -Dtarget_sh
+gcc -std=c99 -o "$TEMP_DIR/pnut-sh" pnut.c -Dtarget_sh
 # Compile pnut-sh-bootstrap
-gcc -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dtarget_sh -DPNUT_BOOTSTRAP
+gcc -std=c99 -o "$TEMP_DIR/pnut-sh-bootstrap" pnut.c -Dtarget_sh -DPNUT_BOOTSTRAP
 # Compile pnut-awk
-gcc -o "$TEMP_DIR/pnut-awk" pnut.c -Dtarget_awk
+gcc -std=c99 -o "$TEMP_DIR/pnut-awk" pnut.c -Dtarget_awk
 # Compile pnut-awk-bootstrap
-gcc -o "$TEMP_DIR/pnut-awk-bootstrap" pnut.c -Dtarget_awk -DPNUT_BOOTSTRAP
+gcc -std=c99 -o "$TEMP_DIR/pnut-awk-bootstrap" pnut.c -Dtarget_awk -DPNUT_BOOTSTRAP
 
 # Measure the minimal pnut variants:
 
