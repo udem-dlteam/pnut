@@ -184,6 +184,10 @@ void write_i32_le(const int n) {
 
 // If the main function returns a value
 bool main_returns = false;
+#ifdef SUPPORT_STRUCT_UNION
+// Return type of the current function, used when returning a struct or union
+ast current_fun_return_type = 0;
+#endif
 
 // Environment tracking
 #include "env.c"
@@ -462,6 +466,11 @@ void grow_stack(int words) {
 // up from the number of bytes).
 void grow_stack_bytes(int bytes) {
   add_reg_imm(reg_SP, -word_size_align(bytes));
+}
+
+void drop_stack_words(int words) {
+  grow_fs(-words);
+  grow_stack(-words);
 }
 
 void rt_debug(char* msg);
@@ -1328,23 +1337,118 @@ void codegen_rvalue(ast node);
 void codegen_statement(ast node);
 int codegen_lvalue(ast node);
 
+// Evaluate a condition expression and pop its value into reg_X, freeing any
+// aggregate temporaries allocated during evaluation.
+void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
+#ifdef SUPPORT_STRUCT_UNION
+  int save_fs = cgc_fs;
+#endif
+  codegen_rvalue(node);
+  pop_reg(reg_X);
+  grow_fs(-1);
+#ifdef SUPPORT_STRUCT_UNION
+  // The node's value is immediately consumed by a conditional jump, so it can
+  // be collected right away. This also ensures that temporaries don't pile up
+  // during loops, where the condition is evaluated multiple times.
+  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+#endif
+
+  xor_reg_reg(reg_Y, reg_Y);
+  jump_cond_reg_reg(cond, lbl, reg_X, reg_Y);
+}
+
+
+// =============================== Struct return ===============================
+//
+// A call to a function returning a struct/union allocates a temporary buffer
+// for the result of the call, which is returned by the callee through a hidden
+// parameter. The value of the call expression is the buffer's address, a single
+// word, so codegen keeps its "one value = one stack word" convention. Member
+// access, struct assignment and by-value arguments all consume that address
+// like any other aggregate lvalue. Temporaries are accounted for in cgc_fs, so
+// locals and parameters (addressed relative to cgc_fs) are unaffected by them.
+//
+// A temporary may be used as part of a larger expression, meaning it must
+// outlive the expression that created it. To simplify the code generator, we
+// don't track the exact lifetime of temporaries (nor reuse them) and instead
+// just let them accumulate on the stack until the end of the statement, where
+// they are all freed at once by codegen_statement's stack cleanup.
+//
+// However, there are cases where a temporary must be freed before the end of
+// the statement to keep the stack balanced:
+//  - When evaluating a condition, the temporary never escapes the condition
+//    expression, and would pile up on the stack during loops if not freed right
+//    away.
+//    Handled by `codegen_rvalue_and_cmp_0`.
+//  - When evaluating a ternary operator condition, since the individual arms
+//    may allocate a different number of temporaries.
+//    Handled by `codegen_ternary_arm`.
+//  - When generating a function call, since the temporary would sit between the
+//    arguments and/or function pointer (for indirect calls).
+//    Handled by `codegen_rvalue_and_drop_temps`.
+//  - When evaluating a local variable initializer, since temporary values would
+//    offset the local variable's address which is assumed to not change.
+//    Handled by `codegen_rvalue_and_drop_temps`.
+//
+// =============================================================================
+
+
+// Evaluate an rvalue expression and pop its value into reg_X, freeing any
+// aggregate temporaries allocated during evaluation unless the expression
+// returns an aggregate value. In that case, the value on top of the stack is a
+// pointer to the aggregate temporaries, and is handled case by case by the
+// caller (struct assignment, function params, ternary operator arms, local
+// variable initializers)
+#ifdef SUPPORT_STRUCT_UNION
+void codegen_rvalue_and_drop_temps(ast node) {
+  int save_fs = cgc_fs;
+  codegen_rvalue(node);
+  if (cgc_fs != save_fs + 1 && !is_aggregate_type(value_type(node))) {
+    pop_reg(reg_X);
+    grow_fs(-1);
+    drop_stack_words(cgc_fs - save_fs);
+    push_reg(reg_X);
+    grow_fs(1);
+  }
+}
+#else
+#define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
+#endif
+
 int codegen_param(ast param) {
   int type = value_type(param);
 
 #ifdef SUPPORT_STRUCT_UNION
   int left_width;
+  int save_fs = cgc_fs;
+  int temp_words;
 
   if (is_struct_or_union_type(type)) {
     left_width = codegen_lvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
+    temp_words = cgc_fs - save_fs;
     grow_stack_bytes(word_size_align(left_width));
     grow_fs(word_size_align(left_width) / WORD_SIZE);
     copy_obj(reg_SP, 0, reg_X, 0, left_width);
+    if (temp_words != 0) {
+      // The argument was copied from a temporary (e.g. a struct-returning
+      // call's result) that sits right below it on the stack. Slide the
+      // argument copy down over the temporaries so that the argument words stay
+      // contiguous (the callee addresses its parameters relative to the stack
+      // pointer). The regions don't overlap because the temporary area contains
+      // the source object, so it is at least as large as the argument.
+      mov_reg_imm(reg_X, temp_words * WORD_SIZE);
+      add_reg_reg(reg_X, reg_SP);
+      copy_obj(reg_X, 0, reg_SP, 0, left_width);
+      drop_stack_words(temp_words);
+    }
   } else
 #endif
   {
-    codegen_rvalue(param);
+    // keep the argument words contiguous, flushing any leftover temporaries
+    // below them on the stack.
+    codegen_rvalue_and_drop_temps(param);
   }
 
   return type_width(type, false, true) / WORD_SIZE;
@@ -1375,13 +1479,47 @@ int codegen_params(ast params) {
 #endif
     fs += codegen_param(car(params));
   }
-  #ifdef SAFE_MODE
+#ifdef SAFE_MODE
   else if (params_type != 0) {
     fatal_error("codegen_params: Function expects more parameters than provided");
   }
-  #endif
+#endif
 
   return fs;
+}
+
+void emit_function_call(ast fun, int binding) {
+  // Generate a fast path for direct calls
+  if (binding != 0) {
+#ifdef ONE_PASS_GENERATOR
+    // When compiling in one pass mode, forward jumps must go through the jump table
+    if (is_label_defined(fun_binding_lbl(binding))) {
+      call(fun_binding_lbl(binding));
+    } else {
+      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+#ifdef SAFE_MODE
+      // In safe mode, we check that the indirect call location is initialized
+      mov_reg_imm(reg_Y, 0);
+      int good_lbl = alloc_label(0);
+      // Check if reg_X == 0 and call debug_interrupt otherwise
+      jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
+      debug_interrupt();
+      def_label(good_lbl);
+#endif
+      call_reg(reg_X);
+    }
+#else
+    call(fun_binding_lbl(binding));
+#endif
+  } else {
+    // Otherwise we go through the function pointer. Temporaries are flushed
+    // because they would sit between the arguments and the callee's frame,
+    // breaking the callee's SP-relative parameter addressing.
+    codegen_rvalue_and_drop_temps(fun);
+    pop_reg(reg_X);
+    grow_fs(-1);
+    call_reg(reg_X);
+  }
 }
 
 void codegen_call(ast node) {
@@ -1389,6 +1527,20 @@ void codegen_call(ast node) {
   ast params = get_child_('(', node, 1);
   ast nb_params;
   int binding = 0;
+#ifdef SUPPORT_STRUCT_UNION
+  int buf_words = 0;
+  ast fun_return_type = function_return_type(value_type(fun));
+
+  if (is_struct_or_union_type(fun_return_type)) {
+    // The function returns a struct/union: allocate the buffer in which the
+    // callee will write the result. The buffer's address is passed as a
+    // hidden argument, and is also the value of the call expression. The
+    // buffer is freed at the end of the full expression.
+    buf_words = type_width(fun_return_type, true, true) / WORD_SIZE;
+    grow_stack(buf_words);
+    grow_fs(buf_words);
+  }
+#endif
 
   // Check if the function is a direct call, find the binding if it is
   if (get_op(fun) == IDENTIFIER) {
@@ -1419,40 +1571,95 @@ void codegen_call(ast node) {
   nb_params = codegen_params(params);
 #endif
 
-  // Generate a fast path for direct calls
-  if (binding != 0) {
-#ifdef ONE_PASS_GENERATOR
-    // When compiling in one pass mode, forward jumps must go through the jump table
-    if (is_label_defined(fun_binding_lbl(binding))) {
-      call(fun_binding_lbl(binding));
-    } else {
-      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
-#ifdef SAFE_MODE
-      // In safe mode, we check that the indirect call location is initialized
-      mov_reg_imm(reg_Y, 0);
-      int good_lbl = alloc_label(0);
-      // Check if reg_X == 0 and call debug_interrupt otherwise
-      jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
-      debug_interrupt();
-      def_label(good_lbl);
-#endif
-      call_reg(reg_X);
-    }
-#else
-    call(fun_binding_lbl(binding));
-#endif
-  } else {
-    // Otherwise we go through the function pointer
-    codegen_rvalue(fun);
-    pop_reg(reg_X);
-    grow_fs(-1);
-    call_reg(reg_X);
+#ifdef SUPPORT_STRUCT_UNION
+  if (buf_words != 0) {
+    // Push the buffer address as the hidden first argument (pushed last)
+    // The arguments occupy nb_params words right above the buffer.
+    mov_reg_imm(reg_X, nb_params * WORD_SIZE);
+    add_reg_reg(reg_X, reg_SP);
+    push_reg(reg_X);
+    grow_fs(1);
+    nb_params += 1;
   }
+#endif
 
-  grow_stack(-nb_params);
-  grow_fs(-nb_params);
+  emit_function_call(fun, binding);
+
+  drop_stack_words(nb_params);
+
+#ifdef SUPPORT_STRUCT_UNION
+  // After popping the arguments, the result buffer is on top of the stack.
+  // Its address is the value of the call expression.
+  if (buf_words != 0) mov_reg_reg(reg_X, reg_SP);
+#endif
 
   push_reg(reg_X);
+}
+
+// One arm of a ternary expression: evaluate the arm and leave its value in
+// reg_X, freeing the arm's temporaries so that both arms leave the same stack
+// shape. width != 0 means the ternary is aggregate-valued: the arm's value (a
+// source address) is copied into the result buffer allocated right below the
+// arm's temporaries, and reg_X is set to the buffer address.
+// Returns the lvalue width when in lvalue context.
+int codegen_ternary_arm(ast arm, bool lvalue_ctx, int width) {
+  int save_fs = cgc_fs;
+  int lvalue_width = 0;
+
+  if (lvalue_ctx) {
+    lvalue_width = codegen_lvalue(arm);
+  } else {
+    codegen_rvalue(arm); // for aggregates, the value is the address
+  }
+  pop_reg(reg_X);
+  grow_fs(-1);
+#ifdef SUPPORT_STRUCT_UNION
+  if (width != 0) {
+    mov_reg_imm(reg_Y, (cgc_fs - save_fs) * WORD_SIZE);
+    add_reg_reg(reg_Y, reg_SP);
+    copy_obj(reg_Y, 0, reg_X, 0, width);
+    mov_reg_reg(reg_X, reg_Y);
+  }
+#endif
+  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+  return lvalue_width;
+}
+
+// Ternary expression, in rvalue or lvalue context. Each arm leaves its value
+// in reg_X, which is pushed at the join point; the caller accounts for the
+// value word (grow_fs(1) at the end of codegen_rvalue/codegen_lvalue).
+// Aggregate-valued ternaries get a result buffer allocated before branching,
+// since the arms may allocate different amounts of temporaries; the value is
+// then the buffer address. Returns the width of the value when it matters
+// (lvalue context or aggregate).
+int codegen_ternary(ast node, bool lvalue_ctx) {
+  int lbl1 = alloc_label(0); // false label
+  int lbl2 = alloc_label(0); // end label
+  int width = 0;
+  int lvalue_width;
+#ifdef SUPPORT_STRUCT_UNION
+  ast type = value_type(node);
+
+  if (is_struct_or_union_type(type)) {
+    width = type_width(type, true, false);
+    grow_stack_bytes(width);
+    grow_fs(word_size_align(width) / WORD_SIZE);
+  }
+#endif
+
+  codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
+  lvalue_width = codegen_ternary_arm(get_child_('?', node, 1), lvalue_ctx, width); // value when true
+  jump(lbl2);
+  def_label(lbl1);
+  codegen_ternary_arm(get_child_('?', node, 2), lvalue_ctx, width); // value when false
+  def_label(lbl2);
+
+  push_reg(reg_X);
+
+#ifdef SUPPORT_STRUCT_UNION
+  if (width != 0) lvalue_width = width;
+#endif
+  return lvalue_width;
 }
 
 #ifdef SUPPORT_GOTO
@@ -1575,6 +1782,26 @@ int codegen_lvalue(ast node) {
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
+    } else if (op == '(') {
+      type = value_type(node);
+      if (is_struct_or_union_type(type)) {
+        // Call to a struct/union-returning function: the lvalue is the
+        // temporary buffer in which the callee wrote the result. codegen_call
+        // leaves the buffer address on the stack; that value word is
+        // accounted for by the grow_fs(1) at the end of the function.
+        codegen_call(node);
+        lvalue_width = type_width(type, true, false);
+      } else {
+        fatal_error("codegen_lvalue: function call does not return a struct/union");
+      }
+    } else if (op == ',') {
+      // A comma expression is only an lvalue when the rhs is an aggregate,
+      // whose "lvalue" is the address of its value. The lhs value word stays
+      // buried below the rhs temporaries and is freed at the end of the full
+      // expression.
+      codegen_rvalue_and_drop_temps(child0);
+      lvalue_width = codegen_lvalue(child1);
+      grow_fs(-1); // nets the rhs lvalue word with the final grow_fs(1)
     }
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
@@ -1590,20 +1817,8 @@ int codegen_lvalue(ast node) {
 
     if (op == '?') {
 
-      int lbl1 = alloc_label(0); // false label
-      int lbl2 = alloc_label(0); // end label
-      codegen_rvalue(child0);
-      pop_reg(reg_X);
-      grow_fs(-1);
-      xor_reg_reg(reg_Y, reg_Y);
-      jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
-      lvalue_width = codegen_lvalue(child1); // value when true, assume that lvalue_width is the same for both cases
-      jump(lbl2);
-      def_label(lbl1);
-      grow_fs(-1); // here, the child#1 is not on the stack, so we adjust it
-      codegen_lvalue(get_child_('?', node, 2)); // value when false
-      grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
-      def_label(lbl2);
+      // assume that lvalue_width is the same for both arms
+      lvalue_width = codegen_ternary(node, true);
 
     } else {
       dump_node(node);
@@ -1647,6 +1862,7 @@ void codegen_rvalue(ast node) {
   ast type1;
 #ifdef SUPPORT_STRUCT_UNION
   ast type2;
+  int save_fs;
 #endif
   ast child0, child1;
 
@@ -1830,25 +2046,50 @@ void codegen_rvalue(ast node) {
 
   } else if (nb_children == 2) {
     if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[' || op == ',') {
-      codegen_rvalue(child0);
-      codegen_rvalue(child1);
-      codegen_binop(op, child0, child1);
-      grow_fs(-2);
+      // codegen_binop expects each operand to be exactly one word on top of
+      // the stack, so the temporaries of each operand are freed as soon as
+      // its value is extracted.
+      codegen_rvalue_and_drop_temps(child0);
+      codegen_rvalue_and_drop_temps(child1);
+#ifdef SUPPORT_STRUCT_UNION
+      if (op == ',' && is_aggregate_type(value_type(child1))) {
+        // The rhs value on top of the stack (a pointer to the aggregate) is
+        // the result. The lhs word stays buried below the rhs temporaries
+        // and is freed at the end of the full expression. codegen_binop's
+        // pop/pop/push would corrupt the rhs temporary, so it is skipped.
+        grow_fs(-1); // nets the buried lhs word with the final grow_fs(1)
+      } else
+#endif
+      {
+        codegen_binop(op, child0, child1);
+        grow_fs(-2);
+      }
     } else if (op == '=') {
       type1 = value_type(child0);
       left_width = codegen_lvalue(child0);
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type1)) {
         // Struct assignment, we copy the struct.
+        save_fs = cgc_fs;
         codegen_lvalue(child1);
         pop_reg(reg_X);
-        pop_reg(reg_Y);
-        grow_fs(-2);
+        grow_fs(-1);
+        if (cgc_fs == save_fs) {
+          pop_reg(reg_Y);
+          grow_fs(-1);
+        } else {
+          // The rhs allocated temporaries (e.g. a struct-returning call) that
+          // bury the destination address: load it from its stack position.
+          // The buried word and the temporaries are freed at the end of the
+          // full expression. The source must not be flushed before the copy,
+          // so cgc_fs stays where it is.
+          mov_reg_mem(reg_Y, reg_SP, (cgc_fs - save_fs) * WORD_SIZE);
+        }
         copy_obj(reg_Y, 0, reg_X, 0, left_width);
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
-        codegen_rvalue(child1);
+        codegen_rvalue_and_drop_temps(child1); // so that the destination address is right below the value
         pop_reg(reg_X);
         pop_reg(reg_Y);
         grow_fs(-2);
@@ -1862,7 +2103,7 @@ void codegen_rvalue(ast node) {
       load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
       push_reg(reg_X);
       grow_fs(1);
-      codegen_rvalue(child1);
+      codegen_rvalue_and_drop_temps(child1); // keep the operands and destination address adjacent
       codegen_binop(op, child0, child1);
       pop_reg(reg_X);
       pop_reg(reg_Y);
@@ -1871,15 +2112,19 @@ void codegen_rvalue(ast node) {
       push_reg(reg_X);
     } else if (op == AMP_AMP || op == BAR_BAR) {
       lbl1 = alloc_label(0);
-      codegen_rvalue(child0);
-      pop_reg(reg_X);
-      push_reg(reg_X);
-      xor_reg_reg(reg_Y, reg_Y);
-      jump_cond_reg_reg(TERNARY(op == AMP_AMP, EQ, NE), lbl1, reg_X, reg_Y); // if lhs == 0, jump to lbl1
-      pop_reg(reg_X); grow_fs(-1);
-      codegen_rvalue(child1);
-      grow_fs(-1);
+      lbl2 = alloc_label(0);
+      // Jump to lbl1 as soon as an operand decides the result (== 0 for &&,
+      // != 0 for ||), short-circuiting the rest. The result is normalized to
+      // 0/1.
+      codegen_rvalue_and_cmp_0(TERNARY(op == AMP_AMP, EQ, NE), lbl1, child0);
+      codegen_rvalue_and_cmp_0(TERNARY(op == AMP_AMP, EQ, NE), lbl1, child1);
+      // fall through, && => true, || => false
+      mov_reg_imm(reg_X, TERNARY(op == AMP_AMP, 1, 0));
+      jump(lbl2);
       def_label(lbl1);
+      mov_reg_imm(reg_X, TERNARY(op == AMP_AMP, 0, 1)); // an operand decided
+      def_label(lbl2);
+      push_reg(reg_X); // accounted by the final grow_fs(1)
     } else if (op == '(') {
       codegen_call(node);
     }
@@ -1942,20 +2187,7 @@ void codegen_rvalue(ast node) {
   } else if (nb_children == 3) {
 
     if (op == '?') {
-      lbl1 = alloc_label(0); // false label
-      lbl2 = alloc_label(0); // end label
-      codegen_rvalue(child0);
-      pop_reg(reg_X);
-      grow_fs(-1);
-      xor_reg_reg(reg_Y, reg_Y);
-      jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
-      codegen_rvalue(child1); // value when true
-      jump(lbl2);
-      def_label(lbl1);
-      grow_fs(-1); // here, the child#1 is not on the stack, so we adjust it
-      codegen_rvalue(get_child(node, 2)); // value when false
-      grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
-      def_label(lbl2);
+      codegen_ternary(node, false);
     } else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
@@ -2071,6 +2303,9 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
   int arr_len;
   int inner_type_width;
 #endif // SUPPORT_COMPLEX_INITIALIZER
+#ifdef SUPPORT_STRUCT_UNION
+  int save_fs;
+#endif
 
   type = canonicalize_type(type);
 
@@ -2146,7 +2381,10 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
            || get_op(car(init)) == INITIALIZER_LIST) { // Or nested initializer list
             fatal_error("codegen_initializer: scalar initializer list has more than one element");
           }
-          codegen_rvalue(car(init));
+          // The value is scalar (the type is neither an array nor a
+          // struct/union), so the temporaries do get flushed and the
+          // SP-relative offset stays valid for the write below.
+          codegen_rvalue_and_drop_temps(car(init));
           pop_reg(reg_X);
           grow_fs(-1);
           write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
@@ -2161,14 +2399,23 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
+        save_fs = cgc_fs;
         codegen_lvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
+        // If the initializer allocated temporaries (e.g. a struct-returning
+        // call), the stack pointer moved: adjust SP-relative destination
+        // offsets, copy, then free the temporaries.
+        if (base_reg == reg_SP) offset += (cgc_fs - save_fs) * WORD_SIZE;
         copy_obj(base_reg, offset, reg_X, 0, type_width(type, true, true));
+        if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
       } else
 #endif // SUPPORT_STRUCT_UNION
       if (get_op(type) != '[') {
-        codegen_rvalue(init);
+        // The value is scalar (the type is neither an array nor a
+        // struct/union), so the temporaries do get flushed and the
+        // SP-relative offset stays valid for the write below.
+        codegen_rvalue_and_drop_temps(init);
         pop_reg(reg_X);
         grow_fs(-1);
         write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
@@ -2355,8 +2602,8 @@ void codegen_body(ast node) {
 void codegen_statement(ast node) {
   int op;
   int lbl1, lbl2, lbl3;
-  int save_fs;
-  int save_locals;
+  int save_fs = cgc_fs;
+  int save_locals = cgc_locals;
   int binding;
 
   if (node == 0) return;
@@ -2367,11 +2614,7 @@ void codegen_statement(ast node) {
 
     lbl1 = alloc_label(0); // else statement
     lbl2 = alloc_label(0); // join point after if
-    codegen_rvalue(get_child_(IF_KW, node, 0));
-    pop_reg(reg_X);
-    grow_fs(-1);
-    xor_reg_reg(reg_Y, reg_Y);
-    jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
+    codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_(IF_KW, node, 0));
     codegen_statement(get_child_(IF_KW, node, 1));
     jump(lbl2);
     def_label(lbl1);
@@ -2383,32 +2626,19 @@ void codegen_statement(ast node) {
     lbl1 = alloc_label(0); // while statement start
     lbl2 = alloc_label(0); // join point after while
 
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
-
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
 
     def_label(lbl1);
-    codegen_rvalue(get_child_(WHILE_KW, node, 0));
-    pop_reg(reg_X);
-    grow_fs(-1);
-    xor_reg_reg(reg_Y, reg_Y);
-    jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+    codegen_rvalue_and_cmp_0(EQ, lbl2, get_child_(WHILE_KW, node, 0));
     codegen_statement(get_child_(WHILE_KW, node, 1));
     jump(lbl1);
     def_label(lbl2);
-
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
 
   } else if (op == FOR_KW) {
 
     lbl1 = alloc_label(0); // while statement start
     lbl2 = alloc_label(0); // join point after while
     lbl3 = alloc_label(0); // initial loop starting point
-
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
 
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
 
@@ -2418,20 +2648,13 @@ void codegen_statement(ast node) {
     codegen_statement(get_child_(FOR_KW, node, 2)); // post loop action
     def_label(lbl3);
     if (get_child_(FOR_KW, node, 1) != 0) {
-      codegen_rvalue(get_child_(FOR_KW, node, 1)); // test
-      pop_reg(reg_X);
-      grow_fs(-1);
-      xor_reg_reg(reg_Y, reg_Y);
-      jump_cond_reg_reg(EQ, lbl2, reg_X, reg_Y);
+      codegen_rvalue_and_cmp_0(EQ, lbl2, get_child_(FOR_KW, node, 1)); // test
     }
     // if no test, we always fall down to the body
 
     codegen_statement(get_child_(FOR_KW, node, 3));
     jump(lbl1);
     def_label(lbl2);
-
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
 
 #ifdef SUPPORT_DO_WHILE
 
@@ -2440,29 +2663,15 @@ void codegen_statement(ast node) {
     lbl1 = alloc_label(0); // do statement start
     lbl2 = alloc_label(0); // break point
 
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
-
     cgc_add_enclosing_loop(cgc_fs, lbl2, lbl1);
     def_label(lbl1);
     codegen_statement(get_child_(DO_KW, node, 0));
-    codegen_rvalue(get_child_(DO_KW, node, 1));
-    pop_reg(reg_X);
-    grow_fs(-1);
-    xor_reg_reg(reg_Y, reg_Y);
-    jump_cond_reg_reg(NE, lbl1, reg_X, reg_Y);
-
+    codegen_rvalue_and_cmp_0(NE, lbl1, get_child_(DO_KW, node, 1));
     def_label(lbl2);
-
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
 
 #endif // SUPPORT_DO_WHILE
 
   } else if (op == SWITCH_KW) {
-
-    save_fs = cgc_fs;
-    save_locals = cgc_locals;
 
     lbl1 = alloc_label(0); // lbl1: end of switch
     lbl2 = alloc_label(0); // lbl2: next case
@@ -2506,15 +2715,11 @@ void codegen_statement(ast node) {
 
     def_label(lbl3);
 
-    // If we fell through the switch, we need to remove the switch operand.
-    // This is done before lbl1 because the stack is adjusted before the break statement.
-    grow_stack(-1);
-    grow_fs(-1);
+    // If we fell through the switch, break didn't restore the stack in its
+    // original state so do it now.
+    drop_stack_words(cgc_fs - heap[binding + 2]);
 
-    def_label(lbl1); // End of switch label
-
-    cgc_fs = save_fs;
-    cgc_locals = save_locals;
+    def_label(lbl1); // End of switch label, break statements land here
 
   } else if (op == CASE_KW) {
 
@@ -2560,8 +2765,9 @@ void codegen_statement(ast node) {
 
     binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
+      // adjust stack and jump to break label
       grow_stack(heap[binding+2] - cgc_fs);
-      jump(heap[binding+3]); // jump to break label
+      jump(heap[binding+3]);
     } else {
       fatal_error("break is not in the body of a loop");
     }
@@ -2570,8 +2776,9 @@ void codegen_statement(ast node) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
     if (binding != 0 && heap[binding+4] != 0) {
+      // adjust stack and jump to continue label
       grow_stack(heap[binding+2] - cgc_fs);
-      jump(heap[binding+4]); // jump to continue label
+      jump(heap[binding+4]);
     } else {
       fatal_error("continue is not in the body of a loop");
     }
@@ -2582,8 +2789,21 @@ void codegen_statement(ast node) {
       codegen_rvalue(get_child_(RETURN_KW, node, 0));
       pop_reg(reg_X);
       grow_fs(-1);
+#ifdef SUPPORT_STRUCT_UNION
+      if (is_struct_or_union_type(current_fun_return_type)) {
+        // The value of a struct/union expression is its address: copy the
+        // result into the caller-allocated buffer whose address is in the
+        // hidden parameter, and leave that address in reg_X. Temporaries are
+        // freed by the stack cleanup below.
+        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
+        mov_reg_mem(reg_Y, reg_SP, (cgc_fs - heap[binding+3]) * WORD_SIZE);
+        copy_obj(reg_Y, 0, reg_X, 0, type_width(current_fun_return_type, true, false));
+        mov_reg_reg(reg_X, reg_Y);
+      }
+#endif
     }
 
+    // The cleanup code at the bottom isn't hit because of the ret, so cleaning here.
     grow_stack(-cgc_fs);
 
     ret();
@@ -2612,13 +2832,26 @@ void codegen_statement(ast node) {
   } else {
 
     codegen_rvalue(node);
-    pop_reg(reg_X);
-    grow_fs(-1);
 
   }
+
+  drop_stack_words(cgc_fs - save_fs);
+  cgc_locals = save_locals;
 }
 
-void add_params(ast params) {
+#ifdef SUPPORT_STRUCT_UNION
+// If the function returns a struct/union, we need to add a hidden parameter for
+// the return value address and store the return type in a global variable so we
+// can access it in the return statement.
+void add_function_hidden_params(ast fun_return_type) {
+  current_fun_return_type = fun_return_type;
+  if (is_struct_or_union_type(fun_return_type)) {
+    cgc_add_local_param(0, 1, pointer_type(fun_return_type, false));
+  }
+}
+#endif // SUPPORT_STRUCT_UNION
+
+void add_function_params(ast params) {
   ast decl, type;
   int ident;
 
@@ -2630,7 +2863,7 @@ void add_params(ast params) {
     // Array to pointer decay
     if (get_op(type) == '[') { type = pointer_type(dereference_type(type), false); }
 
-    if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_params: duplicate parameter");
+    if (cgc_lookup_var(ident, cgc_locals) != 0) fatal_error("add_function_params: duplicate parameter");
 
     cgc_add_local_param(ident, type_width(type, false, true) / WORD_SIZE, type);
     params = tail(params);
@@ -2677,8 +2910,8 @@ void codegen_glo_fun_decl(ast node) {
   int binding;
   int save_locals_fun = cgc_locals_fun;
 
-  if (is_aggregate_type(fun_return_type)) {
-    fatal_error("Returning arrays or structs from function not supported");
+  if (get_op(fun_return_type) == '[') {
+    fatal_error("Returning arrays from function not supported");
   }
 
   binding = cgc_lookup_fun(name_symbol, cgc_globals);
@@ -2692,7 +2925,16 @@ void codegen_glo_fun_decl(ast node) {
   if (name_symbol == MAIN_ID) {
     main_lbl = fun_binding_lbl(binding);
     // Check if main returns an exit code.
-    if (get_op(fun_return_type) != VOID_KW) main_returns = true;
+    switch (get_op(fun_return_type)) {
+      case VOID_KW:
+        main_returns = false;
+        break;
+      case INT_KW:
+        main_returns = true;
+        break;
+      default:
+         fatal_error("main has unsupported return type");
+    }
   }
 
   // Poor man's debug info
@@ -2712,7 +2954,11 @@ void codegen_glo_fun_decl(ast node) {
 
   cgc_fs = -1; // space for return address
   cgc_locals = 0;
-  add_params(params);
+#ifdef SUPPORT_STRUCT_UNION
+  // Add hidden parameter for return value address if function returns a struct
+  add_function_hidden_params(fun_return_type);
+#endif
+  add_function_params(params);
   cgc_fs = 0;
 
   codegen_body(body);
