@@ -786,10 +786,6 @@ bool is_aggregate_type(ast type) {
 #endif // SUPPORT_STRUCT_UNION
 }
 
-bool is_not_pointer_type(ast type) {
-  return !is_pointer_type(type);
-}
-
 bool is_numeric_type(ast type) {
   switch (get_op(type)) {
     case CHAR_KW:
@@ -1035,6 +1031,20 @@ int resolve_identifier(int ident_symbol) {
   return 0;
 }
 
+// Compute result type of a binary arithmetic operation.
+ast arith_value_type(int op, ast left_type, ast right_type) {
+  if (is_pointer_type(left_type) && is_pointer_type(right_type) && op == '-') {
+    return int_type; // pointer - pointer -> integer
+  } else if (is_pointer_type(left_type)) {
+    // pointer + integer -> pointer
+    return left_type;
+  } else {
+    // integer + pointer -> pointer or integer + integer -> integer
+    // Returning right type for simplicity
+    return right_type;
+  }
+}
+
 // Compute the type of an expression
 ast value_type(ast node) {
   int op = get_op(node);
@@ -1120,15 +1130,7 @@ ast value_type(ast node) {
      || op == LSHIFT || op == RSHIFT) {
       left_type = value_type(child0);
       right_type = value_type(child1);
-      if (is_pointer_type(left_type) && is_pointer_type(right_type) && op == '-') {
-        return int_type; // Pointer - Pointer = Integer
-      } else if (is_pointer_type(left_type)) {
-        // if left is an array or a pointer, the type is also a pointer
-        return left_type;
-      } else {
-        // if left is not a pointer, the type is the type of the right operand
-        return right_type;
-      }
+      return arith_value_type(op, left_type, right_type);
     } else if (op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ) {
       return int_type; // Comparison always returns an integer
     } else if (op == ',') {
@@ -1206,16 +1208,61 @@ ast value_type(ast node) {
   }
 }
 
-void codegen_binop(int op, ast lhs, ast rhs) {
+void codegen_binop_cmp(int cond) {
+  int lbl1 = alloc_label(0);
+  int lbl2 = alloc_label(0);
+  jump_cond_reg_reg(cond, lbl1, reg_X, reg_Y);
+  xor_reg_reg(reg_X, reg_X);
+  jump(lbl2);
+  def_label(lbl1);
+  mov_reg_imm(reg_X, 1);
+  def_label(lbl2);
+}
 
-  int lbl1;
-  int lbl2;
-  int cond = -1;
+void codegen_binop_add(ast left_type, ast right_type) {
+  // Add two operands, applying pointer arithmetic rules if needed.
+
+  if (is_pointer_type(left_type) && !is_pointer_type(right_type)) {
+    // pointer + integer -> pointer
+    // result = ptr + integer * sizeof(dereferenced object)
+    mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
+  } else if (is_pointer_type(right_type) && !is_pointer_type(left_type)) {
+    // integer + pointer -> pointer
+    // result = ptr + integer * sizeof(dereferenced object)
+    mul_for_pointer_arith(reg_X, ref_type_width(right_type));
+  }
+
+  add_reg_reg(reg_X, reg_Y);
+}
+
+void codegen_binop_sub(ast left_type, ast right_type) {
+  // Subtract two operands, applying pointer arithmetic rules if needed.
+
+  if (is_pointer_type(left_type) && is_pointer_type(right_type)) {
+    // pointer - pointer -> integer
+    // result = (ptr1 - ptr2) / sizeof(dereferenced object)
+    sub_reg_reg(reg_X, reg_Y);
+    div_for_pointer_arith(reg_X, ref_type_width(left_type));
+  } else if (is_pointer_type(left_type)) {
+    // pointer - integer -> pointer
+    // result = ptr - integer * sizeof(dereferenced object)
+    mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
+    sub_reg_reg(reg_X, reg_Y);
+  } else if (is_pointer_type(right_type)) {
+    // integer - pointer -> pointer
+    // result = ptr - integer * sizeof(dereferenced object)
+    mul_for_pointer_arith(reg_X, ref_type_width(right_type));
+    sub_reg_reg(reg_X, reg_Y);
+  } else {
+    sub_reg_reg(reg_X, reg_Y);
+  }
+}
+
+void codegen_binop(int op, ast lhs, ast rhs) {
   ast left_type = value_type(lhs);
   ast right_type = value_type(rhs);
   bool left_is_numeric = is_numeric_type(left_type);
   bool right_is_numeric = is_numeric_type(right_type);
-  int width;
   // If any of the operands is unsigned, the result is unsigned
   bool is_signed = false;
   if (is_signed_numeric_type(left_type) && is_signed_numeric_type(right_type)) is_signed = true;
@@ -1223,53 +1270,18 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
 
-  if      (op == '<')     cond = TERNARY(is_signed, LT, LT_U);
-  else if (op == '>')     cond = TERNARY(is_signed, GT, GT_U);
-  else if (op == LT_EQ)   cond = TERNARY(is_signed, LE, LE_U);
-  else if (op == GT_EQ)   cond = TERNARY(is_signed, GE, GE_U);
-  else if (op == EQ_EQ)   cond = EQ;
-  else if (op == EXCL_EQ) cond = NE;
+  if      (op == '<')     { codegen_binop_cmp(TERNARY(is_signed, LT, LT_U)); }
+  else if (op == '>')     { codegen_binop_cmp(TERNARY(is_signed, GT, GT_U)); }
+  else if (op == LT_EQ)   { codegen_binop_cmp(TERNARY(is_signed, LE, LE_U)); }
+  else if (op == GT_EQ)   { codegen_binop_cmp(TERNARY(is_signed, GE, GE_U)); }
+  else if (op == EQ_EQ)   { codegen_binop_cmp(EQ); }
+  else if (op == EXCL_EQ) { codegen_binop_cmp(NE); }
 
-  if (cond != -1) {
-
-    lbl1 = alloc_label(0);
-    lbl2 = alloc_label(0);
-    jump_cond_reg_reg(cond, lbl1, reg_X, reg_Y);
-    xor_reg_reg(reg_X, reg_X);
-    jump(lbl2);
-    def_label(lbl1);
-    mov_reg_imm(reg_X, 1);
-    def_label(lbl2);
-
-  } else if (op == '+' || op == PLUS_EQ || op == PLUS_PLUS_PRE || op == PLUS_PLUS_POST) {
-    // Check if one of the operands is a pointer
-    // If so, multiply the other operand by the width of the pointer target object.
-
-    if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
-      mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-    } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
-      mul_for_pointer_arith(reg_X, ref_type_width(right_type));
-    }
-
-    add_reg_reg(reg_X, reg_Y);
+  else if (op == '+' || op == PLUS_EQ || op == PLUS_PLUS_PRE || op == PLUS_PLUS_POST) {
+    codegen_binop_add(left_type, right_type);
   }
   else if (op == '-' || op == MINUS_EQ || op == MINUS_MINUS_PRE || op == MINUS_MINUS_POST) {
-    // Pointer subtraction is only valid if one of the operands is a pointer
-    // When both operands are pointers, the result is the difference between the two pointers divided by the width of the target object.
-    // When one operand is a pointer and the other is an integer, the result is the pointer minus the integer times the width of the target object.
-
-    if (is_pointer_type(left_type) && is_pointer_type(right_type)) {
-      sub_reg_reg(reg_X, reg_Y);
-      div_for_pointer_arith(reg_X, ref_type_width(left_type));
-    } else if (is_pointer_type(left_type)) {
-      mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-      sub_reg_reg(reg_X, reg_Y);
-    } else if (is_pointer_type(right_type)) {
-      mul_for_pointer_arith(reg_X, ref_type_width(right_type));
-      sub_reg_reg(reg_X, reg_Y);
-    } else {
-      sub_reg_reg(reg_X, reg_Y);
-    }
+    codegen_binop_sub(left_type, right_type);
   }
   else if (op == '*' || op == STAR_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to *");
@@ -1307,24 +1319,14 @@ void codegen_binop(int op, ast lhs, ast rhs) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to ^");
     xor_reg_reg(reg_X, reg_Y);
   }
-  else if (op == ',')                       mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
+  else if (op == ',') {
+    mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
+  }
   else if (op == '[') {
-    // Same as pointer addition for address calculation
-    if (is_pointer_type(left_type) && is_not_pointer_type(right_type)) {
-      mul_for_pointer_arith(reg_Y, ref_type_width(left_type));
-      width = ref_type_width(left_type);
-      is_signed = is_signed_numeric_type(dereference_type(left_type));
-    } else if (is_pointer_type(right_type) && is_not_pointer_type(left_type)) {
-      mul_for_pointer_arith(reg_X, ref_type_width(right_type));
-      width = ref_type_width(right_type);
-      is_signed = is_signed_numeric_type(dereference_type(right_type));
-    } else {
-      fatal_error("codegen_binop: invalid array access operands");
-      return;
-    }
-
-    add_reg_reg(reg_X, reg_Y);
-    load_mem_location(reg_X, reg_X, 0, width, is_signed);
+    // Same as pointer addition + dereference of the result.
+    codegen_binop_add(left_type, right_type); // Compute the address resulting from the addition
+    left_type = arith_value_type('+', left_type, right_type); // The pointer type
+    load_mem_location(reg_X, reg_X, 0, ref_type_width(left_type), is_signed_numeric_type(dereference_type(left_type)));
   } else {
     dump_op(op);
     fatal_error("codegen_binop: unknown op");
