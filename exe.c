@@ -1031,6 +1031,46 @@ int resolve_identifier(int ident_symbol) {
   return 0;
 }
 
+#ifdef SUPPORT_INTEGER_PROMOTION_RULES
+// Integer conversion rank.
+// Note that the parser maps "long" to INT_KW and "long long" to LONG_KW.
+int type_rank(ast type) {
+  switch (get_op(type)) {
+    case CHAR_KW:   return 1;
+    case SHORT_KW:  return 2;
+    case LONG_KW:   return 4;
+    case FLOAT_KW:  return 5;
+    case DOUBLE_KW: return 6;
+    default:        return 3; // INT_KW, ENUM_KW
+  }
+}
+
+// Integer promotions (C99 6.3.1.1): types narrower than int are widened to int.
+// int can represent all values of char and short, signed or unsigned, so the
+// promoted type is always plain (signed) int.
+ast integer_promote(ast type) {
+  if (type_rank(type) < 3) return int_type;
+  return type;
+}
+
+// Usual arithmetic conversions (C99 6.3.1.8): the common type both operands of
+// a binary operation are converted to, which is also the result type. Operands
+// are promoted, then the higher-rank type wins; at equal rank, unsigned wins.
+ast usual_arith_conv(ast left_type, ast right_type) {
+  left_type = integer_promote(left_type);
+  right_type = integer_promote(right_type);
+  if (type_rank(left_type) < type_rank(right_type)) return right_type;
+  if (type_rank(left_type) > type_rank(right_type)) return left_type;
+  return TERNARY(is_signed_numeric_type(left_type), right_type, left_type);
+}
+#else
+// Bootstrapping pnut doesn't require proper integer promotion and the usual
+// arithmetic conversions. Stub them out to just return the type of the right
+// operand, which is good enough.
+#define integer_promote(x) (x)
+#define usual_arith_conv(x, y) (y)
+#endif
+
 // Compute result type of a binary arithmetic operation.
 ast arith_value_type(int op, ast left_type, ast right_type) {
   if (is_pointer_type(left_type) && is_pointer_type(right_type) && op == '-') {
@@ -1038,10 +1078,12 @@ ast arith_value_type(int op, ast left_type, ast right_type) {
   } else if (is_pointer_type(left_type)) {
     // pointer + integer -> pointer
     return left_type;
-  } else {
-    // integer + pointer -> pointer or integer + integer -> integer
-    // Returning right type for simplicity
+  } else if (is_pointer_type(right_type)) {
+    // integer + pointer -> pointer
     return right_type;
+  } else {
+    // integer + integer -> integer, with promotion rules applied
+    return usual_arith_conv(left_type, right_type);
   }
 }
 
@@ -1109,8 +1151,11 @@ ast value_type(ast node) {
       return pointer_type(left_type, false);
     } else if (op == '!') {
       return int_type; // Logical not always returns an integer
-    } else if (op == '+' || op == '-' || op == '~' || op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
-      // Unary operation don't change the type
+    } else if (op == '+' || op == '-' || op == '~') {
+      // Unary +, - and ~ apply the integer promotions to their operand
+      return integer_promote(value_type(child0));
+    } else if (op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
+      // Increment/decrement, like assignment, keep the operand's type
       return value_type(child0);
     }
 #ifdef SUPPORT_SIZEOF
@@ -1129,7 +1174,7 @@ ast value_type(ast node) {
     if (op == LSHIFT || op == RSHIFT) {
       // The result type of a shift is the (promoted) left operand type; the
       // right operand's type plays no role.
-      return value_type(child0);
+      return integer_promote(value_type(child0));
     } else if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^') {
       left_type = value_type(child0);
       right_type = value_type(child1);
@@ -1266,20 +1311,16 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   ast right_type = value_type(rhs);
   bool left_is_numeric = is_numeric_type(left_type);
   bool right_is_numeric = is_numeric_type(right_type);
-  // If any of the operands is unsigned, the result is unsigned
-  bool is_signed = false;
-  if (is_signed_numeric_type(left_type) && is_signed_numeric_type(right_type)) is_signed = true;
 
   pop_reg(reg_Y); // rhs operand
   pop_reg(reg_X); // lhs operand
 
-  if      (op == '<')     { codegen_binop_cmp(TERNARY(is_signed, LT, LT_U)); }
-  else if (op == '>')     { codegen_binop_cmp(TERNARY(is_signed, GT, GT_U)); }
-  else if (op == LT_EQ)   { codegen_binop_cmp(TERNARY(is_signed, LE, LE_U)); }
-  else if (op == GT_EQ)   { codegen_binop_cmp(TERNARY(is_signed, GE, GE_U)); }
+  if      (op == '<')     { codegen_binop_cmp(TERNARY(is_signed_numeric_type(usual_arith_conv(left_type, right_type)), LT, LT_U)); }
+  else if (op == '>')     { codegen_binop_cmp(TERNARY(is_signed_numeric_type(usual_arith_conv(left_type, right_type)), GT, GT_U)); }
+  else if (op == LT_EQ)   { codegen_binop_cmp(TERNARY(is_signed_numeric_type(usual_arith_conv(left_type, right_type)), LE, LE_U)); }
+  else if (op == GT_EQ)   { codegen_binop_cmp(TERNARY(is_signed_numeric_type(usual_arith_conv(left_type, right_type)), GE, GE_U)); }
   else if (op == EQ_EQ)   { codegen_binop_cmp(EQ); }
   else if (op == EXCL_EQ) { codegen_binop_cmp(NE); }
-
   else if (op == '+' || op == PLUS_EQ || op == PLUS_PLUS_PRE || op == PLUS_PLUS_POST) {
     codegen_binop_add(left_type, right_type);
   }
@@ -1288,24 +1329,24 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   }
   else if (op == '*' || op == STAR_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to *");
-    if (is_signed) imul_reg_reg(reg_X, reg_Y);
+    if (is_signed_numeric_type(usual_arith_conv(left_type, right_type))) imul_reg_reg(reg_X, reg_Y);
     else mul_reg_reg(reg_X, reg_Y);
   }
   else if (op == '/' || op == SLASH_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to /");
-    if (is_signed) idiv_reg_reg(reg_X, reg_Y);
+    if (is_signed_numeric_type(usual_arith_conv(left_type, right_type))) idiv_reg_reg(reg_X, reg_Y);
     else div_reg_reg(reg_X, reg_Y);
   }
   else if (op == '%' || op == PERCENT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to %");
-    if (is_signed) irem_reg_reg(reg_X, reg_Y);
+    if (is_signed_numeric_type(usual_arith_conv(left_type, right_type))) irem_reg_reg(reg_X, reg_Y);
     else rem_reg_reg(reg_X, reg_Y);
   }
   else if (op == RSHIFT || op == RSHIFT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to >>");
-    // Whether the shift is arithmetic or logical depends only on the left
-    // operand's type; the signedness of the shift count is irrelevant.
-    if (is_signed_numeric_type(left_type)) sar_reg_reg(reg_X, reg_Y);
+    // Whether the shift is arithmetic or logical depends only on the promoted
+    // left operand's type; the signedness of the shift count is irrelevant.
+    if (is_signed_numeric_type(integer_promote(left_type))) sar_reg_reg(reg_X, reg_Y);
     else shr_reg_reg(reg_X, reg_Y);
   }
   else if (op == LSHIFT || op == LSHIFT_EQ) {
