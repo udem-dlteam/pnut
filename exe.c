@@ -1200,8 +1200,7 @@ ast value_type(ast node) {
     } else if (op == '=' || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       return value_type(child0); // Only the left side is relevant here
     } else if (op == AMP_AMP || op == BAR_BAR) {
-      // TODO: Check that the operands have compatible types?
-      return value_type(child0);
+      return int_type; // Logical and/or always returns an integer
     } else if (op == '(') {
       left_type = value_type(child0);
       if (is_function_type(left_type)) {
