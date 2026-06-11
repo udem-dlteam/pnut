@@ -1126,8 +1126,11 @@ ast value_type(ast node) {
 
   } else if (nb_children == 2) {
 
-    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^'
-     || op == LSHIFT || op == RSHIFT) {
+    if (op == LSHIFT || op == RSHIFT) {
+      // The result type of a shift is the (promoted) left operand type; the
+      // right operand's type plays no role.
+      return value_type(child0);
+    } else if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^') {
       left_type = value_type(child0);
       right_type = value_type(child1);
       return arith_value_type(op, left_type, right_type);
@@ -1300,7 +1303,9 @@ void codegen_binop(int op, ast lhs, ast rhs) {
   }
   else if (op == RSHIFT || op == RSHIFT_EQ) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to >>");
-    if (is_signed) sar_reg_reg(reg_X, reg_Y);
+    // Whether the shift is arithmetic or logical depends only on the left
+    // operand's type; the signedness of the shift count is irrelevant.
+    if (is_signed_numeric_type(left_type)) sar_reg_reg(reg_X, reg_Y);
     else shr_reg_reg(reg_X, reg_Y);
   }
   else if (op == LSHIFT || op == LSHIFT_EQ) {
