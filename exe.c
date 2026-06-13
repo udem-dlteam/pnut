@@ -722,7 +722,7 @@ void def_goto_label(int lbl) {
 #endif // SUPPORT_GOTO
 
 ast int_type;
-#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+#if defined(PARSE_NUMERIC_LITERAL_SUFFIX) || defined(SUPPORT_SIZEOF)
 ast uint_type;
 #endif
 ast char_type;
@@ -1160,7 +1160,7 @@ ast value_type(ast node) {
     }
 #ifdef SUPPORT_SIZEOF
     else if (op == SIZEOF_KW) {
-      return int_type; // sizeof always returns an integer
+      return uint_type; // sizeof always returns an unsigned integer
     }
 #endif
     else {
@@ -3384,7 +3384,7 @@ void codegen_begin() {
   cgc_global_alloc += 2 * WORD_SIZE;
 
   int_type = new_ast0(INT_KW, 0);
-#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+#if defined(PARSE_NUMERIC_LITERAL_SUFFIX) || defined(SUPPORT_SIZEOF)
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
 #endif
   char_type = new_ast0(CHAR_KW, 0);
