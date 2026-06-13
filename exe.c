@@ -1111,7 +1111,7 @@ ast value_type(ast node) {
     }
 #endif
     else if (op == CHARACTER) {
-      return char_type;
+      return int_type; // Character literals have type int in C
     } else if (op == STRING) {
       return string_type;
     } else if (op == IDENTIFIER) {
