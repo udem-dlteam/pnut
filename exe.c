@@ -725,6 +725,10 @@ ast int_type;
 #if defined(PARSE_NUMERIC_LITERAL_SUFFIX) || defined(SUPPORT_SIZEOF)
 ast uint_type;
 #endif
+#if defined(PARSE_NUMERIC_LITERAL_SUFFIX)
+ast long_type;
+ast ulong_type;
+#endif
 ast char_type;
 ast string_type;
 ast void_type;
@@ -1100,10 +1104,14 @@ ast value_type(ast node) {
 
   if (nb_children == 0) {
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-    if (op == INTEGER || op == INTEGER_L || op == INTEGER_LL) {
+    if (op == INTEGER) {
       return int_type;
-    } else if (op == INTEGER_U || op == INTEGER_UL || op == INTEGER_ULL) {
+    } else if (op == INTEGER_L || op == INTEGER_LL) {
+      return long_type;
+    } else if (op == INTEGER_U) {
       return uint_type;
+    } else if (op == INTEGER_UL || op == INTEGER_ULL) {
+      return ulong_type;
     }
 #else
     if (op == INTEGER) {
@@ -3386,6 +3394,10 @@ void codegen_begin() {
   int_type = new_ast0(INT_KW, 0);
 #if defined(PARSE_NUMERIC_LITERAL_SUFFIX) || defined(SUPPORT_SIZEOF)
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+#endif
+#if defined(PARSE_NUMERIC_LITERAL_SUFFIX)
+  long_type = new_ast0(LONG_KW, 0);
+  ulong_type = new_ast0(LONG_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
 #endif
   char_type = new_ast0(CHAR_KW, 0);
   string_type = pointer_type(new_ast0(CHAR_KW, 0), false);
