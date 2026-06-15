@@ -1102,12 +1102,20 @@ bool conversion_needed(ast from_type, ast to_type) {
     return true; // Narrowing truncates the value
   } else if (from_width == to_width) {
     // Same width: only a signedness change re-extends
-    return is_signed_numeric_type(from_type) != is_signed_numeric_type(to_type);
+    if (is_signed_numeric_type(from_type) != is_signed_numeric_type(to_type)) {
+      return true;
+    } else {
+      return false;
+    }
   } else { // from_width < to_width (widening)
     // Widening only matters when going from signed to unsigned: the must be
     // zero-extended if the target is unsigned.
     // signed->signed and unsigned->* are already correctly extended.
-    return is_signed_numeric_type(from_type) && !is_signed_numeric_type(to_type);
+    if (is_signed_numeric_type(from_type) && !is_signed_numeric_type(to_type)) {
+      return true;
+    } else {
+      return false;
+    }
   }
 }
 
