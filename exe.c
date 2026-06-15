@@ -1914,9 +1914,8 @@ void codegen_rvalue(ast node) {
   int binding;
   int lbl1, lbl2;
   int left_width;
-  ast type1;
+  ast type;
 #ifdef SUPPORT_STRUCT_UNION
-  ast type2;
   int save_fs;
 #endif
   ast child0, child1;
@@ -2017,13 +2016,13 @@ void codegen_rvalue(ast node) {
 
   } else if (nb_children == 1) {
     if (op == '*') {
-      type1 = value_type(child0);
+      type = value_type(child0);
       codegen_rvalue(child0);
       grow_fs(-1);
-      if (is_function_type(type1)) {
-      } else if (is_pointer_type(type1)) {
+      if (is_function_type(type)) {
+      } else if (is_pointer_type(type)) {
         pop_reg(reg_X);
-        load_mem_location(reg_X, reg_X, 0, ref_type_width(type1), is_signed_numeric_type(dereference_type(type1)));
+        load_mem_location(reg_X, reg_X, 0, ref_type_width(type), is_signed_numeric_type(dereference_type(type)));
         push_reg(reg_X);
       } else {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
@@ -2120,10 +2119,10 @@ void codegen_rvalue(ast node) {
         grow_fs(-2);
       }
     } else if (op == '=') {
-      type1 = value_type(child0);
+      type = value_type(child0);
       left_width = codegen_lvalue(child0);
 #ifdef SUPPORT_STRUCT_UNION
-      if (is_struct_or_union_type(type1)) {
+      if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
         save_fs = cgc_fs;
         codegen_lvalue(child1);
@@ -2185,37 +2184,37 @@ void codegen_rvalue(ast node) {
     }
 #ifdef SUPPORT_STRUCT_UNION
     else if (op == '.') {
-      type1 = value_type(child0);
-      if (is_struct_or_union_type(type1)) {
-        type2 = get_child_(DECL, struct_member(type1, child1), 1);
+      type = value_type(child0);
+      if (is_struct_or_union_type(type)) {
         codegen_lvalue(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
         // union members are at the same offset: 0
-        if (get_op(type1) == STRUCT_KW) {
-          add_reg_imm(reg_Y, struct_member_offset(type1, child1));
+        if (get_op(type) == STRUCT_KW) {
+          add_reg_imm(reg_Y, struct_member_offset(type, child1));
         }
-        if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
+        type = get_child_(DECL, struct_member(type, child1), 1); // struct member type
+        if (!is_aggregate_type(type)) {
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type, false, false), is_signed_numeric_type(type));
         }
         push_reg(reg_Y);
       } else {
         fatal_error("codegen_rvalue: . operator on non-struct type");
       }
     } else if (op == ARROW) {
-      type1 = value_type(child0);
-      if (get_op(type1) == '*' && is_struct_or_union_type(get_child_('*', type1, 1))) {
-        type1 = get_child_('*', type1, 1);
-        type2 = get_child_(DECL, struct_member(type1, child1), 1);
+      type = value_type(child0);
+      if (get_op(type) == '*' && is_struct_or_union_type(get_child_('*', type, 1))) {
+        type = get_child_('*', type, 1);
         codegen_rvalue(child0);
         pop_reg(reg_Y);
         grow_fs(-1);
         // union members are at the same offset: 0
-        if (get_op(type1) == STRUCT_KW) {
-          add_reg_imm(reg_Y, struct_member_offset(type1, child1));
+        if (get_op(type) == STRUCT_KW) {
+          add_reg_imm(reg_Y, struct_member_offset(type, child1));
         }
-        if (!is_aggregate_type(type2)) {
-          load_mem_location(reg_Y, reg_Y, 0, type_width(type2, false, false), is_signed_numeric_type(type2));
+        type = get_child_(DECL, struct_member(type, child1), 1); // struct member type
+        if (!is_aggregate_type(type)) {
+          load_mem_location(reg_Y, reg_Y, 0, type_width(type, false, false), is_signed_numeric_type(type));
         }
         push_reg(reg_Y);
       } else {
