@@ -88,7 +88,7 @@ void putstring(char *s) {
 
 int main() {
   FILE *f;
-  char c;
+  int c;
   f = fopen("tests/_all/six-cc-tests/fgetc.c", "r");
   while ((c = fgetc(f)) != -1) {
     putstring("'");

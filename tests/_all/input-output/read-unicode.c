@@ -7,9 +7,9 @@
 // expect_failure_for: yash
 // expect_failure_for: osh
 
-#ifndef PNUT_CC
 #include <stdio.h>
-#else
+
+#ifdef PNUT_CC
 typedef int FILE;
 #endif
 
@@ -22,7 +22,7 @@ void putstr(const char *s) {
 
 void main() {
   int i = 0;
-  char c;
+  int c;
   FILE *f = fopen("tests/_all/input-output/unicode.txt", "r");
   putstr("printf? 💣\n");
   while ((c = fgetc(f)) != -1) {

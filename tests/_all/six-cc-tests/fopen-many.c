@@ -9,7 +9,7 @@ typedef int FILE;
 
 int main() {
   FILE *f;
-  char c;
+  int c;
   int i = 0;
   while (i < 100) {
     f = fopen("tests/_all/six-cc-tests/fgetc.c", "r");

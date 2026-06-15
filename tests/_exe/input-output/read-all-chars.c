@@ -11,7 +11,7 @@ typedef int FILE;
 
 void main() {
   int i = 0;
-  char c;
+  int c;
   FILE *f = fopen("tests/_exe/input-output/all-chars.txt", "r");
   while ((c = fgetc(f)) != -1) {
     putchar(c);

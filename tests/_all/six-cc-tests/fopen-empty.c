@@ -6,7 +6,7 @@ typedef int FILE;
 
 int main() {
   FILE *f;
-  char c;
+  int c;
   f = fopen("tests/_all/six-cc-tests/empty.txt", "r");
   while ((c = fgetc(f)) != -1) {
     putchar(c);
