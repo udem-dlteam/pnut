@@ -1815,7 +1815,9 @@ int codegen_ternary(ast node, bool lvalue_ctx) {
   int lbl2 = alloc_label(0); // end label
   int width = 0;
   int lvalue_width;
+#if defined(SUPPORT_FULL_ARITHMETIC) || defined(SUPPORT_STRUCT_UNION)
   ast type = value_type(node);
+#endif
 
 #ifdef SUPPORT_STRUCT_UNION
   if (is_struct_or_union_type(type)) {
