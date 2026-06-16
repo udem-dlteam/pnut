@@ -13,6 +13,9 @@
 
 set -e # Exit on error
 
+SCRIPT_DIR=$(dirname "$0")
+. "$SCRIPT_DIR/lib/table.sh"
+
 if [ -z "$CFLAGS" ]; then
   CFLAGS="-std=c99"
 fi
@@ -35,9 +38,13 @@ clean_file() { # $1 = input file, $2 = output file
     sed '/^[[:space:]]*$/d' > "$2"
 }
 
-lines_ratio() { # $1 = numerator, $2 = denominator
-  printf "%d/%d = %s\n" $1 $2 $(echo "scale=3; $1 / $2" | bc -l)
+ratio() { # $1 = numerator, $2 = denominator
+  echo "scale=3; $1 / $2" | bc -l # prints "x.xxx"
 }
+
+# One row per variant is collected into a table (see lib/table.sh) and printed
+# at the end so all variants line up in a single comparison table.
+table_init Variant C Clean Preproc .sh Runtime Blank .awk "R(C)" "R(clean)" "R(preproc)"
 
 measure_size() { # $1 = output-name, $2 = options
   # and that the result of pnut on the expanded file is the same as the result of pnut on the original file
@@ -70,27 +77,30 @@ measure_size() { # $1 = output-name, $2 = options
   tail -n +$marker_line "$TEMP_DIR/$1.sh" > "$TEMP_DIR/$1-runtime.sh"
   head -n $((marker_line - 1)) "$TEMP_DIR/$1.sh" > "$TEMP_DIR/$1-decls.sh"
 
-  printf "########## $1 ##########\n"
-  printf "By file:\n"
-  wc $files
-  printf "By file (without comments or blank lines):\n"
-  wc $cleaned_files
-  printf "Preprocessed (gcc $CFLAGS -E -P without system includes):\n"
-  wc "$TEMP_DIR/$1.sh" "$TEMP_DIR/$1.awk" "$TEMP_DIR/$1-preprocessed.c" "$TEMP_DIR/$1-runtime.sh" "$TEMP_DIR/$1-decls.sh"
-
-  # Number of empty lines in $TEMP_DIR/$1.sh
   sh_lines=$(wc -l < "$TEMP_DIR/$1.sh")
+  awk_lines=$(wc -l < "$TEMP_DIR/$1.awk")
   c_lines=$(wc -l $files | tail -n 1 | awk '{print $1}')
   cleaned_lines=$(wc -l $cleaned_files | tail -n 1 | awk '{print $1}')
   preprocessed_lines=$(wc -l < "$TEMP_DIR/$1-preprocessed.c")
+  empty_lines=$(grep -c '^[[:space:]]*$' "$TEMP_DIR/$1-decls.sh")
+  runtime_lines=$(wc -l < "$TEMP_DIR/$1-runtime.sh")
 
-  printf "Ratio (Original):     "; lines_ratio "$sh_lines" "$c_lines"
-  printf "Ratio (Cleaned):      "; lines_ratio "$sh_lines" "$cleaned_lines"
-  printf "Ratio (Preprocessed): "; lines_ratio "$sh_lines" "$preprocessed_lines"
-  printf "Empty lines count:    %d\n" "$(grep -c '^[[:space:]]*$' "$TEMP_DIR/$1-decls.sh")"
-  printf "Runtime size:         %d\n" "$(wc -l < "$TEMP_DIR/$1-runtime.sh")"
+  # Append one row for this variant to the summary table.
+  table_row "$1" "$c_lines" "$cleaned_lines" "$preprocessed_lines" \
+    "$sh_lines" "$runtime_lines" "$empty_lines" \
+    "$awk_lines" \
+    "$(ratio "$sh_lines" "$c_lines")" \
+    "$(ratio "$sh_lines" "$cleaned_lines")" \
+    "$(ratio "$sh_lines" "$preprocessed_lines")"
+}
 
-  printf "\n"
+print_table() {
+  printf "C/clean/preproc: original, comment-stripped, and preprocessed C line counts.\n"
+  printf ".sh/.awk: generated shell/awk line counts.\n"
+  printf "Runtime: lines of code in the runtime part of the generated shell script.\n"
+  printf "Blank: lines of code in the generated shell script that are empty or contain only whitespace.\n"
+  printf "R(*) = .sh / (C|clean|preproc).\n\n"
+  table_print
 }
 
 # Compile pnut-sh
@@ -104,13 +114,13 @@ gcc $CFLAGS -o "$TEMP_DIR/pnut-awk-bootstrap" pnut.c -Dtarget_awk -DPNUT_BOOTSTR
 
 # Measure the minimal pnut variants:
 
-measure_size "pnut-minimal-sh" "-Dtarget_sh -DPNUT_BOOTSTRAP"
-measure_size "pnut-minimal-awk" "-Dtarget_awk -DPNUT_BOOTSTRAP"
-measure_size "pnut-minimal-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
+measure_size "pnut-sh (min)" "-Dtarget_sh -DPNUT_BOOTSTRAP"
+measure_size "pnut-sh" "-Dtarget_sh"
+measure_size "pnut-awk (min)" "-Dtarget_awk -DPNUT_BOOTSTRAP"
+measure_size "pnut-awk" "-Dtarget_awk"
+measure_size "pnut-i386_linux (min)" "-Dtarget_i386_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
+measure_size "pnut-i386_linux" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
 # measure_size "pnut-minimal-x86_64_linux-one-pass" "-Dtarget_x86_64_linux -DONE_PASS_GENERATOR -DPNUT_BOOTSTRAP"
 # measure_size "pnut-minimal-x86_64_mac-one-pass" "-Dtarget_x86_64_mac -DPNUT_BOOTSTRAP"
 
-# Measure the complete pnut variants:
-measure_size "pnut-complete-sh" "-Dtarget_sh"
-measure_size "pnut-awk" "-Dtarget_awk"
-measure_size "pnut-complete-i386_linux-one-pass" "-Dtarget_i386_linux -DONE_PASS_GENERATOR"
+print_table
