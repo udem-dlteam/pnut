@@ -295,6 +295,7 @@
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_TYPE_SPECIFIERS
   #define SUPPORT_VARIADIC_FUNCTIONS
+  #define SUPPORT_FULL_ARITHMETIC
 #endif
 
 #if defined(NICE_UX) || defined(SAFE_MODE)

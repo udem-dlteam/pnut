@@ -15,7 +15,7 @@ export LC_ALL=C
 
 # PNUT_BUILD_OPT can be used to pass additional compilation flags to pnut
 ifeq ($(CFLAGS),)
-	CFLAGS = -std=c99
+	CFLAGS = -std=c99 -Wall
 endif
 
 # Default: use 'env time -p' to measure time

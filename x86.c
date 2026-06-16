@@ -540,6 +540,56 @@ void shr_reg_reg(const int dst, const int src) {
   shr_reg_cl(dst);
 }
 
+#ifdef SUPPORT_FULL_ARITHMETIC
+void extend_reg(const int reg, const int width, const bool is_signed) {
+
+  // Sign- or zero-extend the low `width` bytes of reg into the whole register.
+  // See: https://web.archive.org/web/20250121105942/https://www.felixcloutier.com/x86/movsx:movsxd
+  // And  https://web.archive.org/web/20250109202608/https://www.felixcloutier.com/x86/movzx
+
+#ifdef SAFE_MODE
+  // Without a REX prefix, the ModR/M byte cannot encode the lower byte of
+  // registers other than AL, CL, DL and BL.
+  if (width == 1 && reg != AX && reg != CX && reg != DX && reg != BX) {
+    fatal_error("extend_reg: reg must be one of AX, CX, DX, BX");
+  }
+#endif
+
+  switch (width) {
+    case 1:
+      rex_prefix(reg, reg);
+      emit_i8(0x0f);
+      emit_i8(TERNARY(is_signed, 0xbe, 0xb6)); // MOVSX/MOVZX reg, reg8
+      break;
+    case 2:
+      rex_prefix(reg, reg);
+      emit_i8(0x0f);
+      emit_i8(TERNARY(is_signed, 0xbf, 0xb7)); // MOVSX/MOVZX reg, reg16
+      break;
+    case 4:
+#if WORD_SIZE == 8
+      // Only on x86-64, where WORD_SIZE is 8
+      if (is_signed) {
+        rex_prefix(reg, reg);
+        emit_i8(0x63); // MOVSXD reg, reg32
+      } else {
+        // Writes to a 32-bit register zero-extend into the upper half, so a
+        // 32-bit MOV of the register to itself does the job.
+        // No REX.W prefix because the operand size must remain 32 bits.
+        if (reg >= R8) emit_i8(0x45); // REX.R + REX.B
+        emit_i8(0x89); // MOV reg32, reg32
+      }
+      break;
+#else
+      // WORD_SIZE is 4, so the register is already extended into itself
+      return;
+#endif
+  }
+
+  mod_rm(reg, reg);
+}
+#endif
+
 void push_reg(const int src) {
 
   // PUSH src_reg  ;; Push word from register to stack
