@@ -1166,19 +1166,102 @@ ast value_type(ast node) {
   if (nb_children >= 2) child1 = get_child(node, 1);
 
   if (nb_children == 0) {
-#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
     if (op == INTEGER) {
+#if 0
+      // C99 6.4.4.1 Integer constants:
+      // > The type of an integer constant is the first of the corresponding
+      // > list in which its value can be represented.
+      //
+      // > Decimal literal:
+      // >  No suffix: int -> long int -> long long int
+      // >  {u|U} suffix: uint -> long uint -> long long uint
+      // >  {l|L} suffix: long int -> long long int;
+      // >  {u|U}{l|L} suffix: long uint -> long long uint
+      // > {ll|LL} suffix: long long int;
+      // > {u|U}{ll|LL} suffix: long long uint
+      //
+      // > Octal/Hex literal:
+      // >  No suffix: int -> uint -> long int -> long uint -> long long int -> long long uint
+      // >  {u|U} suffix: uint -> long uint -> long long uint
+      // >  {l|L} suffix: long int -> long uint -> long long int -> long long uint
+      // >  {u|U}{l|L} suffix: long uint -> long long uint
+      // >  {ll|LL} suffix: long long int -> long long uint
+      // >  {u|U}{ll|LL} suffix: long long uint
+      //
+      // The suffixes are parsed by the parser, but the values are not tested
+      // for fitting in the type they are suffixed with, so we need to apply the
+      // rules above to determine the type of the literal.
+      //
+      // Note that the parser overwrites the base of the literal when a suffix
+      // is present. In that case, the suffix is used to determine the type of
+      // the literal, and the base is ignored. This is _almost_ correct, with
+      // the type ladder being the same for decimal and hex/octal literals,
+      // except for the `l` and `ll` suffix, where decimal literals are always
+      // signed and hex/octal literals can be unsigned.
+      // Ideally, the parser would keep both the base and the suffix, but this
+      // is good enough for now.
+#endif
+
+#ifdef SUPPORT_64_BIT_LITERALS
+      // The value is encoded by pnut.c::u64_to_obj, see function for details.
+      if (get_val_(INTEGER, node) <= 0) { // Small "unboxed" int
+        return int_type;
+      } else if (heap[get_val_(INTEGER, node) + 1] >= 0) { // Large int with non-negative high word
+        return long_type;
+      } else { // Large int with negative high word
+        return ulong_type;
+      }
+#else
+      // Without support for 64-bit literals, all literals fit in an int
       return int_type;
-    } else if (op == INTEGER_L || op == INTEGER_LL) {
-      return long_type;
+#endif
+    }
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+    else if (op == INTEGER_HEX || op == INTEGER_OCT) {
+#ifdef SUPPORT_64_BIT_LITERALS
+      // Type ladder: int -> uint -> long -> ulong.
+      if (get_val(node) <= 0) { // Small "unboxed" int
+        return int_type;
+      } else if (heap[get_val(node) + 1] == 0) { // Large int with zero high word
+        return uint_type;
+      } else if (heap[get_val(node) + 1] >= 0) { // Large int with non-negative high word
+        return long_type;
+      } else { // Large int with negative high word
+        return ulong_type;
+      }
+#else
+      return int_type;
+#endif
+    }
+#endif
+#ifdef PARSE_NUMERIC_LITERAL_SUFFIX
+    else if (op == INTEGER_L || op == INTEGER_LL) {
+#ifdef SUPPORT_64_BIT_LITERALS
+      // long and long long coincide as the 64-bit LONG_KW type here. A value
+      // that doesn't fit in a signed 64-bit long -- bit 63 set, i.e. a large
+      // int with a negative high word -- becomes unsigned long.
+      if (get_val(node) > 0 && heap[get_val(node) + 1] < 0) {
+        return ulong_type;
+      } else {
+        return long_type;
+      }
+#else
+      return int_type;
+#endif
     } else if (op == INTEGER_U) {
+#ifdef SUPPORT_64_BIT_LITERALS
+      // unsigned int -> unsigned long: a value too wide for a 32-bit unsigned
+      // int (large int with a non-zero high word) becomes unsigned long.
+      if (get_val(node) > 0 && heap[get_val(node) + 1] != 0) {
+        return ulong_type;
+      } else {
+        return uint_type;
+      }
+#else
       return uint_type;
+#endif
     } else if (op == INTEGER_UL || op == INTEGER_ULL) {
       return ulong_type;
-    }
-#else
-    if (op == INTEGER) {
-      return int_type;
     }
 #endif
     else if (op == CHARACTER) {
