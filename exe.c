@@ -3413,11 +3413,18 @@ void codegen_builtin_movs(ast params) {
 
 int declare_builtin(char* name, bool variadic, ast return_type, ast params) {
   int lbl = alloc_label(name);
-  return_type = function_type(return_type, params);
+  ast params_start = params;
+  // The params value is a list of types, we convert them to a list of declarations
+  while (params != 0) {
+    set_car(params, new_ast3(DECL, 0, car(params), 0));
+    params = cdr(params);
+  }
+
+  return_type = function_type(return_type, params_start);
   if (variadic) return_type = make_variadic_func(return_type);
   cgc_add_global_fun(init_ident(IDENTIFIER, name), lbl, return_type);
   def_label(lbl);
-  codegen_builtin_movs(params);
+  codegen_builtin_movs(params_start);
   return lbl;
 }
 

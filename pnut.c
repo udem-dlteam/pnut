@@ -971,7 +971,7 @@ ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, ex
 #define car_(expected_op, pair)                 car(pair)
 #define cdr_(expected_op, pair)                 cdr(pair)
 #endif
-// void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
+void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
 void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
 #ifndef target_sh
 ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
