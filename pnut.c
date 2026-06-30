@@ -298,6 +298,39 @@
   #define SUPPORT_FULL_ARITHMETIC
 #endif
 
+// Support for 64-bit arithmetic on native 32-bit targets
+#ifdef SUPPORT_EMULATED_INT64
+  // Support for 64-bit arithmetic requires struct/union support, since
+  // `long long` are represented as 8-byte structs.
+  #ifndef SUPPORT_STRUCT_UNION
+    #define SUPPORT_STRUCT_UNION
+  #endif
+
+  // Support for 64-bit arithmetic requires full arithmetic support, since
+  // 64-bit arithmetic is implemented in the runtime library using 32-bit
+  // signed/unsigned arithmetic.
+  #ifndef SUPPORT_FULL_ARITHMETIC
+    #define SUPPORT_FULL_ARITHMETIC
+  #endif
+
+  // 64-bit literals are needed to materialize long long constants.
+  #ifndef SUPPORT_64_BIT_LITERALS
+    #define SUPPORT_64_BIT_LITERALS
+  #endif
+
+  // Octal/hex constants follow C99's unsigned type progression, which differs
+  // from decimal's (e.g. 0x80000000 is unsigned int, 2147483648 is long).
+  #ifndef PARSE_NUMERIC_LITERAL_WITH_BASE
+    #define PARSE_NUMERIC_LITERAL_WITH_BASE
+  #endif
+
+  // BOOTSTRAP_LONG makes long a 32-bit type
+  //  => incompatible with 64-bit arithmetic support.
+  #ifdef BOOTSTRAP_LONG
+    #error "SUPPORT_EMULATED_INT64 is incompatible with BOOTSTRAP_LONG"
+  #endif
+#endif
+
 #if defined(NICE_UX) || defined(SAFE_MODE)
   #define FULL_PREPROCESSOR_SUPPORT
   #define INCLUDE_LINE_NUMBER_ON_ERROR
