@@ -1308,7 +1308,7 @@ ast value_type(ast node) {
     } else if (op == '+' || op == '-' || op == '~') {
       // Unary +, - and ~ apply the integer promotions to their operand
       return integer_promote(value_type(child0));
-    } else if (op == MINUS_MINUS || op == PLUS_PLUS || op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
+    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE || op == MINUS_MINUS_PRE) {
       // Increment/decrement, like assignment, keep the operand's type
       return value_type(child0);
     }
@@ -1469,9 +1469,7 @@ void codegen_binop_sub(ast left_type, ast right_type) {
   }
 }
 
-void codegen_binop(int op, ast lhs, ast rhs) {
-  ast left_type = value_type(lhs);
-  ast right_type = value_type(rhs);
+void codegen_binop(int op, ast left_type, ast right_type) {
   ast common_type = usual_arith_conv(left_type, right_type);
   bool left_is_numeric = is_numeric_type(left_type);
   bool right_is_numeric = is_numeric_type(right_type);
@@ -2015,7 +2013,7 @@ int codegen_lvalue(ast node) {
       type = value_type(child0);
       codegen_rvalue(child0);
       codegen_rvalue(child1);
-      codegen_binop('+', child0, child1);
+      codegen_binop('+', type, value_type(child1));
       grow_fs(-2);
       lvalue_width = ref_type_width(type);
     }
@@ -2121,6 +2119,47 @@ void codegen_string(char *string_start, char *string_end) {
   emit_i8(0);
 
   def_label(lbl);
+}
+
+// Generates code for an arithmetic assignment operator (+=, -=, *=, /=, %=, &=,
+// |=, ^=, <<=, >>=) and ++/-- (pre/post), leaving the result on the stack.
+void codegen_compound_assignment(int op, ast child0, ast child1) {
+  ast left_type = value_type(child0);
+  int left_width = codegen_lvalue(child0);
+  // Copy the initial value and place it at the bottom of the stack
+  pop_reg(reg_Y); // destination address
+  load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(left_type));
+  push_reg(reg_X); // initial value / result slot
+  push_reg(reg_Y); // destination address, kept adjacent to the value
+  push_reg(reg_X); // current value of the lvalue to be modified
+  grow_fs(2);      // account for the address and value words above the result slot
+
+  if (child1 == 0) { // child1 == 0 => child1 is 1 int literal
+    mov_reg_imm(reg_X, 1);
+    push_reg(reg_X);
+    grow_fs(1);
+    codegen_binop(op, left_type, int_type);
+  } else {
+    codegen_rvalue_and_drop_temps(child1);
+    codegen_binop(op, left_type, value_type(child1));
+  }
+
+  // Stack layout at this point:
+  //   top:       binop result
+  //   top-1:     destination address of the lvalue
+  //   top-2:     initial value of the modified lvalue
+
+  // Write the result back to the lvalue's destination address
+  pop_reg(reg_X);
+  pop_reg(reg_Y);
+  write_mem_location(reg_Y, 0, reg_X, left_width);
+  grow_fs(-4);
+
+  if (op != MINUS_MINUS_POST && op != PLUS_PLUS_POST) {
+    // Overwrite the result slot for operations that return the new value
+    pop_reg(reg_Y);
+    push_reg(reg_X);
+  }
 }
 
 void codegen_rvalue(ast node) {
@@ -2271,36 +2310,10 @@ void codegen_rvalue(ast node) {
       push_reg(reg_X);
       grow_fs(1);
       codegen_rvalue(child0);
-      codegen_binop(EQ_EQ, new_ast0(INTEGER, 0), child0);
+      codegen_binop(EQ_EQ, int_type, value_type(child0));
       grow_fs(-2);
-    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST) {
-      left_width = codegen_lvalue(child0);
-      pop_reg(reg_Y);
-      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
-      push_reg(reg_X); // saves the original value of lvalue
-      push_reg(reg_Y);
-      push_reg(reg_X); // saves the value of lvalue to be modified
-      mov_reg_imm(reg_X, 1); // Equivalent to calling codegen rvalue with INTEGER 1 (subtraction or addition handled in codegen_binop)
-      push_reg(reg_X);
-      codegen_binop(op, child0, new_ast0(INTEGER, 0)); // Pops two values off the stack and pushes the result
-      pop_reg(reg_X); // result
-      pop_reg(reg_Y); // address
-      grow_fs(-1);
-      write_mem_location(reg_Y, 0, reg_X, left_width); // Store the result in the address
-    } else if (op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
-      left_width = codegen_lvalue(child0);
-      pop_reg(reg_Y);
-      push_reg(reg_Y);
-      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
-      push_reg(reg_X);
-      mov_reg_imm(reg_X, 1); // equivalent to calling codegen rvalue with INTEGER 1 (subtraction or addition handled in codegen_binop)
-      push_reg(reg_X);
-      codegen_binop(op, child0, new_ast0(INTEGER, 0)); // Pops two values off the stack and pushes the result
-      pop_reg(reg_X); // result
-      pop_reg(reg_Y); // address
-      grow_fs(-1);
-      write_mem_location(reg_Y, 0, reg_X, left_width); // store the result in the address
-      push_reg(reg_X);
+    } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
+      codegen_compound_assignment(op, child0, 0);
     } else if (op == '&') {
       codegen_lvalue(child0);
       grow_fs(-1);
@@ -2337,7 +2350,7 @@ void codegen_rvalue(ast node) {
       } else
 #endif
       {
-        codegen_binop(op, child0, child1);
+        codegen_binop(op, value_type(child0), value_type(child1));
         grow_fs(-2);
       }
     } else if (op == '=') {
@@ -2375,19 +2388,7 @@ void codegen_rvalue(ast node) {
       }
       push_reg(reg_X);
     } else if (op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
-      left_width = codegen_lvalue(child0);
-      pop_reg(reg_Y);
-      push_reg(reg_Y);
-      load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(value_type(child0)));
-      push_reg(reg_X);
-      grow_fs(1);
-      codegen_rvalue_and_drop_temps(child1); // keep the operands and destination address adjacent
-      codegen_binop(op, child0, child1);
-      pop_reg(reg_X);
-      pop_reg(reg_Y);
-      grow_fs(-3);
-      write_mem_location(reg_Y, 0, reg_X, left_width);
-      push_reg(reg_X);
+      codegen_compound_assignment(op, child0, child1);
     } else if (op == AMP_AMP || op == BAR_BAR) {
       lbl1 = alloc_label(0);
       lbl2 = alloc_label(0);
