@@ -2179,6 +2179,9 @@ void codegen_rvalue(ast node) {
 
   if (nb_children == 0) {
     if ( op == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+      || op == INTEGER_HEX || op == INTEGER_OCT
+#endif
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
       || op == INTEGER_L || op == INTEGER_LL || op == INTEGER_U || op == INTEGER_UL || op == INTEGER_ULL
 #endif
