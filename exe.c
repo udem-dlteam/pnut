@@ -2175,12 +2175,9 @@ void codegen_rvalue(ast node) {
           left_width = cgc_fs - heap[binding+3];
           mov_reg_imm(reg_X, left_width * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
-          // local arrays/structs/unions are allocated on the stack, so no need to dereference
-          if (get_op(heap[binding+4]) != '['
-#ifdef SUPPORT_STRUCT_UNION
-           && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW
-#endif
-            ) {
+          // local arrays/structs/unions/ are allocated on the stack, so their
+          // value is their address (no dereference)
+          if (!is_aggregate_type(heap[binding+4])) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
@@ -2188,12 +2185,9 @@ void codegen_rvalue(ast node) {
         case BINDING_VAR_GLOBAL:
           mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
-          // global arrays/structs/unions are also allocated on the stack, so no need to dereference
-          if (get_op(heap[binding+4]) != '['
-#ifdef SUPPORT_STRUCT_UNION
-           && get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW
-#endif
-          ) {
+          // global arrays/structs/unions are also allocated in
+          // memory, so their value is their address (no dereference)
+          if (!is_aggregate_type(heap[binding+4])) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           push_reg(reg_X);
@@ -2235,7 +2229,9 @@ void codegen_rvalue(ast node) {
       grow_fs(-1);
       if (is_function_type(type)) {
       } else if (is_pointer_type(type)) {
-        // Aggregates are represented by their address, so the address is the value
+        // The value of an aggregate (struct/union/array) is its address, which
+        // is already on the stack, so no load is needed. This also avoids an
+        // oversized load_mem_location for objects wider than a word.
         if (!is_aggregate_type(dereference_type(type))) {
           pop_reg(reg_X);
           load_mem_location(reg_X, reg_X, 0, ref_type_width(type), is_signed_numeric_type(dereference_type(type)));
