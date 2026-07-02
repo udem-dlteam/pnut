@@ -1553,7 +1553,10 @@ void codegen_binop(int op, ast left_type, ast right_type) {
     // Same as pointer addition + dereference of the result.
     codegen_binop_add(left_type, right_type); // Compute the address resulting from the addition
     left_type = arith_value_type('+', left_type, right_type); // The pointer type
-    load_mem_location(reg_X, reg_X, 0, ref_type_width(left_type), is_signed_numeric_type(dereference_type(left_type)));
+    // Aggregates are represented by their address, so the address is the value
+    if (!is_aggregate_type(dereference_type(left_type))) {
+      load_mem_location(reg_X, reg_X, 0, ref_type_width(left_type), is_signed_numeric_type(dereference_type(left_type)));
+    }
   } else {
     dump_op(op);
     fatal_error("codegen_binop: unknown op");
@@ -1678,18 +1681,18 @@ int codegen_param(ast param) {
   int type = value_type(param);
 
 #ifdef SUPPORT_STRUCT_UNION
-  int left_width;
+  int size = type_width(type, false, true);
   int save_fs = cgc_fs;
   int temp_words;
 
   if (is_struct_or_union_type(type)) {
-    left_width = codegen_lvalue(param);
+    codegen_rvalue(param);
     pop_reg(reg_X);
     grow_fs(-1);
     temp_words = cgc_fs - save_fs;
-    grow_stack_bytes(word_size_align(left_width));
-    grow_fs(word_size_align(left_width) / WORD_SIZE);
-    copy_obj(reg_SP, 0, reg_X, 0, left_width);
+    grow_stack_bytes(word_size_align(size));
+    grow_fs(word_size_align(size) / WORD_SIZE);
+    copy_obj(reg_SP, 0, reg_X, 0, size);
     if (temp_words != 0) {
       // The argument was copied from a temporary (e.g. a struct-returning
       // call's result) that sits right below it on the stack. Slide the
@@ -1699,7 +1702,7 @@ int codegen_param(ast param) {
       // the source object, so it is at least as large as the argument.
       mov_reg_imm(reg_X, temp_words * WORD_SIZE);
       add_reg_reg(reg_X, reg_SP);
-      copy_obj(reg_X, 0, reg_SP, 0, left_width);
+      copy_obj(reg_X, 0, reg_SP, 0, size);
       drop_stack_words(temp_words);
     }
   } else
@@ -1860,16 +1863,10 @@ void codegen_call(ast node) {
 // shape. width != 0 means the ternary is aggregate-valued: the arm's value (a
 // source address) is copied into the result buffer allocated right below the
 // arm's temporaries, and reg_X is set to the buffer address.
-// Returns the lvalue width when in lvalue context.
-int codegen_ternary_arm(ast arm, bool lvalue_ctx, int width) {
+void codegen_ternary_arm(ast arm, int width) {
   int save_fs = cgc_fs;
-  int lvalue_width = 0;
 
-  if (lvalue_ctx) {
-    lvalue_width = codegen_lvalue(arm);
-  } else {
-    codegen_rvalue(arm); // for aggregates, the value is the address
-  }
+  codegen_rvalue(arm); // for aggregates, the value is the address
   pop_reg(reg_X);
   grow_fs(-1);
 #ifdef SUPPORT_STRUCT_UNION
@@ -1881,21 +1878,18 @@ int codegen_ternary_arm(ast arm, bool lvalue_ctx, int width) {
   }
 #endif
   if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
-  return lvalue_width;
 }
 
-// Ternary expression, in rvalue or lvalue context. Each arm leaves its value
-// in reg_X, which is pushed at the join point; the caller accounts for the
-// value word (grow_fs(1) at the end of codegen_rvalue/codegen_lvalue).
+// Ternary expression. Each arm leaves its value in reg_X, which is pushed at
+// the join point; the caller accounts for the value word (grow_fs(1) at the
+// end of codegen_rvalue).
 // Aggregate-valued ternaries get a result buffer allocated before branching,
 // since the arms may allocate different amounts of temporaries; the value is
-// then the buffer address. Returns the width of the value when it matters
-// (lvalue context or aggregate).
-int codegen_ternary(ast node, bool lvalue_ctx) {
+// then the buffer address.
+void codegen_ternary(ast node) {
   int lbl1 = alloc_label(0); // false label
   int lbl2 = alloc_label(0); // end label
   int width = 0;
-  int lvalue_width;
 #if defined(SUPPORT_FULL_ARITHMETIC) || defined(SUPPORT_STRUCT_UNION)
   ast type = value_type(node);
 #endif
@@ -1909,25 +1903,20 @@ int codegen_ternary(ast node, bool lvalue_ctx) {
 #endif
 
   codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
-  lvalue_width = codegen_ternary_arm(get_child_('?', node, 1), lvalue_ctx, width); // value when true
+  codegen_ternary_arm(get_child_('?', node, 1), width); // value when true
 #ifdef SUPPORT_FULL_ARITHMETIC
   // The chosen arm is converted to the common type of the two arms
-  if (!lvalue_ctx && width == 0) convert_reg(reg_X, value_type(get_child_('?', node, 1)), type);
+  if (width == 0) convert_reg(reg_X, value_type(get_child_('?', node, 1)), type);
 #endif
   jump(lbl2);
   def_label(lbl1);
-  codegen_ternary_arm(get_child_('?', node, 2), lvalue_ctx, width); // value when false
+  codegen_ternary_arm(get_child_('?', node, 2), width); // value when false
 #ifdef SUPPORT_FULL_ARITHMETIC
-  if (!lvalue_ctx && width == 0) convert_reg(reg_X, value_type(get_child_('?', node, 2)), type);
+  if (width == 0) convert_reg(reg_X, value_type(get_child_('?', node, 2)), type);
 #endif
   def_label(lbl2);
 
   push_reg(reg_X);
-
-#ifdef SUPPORT_STRUCT_UNION
-  if (width != 0) lvalue_width = width;
-#endif
-  return lvalue_width;
 }
 
 #ifdef SUPPORT_GOTO
@@ -2050,44 +2039,12 @@ int codegen_lvalue(ast node) {
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
-    } else if (op == '(') {
-      type = value_type(node);
-      if (is_struct_or_union_type(type)) {
-        // Call to a struct/union-returning function: the lvalue is the
-        // temporary buffer in which the callee wrote the result. codegen_call
-        // leaves the buffer address on the stack; that value word is
-        // accounted for by the grow_fs(1) at the end of the function.
-        codegen_call(node);
-        lvalue_width = type_width(type, true, false);
-      } else {
-        fatal_error("codegen_lvalue: function call does not return a struct/union");
-      }
-    } else if (op == ',') {
-      // A comma expression is only an lvalue when the rhs is an aggregate,
-      // whose "lvalue" is the address of its value. The lhs value word stays
-      // buried below the rhs temporaries and is freed at the end of the full
-      // expression.
-      codegen_rvalue_and_drop_temps(child0);
-      lvalue_width = codegen_lvalue(child1);
-      grow_fs(-1); // nets the rhs lvalue word with the final grow_fs(1)
     }
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
       codegen_lvalue(child1);
       lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
-    } else {
-      dump_node(node);
-      fatal_error("codegen_lvalue: unexpected operator");
-    }
-
-  } else if (nb_children == 3) {
-
-    if (op == '?') {
-
-      // assume that lvalue_width is the same for both arms
-      lvalue_width = codegen_ternary(node, true);
-
     } else {
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
@@ -2278,9 +2235,12 @@ void codegen_rvalue(ast node) {
       grow_fs(-1);
       if (is_function_type(type)) {
       } else if (is_pointer_type(type)) {
-        pop_reg(reg_X);
-        load_mem_location(reg_X, reg_X, 0, ref_type_width(type), is_signed_numeric_type(dereference_type(type)));
-        push_reg(reg_X);
+        // Aggregates are represented by their address, so the address is the value
+        if (!is_aggregate_type(dereference_type(type))) {
+          pop_reg(reg_X);
+          load_mem_location(reg_X, reg_X, 0, ref_type_width(type), is_signed_numeric_type(dereference_type(type)));
+          push_reg(reg_X);
+        }
       } else {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
       }
@@ -2363,7 +2323,7 @@ void codegen_rvalue(ast node) {
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
         save_fs = cgc_fs;
-        codegen_lvalue(child1);
+        codegen_rvalue(child1);
         pop_reg(reg_X);
         grow_fs(-1);
         if (cgc_fs == save_fs) {
@@ -2414,7 +2374,7 @@ void codegen_rvalue(ast node) {
     else if (op == '.') {
       type = value_type(child0);
       if (is_struct_or_union_type(type)) {
-        codegen_lvalue(child0);
+        codegen_rvalue(child0); // for aggregates, the value is the address
         pop_reg(reg_Y);
         grow_fs(-1);
         // union members are at the same offset: 0
@@ -2468,7 +2428,7 @@ void codegen_rvalue(ast node) {
   } else if (nb_children == 3) {
 
     if (op == '?') {
-      codegen_ternary(node, false);
+      codegen_ternary(node);
     } else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
@@ -2681,7 +2641,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
         save_fs = cgc_fs;
-        codegen_lvalue(init);
+        codegen_rvalue(init);
         pop_reg(reg_X);
         grow_fs(-1);
         // If the initializer allocated temporaries (e.g. a struct-returning
