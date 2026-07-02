@@ -392,6 +392,24 @@ void test_casts() {
   }
 }
 
+void test_ternary() {
+  struct Shape shape1, shape2, shape3;
+  int cond = 0;
+  shape1.origin.x = 5;
+  shape1.origin.y = 6;
+  shape2.origin.x = 7;
+  shape2.origin.y = 8;
+
+  shape3 = 1 ? shape1 : shape2;
+
+  putstr("shape3: "); putint(shape3.origin.x); putstr(" "); putint(shape3.origin.y); putchar('\n');
+
+  // Member access on a ternary expression
+  putstr("ternary member: ");
+  putint((cond ? shape1 : shape2).origin.x); putstr(" ");
+  putint((cond ? shape1 : shape2).origin.y); putchar('\n');
+}
+
 void main() {
   test_enums();
   test_stack_structs();
@@ -402,6 +420,7 @@ void main() {
   test_nested_structs();
   test_passing_as_value();
   test_casts();
+  test_ternary();
 
   // Regression test for accessing fields inside anonymous struct/unions
   Sym *s = (Sym*) malloc(sizeof(Sym));
