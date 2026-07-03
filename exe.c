@@ -1685,16 +1685,23 @@ void codegen_rvalue_and_drop_temps(ast node) {
   }
 }
 
-void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int size_word) {
+void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width) {
   int save_fs = cgc_fs;
+  if (dst_reg != reg_SP) {
+    // Save reg in case codegen_rvalue clobbers it
+    push_reg(dst_reg); grow_fs(1);
+  }
   codegen_rvalue(node);
   pop_reg(reg_X); // source aggregate address
   grow_fs(-1);
   if (dst_reg == reg_SP) {
     // Account for temporaries allocated during evaluation
     dst_offset += (cgc_fs - save_fs) * WORD_SIZE;
+  } else {
+    // Reload destination register, saved below the temporaries
+    mov_reg_mem(dst_reg, reg_SP, WORD_SIZE * (cgc_fs - save_fs - 1));
   }
-  copy_obj(reg_SP, dst_offset, reg_X, 0, size_word * WORD_SIZE);
+  copy_obj(dst_reg, dst_offset, reg_X, 0, width);
   if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
 }
 
@@ -1709,7 +1716,7 @@ void codegen_aggregate(ast node, ast type) {
 
   grow_stack(size_word);
   grow_fs(size_word);
-  codegen_aggregate_into(reg_SP, 0, node, size_word);
+  codegen_aggregate_into(reg_SP, 0, node, size_word * WORD_SIZE);
 }
 #else
 #define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
@@ -2319,22 +2326,9 @@ void codegen_rvalue(ast node) {
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
-        save_fs = cgc_fs;
-        codegen_rvalue(child1);
-        pop_reg(reg_X);
+        pop_reg(reg_Y); // destination address
         grow_fs(-1);
-        if (cgc_fs == save_fs) {
-          pop_reg(reg_Y);
-          grow_fs(-1);
-        } else {
-          // The rhs allocated temporaries (e.g. a struct-returning call) that
-          // bury the destination address: load it from its stack position.
-          // The buried word and the temporaries are freed at the end of the
-          // full expression. The source must not be flushed before the copy,
-          // so cgc_fs stays where it is.
-          mov_reg_mem(reg_Y, reg_SP, (cgc_fs - save_fs) * WORD_SIZE);
-        }
-        copy_obj(reg_Y, 0, reg_X, 0, left_width);
+        codegen_aggregate_into(reg_Y, 0, child1, left_width);
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
@@ -2638,16 +2632,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
-        save_fs = cgc_fs;
-        codegen_rvalue(init);
-        pop_reg(reg_X);
-        grow_fs(-1);
-        // If the initializer allocated temporaries (e.g. a struct-returning
-        // call), the stack pointer moved: adjust SP-relative destination
-        // offsets, copy, then free the temporaries.
-        if (base_reg == reg_SP) offset += (cgc_fs - save_fs) * WORD_SIZE;
-        copy_obj(base_reg, offset, reg_X, 0, type_width(type, true, true));
-        if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+        codegen_aggregate_into(base_reg, offset, init, type_width(type, true, true));
       } else
 #endif // SUPPORT_STRUCT_UNION
       if (get_op(type) != '[') {
@@ -3025,24 +3010,24 @@ void codegen_statement(ast node) {
   } else if (op == RETURN_KW) {
 
     if (get_child_(RETURN_KW, node, 0) != 0) {
+#ifdef SUPPORT_STRUCT_UNION
+      if (is_struct_or_union_type(current_fun_return_type)) {
+        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
+        mov_reg_mem(reg_Y, reg_SP, (cgc_fs - heap[binding+3]) * WORD_SIZE);
+        codegen_aggregate_into(reg_Y, 0, get_child_(RETURN_KW, node, 0), type_width(current_fun_return_type, true, true));
+        // The value of a struct/union expression is its address: leave the
+        // caller-allocated buffer's address in reg_X.
+        mov_reg_reg(reg_X, reg_Y);
+      } else
+#endif
+      {
       codegen_rvalue(get_child_(RETURN_KW, node, 0));
       pop_reg(reg_X);
       grow_fs(-1);
       // The returned value is converted to the function's return type, which
       // the callers trust to be correctly extended.
       convert_reg(reg_X, value_type(get_child_(RETURN_KW, node, 0)), current_fun_return_type);
-#ifdef SUPPORT_STRUCT_UNION
-      if (is_struct_or_union_type(current_fun_return_type)) {
-        // The value of a struct/union expression is its address: copy the
-        // result into the caller-allocated buffer whose address is in the
-        // hidden parameter, and leave that address in reg_X. Temporaries are
-        // freed by the stack cleanup below.
-        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
-        mov_reg_mem(reg_Y, reg_SP, (cgc_fs - heap[binding+3]) * WORD_SIZE);
-        copy_obj(reg_Y, 0, reg_X, 0, type_width(current_fun_return_type, true, false));
-        mov_reg_reg(reg_X, reg_Y);
       }
-#endif
     }
 
     // The cleanup code at the bottom isn't hit because of the ret, so cleaning here.
