@@ -450,28 +450,23 @@ int init_next_lbl;
 int main_lbl = 0;
 int exit_lbl;
 
-int word_size_align(int n) {
+int word_size_align(const int n) {
   return (n + WORD_SIZE - 1) / WORD_SIZE * WORD_SIZE;
 }
 
-int align_to(int mul, int n) {
+int align_to(const int mul, const int n) {
   return (n + mul - 1) / mul * mul;
 }
 
-void grow_stack(int words) {
+void grow_stack(const int words) {
   add_reg_imm(reg_SP, -words * WORD_SIZE);
 }
 
-// Like grow_stack, but takes bytes instead of words.
-// To maintain alignment, the stack is grown by a multiple of WORD_SIZE (rounded
-// up from the number of bytes).
-void grow_stack_bytes(int bytes) {
-  add_reg_imm(reg_SP, -word_size_align(bytes));
-}
-
-void drop_stack_words(int words) {
-  grow_fs(-words);
-  grow_stack(-words);
+void reset_stack_to(const int to_cgc_fs) {
+  if (to_cgc_fs != cgc_fs) {
+    grow_stack(to_cgc_fs - cgc_fs);
+    grow_fs(to_cgc_fs - cgc_fs);
+  }
 }
 
 void rt_debug(char* msg);
@@ -1621,7 +1616,7 @@ void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
   // The node's value is immediately consumed by a conditional jump, so it can
   // be collected right away. This also ensures that temporaries don't pile up
   // during loops, where the condition is evaluated multiple times.
-  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+  reset_stack_to(save_fs);
 #endif
 
   xor_reg_reg(reg_Y, reg_Y);
@@ -1679,7 +1674,7 @@ void codegen_rvalue_and_drop_temps(ast node) {
   if (cgc_fs != save_fs + 1 && !is_aggregate_type(value_type(node))) {
     pop_reg(reg_X);
     grow_fs(-1);
-    drop_stack_words(cgc_fs - save_fs);
+    reset_stack_to(save_fs);
     push_reg(reg_X);
     grow_fs(1);
   }
@@ -1702,7 +1697,7 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width) {
     mov_reg_mem(dst_reg, reg_SP, WORD_SIZE * (cgc_fs - save_fs - 1));
   }
   copy_obj(dst_reg, dst_offset, reg_X, 0, width);
-  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+  reset_stack_to(save_fs);
 }
 
 // Evaluate an aggregate rvalue and place it directly on top of the stack,
@@ -1722,7 +1717,7 @@ void codegen_aggregate(ast node, ast type) {
 #define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
 #endif
 
-int codegen_param(ast param) {
+void codegen_param(ast param) {
   int type = value_type(param);
 
 #ifdef SUPPORT_STRUCT_UNION
@@ -1736,17 +1731,13 @@ int codegen_param(ast param) {
     // below them on the stack.
     codegen_rvalue_and_drop_temps(param);
   }
-
-  return type_width(type, false, true) / WORD_SIZE;
 }
 
 #ifdef SAFE_MODE
-int codegen_params(ast params, ast params_type, bool allow_extra_params) {
+void codegen_params(ast params, ast params_type, bool allow_extra_params) {
 #else
-int codegen_params(ast params) {
+void codegen_params(ast params) {
 #endif
-
-  int fs = 0;
 
   if (params != 0) {
 #ifdef SAFE_MODE
@@ -1759,19 +1750,17 @@ int codegen_params(ast params) {
 #endif
 
 #ifdef SAFE_MODE
-    fs = codegen_params(tail(params), params_type, allow_extra_params);
+    codegen_params(tail(params), params_type, allow_extra_params);
 #else
-    fs = codegen_params(tail(params));
+    codegen_params(tail(params));
 #endif
-    fs += codegen_param(car(params));
+    codegen_param(car(params));
   }
 #ifdef SAFE_MODE
   else if (params_type != 0) {
     fatal_error("codegen_params: Function expects more parameters than provided");
   }
 #endif
-
-  return fs;
 }
 
 void emit_function_call(ast fun, int binding) {
@@ -1811,7 +1800,7 @@ void emit_function_call(ast fun, int binding) {
 void codegen_call(ast node) {
   ast fun = get_child_('(', node, 0);
   ast params = get_child_('(', node, 1);
-  ast nb_params;
+  int save_fs = cgc_fs;
   int binding = 0;
 #ifdef SUPPORT_STRUCT_UNION
   int buf_words = 0;
@@ -1825,6 +1814,7 @@ void codegen_call(ast node) {
     buf_words = type_width(fun_return_type, true, true) / WORD_SIZE;
     grow_stack(buf_words);
     grow_fs(buf_words);
+    save_fs = cgc_fs; // Keep buffer alive after call
   }
 #endif
 
@@ -1852,26 +1842,24 @@ void codegen_call(ast node) {
   // allow_extra_params is true if the function is called indirectly or if the function is variadic
   bool allow_extra_params = binding == 0;
   if (get_child_('(', type, 2)) allow_extra_params = true;
-  nb_params = codegen_params(params, get_child_('(', type, 1), allow_extra_params);
+  codegen_params(params, get_child_('(', type, 1), allow_extra_params);
 #else
-  nb_params = codegen_params(params);
+  codegen_params(params);
 #endif
 
 #ifdef SUPPORT_STRUCT_UNION
   if (buf_words != 0) {
     // Push the buffer address as the hidden first argument (pushed last)
-    // The arguments occupy nb_params words right above the buffer.
-    mov_reg_imm(reg_X, nb_params * WORD_SIZE);
+    mov_reg_imm(reg_X, (cgc_fs - save_fs) * WORD_SIZE);
     add_reg_reg(reg_X, reg_SP);
     push_reg(reg_X);
     grow_fs(1);
-    nb_params += 1;
   }
 #endif
 
   emit_function_call(fun, binding);
 
-  drop_stack_words(nb_params);
+  reset_stack_to(save_fs);
 
 #ifdef SUPPORT_STRUCT_UNION
   // After popping the arguments, the result buffer is on top of the stack.
@@ -2118,9 +2106,6 @@ void codegen_rvalue(ast node) {
   int lbl1, lbl2;
   int left_width;
   ast type;
-#ifdef SUPPORT_STRUCT_UNION
-  int save_fs;
-#endif
   ast child0, child1;
 
   if (nb_children >= 1) child0 = get_child(node, 0);
@@ -2525,9 +2510,6 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
   int arr_len;
   int inner_type_width;
 #endif // SUPPORT_COMPLEX_INITIALIZER
-#ifdef SUPPORT_STRUCT_UNION
-  int save_fs;
-#endif
 
   type = canonicalize_type(type);
 
@@ -2806,9 +2788,7 @@ void codegen_body(ast node) {
     node = get_child_opt_('{', '{', node, 1);
   }
 
-  grow_stack(save_fs - cgc_fs);
-
-  cgc_fs = save_fs;
+  reset_stack_to(save_fs);
   cgc_locals = save_locals;
 }
 
@@ -2930,7 +2910,7 @@ void codegen_statement(ast node) {
 
     // If we fell through the switch, break didn't restore the stack in its
     // original state so do it now.
-    drop_stack_words(cgc_fs - heap[binding + 2]);
+    reset_stack_to(heap[binding + 2]);
 
     def_label(lbl1); // End of switch label, break statements land here
 
@@ -3051,7 +3031,7 @@ void codegen_statement(ast node) {
 
   }
 
-  drop_stack_words(cgc_fs - save_fs);
+  reset_stack_to(save_fs);
   cgc_locals = save_locals;
 }
 
@@ -3179,9 +3159,8 @@ void codegen_glo_fun_decl(ast node) {
 
   codegen_body(body);
 
-  grow_stack(-cgc_fs);
-  cgc_fs = 0;
-
+  // Drop everything on the stack and return to the caller
+  reset_stack_to(0);
   ret();
 
   // Register the function in the forward jump table during initialization
@@ -3502,6 +3481,7 @@ void codegen_builtin() {
 }
 
 void init_memory_spaces(int glo_size) {
+  glo_size = word_size_align(glo_size);
   // Allocate some space for the global variables.
   //
   // By default, the global variables are placed in a mmapped region, but not
@@ -3510,7 +3490,7 @@ void init_memory_spaces(int glo_size) {
 #ifdef USE_STACK_FOR_GLOBALS
   int loop_lbl = alloc_label("glo_init_loop");
   mov_reg_reg(reg_Y, reg_SP); // reg_Y = end of global variables/heap
-  grow_stack_bytes(glo_size + RT_HEAP_SIZE); // reg_SP = start of globals table/heap
+  grow_stack((glo_size + RT_HEAP_SIZE) / WORD_SIZE); // reg_SP = start of globals table/heap
   mov_reg_reg(reg_Z, reg_SP); // reg_Z = start of globals table/heap
 
   // Loop over the range [reg_Z, reg_Y)
@@ -3588,7 +3568,7 @@ void codegen_end() {
 #ifndef ONE_PASS_GENERATOR
   def_label(setup_lbl);
   // Initialize the global variable table and heap for malloc
-  init_memory_spaces(word_size_align(cgc_global_alloc));
+  init_memory_spaces(cgc_global_alloc);
   // Jump to the initialization code
   jump(init_start_lbl);
 #endif
