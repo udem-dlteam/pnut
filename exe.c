@@ -1685,6 +1685,19 @@ void codegen_rvalue_and_drop_temps(ast node) {
   }
 }
 
+void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int size_word) {
+  int save_fs = cgc_fs;
+  codegen_rvalue(node);
+  pop_reg(reg_X); // source aggregate address
+  grow_fs(-1);
+  if (dst_reg == reg_SP) {
+    // Account for temporaries allocated during evaluation
+    dst_offset += (cgc_fs - save_fs) * WORD_SIZE;
+  }
+  copy_obj(reg_SP, dst_offset, reg_X, 0, size_word * WORD_SIZE);
+  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+}
+
 // Evaluate an aggregate rvalue and place it directly on top of the stack,
 // dropping any temporaries allocated during evaluation. The buffer is
 // allocated before evaluating the expression so that the value is copied
@@ -1692,19 +1705,11 @@ void codegen_rvalue_and_drop_temps(ast node) {
 // hence the copy-then-drop order).
 void codegen_aggregate(ast node, ast type) {
   // Round up the size to a multiple of WORD_SIZE to keep the stack aligned
-  int size = type_width(type, true, true);
-  int size_word = size / WORD_SIZE;
-  int save_fs = cgc_fs + size_word; // frame size after the aggregate is allocated
+  int size_word = type_width(type, true, true) / WORD_SIZE;
 
-  grow_stack_bytes(size);
+  grow_stack(size_word);
   grow_fs(size_word);
-  codegen_rvalue(node);
-  pop_reg(reg_X); // source aggregate address
-  grow_fs(-1);
-  mov_reg_imm(reg_Y, (cgc_fs - save_fs) * WORD_SIZE);
-  add_reg_reg(reg_Y, reg_SP);
-  copy_obj(reg_Y, 0, reg_X, 0, size);
-  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+  codegen_aggregate_into(reg_SP, 0, node, size_word);
 }
 #else
 #define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
