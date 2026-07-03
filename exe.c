@@ -2265,12 +2265,16 @@ void codegen_rvalue(ast node) {
 #endif // SUPPORT_FULL_ARITHMETIC
       push_reg(reg_X);
     } else if (op == '!') {
+      lbl1 = alloc_label(0);
+      lbl2 = alloc_label(0);
+      codegen_rvalue_and_cmp_0(EQ, lbl1, child0);
+      // fall through => child0 != 0 => result = 0
       xor_reg_reg(reg_X, reg_X);
+      jump(lbl2);
+      def_label(lbl1); // child0 == 0 => result = 1
+      mov_reg_imm(reg_X, 1);
+      def_label(lbl2);
       push_reg(reg_X);
-      grow_fs(1);
-      codegen_rvalue(child0);
-      codegen_binop(EQ_EQ, int_type, value_type(child0));
-      grow_fs(-2);
     } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
       codegen_compound_assignment(op, child0, 0);
     } else if (op == '&') {
