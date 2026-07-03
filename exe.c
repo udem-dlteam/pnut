@@ -1127,6 +1127,14 @@ void convert_reg(const int reg, const ast from_type, const ast to_type) {
   }
 }
 
+void convert_top(const ast from_type, const ast to_type) {
+  if (conversion_needed(from_type, to_type)) {
+    pop_reg(reg_X);
+    convert_reg(reg_X, from_type, to_type);
+    push_reg(reg_X);
+  }
+}
+
 #else
 
 // Bootstrapping pnut doesn't require proper integer promotion and the usual
@@ -1135,6 +1143,7 @@ void convert_reg(const int reg, const ast from_type, const ast to_type) {
 #define integer_promote(x) (x)
 #define usual_arith_conv(x, y) (y)
 #define convert_reg(reg, from_type, to_type) ((void) 0)
+#define convert_top(from_type, to_type) ((void) 0)
 
 #endif // SUPPORT_FULL_ARITHMETIC
 
@@ -1642,12 +1651,14 @@ void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
 //    expression, and would pile up on the stack during loops if not freed right
 //    away.
 //    Handled by `codegen_rvalue_and_cmp_0`.
-//  - When evaluating a ternary operator condition, since the individual arms
-//    may allocate a different number of temporaries.
-//    Handled by `codegen_ternary_arm`.
+//  - When evaluating a ternary operator arm, since the individual arms may
+//    allocate a different number of temporaries while both must leave the same
+//    stack shape at the join point.
+//    Handled by `codegen_aggregate`.
 //  - When generating a function call, since the temporary would sit between the
 //    arguments and/or function pointer (for indirect calls).
-//    Handled by `codegen_rvalue_and_drop_temps`.
+//    Handled by `codegen_rvalue_and_drop_temps` for scalar arguments, and
+//    `codegen_aggregate` for by-value struct/union arguments.
 //  - When evaluating a local variable initializer, since temporary values would
 //    offset the local variable's address which is assumed to not change.
 //    Handled by `codegen_rvalue_and_drop_temps`.
@@ -1673,6 +1684,28 @@ void codegen_rvalue_and_drop_temps(ast node) {
     grow_fs(1);
   }
 }
+
+// Evaluate an aggregate rvalue and place it directly on top of the stack,
+// dropping any temporaries allocated during evaluation. The buffer is
+// allocated before evaluating the expression so that the value is copied
+// directly into place, below the temporaries (in which the value may live,
+// hence the copy-then-drop order).
+void codegen_aggregate(ast node, ast type) {
+  // Round up the size to a multiple of WORD_SIZE to keep the stack aligned
+  int size = type_width(type, true, true);
+  int size_word = size / WORD_SIZE;
+  int save_fs = cgc_fs + size_word; // frame size after the aggregate is allocated
+
+  grow_stack_bytes(size);
+  grow_fs(size_word);
+  codegen_rvalue(node);
+  pop_reg(reg_X); // source aggregate address
+  grow_fs(-1);
+  mov_reg_imm(reg_Y, (cgc_fs - save_fs) * WORD_SIZE);
+  add_reg_reg(reg_Y, reg_SP);
+  copy_obj(reg_Y, 0, reg_X, 0, size);
+  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
+}
 #else
 #define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
 #endif
@@ -1681,30 +1714,9 @@ int codegen_param(ast param) {
   int type = value_type(param);
 
 #ifdef SUPPORT_STRUCT_UNION
-  int size = type_width(type, false, true);
-  int save_fs = cgc_fs;
-  int temp_words;
-
   if (is_struct_or_union_type(type)) {
-    codegen_rvalue(param);
-    pop_reg(reg_X);
-    grow_fs(-1);
-    temp_words = cgc_fs - save_fs;
-    grow_stack_bytes(word_size_align(size));
-    grow_fs(word_size_align(size) / WORD_SIZE);
-    copy_obj(reg_SP, 0, reg_X, 0, size);
-    if (temp_words != 0) {
-      // The argument was copied from a temporary (e.g. a struct-returning
-      // call's result) that sits right below it on the stack. Slide the
-      // argument copy down over the temporaries so that the argument words stay
-      // contiguous (the callee addresses its parameters relative to the stack
-      // pointer). The regions don't overlap because the temporary area contains
-      // the source object, so it is at least as large as the argument.
-      mov_reg_imm(reg_X, temp_words * WORD_SIZE);
-      add_reg_reg(reg_X, reg_SP);
-      copy_obj(reg_X, 0, reg_SP, 0, size);
-      drop_stack_words(temp_words);
-    }
+    // Place the aggregate argument directly on the stack
+    codegen_aggregate(param, type);
   } else
 #endif
   {
@@ -1858,65 +1870,45 @@ void codegen_call(ast node) {
   push_reg(reg_X);
 }
 
-// One arm of a ternary expression: evaluate the arm and leave its value in
-// reg_X, freeing the arm's temporaries so that both arms leave the same stack
-// shape. width != 0 means the ternary is aggregate-valued: the arm's value (a
-// source address) is copied into the result buffer allocated right below the
-// arm's temporaries, and reg_X is set to the buffer address.
-void codegen_ternary_arm(ast arm, int width) {
-  int save_fs = cgc_fs;
-
-  codegen_rvalue(arm); // for aggregates, the value is the address
-  pop_reg(reg_X);
-  grow_fs(-1);
-#ifdef SUPPORT_STRUCT_UNION
-  if (width != 0) {
-    mov_reg_imm(reg_Y, (cgc_fs - save_fs) * WORD_SIZE);
-    add_reg_reg(reg_Y, reg_SP);
-    copy_obj(reg_Y, 0, reg_X, 0, width);
-    mov_reg_reg(reg_X, reg_Y);
-  }
-#endif
-  if (cgc_fs != save_fs) drop_stack_words(cgc_fs - save_fs);
-}
-
-// Ternary expression. Each arm leaves its value in reg_X, which is pushed at
-// the join point; the caller accounts for the value word (grow_fs(1) at the
-// end of codegen_rvalue).
-// Aggregate-valued ternaries get a result buffer allocated before branching,
-// since the arms may allocate different amounts of temporaries; the value is
-// then the buffer address.
+// Ternary expression. Each arm leaves its value on the stack; the caller
+// accounts for the value word (grow_fs(1) at the end of codegen_rvalue), so
+// each arm compensates with grow_fs(-1) since only one of them executes.
 void codegen_ternary(ast node) {
   int lbl1 = alloc_label(0); // false label
   int lbl2 = alloc_label(0); // end label
-  int width = 0;
 #if defined(SUPPORT_FULL_ARITHMETIC) || defined(SUPPORT_STRUCT_UNION)
   ast type = value_type(node);
 #endif
-
 #ifdef SUPPORT_STRUCT_UNION
+  int save_fs = cgc_fs;
+
   if (is_struct_or_union_type(type)) {
-    width = type_width(type, true, false);
-    grow_stack_bytes(width);
-    grow_fs(word_size_align(width) / WORD_SIZE);
+    codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
+    codegen_aggregate(get_child_('?', node, 1), type); // value when true
+    jump(lbl2);                                        // jump to end
+    def_label(lbl1);                                   // false label
+    cgc_fs = save_fs;                                  // reset fs for false arm
+    codegen_aggregate(get_child_('?', node, 2), type); // value when false
+    def_label(lbl2);                                   // end label
+    push_reg(reg_SP);                                  // agg buffer is on top of the stack
+    grow_fs(1);                                        // account for the pushed address
+  } else
+#endif
+  {
+    codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
+    codegen_rvalue_and_drop_temps(get_child_('?', node, 1)); // value when true
+#ifdef SUPPORT_FULL_ARITHMETIC
+    convert_top(value_type(get_child_('?', node, 1)), type); // Convert to common type
+#endif
+    grow_fs(-1);                                             // reset fs for false arm
+    jump(lbl2);                                              // jump to end
+    def_label(lbl1);                                         // false label
+    codegen_rvalue_and_drop_temps(get_child_('?', node, 2)); // value when false
+#ifdef SUPPORT_FULL_ARITHMETIC
+    convert_top(value_type(get_child_('?', node, 2)), type); // Convert to common type
+#endif
+    def_label(lbl2);                                         // end label
   }
-#endif
-
-  codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
-  codegen_ternary_arm(get_child_('?', node, 1), width); // value when true
-#ifdef SUPPORT_FULL_ARITHMETIC
-  // The chosen arm is converted to the common type of the two arms
-  if (width == 0) convert_reg(reg_X, value_type(get_child_('?', node, 1)), type);
-#endif
-  jump(lbl2);
-  def_label(lbl1);
-  codegen_ternary_arm(get_child_('?', node, 2), width); // value when false
-#ifdef SUPPORT_FULL_ARITHMETIC
-  if (width == 0) convert_reg(reg_X, value_type(get_child_('?', node, 2)), type);
-#endif
-  def_label(lbl2);
-
-  push_reg(reg_X);
 }
 
 #ifdef SUPPORT_GOTO
@@ -2429,6 +2421,7 @@ void codegen_rvalue(ast node) {
 
     if (op == '?') {
       codegen_ternary(node);
+      grow_fs(-1); // offset end of function grow_fs(1)
     } else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
