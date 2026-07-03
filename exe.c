@@ -1606,7 +1606,7 @@ void codegen_binop(int op, ast left_type, ast right_type) {
 
 void codegen_rvalue(ast node);
 void codegen_statement(ast node);
-int codegen_lvalue(ast node);
+void codegen_lvalue(ast node);
 
 // Evaluate a condition expression and pop its value into reg_X, freeing any
 // aggregate temporaries allocated during evaluation.
@@ -1943,11 +1943,10 @@ void codegen_goto(ast node) {
 #endif // SUPPORT_GOTO
 
 // Return the width of the lvalue
-int codegen_lvalue(ast node) {
+void codegen_lvalue(ast node) {
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   int binding;
-  int lvalue_width = 0;
   ast type;
   ast child0, child1;
 
@@ -1960,8 +1959,7 @@ int codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          lvalue_width = cgc_fs - heap[binding+3];
-          mov_reg_imm(reg_X, lvalue_width * WORD_SIZE);
+          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
           push_reg(reg_X);
           break;
@@ -1983,7 +1981,6 @@ int codegen_lvalue(ast node) {
           fatal_error("codegen_lvalue: identifier not found");
           break;
       }
-      lvalue_width = type_width(heap[binding+4], true, false);
     } else {
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
@@ -1994,7 +1991,6 @@ int codegen_lvalue(ast node) {
     if (op == '*') {
       codegen_rvalue(child0);
       grow_fs(-1);
-      lvalue_width = ref_type_width(value_type(child0));
     } else {
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
@@ -2008,7 +2004,6 @@ int codegen_lvalue(ast node) {
       codegen_rvalue(child1);
       codegen_binop('+', type, value_type(child1));
       grow_fs(-2);
-      lvalue_width = ref_type_width(type);
     }
 #ifdef SUPPORT_STRUCT_UNION
     else if (op == '.') {
@@ -2022,7 +2017,6 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, false); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: . operator on non-struct type");
       }
@@ -2039,7 +2033,6 @@ int codegen_lvalue(ast node) {
         }
         push_reg(reg_X);
         grow_fs(-1);
-        lvalue_width = type_width(get_child_(DECL, struct_member(type, child1), 1), true, false); // child 1 of member is the type
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
@@ -2047,7 +2040,6 @@ int codegen_lvalue(ast node) {
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
       codegen_lvalue(child1);
-      lvalue_width = type_width(child0, true, false);
       grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       dump_node(node);
@@ -2059,12 +2051,7 @@ int codegen_lvalue(ast node) {
     fatal_error("codegen_lvalue: unexpected operator");
   }
 
-  if (lvalue_width == 0) {
-    fatal_error("codegen_lvalue: lvalue_width == 0");
-  }
-
   grow_fs(1);
-  return lvalue_width;
 }
 
 void codegen_string(char *string_start, char *string_end) {
@@ -2086,7 +2073,8 @@ void codegen_string(char *string_start, char *string_end) {
 // |=, ^=, <<=, >>=) and ++/-- (pre/post), leaving the result on the stack.
 void codegen_compound_assignment(int op, ast child0, ast child1) {
   ast left_type = value_type(child0);
-  int left_width = codegen_lvalue(child0);
+  int left_width = type_width(left_type, true, false);
+  codegen_lvalue(child0);
   // Copy the initial value and place it at the bottom of the stack
   pop_reg(reg_Y); // destination address
   load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(left_type));
@@ -2322,7 +2310,8 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == '=') {
       type = value_type(child0);
-      left_width = codegen_lvalue(child0);
+      left_width = type_width(type, true, false);
+      codegen_lvalue(child0);
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
