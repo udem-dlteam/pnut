@@ -1718,9 +1718,8 @@ void codegen_aggregate(ast node, ast type) {
 #endif
 
 void codegen_param(ast param) {
-  int type = value_type(param);
-
 #ifdef SUPPORT_STRUCT_UNION
+  int type = value_type(param);
   if (is_struct_or_union_type(type)) {
     // Place the aggregate argument directly on the stack
     codegen_aggregate(param, type);
