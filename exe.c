@@ -190,8 +190,8 @@ ast current_fun_return_type = 0;
 // Environment tracking
 #include "env.c"
 
-void grow_fs(const int words) {
-  cgc_fs += words;
+int grow_fs(const int words) {
+  return (cgc_fs += words);
 }
 
 const int reg_X;
@@ -256,6 +256,35 @@ void call(int lbl);
 void call_reg(int reg);
 void ret();
 void debug_interrupt();
+
+// ============================== Stack Operations =============================
+//
+// The following functions abstract over the stack operations, which are used to
+// manage the stack pointer and the frame size (cgc_fs). Use these functions
+// instead of directly manipulating the stack pointer and cgc_fs unless needed.
+
+void stack_push(const int reg) {
+  push_reg(reg);
+  grow_fs(1);
+}
+
+void stack_pop(const int reg) {
+  pop_reg(reg);
+  grow_fs(-1);
+}
+
+void stack_grow(const int words) {
+  add_reg_imm(reg_SP, -words * WORD_SIZE);
+}
+
+void reset_stack_to(const int to_cgc_fs) {
+  if (to_cgc_fs != cgc_fs) {
+    stack_grow(to_cgc_fs - cgc_fs);
+    cgc_fs += (to_cgc_fs - cgc_fs);
+  }
+}
+
+// =============================================================================
 
 void load_mem_location(int dst, int base, int offset, int width, bool is_signed) {
   if (is_signed) {
@@ -356,10 +385,10 @@ void mul_for_pointer_arith(int reg, int width) {
       add_reg_reg(reg, reg);
     }
   } else {
-    push_reg(other_reg);
+    stack_push(other_reg);
     mov_reg_imm(other_reg, width);
     mul_reg_reg(reg, other_reg);
-    pop_reg(other_reg);
+    stack_pop(other_reg);
   }
 }
 
@@ -371,11 +400,11 @@ void div_for_pointer_arith(int reg, int width) {
   if (is_power_of_2(width)) {
     // sar_reg_reg does not work with reg_Y, so we need to shift the value to reg_X
     if (reg_start != reg_X) {
-      push_reg(reg_X);                // Save reg_X
+      stack_push(reg_X);                // Save reg_X
       mov_reg_reg(reg_X, reg_start);  // Move the value to reg_X
       reg = reg_X;
     } else {
-      push_reg(reg_Y);                // Otherwise we still clobber reg_Y so save it
+      stack_push(reg_Y);                // Otherwise we still clobber reg_Y so save it
     }
 
     // At this point, reg is always reg_X, and reg_Y is free
@@ -385,17 +414,17 @@ void div_for_pointer_arith(int reg, int width) {
     // Now reg_X contains the result, and we move it back in reg_start if needed
     if (reg_start != reg_X) {
       mov_reg_reg(reg_start, reg_X);
-      pop_reg(reg_X);
+      stack_pop(reg_X);
     } else {
-      pop_reg(reg_Y); // Otherwise, we still need to restore reg_Y
+      stack_pop(reg_Y); // Otherwise, we still need to restore reg_Y
     }
   } else {
     // div_reg_reg only works with reg_X on certain architectures, so we need to save it
     if (reg_start != reg_X) {
-      push_reg(reg_X);
+      stack_push(reg_X);
       reg = reg_X;
     } else {
-      push_reg(reg_Y);
+      stack_push(reg_Y);
     }
 
     mov_reg_imm(reg_Y, width);
@@ -403,9 +432,9 @@ void div_for_pointer_arith(int reg, int width) {
 
     if (reg_start != reg_X) {
       mov_reg_reg(reg_start, reg_X);
-      pop_reg(reg_X);
+      stack_pop(reg_X);
     } else {
-      pop_reg(reg_Y);
+      stack_pop(reg_Y);
     }
   }
 }
@@ -456,17 +485,6 @@ int word_size_align(const int n) {
 
 int align_to(const int mul, const int n) {
   return (n + mul - 1) / mul * mul;
-}
-
-void grow_stack(const int words) {
-  add_reg_imm(reg_SP, -words * WORD_SIZE);
-}
-
-void reset_stack_to(const int to_cgc_fs) {
-  if (to_cgc_fs != cgc_fs) {
-    grow_stack(to_cgc_fs - cgc_fs);
-    grow_fs(to_cgc_fs - cgc_fs);
-  }
 }
 
 void rt_debug(char* msg);
@@ -664,7 +682,7 @@ void jump_to_goto_label(int lbl) {
 
   if (addr < 0) {
     // label address is currently known
-    grow_stack(lbl_fs - cgc_fs);
+    stack_grow(lbl_fs - cgc_fs);
     start_code_alloc = code_alloc;
     jump_rel(0); // Generate dummy jump instruction to get instruction length
     addr = -addr - code_alloc; // compute relative address
@@ -673,7 +691,7 @@ void jump_to_goto_label(int lbl) {
   } else {
     // label address is not yet known
     // placeholders for when we know the destination address and frame size
-    grow_stack(0);
+    stack_grow(0);
     jump_rel(0);
     code[code_alloc-1] = addr; // chain with previous patch address
     code[code_alloc-2] = cgc_fs; // save current frame size
@@ -703,7 +721,7 @@ void def_goto_label(int lbl) {
       next_addr = code[addr-1]; // get pointer to next patch address
       goto_fs = code[addr-2]; // get frame size at goto instruction
       code_alloc = code[addr-3]; // reset code pointer to start of jump_to_goto_label instruction
-      grow_stack(cgc_fs - goto_fs); // adjust stack
+      stack_grow(cgc_fs - goto_fs); // adjust stack
       start_code_alloc = code_alloc;
       jump_rel(0); // Generate dummy jump instruction to get instruction length
       addr = label_addr - code_alloc; // compute relative address
@@ -1124,9 +1142,9 @@ void convert_reg(const int reg, const ast from_type, const ast to_type) {
 
 void convert_top(const ast from_type, const ast to_type) {
   if (conversion_needed(from_type, to_type)) {
-    pop_reg(reg_X);
+    stack_pop(reg_X);
     convert_reg(reg_X, from_type, to_type);
-    push_reg(reg_X);
+    stack_push(reg_X);
   }
 }
 
@@ -1478,8 +1496,8 @@ void codegen_binop(int op, ast left_type, ast right_type) {
   bool left_is_numeric = is_numeric_type(left_type);
   bool right_is_numeric = is_numeric_type(right_type);
 
-  pop_reg(reg_Y); // rhs operand
-  pop_reg(reg_X); // lhs operand
+  stack_pop(reg_Y); // rhs operand
+  stack_pop(reg_X); // lhs operand
 
 #ifdef SUPPORT_FULL_ARITHMETIC
   // Operands are converted to the common type given by the usual arithmetic
@@ -1596,7 +1614,7 @@ void codegen_binop(int op, ast left_type, ast right_type) {
   }
 #endif // SUPPORT_FULL_ARITHMETIC
 
-  push_reg(reg_X);
+  stack_push(reg_X);
 }
 
 void codegen_rvalue(ast node);
@@ -1671,11 +1689,9 @@ void codegen_rvalue_no_temps(ast node) {
     if (is_aggregate_type(value_type(node))) {
       fatal_error("codegen_rvalue_no_temps: array value backed by a temporary is not supported in this context");
     }
-    pop_reg(reg_X);
-    grow_fs(-1);
+    stack_pop(reg_X);
     reset_stack_to(save_fs);
-    push_reg(reg_X);
-    grow_fs(1);
+    stack_push(reg_X);
   }
 }
 
@@ -1683,11 +1699,10 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width) {
   int save_fs = cgc_fs;
   if (dst_reg != reg_SP) {
     // Save reg in case codegen_rvalue clobbers it
-    push_reg(dst_reg); grow_fs(1);
+    stack_push(dst_reg);
   }
   codegen_rvalue(node);
-  pop_reg(reg_X); // source aggregate address
-  grow_fs(-1);
+  stack_pop(reg_X); // source aggregate address
   if (dst_reg == reg_SP) {
     // Account for temporaries allocated during evaluation
     dst_offset += (cgc_fs - save_fs) * WORD_SIZE;
@@ -1708,7 +1723,7 @@ void codegen_aggregate(ast node, ast type) {
   // Round up the size to a multiple of WORD_SIZE to keep the stack aligned
   int size_word = type_width(type, true, true) / WORD_SIZE;
 
-  grow_stack(size_word);
+  stack_grow(size_word);
   grow_fs(size_word);
   codegen_aggregate_into(reg_SP, 0, node, size_word * WORD_SIZE);
 }
@@ -1789,8 +1804,7 @@ void emit_function_call(ast fun, int binding) {
     // because they would sit between the arguments and the callee's frame,
     // breaking the callee's SP-relative parameter addressing.
     codegen_rvalue_no_temps(fun);
-    pop_reg(reg_X);
-    grow_fs(-1);
+    stack_pop(reg_X);
     call_reg(reg_X);
   }
 }
@@ -1810,9 +1824,8 @@ void codegen_call(ast node) {
     // hidden argument, and is also the value of the call expression. The
     // buffer is freed at the end of the full expression.
     buf_words = type_width(fun_return_type, true, true) / WORD_SIZE;
-    grow_stack(buf_words);
-    grow_fs(buf_words);
-    save_fs = cgc_fs; // Keep buffer alive after call
+    stack_grow(buf_words);
+    save_fs = grow_fs(buf_words); // Keep buffer alive after call
   }
 #endif
 
@@ -1821,7 +1834,7 @@ void codegen_call(ast node) {
     #ifdef ENABLE_PNUT_INLINE_INTERRUPT
     if (get_val_(IDENTIFIER, fun) == intern_str("PNUT_INLINE_INTERRUPT")) {
       debug_interrupt();
-      push_reg(reg_X); // Dummy push to keep the stack balanced
+      stack_push(reg_X); // Dummy push to keep the stack balanced
       return;
     }
     #endif
@@ -1850,8 +1863,7 @@ void codegen_call(ast node) {
     // Push the buffer address as the hidden first argument (pushed last)
     mov_reg_imm(reg_X, (cgc_fs - save_fs) * WORD_SIZE);
     add_reg_reg(reg_X, reg_SP);
-    push_reg(reg_X);
-    grow_fs(1);
+    stack_push(reg_X);
   }
 #endif
 
@@ -1865,20 +1877,18 @@ void codegen_call(ast node) {
   if (buf_words != 0) mov_reg_reg(reg_X, reg_SP);
 #endif
 
-  push_reg(reg_X);
+  stack_push(reg_X);
 }
 
-// Ternary expression. Each arm leaves its value on the stack; the caller
-// accounts for the value word (grow_fs(1) at the end of codegen_rvalue), so
-// each arm compensates with grow_fs(-1) since only one of them executes.
+// Ternary expression. Each arm leaves its value on the stack.
 void codegen_ternary(ast node) {
   int lbl1 = alloc_label(0); // false label
   int lbl2 = alloc_label(0); // end label
+  int save_fs = cgc_fs;
 #if defined(SUPPORT_FULL_ARITHMETIC) || defined(SUPPORT_STRUCT_UNION)
   ast type = value_type(node);
 #endif
 #ifdef SUPPORT_STRUCT_UNION
-  int save_fs = cgc_fs;
 
   if (is_struct_or_union_type(type)) {
     codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
@@ -1888,8 +1898,7 @@ void codegen_ternary(ast node) {
     cgc_fs = save_fs;                                  // reset fs for false arm
     codegen_aggregate(get_child_('?', node, 2), type); // value when false
     def_label(lbl2);                                   // end label
-    push_reg(reg_SP);                                  // agg buffer is on top of the stack
-    grow_fs(1);                                        // account for the pushed address
+    stack_push(reg_SP);                                // agg buffer is on top of the stack
   } else
 #endif
   {
@@ -1898,7 +1907,7 @@ void codegen_ternary(ast node) {
 #ifdef SUPPORT_FULL_ARITHMETIC
     convert_top(value_type(get_child_('?', node, 1)), type); // Convert to common type
 #endif
-    grow_fs(-1);                                             // reset fs for false arm
+    cgc_fs = save_fs;                                        // reset fs for false arm
     jump(lbl2);                                              // jump to end
     def_label(lbl1);                                         // false label
     codegen_rvalue_no_temps(get_child_('?', node, 2));       // value when false
@@ -1947,12 +1956,12 @@ void codegen_lvalue(ast node) {
         case BINDING_VAR_LOCAL:
           mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
           add_reg_reg(reg_X, reg_SP);
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
         case BINDING_VAR_GLOBAL:
           mov_reg_imm(reg_X, heap[binding+3]);
           add_reg_reg(reg_X, reg_glo);
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
         case BINDING_FUN:
           // Function pointers are stored in the forward jump table
@@ -1961,7 +1970,7 @@ void codegen_lvalue(ast node) {
 #else
           mov_reg_lbl(reg_X, heap[binding+4]);
 #endif
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
         default:
           fatal_error("codegen_lvalue: identifier not found");
@@ -1976,7 +1985,6 @@ void codegen_lvalue(ast node) {
 
     if (op == '*') {
       codegen_rvalue(child0);
-      grow_fs(-1);
     } else {
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
@@ -1989,20 +1997,18 @@ void codegen_lvalue(ast node) {
       codegen_rvalue(child0);
       codegen_rvalue(child1);
       codegen_binop('+', type, value_type(child1));
-      grow_fs(-2);
     }
 #ifdef SUPPORT_STRUCT_UNION
     else if (op == '.') {
       type = value_type(child0);
       if (is_struct_or_union_type(type)) {
         codegen_lvalue(child0);
-        pop_reg(reg_X);
+        stack_pop(reg_X);
         // union members are at the same offset: 0
         if (get_op(type) == STRUCT_KW) {
           add_reg_imm(reg_X, struct_member_offset(type, child1));
         }
-        push_reg(reg_X);
-        grow_fs(-1);
+        stack_push(reg_X);
       } else {
         fatal_error("codegen_lvalue: . operator on non-struct type");
       }
@@ -2012,13 +2018,12 @@ void codegen_lvalue(ast node) {
       if (get_op(type) == '*' && is_struct_or_union_type(get_child_('*', type, 1))) {
         type = get_child_('*', type, 1);
         codegen_rvalue(child0);
-        pop_reg(reg_X);
+        stack_pop(reg_X);
         // union members are at the same offset: 0
         if (get_op(type) == STRUCT_KW) {
           add_reg_imm(reg_X, struct_member_offset(type, child1));
         }
-        push_reg(reg_X);
-        grow_fs(-1);
+        stack_push(reg_X);
       } else {
         fatal_error("codegen_lvalue: -> operator on non-struct pointer type");
       }
@@ -2026,7 +2031,6 @@ void codegen_lvalue(ast node) {
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
       codegen_lvalue(child1);
-      grow_fs(-1); // grow_fs is called at the end of the function, so we need to decrement it here
     } else {
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
@@ -2036,14 +2040,13 @@ void codegen_lvalue(ast node) {
     dump_node(node);
     fatal_error("codegen_lvalue: unexpected operator");
   }
-
-  grow_fs(1);
 }
 
 void codegen_string(char *string_start, char *string_end) {
   int lbl = alloc_label(0);
 
   call(lbl);
+  grow_fs(1); // Account for the value pushed by the call
 
   while (string_start != string_end) {
     emit_i8(*string_start);
@@ -2062,17 +2065,15 @@ void codegen_compound_assignment(int op, ast child0, ast child1) {
   int left_width = type_width(left_type, true, false);
   codegen_lvalue(child0);
   // Copy the initial value and place it at the bottom of the stack
-  pop_reg(reg_Y); // destination address
+  stack_pop(reg_Y); // destination address
   load_mem_location(reg_X, reg_Y, 0, left_width, is_signed_numeric_type(left_type));
-  push_reg(reg_X); // initial value / result slot
-  push_reg(reg_Y); // destination address, kept adjacent to the value
-  push_reg(reg_X); // current value of the lvalue to be modified
-  grow_fs(2);      // account for the address and value words above the result slot
+  stack_push(reg_X); // initial value / result slot
+  stack_push(reg_Y); // destination address, kept adjacent to the value
+  stack_push(reg_X); // current value of the lvalue to be modified
 
   if (child1 == 0) { // child1 == 0 => child1 is 1 int literal
     mov_reg_imm(reg_X, 1);
-    push_reg(reg_X);
-    grow_fs(1);
+    stack_push(reg_X);
     codegen_binop(op, left_type, int_type);
   } else {
     codegen_rvalue_no_temps(child1);
@@ -2085,15 +2086,14 @@ void codegen_compound_assignment(int op, ast child0, ast child1) {
   //   top-2:     initial value of the modified lvalue
 
   // Write the result back to the lvalue's destination address
-  pop_reg(reg_X);
-  pop_reg(reg_Y);
+  stack_pop(reg_X);
+  stack_pop(reg_Y);
   write_mem_location(reg_Y, 0, reg_X, left_width);
-  grow_fs(-4);
 
   if (op != MINUS_MINUS_POST && op != PLUS_PLUS_POST) {
     // Overwrite the result slot for operations that return the new value
-    pop_reg(reg_Y);
-    push_reg(reg_X);
+    stack_pop(reg_Y);
+    stack_push(reg_X);
   }
 }
 
@@ -2123,10 +2123,10 @@ void codegen_rvalue(ast node) {
 #else
       mov_reg_imm(reg_X, -get_val(node));
 #endif
-      push_reg(reg_X);
+      stack_push(reg_X);
     } else if (op == CHARACTER) {
       mov_reg_imm(reg_X, get_val_(CHARACTER, node));
-      push_reg(reg_X);
+      stack_push(reg_X);
     } else if (op == IDENTIFIER) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
@@ -2143,7 +2143,7 @@ void codegen_rvalue(ast node) {
 #else
           load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
 #endif
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
 
         case BINDING_VAR_LOCAL:
@@ -2155,7 +2155,7 @@ void codegen_rvalue(ast node) {
           if (!is_aggregate_type(heap[binding+4])) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
         case BINDING_VAR_GLOBAL:
           mov_reg_imm(reg_X, heap[binding+3]);
@@ -2165,7 +2165,7 @@ void codegen_rvalue(ast node) {
           if (!is_aggregate_type(heap[binding+4])) {
             load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
         case BINDING_ENUM_CST:
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -2173,7 +2173,7 @@ void codegen_rvalue(ast node) {
 #else
           mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
 #endif
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
 
         case BINDING_FUN:
@@ -2182,7 +2182,7 @@ void codegen_rvalue(ast node) {
 #else
           mov_reg_lbl(reg_X, heap[binding+4]);
 #endif
-          push_reg(reg_X);
+          stack_push(reg_X);
           break;
 
         default:
@@ -2201,27 +2201,24 @@ void codegen_rvalue(ast node) {
     if (op == '*') {
       type = value_type(child0);
       codegen_rvalue(child0);
-      grow_fs(-1);
       if (is_function_type(type)) {
       } else if (is_pointer_type(type)) {
         // The value of an aggregate (struct/union/array) is its address, which
         // is already on the stack, so no load is needed. This also avoids an
         // oversized load_mem_location for objects wider than a word.
         if (!is_aggregate_type(dereference_type(type))) {
-          pop_reg(reg_X);
+          stack_pop(reg_X);
           load_mem_location(reg_X, reg_X, 0, ref_type_width(type), is_signed_numeric_type(dereference_type(type)));
-          push_reg(reg_X);
+          stack_push(reg_X);
         }
       } else {
         fatal_error("codegen_rvalue: non-pointer is being dereferenced with *");
       }
     } else if (op == '+') {
       codegen_rvalue(child0);
-      grow_fs(-1);
     } else if (op == '-' || op == '~') {
       codegen_rvalue(child0);
-      pop_reg(reg_Y);
-      grow_fs(-1);
+      stack_pop(reg_Y);
       if (op == '-') {
         xor_reg_reg(reg_X, reg_X);
         sub_reg_reg(reg_X, reg_Y);
@@ -2238,7 +2235,7 @@ void codegen_rvalue(ast node) {
         extend_reg(reg_X, type_width(type, false, false), is_signed_numeric_type(type));
       }
 #endif // SUPPORT_FULL_ARITHMETIC
-      push_reg(reg_X);
+      stack_push(reg_X);
     } else if (op == '!') {
       lbl1 = alloc_label(0);
       lbl2 = alloc_label(0);
@@ -2249,12 +2246,11 @@ void codegen_rvalue(ast node) {
       def_label(lbl1); // child0 == 0 => result = 1
       mov_reg_imm(reg_X, 1);
       def_label(lbl2);
-      push_reg(reg_X);
+      stack_push(reg_X);
     } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
       codegen_compound_assignment(op, child0, 0);
     } else if (op == '&') {
       codegen_lvalue(child0);
-      grow_fs(-1);
     }
 #ifdef SUPPORT_SIZEOF
     else if (op == SIZEOF_KW) {
@@ -2263,7 +2259,7 @@ void codegen_rvalue(ast node) {
       } else {
         mov_reg_imm(reg_X, type_width(value_type(child0), true, false));
       }
-      push_reg(reg_X);
+      stack_push(reg_X);
     }
 #endif // SUPPORT_SIZEOF
     else {
@@ -2286,7 +2282,6 @@ void codegen_rvalue(ast node) {
         // expression. codegen_binop's pop/pop/push would corrupt them, so it
         // is skipped.
         codegen_rvalue(child1);
-        grow_fs(-1); // nets the buried lhs word with the final grow_fs(1)
       } else
 #endif
       {
@@ -2294,7 +2289,6 @@ void codegen_rvalue(ast node) {
         // the lhs value word, so the rhs's temporaries are flushed.
         codegen_rvalue_no_temps(child1);
         codegen_binop(op, value_type(child0), value_type(child1));
-        grow_fs(-2);
       }
     } else if (op == '=') {
       type = value_type(child0);
@@ -2303,21 +2297,19 @@ void codegen_rvalue(ast node) {
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
-        pop_reg(reg_Y); // destination address
-        grow_fs(-1);
+        stack_pop(reg_Y); // destination address
         codegen_aggregate_into(reg_Y, 0, child1, left_width);
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
         codegen_rvalue_no_temps(child1); // so that the destination address is right below the value
-        pop_reg(reg_X);
-        pop_reg(reg_Y);
-        grow_fs(-2);
+        stack_pop(reg_X);
+        stack_pop(reg_Y);
         // Convert the result to the assignment expression's type.
         convert_reg(reg_X, value_type(child1), type);
         write_mem_location(reg_Y, 0, reg_X, left_width);
       }
-      push_reg(reg_X);
+      stack_push(reg_X);
     } else if (op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
       codegen_compound_assignment(op, child0, child1);
     } else if (op == AMP_AMP || op == BAR_BAR) {
@@ -2334,7 +2326,7 @@ void codegen_rvalue(ast node) {
       def_label(lbl1);
       mov_reg_imm(reg_X, TERNARY(op == AMP_AMP, 0, 1)); // an operand decided
       def_label(lbl2);
-      push_reg(reg_X); // accounted by the final grow_fs(1)
+      stack_push(reg_X);
     } else if (op == '(') {
       codegen_call(node);
     }
@@ -2343,8 +2335,7 @@ void codegen_rvalue(ast node) {
       type = value_type(child0);
       if (is_struct_or_union_type(type)) {
         codegen_rvalue(child0); // for aggregates, the value is the address
-        pop_reg(reg_Y);
-        grow_fs(-1);
+        stack_pop(reg_Y);
         // union members are at the same offset: 0
         if (get_op(type) == STRUCT_KW) {
           add_reg_imm(reg_Y, struct_member_offset(type, child1));
@@ -2353,7 +2344,7 @@ void codegen_rvalue(ast node) {
         if (!is_aggregate_type(type)) {
           load_mem_location(reg_Y, reg_Y, 0, type_width(type, false, false), is_signed_numeric_type(type));
         }
-        push_reg(reg_Y);
+        stack_push(reg_Y);
       } else {
         fatal_error("codegen_rvalue: . operator on non-struct type");
       }
@@ -2362,8 +2353,7 @@ void codegen_rvalue(ast node) {
       if (get_op(type) == '*' && is_struct_or_union_type(get_child_('*', type, 1))) {
         type = get_child_('*', type, 1);
         codegen_rvalue(child0);
-        pop_reg(reg_Y);
-        grow_fs(-1);
+        stack_pop(reg_Y);
         // union members are at the same offset: 0
         if (get_op(type) == STRUCT_KW) {
           add_reg_imm(reg_Y, struct_member_offset(type, child1));
@@ -2372,7 +2362,7 @@ void codegen_rvalue(ast node) {
         if (!is_aggregate_type(type)) {
           load_mem_location(reg_Y, reg_Y, 0, type_width(type, false, false), is_signed_numeric_type(type));
         }
-        push_reg(reg_Y);
+        stack_push(reg_Y);
       } else {
         fatal_error("codegen_rvalue: -> operator on non-struct pointer type");
       }
@@ -2383,12 +2373,11 @@ void codegen_rvalue(ast node) {
 #ifdef SUPPORT_FULL_ARITHMETIC
       child0 = get_child_(DECL, child0, 1); // child 1 of cast is the type
       if (conversion_needed(value_type(child1), child0)) {
-        pop_reg(reg_X);
+        stack_pop(reg_X);
         convert_reg(reg_X, value_type(child1), child0);
-        push_reg(reg_X);
+        stack_push(reg_X);
       }
 #endif
-      grow_fs(-1); // grow_fs(1) is called by codegen_rvalue and at the end of the function
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
@@ -2397,7 +2386,6 @@ void codegen_rvalue(ast node) {
 
     if (op == '?') {
       codegen_ternary(node);
-      grow_fs(-1); // offset end of function grow_fs(1)
     } else {
       dump_node(node);
       fatal_error("codegen_rvalue: unexpected operator");
@@ -2407,8 +2395,6 @@ void codegen_rvalue(ast node) {
     dump_node(node);
     fatal_error("codegen_rvalue: unexpected operator");
   }
-
-  grow_fs(1);
 }
 
 // Evaluate a condition expression and jump to lbl if the condition is true,
@@ -2418,8 +2404,7 @@ void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
   int save_fs = cgc_fs;
 #endif
   codegen_rvalue(node);
-  pop_reg(reg_X);
-  grow_fs(-1);
+  stack_pop(reg_X);
 #ifdef SUPPORT_STRUCT_UNION
   // The node's value is immediately consumed by a conditional jump, so it can
   // be collected right away. This also ensures that temporaries don't pile up
@@ -2518,7 +2503,7 @@ void codegen_initializer_string(int string_symbol, ast type, int base_reg, int o
   } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
     // Create the string and assign global variable to the pointer
     codegen_string(symbol_buf(string_symbol), symbol_buf_end(string_symbol));
-    pop_reg(reg_X);
+    stack_pop(reg_X);
     mov_mem_reg(base_reg, offset, reg_X);
   } else {
     fatal_error("codegen_initializer: string initializer must be assigned to a char[] or char*");
@@ -2612,8 +2597,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           // struct/union), so the temporaries do get flushed and the
           // SP-relative offset stays valid for the write below.
           codegen_rvalue_no_temps(car(init));
-          pop_reg(reg_X);
-          grow_fs(-1);
+          stack_pop(reg_X);
           write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
           break;
       }
@@ -2634,8 +2618,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         // struct/union), so the temporaries do get flushed and the
         // SP-relative offset stays valid for the write below.
         codegen_rvalue_no_temps(init);
-        pop_reg(reg_X);
-        grow_fs(-1);
+        stack_pop(reg_X);
         write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
       } else {
         fatal_error("codegen_initializer: cannot initialize array with scalar value");
@@ -2734,7 +2717,7 @@ void codegen_local_var_decl(ast node) {
   int size = compute_local_var_decl_size(type, init) / WORD_SIZE;
 
   cgc_add_local_var(get_val_(IDENTIFIER, name), size, type);
-  grow_stack(size); // Make room for the local variable
+  stack_grow(size); // Make room for the local variable
 
   if (init != 0) {
     // offset (cgc_fs - heap[cgc_locals + 3]) should be 0 since we just allocated the space
@@ -2954,7 +2937,7 @@ void codegen_statement(ast node) {
       def_label(heap[binding + 4]);           // false jump location of previous case
       heap[binding + 4] = alloc_label(0);     // create false jump location for current case
       codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
-      pop_reg(reg_Y); grow_fs(-1);
+      stack_pop(reg_Y);                       // get case value
       mov_reg_mem(reg_X, reg_SP, 0);          // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       jump(heap[binding + 4]);                // condition is false => jump to next case
@@ -2982,7 +2965,7 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
       // adjust stack and jump to break label
-      grow_stack(heap[binding+2] - cgc_fs);
+      stack_grow(heap[binding+2] - cgc_fs);
       jump(heap[binding+3]);
     } else {
       fatal_error("break is not in the body of a loop");
@@ -2993,7 +2976,7 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_loop(cgc_locals);
     if (binding != 0 && heap[binding+4] != 0) {
       // adjust stack and jump to continue label
-      grow_stack(heap[binding+2] - cgc_fs);
+      stack_grow(heap[binding+2] - cgc_fs);
       jump(heap[binding+4]);
     } else {
       fatal_error("continue is not in the body of a loop");
@@ -3014,8 +2997,7 @@ void codegen_statement(ast node) {
 #endif
       {
       codegen_rvalue(get_child_(RETURN_KW, node, 0));
-      pop_reg(reg_X);
-      grow_fs(-1);
+      stack_pop(reg_X);
       // The returned value is converted to the function's return type, which
       // the callers trust to be correctly extended.
       convert_reg(reg_X, value_type(get_child_(RETURN_KW, node, 0)), current_fun_return_type);
@@ -3023,7 +3005,7 @@ void codegen_statement(ast node) {
     }
 
     // The cleanup code at the bottom isn't hit because of the ret, so cleaning here.
-    grow_stack(-cgc_fs);
+    stack_grow(-cgc_fs);
 
     ret();
 
@@ -3513,7 +3495,7 @@ void init_memory_spaces(int glo_size) {
 #ifdef USE_STACK_FOR_GLOBALS
   int loop_lbl = alloc_label("glo_init_loop");
   mov_reg_reg(reg_Y, reg_SP); // reg_Y = end of global variables/heap
-  grow_stack((glo_size + RT_HEAP_SIZE) / WORD_SIZE); // reg_SP = start of globals table/heap
+  stack_grow((glo_size + RT_HEAP_SIZE) / WORD_SIZE); // reg_SP = start of globals table/heap
   mov_reg_reg(reg_Z, reg_SP); // reg_Z = start of globals table/heap
 
   // Loop over the range [reg_Z, reg_Y)
