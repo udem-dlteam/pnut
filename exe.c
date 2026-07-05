@@ -1140,14 +1140,6 @@ void convert_reg(const int reg, const ast from_type, const ast to_type) {
   }
 }
 
-void convert_top(const ast from_type, const ast to_type) {
-  if (conversion_needed(from_type, to_type)) {
-    stack_pop(reg_X);
-    convert_reg(reg_X, from_type, to_type);
-    stack_push(reg_X);
-  }
-}
-
 #else
 
 // Bootstrapping pnut doesn't require proper integer promotion and the usual
@@ -1156,7 +1148,6 @@ void convert_top(const ast from_type, const ast to_type) {
 #define integer_promote(x) (x)
 #define usual_arith_conv(x, y) (y)
 #define convert_reg(reg, from_type, to_type) ((void) 0)
-#define convert_top(from_type, to_type) ((void) 0)
 
 #endif // SUPPORT_FULL_ARITHMETIC
 
@@ -1607,7 +1598,7 @@ void codegen_binop(int op, ast left_type, ast right_type) {
         extend_reg(reg_X, type_width(left_type, false, false), is_signed_numeric_type(left_type));
     } else if (op == SLASH_EQ || op == PERCENT_EQ
             || op == AMP_EQ || op == BAR_EQ || op == CARET_EQ) {
-      convert_reg(reg_X, common_type, left_type); //
+      convert_reg(reg_X, common_type, left_type);
     } else if (op == RSHIFT_EQ) {
       convert_reg(reg_X, integer_promote(left_type), left_type);
     }
@@ -1622,6 +1613,35 @@ void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node);
 void codegen_lvalue(ast node);
 void codegen_statement(ast node);
 
+
+#ifdef SUPPORT_STRUCT_UNION
+void codegen_rvalue_no_temps(ast node);
+#else
+#define codegen_rvalue_no_temps(node) codegen_rvalue(node)
+#endif
+
+#ifdef SUPPORT_FULL_ARITHMETIC
+void codegen_rvalue_coerced_no_temps(ast node, ast target_type);
+#else
+#define codegen_rvalue_coerced_no_temps(node, target_type) codegen_rvalue_no_temps(node)
+#endif
+
+#ifdef SUPPORT_FULL_ARITHMETIC
+
+// Version of codegen_rvalue that coerces the value to the target type, if needed.
+void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
+  ast src_type = value_type(node);
+  codegen_rvalue_no_temps(node);
+  if (conversion_needed(src_type, target_type)) {
+    stack_pop(reg_X);
+    extend_reg(reg_X, type_width(target_type, false, false), is_signed_numeric_type(target_type));
+    stack_push(reg_X);
+  }
+}
+
+#endif // SUPPORT_FULL_ARITHMETIC
+
+#ifdef SUPPORT_STRUCT_UNION
 // =============================== Struct return ===============================
 //
 // A call to a function returning a struct/union allocates a temporary buffer
@@ -1681,7 +1701,7 @@ void codegen_statement(ast node);
 // allocate temporaries (e.g. f().arr with f returning a struct by value) are
 // rejected instead of being miscompiled. Struct/union-valued expressions
 // never reach this: these contexts route them through codegen_aggregate*.
-#ifdef SUPPORT_STRUCT_UNION
+
 void codegen_rvalue_no_temps(ast node) {
   int save_fs = cgc_fs;
   codegen_rvalue(node);
@@ -1727,8 +1747,7 @@ void codegen_aggregate(ast node, ast type) {
   grow_fs(size_word);
   codegen_aggregate_into(reg_SP, 0, node, size_word * WORD_SIZE);
 }
-#else
-#define codegen_rvalue_no_temps(node) codegen_rvalue(node)
+
 #endif // SUPPORT_STRUCT_UNION
 
 void codegen_param(ast param) {
@@ -1903,17 +1922,11 @@ void codegen_ternary(ast node) {
 #endif
   {
     codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
-    codegen_rvalue_no_temps(get_child_('?', node, 1));       // value when true
-#ifdef SUPPORT_FULL_ARITHMETIC
-    convert_top(value_type(get_child_('?', node, 1)), type); // Convert to common type
-#endif
+    codegen_rvalue_coerced_no_temps(get_child_('?', node, 1), type); // value when true
     cgc_fs = save_fs;                                        // reset fs for false arm
     jump(lbl2);                                              // jump to end
     def_label(lbl1);                                         // false label
-    codegen_rvalue_no_temps(get_child_('?', node, 2));       // value when false
-#ifdef SUPPORT_FULL_ARITHMETIC
-    convert_top(value_type(get_child_('?', node, 2)), type); // Convert to common type
-#endif
+    codegen_rvalue_coerced_no_temps(get_child_('?', node, 2), type); // value when false
     def_label(lbl2);                                         // end label
   }
 }
@@ -2302,11 +2315,9 @@ void codegen_rvalue(ast node) {
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
-        codegen_rvalue_no_temps(child1); // so that the destination address is right below the value
+        codegen_rvalue_coerced_no_temps(child1, type); // so that the destination address is right below the value
         stack_pop(reg_X);
         stack_pop(reg_Y);
-        // Convert the result to the assignment expression's type.
-        convert_reg(reg_X, value_type(child1), type);
         write_mem_location(reg_Y, 0, reg_X, left_width);
       }
       stack_push(reg_X);
@@ -2369,15 +2380,7 @@ void codegen_rvalue(ast node) {
     }
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
-      codegen_rvalue(child1);
-#ifdef SUPPORT_FULL_ARITHMETIC
-      child0 = get_child_(DECL, child0, 1); // child 1 of cast is the type
-      if (conversion_needed(value_type(child1), child0)) {
-        stack_pop(reg_X);
-        convert_reg(reg_X, value_type(child1), child0);
-        stack_push(reg_X);
-      }
-#endif
+      codegen_rvalue_coerced_no_temps(child1, get_child_(DECL, child0, 1));
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
