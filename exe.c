@@ -1629,29 +1629,48 @@ void codegen_statement(ast node);
 //  - When evaluating a ternary operator arm, since the individual arms may
 //    allocate a different number of temporaries while both must leave the same
 //    stack shape at the join point.
-//    Handled by `codegen_aggregate`.
+//    Handled by `codegen_aggregate` for struct/union-typed ternaries, and
+//    `codegen_rvalue_no_temps` for the other arms.
 //  - When generating a function call, since the temporary would sit between the
 //    arguments and/or function pointer (for indirect calls).
-//    Handled by `codegen_rvalue_and_drop_temps` for scalar arguments, and
+//    Handled by `codegen_rvalue_no_temps` for scalar arguments, and
 //    `codegen_aggregate` for by-value struct/union arguments.
-//  - When evaluating a local variable initializer, since temporary values would
-//    offset the local variable's address which is assumed to not change.
-//    Handled by `codegen_rvalue_and_drop_temps`.
+//  - When evaluating a scalar assignment or local variable initializer, since
+//    temporary values would offset the destination address / the local
+//    variable's SP-relative offset which are assumed to not change.
+//    Handled by `codegen_rvalue_no_temps`.
+//  - When evaluating the right operand of a binary operator, since
+//    codegen_binop expects its two operand words to be adjacent on top of the
+//    stack (the left operand's temporaries can stay buried below its value
+//    word, so the left operand doesn't need this).
+//    Handled by `codegen_rvalue_no_temps`.
+//
+// In those contexts, an array-typed expression backed by a temporary (e.g.
+// f().arr with f returning a struct by value) cannot be handled: its value is
+// a pointer into a temporary that cannot be dropped, moved nor copied (the
+// pointer may alias a named object). `codegen_rvalue_no_temps` rejects it
+// with a compilation error instead of miscompiling it.
 //
 // =============================================================================
 
 
-// Evaluate an rvalue expression and pop its value into reg_X, freeing any
-// aggregate temporaries allocated during evaluation unless the expression
-// returns an aggregate value. In that case, the value on top of the stack is a
-// pointer to the aggregate temporaries, and is handled case by case by the
-// caller (struct assignment, function params, ternary operator arms, local
-// variable initializers)
+// Evaluate an rvalue expression for contexts that require the value to be
+// exactly one word on top of the stack with no temporaries left behind
+// (binop operands, function arguments, ternary arms, scalar assignments and
+// initializers): any temporaries allocated during evaluation are freed, the
+// value word being preserved. Aggregate temporaries can't be dropped when the
+// expression's value is a pointer into them, so array-typed expressions that
+// allocate temporaries (e.g. f().arr with f returning a struct by value) are
+// rejected instead of being miscompiled. Struct/union-valued expressions
+// never reach this: these contexts route them through codegen_aggregate*.
 #ifdef SUPPORT_STRUCT_UNION
-void codegen_rvalue_and_drop_temps(ast node) {
+void codegen_rvalue_no_temps(ast node) {
   int save_fs = cgc_fs;
   codegen_rvalue(node);
-  if (cgc_fs != save_fs + 1 && !is_aggregate_type(value_type(node))) {
+  if (cgc_fs != save_fs + 1) {
+    if (is_aggregate_type(value_type(node))) {
+      fatal_error("codegen_rvalue_no_temps: array value backed by a temporary is not supported in this context");
+    }
     pop_reg(reg_X);
     grow_fs(-1);
     reset_stack_to(save_fs);
@@ -1694,7 +1713,7 @@ void codegen_aggregate(ast node, ast type) {
   codegen_aggregate_into(reg_SP, 0, node, size_word * WORD_SIZE);
 }
 #else
-#define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
+#define codegen_rvalue_no_temps(node) codegen_rvalue(node)
 #endif // SUPPORT_STRUCT_UNION
 
 void codegen_param(ast param) {
@@ -1708,7 +1727,7 @@ void codegen_param(ast param) {
   {
     // keep the argument words contiguous, flushing any leftover temporaries
     // below them on the stack.
-    codegen_rvalue_and_drop_temps(param);
+    codegen_rvalue_no_temps(param);
   }
 }
 
@@ -1769,7 +1788,7 @@ void emit_function_call(ast fun, int binding) {
     // Otherwise we go through the function pointer. Temporaries are flushed
     // because they would sit between the arguments and the callee's frame,
     // breaking the callee's SP-relative parameter addressing.
-    codegen_rvalue_and_drop_temps(fun);
+    codegen_rvalue_no_temps(fun);
     pop_reg(reg_X);
     grow_fs(-1);
     call_reg(reg_X);
@@ -1875,14 +1894,14 @@ void codegen_ternary(ast node) {
 #endif
   {
     codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
-    codegen_rvalue_and_drop_temps(get_child_('?', node, 1)); // value when true
+    codegen_rvalue_no_temps(get_child_('?', node, 1));       // value when true
 #ifdef SUPPORT_FULL_ARITHMETIC
     convert_top(value_type(get_child_('?', node, 1)), type); // Convert to common type
 #endif
     grow_fs(-1);                                             // reset fs for false arm
     jump(lbl2);                                              // jump to end
     def_label(lbl1);                                         // false label
-    codegen_rvalue_and_drop_temps(get_child_('?', node, 2)); // value when false
+    codegen_rvalue_no_temps(get_child_('?', node, 2));       // value when false
 #ifdef SUPPORT_FULL_ARITHMETIC
     convert_top(value_type(get_child_('?', node, 2)), type); // Convert to common type
 #endif
@@ -2056,7 +2075,7 @@ void codegen_compound_assignment(int op, ast child0, ast child1) {
     grow_fs(1);
     codegen_binop(op, left_type, int_type);
   } else {
-    codegen_rvalue_and_drop_temps(child1);
+    codegen_rvalue_no_temps(child1);
     codegen_binop(op, left_type, value_type(child1));
   }
 
@@ -2254,21 +2273,26 @@ void codegen_rvalue(ast node) {
 
   } else if (nb_children == 2) {
     if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[' || op == ',') {
-      // codegen_binop expects each operand to be exactly one word on top of
-      // the stack, so the temporaries of each operand are freed as soon as
-      // its value is extracted.
-      codegen_rvalue_and_drop_temps(child0);
-      codegen_rvalue_and_drop_temps(child1);
+      // The lhs's temporaries can stay buried below its value word (they are
+      // freed at the end of the full expression), which is what keeps
+      // expressions like f().arr[i] working: the lhs value is a pointer into
+      // the temporary right below it.
+      codegen_rvalue(child0);
 #ifdef SUPPORT_STRUCT_UNION
       if (op == ',' && is_aggregate_type(value_type(child1))) {
         // The rhs value on top of the stack (a pointer to the aggregate) is
-        // the result. The lhs word stays buried below the rhs temporaries
-        // and is freed at the end of the full expression. codegen_binop's
-        // pop/pop/push would corrupt the rhs temporary, so it is skipped.
+        // the result, and may point into the rhs temporaries, which stay
+        // buried below it along with the lhs word until the end of the full
+        // expression. codegen_binop's pop/pop/push would corrupt them, so it
+        // is skipped.
+        codegen_rvalue(child1);
         grow_fs(-1); // nets the buried lhs word with the final grow_fs(1)
       } else
 #endif
       {
+        // codegen_binop expects the rhs value word to sit directly on top of
+        // the lhs value word, so the rhs's temporaries are flushed.
+        codegen_rvalue_no_temps(child1);
         codegen_binop(op, value_type(child0), value_type(child1));
         grow_fs(-2);
       }
@@ -2285,7 +2309,7 @@ void codegen_rvalue(ast node) {
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
-        codegen_rvalue_and_drop_temps(child1); // so that the destination address is right below the value
+        codegen_rvalue_no_temps(child1); // so that the destination address is right below the value
         pop_reg(reg_X);
         pop_reg(reg_Y);
         grow_fs(-2);
@@ -2587,7 +2611,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           // The value is scalar (the type is neither an array nor a
           // struct/union), so the temporaries do get flushed and the
           // SP-relative offset stays valid for the write below.
-          codegen_rvalue_and_drop_temps(car(init));
+          codegen_rvalue_no_temps(car(init));
           pop_reg(reg_X);
           grow_fs(-1);
           write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
@@ -2609,7 +2633,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
         // The value is scalar (the type is neither an array nor a
         // struct/union), so the temporaries do get flushed and the
         // SP-relative offset stays valid for the write below.
-        codegen_rvalue_and_drop_temps(init);
+        codegen_rvalue_no_temps(init);
         pop_reg(reg_X);
         grow_fs(-1);
         write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
