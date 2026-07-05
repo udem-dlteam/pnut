@@ -1600,29 +1600,9 @@ void codegen_binop(int op, ast left_type, ast right_type) {
 }
 
 void codegen_rvalue(ast node);
-void codegen_statement(ast node);
+void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node);
 void codegen_lvalue(ast node);
-
-// Evaluate a condition expression and pop its value into reg_X, freeing any
-// aggregate temporaries allocated during evaluation.
-void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
-#ifdef SUPPORT_STRUCT_UNION
-  int save_fs = cgc_fs;
-#endif
-  codegen_rvalue(node);
-  pop_reg(reg_X);
-  grow_fs(-1);
-#ifdef SUPPORT_STRUCT_UNION
-  // The node's value is immediately consumed by a conditional jump, so it can
-  // be collected right away. This also ensures that temporaries don't pile up
-  // during loops, where the condition is evaluated multiple times.
-  reset_stack_to(save_fs);
-#endif
-
-  xor_reg_reg(reg_Y, reg_Y);
-  jump_cond_reg_reg(cond, lbl, reg_X, reg_Y);
-}
-
+void codegen_statement(ast node);
 
 // =============================== Struct return ===============================
 //
@@ -1715,7 +1695,7 @@ void codegen_aggregate(ast node, ast type) {
 }
 #else
 #define codegen_rvalue_and_drop_temps(node) codegen_rvalue(node)
-#endif
+#endif // SUPPORT_STRUCT_UNION
 
 void codegen_param(ast param) {
 #ifdef SUPPORT_STRUCT_UNION
@@ -2405,6 +2385,26 @@ void codegen_rvalue(ast node) {
   }
 
   grow_fs(1);
+}
+
+// Evaluate a condition expression and jump to lbl if the condition is true,
+// fallthrough otherwise.
+void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
+#ifdef SUPPORT_STRUCT_UNION
+  int save_fs = cgc_fs;
+#endif
+  codegen_rvalue(node);
+  pop_reg(reg_X);
+  grow_fs(-1);
+#ifdef SUPPORT_STRUCT_UNION
+  // The node's value is immediately consumed by a conditional jump, so it can
+  // be collected right away. This also ensures that temporaries don't pile up
+  // during loops, where the condition is evaluated multiple times.
+  reset_stack_to(save_fs);
+#endif
+
+  xor_reg_reg(reg_Y, reg_Y);
+  jump_cond_reg_reg(cond, lbl, reg_X, reg_Y);
 }
 
 void handle_enum_struct_union_type_decl(ast type);
