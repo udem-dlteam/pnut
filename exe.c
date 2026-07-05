@@ -2780,8 +2780,6 @@ void codegen_local_var_decls(ast node) {
 }
 
 void codegen_body(ast node) {
-  int save_fs = cgc_fs;
-  int save_locals = cgc_locals;
   ast stmt;
 
   while (node != 0) {
@@ -2793,9 +2791,6 @@ void codegen_body(ast node) {
     }
     node = get_child_opt_('{', '{', node, 1);
   }
-
-  reset_stack_to(save_fs);
-  cgc_locals = save_locals;
 }
 
 void codegen_statement(ast node) {
@@ -3108,7 +3103,8 @@ void codegen_glo_fun_decl(ast node) {
   ast params = get_child_opt_('(', LIST, fun_type, 1);
   ast fun_return_type = get_child_('(', fun_type, 0);
   int binding;
-  int save_locals_fun = cgc_locals_fun;
+
+  cgc_locals_fun = 0; // init local bindings list
 
   if (get_op(fun_return_type) == '[') {
     fatal_error("Returning arrays from function not supported");
@@ -3170,8 +3166,6 @@ void codegen_glo_fun_decl(ast node) {
 
   // Register the function in the forward jump table during initialization
   init_forward_jump_table(binding);
-
-  cgc_locals_fun = save_locals_fun;
 }
 
 // For now, we don't do anything with the declarations in a typedef.
