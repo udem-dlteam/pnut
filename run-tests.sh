@@ -30,6 +30,7 @@ if [ $# -lt 1 ]; then usage; fi
 : ${PNUT_OPTIONS:=}
 backend=$1; shift
 shell="/bin/sh"
+runtime_flag=""
 pattern=".*"
 bootstrap=0
 safe=0
@@ -77,6 +78,13 @@ case "$backend" in
     executor=""
     test_folders="tests/_all tests/_exe tests/_bug"
     [ "$one_pass" -eq 1 ] && pnut_target_flag="$pnut_target_flag -DONE_PASS_GENERATOR"
+    # On i386, `long long` doesn't fit a native register, so 64-bit arithmetic
+    # is lowered to calls into the arith64.c runtime, which is linked ahead of
+    # each user program via -rt.
+    if [ "$backend" = "i386_linux" ]; then
+      pnut_target_flag="$pnut_target_flag -DSUPPORT_EMULATED_INT64"
+      runtime_flag="-rt arith64.c"
+    fi
     ;;
   *)
     fail "Unknown backend: $backend"
@@ -87,7 +95,7 @@ PNUT_EXE_OPTIONS="$PNUT_OPTIONS $pnut_target_flag"
 [ "$safe" -eq 1 ] && PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE"
 
 if [ -z "$CFLAGS" ]; then
-  CFLAGS="-std=c99"
+  CFLAGS="-std=c99 -g -rdynamic"
 fi
 
 # --- Helper Functions ---
@@ -212,10 +220,10 @@ compile_test() { # c file: $1, $2: output, expect_failed_compilation?: $3
 
   # Timeout to prevent infinite loops in pnut
   if [ $bootstrap -eq 1 ] && [ -n "$executor" ]; then
-    timeout 15 $executor "$pnut_comp" "$1" $(test_comp_options "$1") > $2
+    timeout 15 $executor "$pnut_comp" $runtime_flag "$1" $(test_comp_options "$1") > $2
     res=$?
   else
-    timeout 5 "$pnut_comp" "$1" $(test_comp_options "$1") > $2
+    timeout 5 "$pnut_comp" $runtime_flag "$1" $(test_comp_options "$1") > $2
     res=$?
   fi
   chmod +x "$2"

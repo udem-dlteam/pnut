@@ -765,6 +765,7 @@ void def_goto_label(int lbl) {
 
 #endif // SUPPORT_GOTO
 
+ast one_literal;
 ast int_type;
 #if defined(PARSE_NUMERIC_LITERAL_SUFFIX) || defined(SUPPORT_SIZEOF)
 ast uint_type;
@@ -815,6 +816,17 @@ bool is_function_type(ast type) {
   return op == '(';
 }
 
+#ifdef SUPPORT_EMULATED_INT64
+// A 64-bit long long that must be lowered to runtime calls: on 32-bit targets
+// under SUPPORT_EMULATED_INT64, a `long long` value is an 8-byte aggregate
+// handled like a struct (stored in memory, copied by value, returned via a
+// hidden pointer). Returns false everywhere else (native long long on 64-bit
+// targets, or builds without SUPPORT_EMULATED_INT64).
+bool is_int64_type(ast type) {
+  return get_op(type) == LONG_KW;
+}
+#endif
+
 #ifdef SUPPORT_STRUCT_UNION
 
 bool is_struct_or_union_type(ast type) {
@@ -822,13 +834,33 @@ bool is_struct_or_union_type(ast type) {
   return op == STRUCT_KW || op == UNION_KW;
 }
 
+#ifdef SUPPORT_EMULATED_INT64
+// A type handled by the struct machinery: struct, union, 8-byte long long.
+// These are multi-word objects copied by value, returned through a hidden
+// pointer, and represented on the operand stack by the address of their
+// storage.
+bool is_struct_like(ast type) {
+  int op = get_op(type);
+  return op == STRUCT_KW || op == UNION_KW || op == LONG_KW;
+}
+#else
+#define is_struct_like(type) is_struct_or_union_type(type)
+#endif
+
 #endif // SUPPORT_STRUCT_UNION
 
-// An aggregate type is either an array type or a struct/union type (that's not a reference)
+// An aggregate type is either an array type or a struct/union type (that's not a
+// reference), or (under SUPPORT_EMULATED_INT64) a 64-bit long long.
+// Aggregate values live in memory and their rvalue on the operand stack is the
+// address of that memory, not the value itself.
 bool is_aggregate_type(ast type) {
   int op = get_op(type);
 #ifdef SUPPORT_STRUCT_UNION
-  return op == '[' || op == STRUCT_KW || op == UNION_KW;
+  return op == '[' || op == STRUCT_KW || op == UNION_KW
+#ifdef SUPPORT_EMULATED_INT64
+      || op == LONG_KW
+#endif
+      ;
 #else
   return op == '[';
 #endif // SUPPORT_STRUCT_UNION
@@ -889,6 +921,9 @@ int type_width(ast type, bool array_value, bool word_align) {
     case LONG_KW:
 #if WORD_SIZE == 8
       width = 8;
+      break;
+#elif defined (SUPPORT_EMULATED_INT64)
+      width = 8; // 8-byte aggregate, lowered to arith64.c runtime calls
       break;
 #elif defined (BOOTSTRAP_LONG)
       width = 4;
@@ -1589,9 +1624,6 @@ void codegen_binop(int op, ast left_type, ast right_type) {
     if (!left_is_numeric || !right_is_numeric) fatal_error("invalid operands to ^");
     xor_reg_reg(reg_X, reg_Y);
   }
-  else if (op == ',') {
-    mov_reg_reg(reg_X, reg_Y); // Ignore lhs and keep rhs
-  }
   else if (op == '[') {
     // Same as pointer addition + dereference of the result.
     codegen_binop_add(left_type, right_type); // Compute the address resulting from the addition
@@ -1643,33 +1675,157 @@ void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node);
 void codegen_lvalue(ast node);
 void codegen_statement(ast node);
 
+#ifdef SUPPORT_EMULATED_INT64
+// =============================== Emulated Int64 ==============================
+//
+// On 32-bit hosts, 64-bit integers are emulated by a pair of 32-bit words, with
+// the low word on the stack top and the high word below it, corresponding to
+// the memory layout of 64-bit integers in little-endian architectures. The code
+// generator emits calls to runtime functions to perform 64-bit
+// arithmetic/comparison operations, and the runtime library (arith64.c)
+// emulates them with 32-bit operations.
+//
+// Because 64-bit values are represented as structures, the calls reuse the
+// struct-return machinery: arguments are copied by value, the result comes back
+// through a hidden pointer, and temporaries live until the end of the
+// expression unless they are explicitly freed by the code generator
+// (using reset_stack_to).
+//
+// Unlike for the "native" integer types, where values are always properly
+// {signed/zero}-extended to the word size in registers and on the stack,
+// operations between native integer types and emulated 64-bit integers require
+// explicit narrowing/widening/truthiness conversions to translate from one
+// representation to the other.
+//
+// These conversions (widen, narrow, truthiness) are simple enough to emit
+// inline instead, simplifying the code generation as they avoid the need for
+// temporary buffers and the associated lifetime management.
+//
+// narrowed_rvalue_type is used to determine the type of an rvalue expression
+// after applying the narrowing conversion, and is a no-op when emulated 64-bit
+// integers are not supported. Used to indicate to codegen_binop the type of the
+// operands after applying the narrowing conversion.
+//
+// =============================================================================
+
+void codegen_int64_compound_assignment(int op, ast lhs, ast rhs);
+void codegen_int64_case_eq(ast case_expr);
+int int64_runtime_binding(char *name);
+void codegen_int64_widen_scalar(ast node);
+void codegen_int64_value(ast node);
+void codegen_int64_call(int binding, ast arg0, ast arg1, int result_words);
+void codegen_int64_narrow(ast node, ast target_type);
+void codegen_int64_truthy(ast node);
+char *int64_resolve_binop_name(int op, ast left_type, ast right_type);
+void codegen_int64_binop(ast node, ast child0, ast child1);
+void codegen_int64_unary(int op, ast child0);
+void codegen_int64_literal(ast node);
+ast narrowed_rvalue_type(ast node);
+
+#else
+
+#define narrowed_rvalue_type(node) value_type(node)
+
+#endif
+
+// =========================== rvalue code generation ==========================
+//
+// In the minimal version of pnut-exe, rvalues are compiled naively, without any
+// implicit conversions. This is enough to bootstrap pnut and bootstrap-friendly
+// TCC, but is not C99 compliant.
+//
+// To support proper C99 semantics, the code generator must apply the integer
+// promotions and the usual arithmetic conversions to rvalues, and convert them
+// to the representation of their target type when needed. This is enabled with
+// the SUPPORT_FULL_ARITHMETIC flag.
+//
+// In parallel, pnut-exe supports functions returning structures/unions, which
+// requires allocating temporaries for the return value. The lifetime of these
+// temporaries is managed by the code generator, which frees them when they are
+// no longer needed.
+//
+// As a result, we define two functions that abstract over the different
+// versions of codegen_rvalue, which are defined differently depending on the
+// compilation flags:
+//  - codegen_rvalue_coerced:
+//      Evaluate an rvalue expression and convert the result to the
+//      representation of target_type. Temporaries that are allocated are not
+//      dropped, and must be freed by the caller or are freed when the
+//      expression is consumed.
+//
+//  - codegen_rvalue_coerced_no_temps:
+//      Evaluate an rvalue expression and convert the result to the
+//      representation of target_type. Enforces that any temporaries allocated
+//      during evaluation must be freed, fails if the expression returns an
+//      array backed by a temporary.
+//
+// =============================================================================
+
+#ifdef SUPPORT_EMULATED_INT64
+// Compile node as rvalue, converting result to target type.
+// target_type == 0 (varargs/unknown parameter) means no coercion.
+void codegen_rvalue_coerced(ast node, ast target_type) {
+  ast type = value_type(node);
+  target_type = TERNARY(target_type == 0, type, target_type);
+#ifdef SUPPORT_EMULATED_INT64
+  if (is_int64_type(target_type) && !is_int64_type(type)) { // 64-bit widening
+    codegen_int64_widen_scalar(node);
+    stack_push(reg_SP);
+    return;
+  }
+  else if (!is_aggregate_type(target_type) && is_int64_type(type)) { // 64-bit narrowing
+    codegen_int64_narrow(node, target_type);
+  } else // no 64-bit conversion needed
+#endif
+  {
+    codegen_rvalue(node);
+    if (conversion_needed(type, target_type)) {
+      stack_pop(reg_X);
+      convert_reg(reg_X, type, target_type);
+      stack_push(reg_X);
+    }
+  }
+}
+#elif defined(SUPPORT_FULL_ARITHMETIC)
+void codegen_rvalue_coerced(ast node, ast target_type) {
+  ast type = value_type(node);
+  target_type = TERNARY(target_type == 0, type, target_type);
+  codegen_rvalue(node);
+  if (conversion_needed(type, target_type)) {
+    stack_pop(reg_X);
+    convert_reg(reg_X, type, target_type);
+    stack_push(reg_X);
+  }
+}
+#else
+#define codegen_rvalue_coerced(node, target_type) codegen_rvalue(node)
+#endif
 
 #ifdef SUPPORT_STRUCT_UNION
-void codegen_rvalue_no_temps(ast node);
-#else
-#define codegen_rvalue_no_temps(node) codegen_rvalue(node)
-#endif
 
-#ifdef SUPPORT_FULL_ARITHMETIC
-void codegen_rvalue_coerced_no_temps(ast node, ast target_type);
-#else
-#define codegen_rvalue_coerced_no_temps(node, target_type) codegen_rvalue_no_temps(node)
-#endif
-
-#ifdef SUPPORT_FULL_ARITHMETIC
-
-// Version of codegen_rvalue that coerces the value to the target type, if needed.
+// Compile node as rvalue, converting result to target type. Free any
+// temporaries allocated during evaluation, leaving the value directly on top of
+// the stack.
+// target_type == 0 (varargs/unknown parameter) means no coercion.
 void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
   ast src_type = value_type(node);
-  codegen_rvalue_no_temps(node);
-  if (conversion_needed(src_type, target_type)) {
+  int save_fs = cgc_fs;
+  codegen_rvalue_coerced(node, target_type);
+  if (cgc_fs != save_fs + 1) {
+    if (is_aggregate_type(src_type)) {
+      fatal_error("codegen_rvalue_coerced_no_temps: array value backed by a temporary is not supported in this context");
+    }
     stack_pop(reg_X);
-    extend_reg(reg_X, type_width(target_type, false, false), is_signed_numeric_type(target_type));
+    reset_stack_to(save_fs);
     stack_push(reg_X);
   }
 }
 
-#endif // SUPPORT_FULL_ARITHMETIC
+#else
+
+#define codegen_rvalue_coerced_no_temps(node, target_type) codegen_rvalue_coerced(node, target_type)
+
+#endif
 
 #ifdef SUPPORT_STRUCT_UNION
 // =============================== Struct return ===============================
@@ -1732,26 +1888,13 @@ void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
 // rejected instead of being miscompiled. Struct/union-valued expressions
 // never reach this: these contexts route them through codegen_aggregate*.
 
-void codegen_rvalue_no_temps(ast node) {
-  int save_fs = cgc_fs;
-  codegen_rvalue(node);
-  if (cgc_fs != save_fs + 1) {
-    if (is_aggregate_type(value_type(node))) {
-      fatal_error("codegen_rvalue_no_temps: array value backed by a temporary is not supported in this context");
-    }
-    stack_pop(reg_X);
-    reset_stack_to(save_fs);
-    stack_push(reg_X);
-  }
-}
-
-void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width) {
+void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width, ast target_type) {
   int save_fs = cgc_fs;
   if (dst_reg != reg_SP) {
     // Save reg in case codegen_rvalue clobbers it
     stack_push(dst_reg);
   }
-  codegen_rvalue(node);
+  codegen_rvalue_coerced(node, target_type);
   stack_pop(reg_X); // source aggregate address
   if (dst_reg == reg_SP) {
     // Account for temporaries allocated during evaluation
@@ -1769,54 +1912,75 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width) {
 // allocated before evaluating the expression so that the value is copied
 // directly into place, below the temporaries (in which the value may live,
 // hence the copy-then-drop order).
-void codegen_aggregate(ast node, ast type) {
-  // Round up the size to a multiple of WORD_SIZE to keep the stack aligned
-  int size_word = type_width(type, true, true) / WORD_SIZE;
+void codegen_aggregate(ast node, ast target_type) {
+  int size_word = type_width(target_type, true, true) / WORD_SIZE;
+
+#ifdef SUPPORT_EMULATED_INT64
+  // Optimization: 64-bit values (including widened scalars) are materialized
+  // directly into place instead of being copied from a temporary buffer.
+  if (is_int64_type(target_type)) {
+    codegen_int64_value(node);
+    return;
+  }
+#endif
+
 
   stack_grow(size_word);
   grow_fs(size_word);
-  codegen_aggregate_into(reg_SP, 0, node, size_word * WORD_SIZE);
+  codegen_aggregate_into(reg_SP, 0, node, size_word * WORD_SIZE, target_type);
 }
 
 #endif // SUPPORT_STRUCT_UNION
 
-void codegen_param(ast param) {
+// Evaluate an rvalue for use as a function argument, coercing it to the
+// parameter's declared type if needed.
+void codegen_param(ast param, ast target_type) {
+  if (target_type == 0) {
+    target_type = value_type(param);
+  }
 #ifdef SUPPORT_STRUCT_UNION
-  int type = value_type(param);
-  if (is_struct_or_union_type(type)) {
-    // Place the aggregate argument directly on the stack
-    codegen_aggregate(param, type);
+  if (is_struct_like(target_type)) {
+    // Aggregate values (structs/unions and 64-bit values, including scalars
+    // widened to a 64-bit parameter) are passed by value
+    codegen_aggregate(param, target_type);
   } else
 #endif
   {
-    // keep the argument words contiguous, flushing any leftover temporaries
-    // below them on the stack.
-    codegen_rvalue_no_temps(param);
+    // Scalars, including a 64-bit value narrowed to a scalar parameter: keep
+    // the argument words contiguous, flushing any leftover temporaries below
+    // them on the stack.
+    codegen_rvalue_coerced_no_temps(param, target_type);
   }
 }
 
+// Evaluate the call arguments, converting the them to their expected types.
 #ifdef SAFE_MODE
 void codegen_params(ast params, ast params_type, bool allow_extra_params) {
 #else
-void codegen_params(ast params) {
+void codegen_params(ast params, ast params_type) {
 #endif
+
+  ast param_type;
 
   if (params != 0) {
 #ifdef SAFE_MODE
     if (!allow_extra_params && params_type == 0) {
       fatal_error("codegen_params: Function expects less parameters than provided");
     }
-
-    // Check that the number of parameters is correct
-    if (params_type != 0) params_type = tail(params_type);
 #endif
+
+    param_type = 0;
+    if (params_type != 0) {
+      param_type = get_child_(DECL, car(params_type), 1);
+      params_type = tail(params_type);
+    }
 
 #ifdef SAFE_MODE
     codegen_params(tail(params), params_type, allow_extra_params);
 #else
-    codegen_params(tail(params));
+    codegen_params(tail(params), params_type);
 #endif
-    codegen_param(car(params));
+    codegen_param(car(params), param_type);
   }
 #ifdef SAFE_MODE
   else if (params_type != 0) {
@@ -1852,22 +2016,39 @@ void emit_function_call(ast fun, int binding) {
     // Otherwise we go through the function pointer. Temporaries are flushed
     // because they would sit between the arguments and the callee's frame,
     // breaking the callee's SP-relative parameter addressing.
-    codegen_rvalue_no_temps(fun);
+    codegen_rvalue_coerced_no_temps(fun, 0);
     stack_pop(reg_X);
     call_reg(reg_X);
   }
 }
 
+#ifdef SUPPORT_STRUCT_UNION
+// Complete a function call whose argument words are already on the stack.
+// Setup the hidden result-buffer pointer for aggregate returns, emit the call,
+// then do the stack cleanup.
+void codegen_call_finish(ast fun, int binding, int args_fs, int buf_words) {
+  // Push the buffer address as the hidden first argument (pushed last)
+  if (buf_words != 0) stack_push_address_of(args_fs);
+
+  emit_function_call(fun, binding);
+  reset_stack_to(args_fs);
+  // After popping the arguments, the result buffer is on top of the stack.
+  if (buf_words != 0) mov_reg_reg(reg_X, reg_SP);
+}
+#endif
+
 void codegen_call(ast node) {
   ast fun = get_child_('(', node, 0);
   ast params = get_child_('(', node, 1);
+  ast type = value_type(fun);
   int save_fs = cgc_fs;
   int binding = 0;
+
 #ifdef SUPPORT_STRUCT_UNION
   int buf_words = 0;
   ast fun_return_type = function_return_type(value_type(fun));
 
-  if (is_struct_or_union_type(fun_return_type)) {
+  if (is_struct_like(fun_return_type)) {
     // The function returns a struct/union: allocate the buffer in which the
     // callee will write the result. The buffer's address is passed as a
     // hidden argument, and is also the value of the call expression. The
@@ -1891,41 +2072,33 @@ void codegen_call(ast node) {
     if (binding_kind(binding) != BINDING_FUN) binding = 0;
   }
 
+  // Declared parameter types. codegen_params pairs each argument with its type
+  // and converts it to that type if needed.
 #ifdef SAFE_MODE
-  // Make sure fun has a type that can be called, either a function pointer or a function
-  ast type = value_type(fun);
   if (!is_function_type(type)) {
     dump_node(type);
     fatal_error("Not a function or function pointer");
   }
-  if (get_op(type) == '*') type = get_child_('*', type, 1); // Dereference function pointer
-  // allow_extra_params is true if the function is called indirectly or if the function is variadic
+#endif
+  if (get_op(type) == '*') type = get_child_('*', type, 1); // dereference function pointer
+
+#ifdef SAFE_MODE
+  // allow_extra_params is true if the function is called indirectly or is variadic
   bool allow_extra_params = binding == 0;
   if (get_child_('(', type, 2)) allow_extra_params = true;
-  codegen_params(params, get_child_('(', type, 1), allow_extra_params);
+  codegen_params(params, get_child_opt_('(', LIST, type, 1), allow_extra_params);
 #else
-  codegen_params(params);
+  codegen_params(params, get_child_opt_('(', LIST, type, 1));
 #endif
 
 #ifdef SUPPORT_STRUCT_UNION
-  if (buf_words != 0) {
-    // Push the buffer address as the hidden first argument (pushed last)
-    stack_push_address_of(save_fs);
-  }
-#endif
-
+  codegen_call_finish(fun, binding, save_fs, buf_words);
+#else
   emit_function_call(fun, binding);
-
   reset_stack_to(save_fs);
-
-#ifdef SUPPORT_STRUCT_UNION
-  // After popping the arguments, the result buffer is on top of the stack.
-  // Its address is the value of the call expression.
-  if (buf_words != 0) stack_push(reg_SP);
-  else stack_push(reg_X);
-#else
-  stack_push(reg_X);
 #endif
+
+  stack_push(reg_X);
 }
 
 // Ternary expression. Each arm leaves its value on the stack.
@@ -1938,7 +2111,7 @@ void codegen_ternary(ast node) {
 #endif
 #ifdef SUPPORT_STRUCT_UNION
 
-  if (is_struct_or_union_type(type)) {
+  if (is_struct_like(type)) {
     codegen_rvalue_and_cmp_0(EQ, lbl1, get_child_('?', node, 0));
     codegen_aggregate(get_child_('?', node, 1), type); // value when true
     jump(lbl2);                                        // jump to end
@@ -2017,6 +2190,12 @@ void codegen_lvalue(ast node) {
           break;
       }
     } else {
+#ifdef SUPPORT_EMULATED_INT64
+  if (is_int64_type(value_type(node))) {
+    codegen_rvalue(node);
+    return; // codegen_rvalue already accounted for the pushed address
+  }
+#endif
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
     }
@@ -2026,6 +2205,12 @@ void codegen_lvalue(ast node) {
     if (op == '*') {
       codegen_rvalue(child0);
     } else {
+#ifdef SUPPORT_EMULATED_INT64
+  if (is_int64_type(value_type(node))) {
+    codegen_rvalue(node);
+    return; // codegen_rvalue already accounted for the pushed address
+  }
+#endif
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
     }
@@ -2072,11 +2257,23 @@ void codegen_lvalue(ast node) {
     else if (op == CAST) {
       codegen_lvalue(child1);
     } else {
+#ifdef SUPPORT_EMULATED_INT64
+  if (is_int64_type(value_type(node))) {
+    codegen_rvalue(node);
+    return; // codegen_rvalue already accounted for the pushed address
+  }
+#endif
       dump_node(node);
       fatal_error("codegen_lvalue: unexpected operator");
     }
 
   } else {
+#ifdef SUPPORT_EMULATED_INT64
+  if (is_int64_type(value_type(node))) {
+    codegen_rvalue(node);
+    return; // codegen_rvalue already accounted for the pushed address
+  }
+#endif
     dump_node(node);
     fatal_error("codegen_lvalue: unexpected operator");
   }
@@ -2102,7 +2299,17 @@ void codegen_string(char *string_start, char *string_end) {
 // |=, ^=, <<=, >>=) and ++/-- (pre/post), leaving the result on the stack.
 void codegen_compound_assignment(int op, ast child0, ast child1) {
   ast left_type = value_type(child0);
-  int left_width = type_width(left_type, true, false);
+  int left_width;
+
+#ifdef SUPPORT_EMULATED_INT64
+  // A narrower lvalue with a 64-bit rhs is handled below by narrowing the rhs
+  if (is_int64_type(left_type)) {
+    codegen_int64_compound_assignment(op, child0, child1);
+    return;
+  }
+#endif
+
+  left_width = type_width(left_type, true, false);
   codegen_lvalue(child0);
   // Copy the initial value and place it at the bottom of the stack
   stack_pop(reg_Y); // destination address
@@ -2111,14 +2318,8 @@ void codegen_compound_assignment(int op, ast child0, ast child1) {
   stack_push(reg_Y); // destination address, kept adjacent to the value
   stack_push(reg_X); // current value of the lvalue to be modified
 
-  if (child1 == 0) { // child1 == 0 => child1 is 1 int literal
-    mov_reg_imm(reg_X, 1);
-    stack_push(reg_X);
-    codegen_binop(op, left_type, int_type);
-  } else {
-    codegen_rvalue_no_temps(child1);
-    codegen_binop(op, left_type, value_type(child1));
-  }
+  codegen_rvalue_coerced_no_temps(child1, narrowed_rvalue_type(child1));
+  codegen_binop(op, left_type, narrowed_rvalue_type(child1));
 
   // Stack layout at this point:
   //   top:       binop result
@@ -2134,6 +2335,225 @@ void codegen_compound_assignment(int op, ast child0, ast child1) {
     // Overwrite the result slot for operations that return the new value
     stack_pop(reg_Y);
     stack_push(reg_X);
+  }
+}
+
+#ifdef SUPPORT_EMULATED_INT64
+
+// A 64-bit value occupies this many operand-stack words (32-bit hosts only)
+#define INT64_WORDS 2
+
+// The binding of a 64-bit runtime function, looked up by name.
+int int64_runtime_binding(char *name) {
+  int binding = cgc_lookup_fun(intern_str(name), cgc_globals);
+  if (binding == 0) {
+    dump_string("64-bit runtime function not found: ", name);
+    fatal_error("missing 64-bit runtime; compile with -rt <path-to-arith64.c>");
+  }
+  return binding;
+}
+
+// The runtime function implementing a operator on 64-bit operands.
+char *int64_resolve_binop_name(int op, ast left_type, ast right_type) {
+  ast comp_common_type = usual_arith_conv(left_type, right_type);
+  ast arith_common_type = arith_value_type(op, left_type, right_type);
+
+  switch (op) {
+    case '+':     case PLUS_EQ:     return "add_i64";
+    case '-':     case MINUS_EQ:    return "sub_i64";
+    case '*':     case STAR_EQ:     return "mul_i64";
+    case '&':     case AMP_EQ:      return "and_i64";
+    case '|':     case BAR_EQ:      return "or_i64";
+    case '^':     case CARET_EQ:    return "xor_i64";
+    case LSHIFT:  case LSHIFT_EQ:   return "shl_i64";
+    case '/':     case SLASH_EQ:    return TERNARY(is_signed_numeric_type(arith_common_type), "div_i64", "div_u64");
+    case '%':     case PERCENT_EQ:  return TERNARY(is_signed_numeric_type(arith_common_type), "rem_i64", "rem_u64");
+    case RSHIFT:  case RSHIFT_EQ:   return TERNARY(is_signed_numeric_type(arith_common_type), "shr_i64", "shr_u64");
+    case '<':                       return TERNARY(is_signed_numeric_type(comp_common_type), "lt_i64", "lt_u64");
+    case '>':                       return TERNARY(is_signed_numeric_type(comp_common_type), "gt_i64", "gt_u64");
+    case LT_EQ:                     return TERNARY(is_signed_numeric_type(comp_common_type), "le_i64", "le_u64");
+    case GT_EQ:                     return TERNARY(is_signed_numeric_type(comp_common_type), "ge_i64", "ge_u64");
+    case EQ_EQ:                     return "eq_i64";
+    case EXCL_EQ:                   return "ne_i64";
+    default:                        {
+      fatal_error("int64_resolve_binop_name: unexpected operator");
+      return 0;
+    }
+  }
+}
+
+// Widen a scalar to a 64-bit value.
+// Leaves the 64-bit value on the stack as an 8-byte buffer.
+void codegen_int64_widen_scalar(ast node) {
+  int save_fs = cgc_fs;
+  bool is_signed = is_signed_numeric_type(value_type(node));
+  codegen_rvalue(node);
+  stack_pop(reg_X);                       // lo = the source scalar
+  reset_stack_to(save_fs);                // drop the temporaries if any
+  if (is_signed) {
+    mov_reg_reg(reg_Z, reg_X);            // preserve lo (sar also clobbers reg_Y/CX)
+    mov_reg_imm(reg_Y, WORD_SIZE * 8 - 1);
+    sar_reg_reg(reg_Z, reg_Y);            // hi = sign fill
+  } else {
+    xor_reg_reg(reg_Z, reg_Z);            // hi = 0
+  }
+  stack_push(reg_Z);                      // push buffer.hi
+  stack_push(reg_X);                      // push buffer.lo
+}
+
+// Push a integer (scalar or 64-bit) value onto the stack as 64-bit integer.
+void codegen_int64_value(ast node) {
+  int save_fs;
+  if (!is_int64_type(value_type(node))) {
+    codegen_int64_widen_scalar(node);
+    return;
+  }
+  save_fs = cgc_fs;
+  codegen_rvalue(node);
+  stack_pop(reg_X);                         // the value is the buffer's address
+  if (cgc_fs != save_fs + INT64_WORDS) {    // drop temps if any, otherwise the buffer is already on top of the stack
+    mov_reg_mem(reg_Z, reg_X, WORD_SIZE);   // hi
+    mov_reg_mem(reg_X, reg_X, 0);           // lo
+    reset_stack_to(save_fs);                // drop the temporaries and the source buffer
+    stack_push(reg_Z);                      // push buffer.hi
+    stack_push(reg_X);                      // push buffer.lo
+  }
+}
+
+// Truncate a 64-bit value to a scalar value
+void codegen_int64_narrow(ast node, ast target_type) {
+  int save_fs = cgc_fs;
+  bool is_signed = is_signed_numeric_type(target_type);
+  codegen_rvalue(node);         // the value is the buffer's address
+  stack_pop(reg_X);             // pop the buffer's address
+  mov_reg_mem(reg_X, reg_X, 0); // load lo word
+  reset_stack_to(save_fs);      // drop the temporaries and the buffer
+  convert_reg(reg_X, TERNARY(is_signed, int_type, uint_type), target_type); // convert to the target scalar type
+  stack_push(reg_X);            // push the scalar value
+}
+
+// Reduce a 64-bit value to (lo | hi): zero iff the value is zero.
+// Note that the result is not normalized to 0/1.
+void codegen_int64_truthy(ast node) {
+  int save_fs = cgc_fs;
+  codegen_rvalue(node);                 // the value is the buffer's address
+  stack_pop(reg_X);                     // pop the buffer's address
+  mov_reg_mem(reg_Y, reg_X, WORD_SIZE); // load hi word
+  mov_reg_mem(reg_X, reg_X, 0);         // load lo word
+  or_reg_reg(reg_X, reg_Y);             // lo | hi
+  reset_stack_to(save_fs);              // drop the temporaries and the buffer
+  stack_push(reg_X);                    // push the result
+}
+
+// Emit a direct call to a 64-bit runtime function, leaving its result on the
+// operand stack. 64-bit runtime functions take their arguments by value and
+// return their value through a hidden pointer to an 8-byte buffer.
+void codegen_int64_call(int binding, ast arg0, ast arg1, int result_words) {
+  int args_fs = cgc_fs + result_words; // account for the result buffer if any
+  if (result_words != 0) { stack_grow(result_words); grow_fs(result_words); }
+  if (arg1) codegen_param(arg1, ulong_type);
+  if (arg0) codegen_param(arg0, ulong_type);
+  codegen_call_finish(0, binding, args_fs, result_words);
+  stack_push(reg_X); // the call's result is the expression's value
+}
+
+// Emit the runtime call implementing a binary arithmetic or comparison node
+// known to have at least one 64-bit operand. Called from codegen_rvalue's
+// binop case once it has already established that op is lowerable and an
+// operand is 64-bit. The value of an arithmetic result is the address of its
+// 8-byte buffer (usable as rvalue or lvalue); a comparison yields a plain int.
+void codegen_int64_binop(ast node, ast child0, ast child1) {
+  int op = get_op(node);
+  ast node_type = value_type(node);
+  int binding = int64_runtime_binding(int64_resolve_binop_name(op, value_type(child0), value_type(child1)));
+  codegen_int64_call(binding, child0, child1, TERNARY(is_int64_type(node_type), INT64_WORDS, 0));
+}
+
+// Push a 64-bit literal onto the stack as an 8-byte buffer ({lo, hi}) with
+// its address on top of the stack.
+void codegen_int64_literal(ast node) {
+  int val = get_val(node);
+  int lo, hi;
+  if (val > 0) { lo = heap[val]; hi = heap[val + 1]; }  // large-int object: two words
+  else         { lo = -val; hi = 0; }                   // small LL literal, fits 32 bits (non-negative)
+  mov_reg_imm(reg_X, hi);
+  stack_push(reg_X);                                    // push buffer.hi
+  if (lo != hi) mov_reg_imm(reg_X, lo);                 // reg_X already equals lo if lo == hi
+  stack_push(reg_X);                                    // push buffer.lo
+  stack_push(reg_SP);                                   // push buffer address
+}
+
+// Type of a value after it has been narrowed to a scalar type. This is the type
+// that should be used for the following convert_reg / codegen_binop, so that
+// the right source type is fed to the conversion or binary operation.
+ast narrowed_rvalue_type(ast node) {
+  ast type = value_type(node);
+  if (is_int64_type(type)) {
+    return TERNARY(is_signed_numeric_type(type), int_type, uint_type);
+  } else {
+    return type;
+  }
+}
+
+// Push a copy of the 8-byte value whose address is stored at slot_fs.
+void codegen_int64_push_copy(int slot_fs) {
+  stack_grow(INT64_WORDS); grow_fs(INT64_WORDS);
+  stack_load(reg_X, slot_fs); // reg_X = &value
+  copy_obj(reg_SP, 0, reg_X, 0, INT64_WORDS * WORD_SIZE);
+}
+
+// 64-bit variant of codegen_compound_assignment, when the lvalue is 64-bit.
+void codegen_int64_compound_assignment(int op, ast lhs, ast rhs) {
+  int binding;
+  int lhs_fs;
+  int args_fs;
+  bool want_old_value = op == MINUS_MINUS_POST || op == PLUS_PLUS_POST;
+  op = TERNARY(op == MINUS_MINUS_POST || op == MINUS_MINUS_PRE, '-', op);
+  op = TERNARY(op == PLUS_PLUS_POST || op == PLUS_PLUS_PRE, '+', op);
+  binding = int64_runtime_binding(int64_resolve_binop_name(op, value_type(lhs), value_type(rhs)));
+
+  codegen_lvalue(lhs); // top of stack = &lhs
+  lhs_fs = cgc_fs;
+
+  // Save the pre-update value before the original value is overwritten
+  if (want_old_value) {
+    codegen_int64_push_copy(lhs_fs);
+    stack_push(reg_SP);
+  }
+
+  args_fs = cgc_fs;
+  codegen_param(rhs, ulong_type);  // push rhs
+  codegen_int64_push_copy(lhs_fs); // push copy of lhs
+  stack_load(reg_X, lhs_fs);       // return buffer = &lhs
+  stack_push(reg_X);               // hidden buffer pointer (pushed last) = &lhs
+  emit_function_call(0, binding);
+  reset_stack_to(args_fs);         // pop arguments; &lhs (or &saved_copy) is on top
+}
+
+// Compare a switch's 64-bit operand against a case expression, reg_X = 0 or 1.
+void codegen_int64_case_eq(ast case_expr) {
+  int op_fs = cgc_fs; // the 64-bit switch operand address is on top of stack
+
+  codegen_int64_push_copy(op_fs); // Copy of the switch operand
+  codegen_param(case_expr, ulong_type); // Then the case expression as value (widened to 64-bit if needed)
+  codegen_call_finish(0, int64_runtime_binding("eq_i64"), op_fs, 0); // Call eq_i64
+}
+
+#endif // SUPPORT_EMULATED_INT64
+
+void codegen_integer(ast node) {
+#ifdef SUPPORT_EMULATED_INT64
+  if (get_op(value_type(node)) == LONG_KW) {
+    codegen_int64_literal(node);
+  } else
+#endif
+  {
+#ifdef SUPPORT_64_BIT_LITERALS
+      mov_reg_large_imm(reg_X, get_val(node));
+#else
+      mov_reg_imm(reg_X, -get_val(node));
+#endif
+      stack_push(reg_X);
   }
 }
 
@@ -2157,12 +2577,7 @@ void codegen_rvalue(ast node) {
       || op == INTEGER_L || op == INTEGER_LL || op == INTEGER_U || op == INTEGER_UL || op == INTEGER_ULL
 #endif
        ) {
-#ifdef SUPPORT_64_BIT_LITERALS
-      mov_reg_large_imm(reg_X, get_val(node));
-#else
-      mov_reg_imm(reg_X, -get_val(node));
-#endif
-      stack_push(reg_X);
+      codegen_integer(node);
     } else if (op == CHARACTER) {
       mov_reg_imm(reg_X, get_val_(CHARACTER, node));
       stack_push(reg_X);
@@ -2245,6 +2660,14 @@ void codegen_rvalue(ast node) {
     } else if (op == '+') {
       codegen_rvalue(child0);
     } else if (op == '-' || op == '~') {
+#ifdef SUPPORT_EMULATED_INT64
+      if (is_int64_type(value_type(child0))) {
+        codegen_int64_call(
+          int64_runtime_binding(TERNARY(op == '-', "neg_i64", "not_i64")),
+          child0, 0, INT64_WORDS);
+        return;
+      }
+#endif
       codegen_rvalue(child0);
       stack_pop(reg_Y);
       if (op == '-') {
@@ -2276,7 +2699,7 @@ void codegen_rvalue(ast node) {
       def_label(lbl2);
       stack_push(reg_X);
     } else if (op == MINUS_MINUS_POST || op == PLUS_PLUS_POST || op == MINUS_MINUS_PRE || op == PLUS_PLUS_PRE) {
-      codegen_compound_assignment(op, child0, 0);
+      codegen_compound_assignment(op, child0, one_literal);
     } else if (op == '&') {
       codegen_lvalue(child0);
     }
@@ -2296,38 +2719,36 @@ void codegen_rvalue(ast node) {
     }
 
   } else if (nb_children == 2) {
-    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[' || op == ',') {
-      // The lhs's temporaries can stay buried below its value word (they are
-      // freed at the end of the full expression), which is what keeps
-      // expressions like f().arr[i] working: the lhs value is a pointer into
-      // the temporary right below it.
-      codegen_rvalue(child0);
-#ifdef SUPPORT_STRUCT_UNION
-      if (op == ',' && is_aggregate_type(value_type(child1))) {
-        // The rhs value on top of the stack (a pointer to the aggregate) is
-        // the result, and may point into the rhs temporaries, which stay
-        // buried below it along with the lhs word until the end of the full
-        // expression. codegen_binop's pop/pop/push would corrupt them, so it
-        // is skipped.
-        codegen_rvalue(child1);
+    if (op == '+' || op == '-' || op == '*' || op == '/' || op == '%' || op == '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT || op == '<' || op == '>' || op == EQ_EQ || op == EXCL_EQ || op == LT_EQ || op == GT_EQ || op == '[') {
+#ifdef SUPPORT_EMULATED_INT64
+      // An arithmetic/comparison operator with a 64-bit operand and no pointers
+      // requires 64-bit arithmetic, which is emulated through a runtime call.
+      if (!is_pointer_type(value_type(child0)) && !is_pointer_type(value_type(child1))
+          && (is_int64_type(value_type(child0)) || is_int64_type(value_type(child1)))) {
+        codegen_int64_binop(node, child0, child1);
       } else
 #endif
       {
         // codegen_binop expects the rhs value word to sit directly on top of
         // the lhs value word, so the rhs's temporaries are flushed.
-        codegen_rvalue_no_temps(child1);
-        codegen_binop(op, value_type(child0), value_type(child1));
+        codegen_rvalue_coerced(child0, narrowed_rvalue_type(child0));
+        codegen_rvalue_coerced_no_temps(child1, narrowed_rvalue_type(child1));
+        codegen_binop(op, narrowed_rvalue_type(child0), narrowed_rvalue_type(child1));
       }
+    } else if (op == ',') {
+      codegen_rvalue(child0);
+      stack_pop(reg_X); // discard the lhs value
+      codegen_rvalue(child1);
     } else if (op == '=') {
       type = value_type(child0);
       codegen_lvalue(child0);
 #ifdef SUPPORT_STRUCT_UNION
-      if (is_struct_or_union_type(type)) {
+      if (is_struct_like(type)) {
         // Struct assignment, we copy the struct.
         stack_pop(reg_Y); // destination address
-        codegen_aggregate_into(reg_Y, 0, child1, type_width(type, true, false));
+        codegen_aggregate_into(reg_Y, 0, child1, type_width(type, true, false), type);
       } else
-#endif // SUPPORT_STRUCT_UNION
+#endif
       {
         codegen_rvalue_coerced_no_temps(child1, type); // so that the destination address is right below the value
         stack_pop(reg_X);
@@ -2394,7 +2815,7 @@ void codegen_rvalue(ast node) {
     }
 #endif // SUPPORT_STRUCT_UNION
     else if (op == CAST) {
-      codegen_rvalue_coerced_no_temps(child1, get_child_(DECL, child0, 1));
+      codegen_rvalue_coerced(child1, get_child_(DECL, child0, 1));
     } else {
       fatal_error("codegen_rvalue: unknown rvalue with 2 children");
     }
@@ -2419,6 +2840,14 @@ void codegen_rvalue(ast node) {
 void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
 #ifdef SUPPORT_STRUCT_UNION
   int save_fs = cgc_fs;
+#endif
+#ifdef SUPPORT_EMULATED_INT64
+  // A 64-bit value used as a condition is reduced to an int truthiness word
+  // (lo | hi) so the comparison-against-0 below operates on a scalar, not the
+  // buffer address.
+  if (is_int64_type(value_type(node))) {
+    codegen_int64_truthy(node);
+  } else
 #endif
   codegen_rvalue(node);
   stack_pop(reg_X);
@@ -2610,12 +3039,9 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
            || get_op(car(init)) == INITIALIZER_LIST) { // Or nested initializer list
             fatal_error("codegen_initializer: scalar initializer list has more than one element");
           }
-          // The value is scalar (the type is neither an array nor a
-          // struct/union), so the temporaries do get flushed and the
-          // SP-relative offset stays valid for the write below.
-          codegen_rvalue_no_temps(car(init));
-          stack_pop(reg_X);
-          write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
+          // Single scalar/struct element wrapped in braces, same as a simple
+          // scalar initializer.
+          codegen_initializer(local, car(init), type, base_reg, offset);
           break;
       }
 
@@ -2625,16 +3051,16 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 
     default:
 #ifdef SUPPORT_STRUCT_UNION
-      if (is_struct_or_union_type(type)) {
+      if (is_struct_like(type)) {
         // Struct assignment, we copy the struct.
-        codegen_aggregate_into(base_reg, offset, init, type_width(type, true, true));
+        codegen_aggregate_into(base_reg, offset, init, type_width(type, true, true), type);
       } else
 #endif // SUPPORT_STRUCT_UNION
       if (get_op(type) != '[') {
         // The value is scalar (the type is neither an array nor a
-        // struct/union), so the temporaries do get flushed and the
+        // struct/union/int64), so the temporaries do get flushed and the
         // SP-relative offset stays valid for the write below.
-        codegen_rvalue_no_temps(init);
+        codegen_rvalue_coerced_no_temps(init, type);
         stack_pop(reg_X);
         write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
       } else {
@@ -2887,7 +3313,14 @@ void codegen_statement(ast node) {
     lbl1 = alloc_label(0); // lbl1: end of switch
     lbl2 = alloc_label(0); // lbl2: next case
 
+#ifdef SUPPORT_EMULATED_INT64
+    // The switch operand is kept on the stack and compared against each case.
+    // For the comparison to work correctly between 64-bit and narrower types,
+    // the switch operand must be coerced to the type of the case expression.
+    cgc_add_enclosing_switch(cgc_fs, lbl1, lbl2, value_type(get_child_(SWITCH_KW, node, 0)));
+#else
     cgc_add_enclosing_switch(cgc_fs, lbl1, lbl2);
+#endif
     binding = cgc_locals;
 
     codegen_rvalue(get_child_(SWITCH_KW, node, 0));    // switch operand
@@ -2948,10 +3381,23 @@ void codegen_statement(ast node) {
       jump(lbl1);
       def_label(heap[binding + 4]);           // false jump location of previous case
       heap[binding + 4] = alloc_label(0);     // create false jump location for current case
+#ifdef SUPPORT_EMULATED_INT64
+      if (is_int64_type(switch_binding_expr_type(binding))) {
+        // A scalar EQ can't compare 8-byte values: call eq_i64 on the switch
+        // operand (kept at the top of the stack, not popped) and the case
+        // expression, then branch on the 0/1 result like the scalar path
+        // branches on the raw comparison.
+        codegen_int64_case_eq(get_child_(CASE_KW, node, 0));
+        xor_reg_reg(reg_Y, reg_Y);
+        jump_cond_reg_reg(NE, lbl1, reg_X, reg_Y);
+      } else
+#endif
+      {
       codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
       stack_pop(reg_Y);                       // get case value
       stack_load(reg_X, cgc_fs);              // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
+      }
       jump(heap[binding + 4]);                // condition is false => jump to next case
       def_label(lbl1);                        // start of case conditional block
       codegen_statement(get_child_(CASE_KW, node, 1));  // case statement
@@ -2998,21 +3444,21 @@ void codegen_statement(ast node) {
 
     if (get_child_(RETURN_KW, node, 0) != 0) {
 #ifdef SUPPORT_STRUCT_UNION
-      if (is_struct_or_union_type(current_fun_return_type)) {
-        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter binding
+      if (is_struct_like(current_fun_return_type)) {
+        // Widening of scalar values to 64 bits done by codegen_aggregate_into
+        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
         stack_load(reg_Y, heap[binding+3]); // load hidden parameter address
-        codegen_aggregate_into(reg_Y, 0, get_child_(RETURN_KW, node, 0), type_width(current_fun_return_type, true, true));
+        codegen_aggregate_into(reg_Y, 0, get_child_(RETURN_KW, node, 0), type_width(current_fun_return_type, true, true), current_fun_return_type);
         // The value of a struct/union expression is its address: leave the
         // caller-allocated buffer's address in reg_X.
         mov_reg_reg(reg_X, reg_Y);
       } else
 #endif
       {
-      codegen_rvalue(get_child_(RETURN_KW, node, 0));
-      stack_pop(reg_X);
       // The returned value is converted to the function's return type, which
       // the callers trust to be correctly extended.
-      convert_reg(reg_X, value_type(get_child_(RETURN_KW, node, 0)), current_fun_return_type);
+      codegen_rvalue_coerced(get_child_(RETURN_KW, node, 0), current_fun_return_type);
+      stack_pop(reg_X); // return value is in reg_X
       }
     }
 
@@ -3057,7 +3503,7 @@ void codegen_statement(ast node) {
 // the return value address and store the return type in a global variable so we
 // can access it in the return statement.
 void add_function_hidden_params(ast fun_return_type) {
-  if (is_struct_or_union_type(fun_return_type)) {
+  if (is_struct_like(fun_return_type)) {
     cgc_add_local_param(0, 1, pointer_type(fun_return_type, false));
   }
 }
@@ -3555,6 +4001,7 @@ void codegen_begin() {
   // reg_glo[WORD_SIZE]: malloc bump pointer
   cgc_global_alloc += 2 * WORD_SIZE;
 
+  one_literal = new_ast0(INTEGER, -1);
   int_type = new_ast0(INT_KW, 0);
 #if defined(PARSE_NUMERIC_LITERAL_SUFFIX) || defined(SUPPORT_SIZEOF)
   uint_type = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
