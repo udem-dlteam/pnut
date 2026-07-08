@@ -225,6 +225,7 @@ void mov_reg_mem64(int dst, int base, int offset);
 #define mov_mem_reg(base, offset, src) mov_mem64_reg(base, offset, src)
 #define mov_reg_mem(dst, base, offset) mov_reg_mem64(dst, base, offset)
 #endif
+void load_mem_location(int dst, int base, int offset, int width, bool is_signed);
 
 void add_reg_imm(int dst, int imm);
 void add_reg_lbl(int dst, int lbl);
@@ -281,6 +282,32 @@ void reset_stack_to(const int to_cgc_fs) {
   if (to_cgc_fs != cgc_fs) {
     stack_grow(to_cgc_fs - cgc_fs);
     cgc_fs += (to_cgc_fs - cgc_fs);
+  }
+}
+
+// Load word-sized value from the stack at index `ix` into register `reg`.
+// The index is relative to the current frame size (cgc_fs).
+void stack_load(const int reg, const int ix) {
+  mov_reg_mem(reg, reg_SP, (cgc_fs - ix) * WORD_SIZE);
+}
+
+// Load a value of size `width` and sign `is_signed` from the stack at index
+// `ix` into register `reg`.
+// The index is relative to the current frame size (cgc_fs).
+void stack_dereference(const int reg, const int ix, const int width, const bool is_signed) {
+  load_mem_location(reg, reg_SP, (cgc_fs - ix) * WORD_SIZE, width, is_signed);
+}
+
+// Push the address of the stack value at index `ix` onto the stack.
+// The index is relative to the current frame size (cgc_fs).
+// Clobbers reg_Z.
+void stack_push_address_of(const int ix) {
+  if (cgc_fs != ix) {
+    mov_reg_reg(reg_Z, reg_SP);
+    add_reg_imm(reg_Z, (cgc_fs - ix) * WORD_SIZE);
+    stack_push(reg_Z);
+  } else {
+    stack_push(reg_SP);
   }
 }
 
@@ -1728,7 +1755,7 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width) {
     dst_offset += (cgc_fs - save_fs) * WORD_SIZE;
   } else {
     // Reload destination register, saved below the temporaries
-    mov_reg_mem(dst_reg, reg_SP, WORD_SIZE * (cgc_fs - save_fs - 1));
+    stack_load(dst_reg, (save_fs + 1));
   }
   copy_obj(dst_reg, dst_offset, reg_X, 0, width);
   reset_stack_to(save_fs);
@@ -1880,9 +1907,7 @@ void codegen_call(ast node) {
 #ifdef SUPPORT_STRUCT_UNION
   if (buf_words != 0) {
     // Push the buffer address as the hidden first argument (pushed last)
-    mov_reg_imm(reg_X, (cgc_fs - save_fs) * WORD_SIZE);
-    add_reg_reg(reg_X, reg_SP);
-    stack_push(reg_X);
+    stack_push_address_of(save_fs);
   }
 #endif
 
@@ -1893,10 +1918,11 @@ void codegen_call(ast node) {
 #ifdef SUPPORT_STRUCT_UNION
   // After popping the arguments, the result buffer is on top of the stack.
   // Its address is the value of the call expression.
-  if (buf_words != 0) mov_reg_reg(reg_X, reg_SP);
-#endif
-
+  if (buf_words != 0) stack_push(reg_SP);
+  else stack_push(reg_X);
+#else
   stack_push(reg_X);
+#endif
 }
 
 // Ternary expression. Each arm leaves its value on the stack.
@@ -1967,9 +1993,7 @@ void codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          mov_reg_imm(reg_X, (cgc_fs - heap[binding+3]) * WORD_SIZE);
-          add_reg_reg(reg_X, reg_SP);
-          stack_push(reg_X);
+          stack_push_address_of(heap[binding+3]);
           break;
         case BINDING_VAR_GLOBAL:
           mov_reg_imm(reg_X, heap[binding+3]);
@@ -2115,7 +2139,6 @@ void codegen_rvalue(ast node) {
   int nb_children = get_nb_children(node);
   int binding;
   int lbl1, lbl2;
-  int left_width;
   ast type;
   ast child0, child1;
 
@@ -2144,39 +2167,28 @@ void codegen_rvalue(ast node) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
-          left_width = cgc_fs - heap[binding+3];
-          mov_reg_imm(reg_X, left_width * WORD_SIZE);
-          add_reg_reg(reg_X, reg_SP);
-          // structs/unions are allocated on the stack, so no need to dereference
-          // For arrays, we need to dereference the pointer since they are passed as pointers
-#ifdef SUPPORT_STRUCT_UNION
-          if (get_op(heap[binding+4]) != STRUCT_KW && get_op(heap[binding+4]) != UNION_KW) {
-            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
-          }
-#else
-          load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
-#endif
-          stack_push(reg_X);
-          break;
-
         case BINDING_VAR_LOCAL:
-          left_width = cgc_fs - heap[binding+3];
-          mov_reg_imm(reg_X, left_width * WORD_SIZE);
-          add_reg_reg(reg_X, reg_SP);
-          // local arrays/structs/unions/ are allocated on the stack, so their
-          // value is their address (no dereference)
-          if (!is_aggregate_type(heap[binding+4])) {
-            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+          // structs and unions locals and parameters are always on the stack,
+          // so their value is their address.
+          // Arrays are allocated on the stack only when they are local
+          // variables, so their value is also their address.
+          // Array parameters (see add_function_params) are passed as pointers,
+          // so we dereference the stack value to get the value of the pointer.
+          if (is_aggregate_type(heap[binding+4])) {
+            stack_push_address_of(heap[binding+3]);
+          } else {
+            stack_dereference(reg_X, heap[binding+3], type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+            stack_push(reg_X);
           }
-          stack_push(reg_X);
           break;
         case BINDING_VAR_GLOBAL:
-          mov_reg_imm(reg_X, heap[binding+3]);
-          add_reg_reg(reg_X, reg_glo);
           // global arrays/structs/unions are also allocated in
           // memory, so their value is their address (no dereference)
-          if (!is_aggregate_type(heap[binding+4])) {
-            load_mem_location(reg_X, reg_X, 0, type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+          if (is_aggregate_type(heap[binding+4])) {
+            mov_reg_reg(reg_X, reg_glo);
+            add_reg_imm(reg_X, heap[binding+3]);
+          } else {
+            load_mem_location(reg_X, reg_glo, heap[binding+3], type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
           }
           stack_push(reg_X);
           break;
@@ -2305,20 +2317,19 @@ void codegen_rvalue(ast node) {
       }
     } else if (op == '=') {
       type = value_type(child0);
-      left_width = type_width(type, true, false);
       codegen_lvalue(child0);
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(type)) {
         // Struct assignment, we copy the struct.
         stack_pop(reg_Y); // destination address
-        codegen_aggregate_into(reg_Y, 0, child1, left_width);
+        codegen_aggregate_into(reg_Y, 0, child1, type_width(type, true, false));
       } else
 #endif // SUPPORT_STRUCT_UNION
       {
         codegen_rvalue_coerced_no_temps(child1, type); // so that the destination address is right below the value
         stack_pop(reg_X);
         stack_pop(reg_Y);
-        write_mem_location(reg_Y, 0, reg_X, left_width);
+        write_mem_location(reg_Y, 0, reg_X, type_width(type, true, false));
       }
       stack_push(reg_X);
     } else if (op == AMP_EQ || op == BAR_EQ || op == CARET_EQ || op == LSHIFT_EQ || op == MINUS_EQ || op == PERCENT_EQ || op == PLUS_EQ || op == RSHIFT_EQ || op == SLASH_EQ || op == STAR_EQ) {
@@ -2936,7 +2947,7 @@ void codegen_statement(ast node) {
       heap[binding + 4] = alloc_label(0);     // create false jump location for current case
       codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
       stack_pop(reg_Y);                       // get case value
-      mov_reg_mem(reg_X, reg_SP, 0);          // get switch operand without popping it
+      stack_load(reg_X, cgc_fs);              // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       jump(heap[binding + 4]);                // condition is false => jump to next case
       def_label(lbl1);                        // start of case conditional block
@@ -2985,8 +2996,8 @@ void codegen_statement(ast node) {
     if (get_child_(RETURN_KW, node, 0) != 0) {
 #ifdef SUPPORT_STRUCT_UNION
       if (is_struct_or_union_type(current_fun_return_type)) {
-        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
-        mov_reg_mem(reg_Y, reg_SP, (cgc_fs - heap[binding+3]) * WORD_SIZE);
+        binding = cgc_lookup_var(0, cgc_locals); // hidden parameter binding
+        stack_load(reg_Y, heap[binding+3]); // load hidden parameter address
         codegen_aggregate_into(reg_Y, 0, get_child_(RETURN_KW, node, 0), type_width(current_fun_return_type, true, true));
         // The value of a struct/union expression is its address: leave the
         // caller-allocated buffer's address in reg_X.
