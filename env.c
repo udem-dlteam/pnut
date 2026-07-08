@@ -38,6 +38,9 @@ enum BINDING {
 #define binding_ident(binding) heap[binding+2]
 
 #define fun_binding_lbl(binding) heap[binding+4]
+#ifdef SUPPORT_EMULATED_INT64
+#define switch_binding_expr_type(binding) heap[binding+6]
+#endif
 
 int cgc_lookup_last_binding(const int binding_type, int binding) {
   while (binding != 0) {
@@ -187,6 +190,19 @@ void cgc_add_enclosing_loop(const int loop_fs, const int break_lbl, const ast co
   cgc_locals = binding;
 }
 
+#ifdef SUPPORT_EMULATED_INT64
+void cgc_add_enclosing_switch(const int loop_fs, const int break_lbl, const int next_case_lbl, const ast type) {
+  int binding = alloc_obj(7);
+  heap[binding+0] = cgc_locals;
+  heap[binding+1] = BINDING_SWITCH;
+  heap[binding+2] = loop_fs;
+  heap[binding+3] = break_lbl;
+  heap[binding+4] = next_case_lbl;
+  heap[binding+5] = 0; // Default label
+  heap[binding+6] = type; // Switch operand type
+  cgc_locals = binding;
+}
+#else
 void cgc_add_enclosing_switch(const int loop_fs, const int break_lbl, const int next_case_lbl) {
   int binding = alloc_obj(6);
   heap[binding+0] = cgc_locals;
@@ -197,6 +213,7 @@ void cgc_add_enclosing_switch(const int loop_fs, const int break_lbl, const int 
   heap[binding+5] = 0; // Default label
   cgc_locals = binding;
 }
+#endif
 
 void cgc_add_global(const int ident, const int width, const ast type, const bool is_static_local) {
   int binding = alloc_obj(5);
