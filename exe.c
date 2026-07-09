@@ -191,7 +191,10 @@ ast current_fun_return_type = 0;
 #include "env.c"
 
 int grow_fs(const int words) {
-  return (cgc_fs += words);
+  // avoid `return (cgc_fs += words)` because some shells parse assignment ops
+  // with lower precedence than assignment.
+  cgc_fs += words;
+  return cgc_fs;
 }
 
 const int reg_X;
