@@ -51,3 +51,5 @@ shape_stack after pass_as_ref: 123 456
 26 34 38 46
 39 51 57 69
 52 68 76 92
+shape3: 5 6
+ternary member: 7 8

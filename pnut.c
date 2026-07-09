@@ -943,7 +943,7 @@ ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, ex
 #define car_(expected_op, pair)                 car(pair)
 #define cdr_(expected_op, pair)                 cdr(pair)
 #endif
-// void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
+void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
 void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
 #ifndef target_sh
 ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
@@ -1589,16 +1589,31 @@ void include_file(char *file_name, char *relative_to) {
 }
 
 #ifdef SUPPORT_64_BIT_LITERALS
+// Pnut targets platforms without support for 64-bit integers, so we
+// emulate 64-bit unsigned integers using two 32-bit signed integers.
+// Furthermore, some shell/awk implementations use numbers with higher than
+// 32-bit precision (int64_t or double), meaning that we cannot rely on the sign
+// bit to detect overflows.
+// To optimize for memory usage, only 64-bit integers larger than 31 bits are
+// stored as objects in the heap. Smaller integers are stored as regular
+// integers. The sign bit is used to distinguish between large ints (positive)
+// and regular ints (negative).
+
+// Clear the upper bits when shifting right, to make sure we don't get any upper
+// bits/sign extension.
+#define I32_LOGICAL_RSHIFT_16(x) ((x >> 16) & 0xffff)
+// Test bit 31 with a shift rather than `& 0x80000000`. The constant 0x80000000
+// has its sign bit set, so the awk/sh backend serializes it host-dependently
+// (GCC prints the signed word -2147483648, the awk runtime prints 2147483648),
+// which breaks the byte-for-byte bootstrap. 31 and 1 serialize identically.
+#define I32_POSITIVE(x) (((x >> 31) & 1) == 0)
+#define I32_NEGATIVE(x) ((x >> 31) & 1)
+
 // Array used to accumulate 64 bit unsigned integers on 32 bit systems
 int val_32[2];
 
 // x = x * y
 void u64_mul_u32(int *x, int y) {
-
-  // Note, because we are using 32 bit **signed** integers, we need to clear the
-  // sign bit when shifting right to avoid sign extension.
-  #define I32_LOGICAL_RSHIFT_16(x) ((x >> 16) & 0xffff)
-
   int xlo = x[0] & 0xffff;
   int xhi = I32_LOGICAL_RSHIFT_16(x[0]);
   int ylo = y & 0xffff;
@@ -1614,19 +1629,23 @@ void u64_mul_u32(int *x, int y) {
 
 // x = x + y
 void u64_add_u32(int *x, int y) {
+#ifdef SAFE_MODE
+  if (y > 255) fatal_error("u64_add_u32: Only small integers can be added to large integers");
+#endif
+  // y is a single digit (< base <= 16), so a carry out of the low word can only
+  // clear bit 31, never set it. Detect it with a bit test, not `lo < 0`: a low
+  // word with bit 31 set is negative under GCC's 32-bit signed ints but positive
+  // in the shell/awk runtime, so a signed test disagrees between runtimes.
   int lo = x[0] + y;
-  // Carry (using signed integers)
-  x[1] += ((x[0] < 0) != (lo < 0));
-  x[0] = lo;
+  x[1] = x[1] + (I32_NEGATIVE(x[0]) && I32_POSITIVE(lo));
+  // Mask lo to 32 bits (awk's + doesn't wrap) by reassembling from its 16-bit
+  // halves, avoiding the 0xffffffff literal which also serializes host-dependently.
+  x[0] = (I32_LOGICAL_RSHIFT_16(lo) << 16) + (lo & 0xffff);
 }
 
-// Pack a 64 bit unsigned integer into an object.
-// Because most integers are small and we want to save memory, we only store the
-// large int object ("large ints") if it is larger than 31 bits. Otherwise, we
-// store it as a regular integer. The sign bit is used to distinguish between
-// large ints (positive) and regular ints (negative).
+// Pack a 64 bit unsigned integer into an object or immediate.
 void u64_to_obj(int *x) {
-  if (x[0] >= 0 && x[1] == 0) { // "small int"
+  if (I32_POSITIVE(x[0]) && x[1] == 0) { // "small int"
     val = -x[0];
   } else {
     // putstr("0x");
