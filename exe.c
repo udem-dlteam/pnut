@@ -1206,7 +1206,7 @@ ast value_type(ast node) {
       // The value is encoded by pnut.c::u64_to_obj, see function for details.
       if (get_val_(INTEGER, node) <= 0) { // Small "unboxed" int
         return int_type;
-      } else if (heap[get_val_(INTEGER, node) + 1] >= 0) { // Large int with non-negative high word
+      } else if (I32_POSITIVE(heap[get_val_(INTEGER, node) + 1])) { // Large int with non-negative high word
         return long_type;
       } else { // Large int with negative high word
         return ulong_type;
@@ -1224,7 +1224,7 @@ ast value_type(ast node) {
         return int_type;
       } else if (heap[get_val(node) + 1] == 0) { // Large int with zero high word
         return uint_type;
-      } else if (heap[get_val(node) + 1] >= 0) { // Large int with non-negative high word
+      } else if (I32_POSITIVE(heap[get_val(node) + 1])) { // Large int with non-negative high word
         return long_type;
       } else { // Large int with negative high word
         return ulong_type;
@@ -1240,7 +1240,7 @@ ast value_type(ast node) {
       // long and long long coincide as the 64-bit LONG_KW type here. A value
       // that doesn't fit in a signed 64-bit long -- bit 63 set, i.e. a large
       // int with a negative high word -- becomes unsigned long.
-      if (get_val(node) > 0 && heap[get_val(node) + 1] < 0) {
+      if (get_val(node) > 0 && I32_NEGATIVE(heap[get_val(node) + 1])) {
         return ulong_type;
       } else {
         return long_type;
