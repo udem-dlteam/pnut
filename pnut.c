@@ -403,11 +403,16 @@ void putstr(char *str) {
   }
 }
 
-#ifdef PNUT_SH
+#if defined(PNUT_SH) || defined(PNUT_AWK)
+// When compiling pnut-sh or pnut-awk, we use the built-in printf function to
+// output integers in decimal, hex and octal.
+
 #define putint(n) printf("%d", n)
 #define puthex_unsigned(n) printf("%x", n)
 #define putoct_unsigned(n) printf("%o", n)
+
 #else
+
 void putint_aux(int n) {
   if (n <= -10) putint_aux(n / 10);
   putchar('0' - (n % 10));
@@ -423,7 +428,7 @@ void putint(int n) {
   }
 }
 
-#ifdef target_sh
+#if defined(target_sh) || defined(target_awk)
 
 // Output unsigned integer in hex
 void puthex_unsigned(int n) {
@@ -438,9 +443,9 @@ void putoct_unsigned(int n) {
   if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
   putchar('0' + (n & 7));
 }
-#endif
+#endif // defined(target_sh) || defined(target_awk)
 
-#endif
+#endif // defined(PNUT_SH) || defined(PNUT_AWK)
 
 #ifdef NICE_ERR_MSG
 
@@ -1624,6 +1629,10 @@ void u64_to_obj(int *x) {
   if (x[0] >= 0 && x[1] == 0) { // "small int"
     val = -x[0];
   } else {
+    // putstr("0x");
+    // puthex_unsigned(x[1]);
+    // puthex_unsigned(x[0]);
+    // putchar('\n');
     val = alloc_obj(2);
     heap[val    ] = x[0];
     heap[val + 1] = x[1];
