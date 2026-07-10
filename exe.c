@@ -3648,12 +3648,12 @@ void codegen_glo_decl(ast node) {
   int op = get_op(node);
 
   if (op == DECLS) {
-    // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
-    // storage class for global variables since pnut-sh only supports 1
-    // translation unit.
-#ifdef SUPPORT_TYPE_SPECIFIERS
-    if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
-#endif
+    // - AUTO_KW and REGISTER_KW can simply be ignored.
+    // - STATIC_KW is the default storage class for global variables since pnut-sh
+    //   only supports 1 translation unit.
+    // - EXTERN_KW forward-declares a variable defined later in the same
+    //   translation unit. codegen_glo_var_decl allocates the binding without
+    //   emitting an initializer, and the definition reuses that binding.
 
     decls = get_child__(DECLS, LIST, node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations

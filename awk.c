@@ -1285,11 +1285,14 @@ void comp_glo_decl(ast node) {
   }
 
   if (op == DECLS) { // Variable declarations
-    // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
-    // storage class for global variables since pnut-sh only supports 1
-    // translation unit.
+    // - AUTO_KW and REGISTER_KW can simply be ignored.
+    // - STATIC_KW is the default storage class for global variables since
+    //   pnut-sh only supports 1 translation unit.
+    // - EXTERN_KW forward-declares a variable defined later in the same
+    //   translation unit. Globals are plain shell variables, so the declaration
+    //   allocates nothing and emits no assignment.
 #ifdef SUPPORT_TYPE_SPECIFIERS
-    if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
+    if (get_child_(DECLS, node, 1) == EXTERN_KW) return;
 #endif
     declarations = get_child__(DECLS, LIST, node, 0);
     while (declarations != 0) { // Multiple variable declarations

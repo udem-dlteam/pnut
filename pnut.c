@@ -354,6 +354,19 @@
 // #define PRINT_MEMORY_STATS
 
 // ===================== Compatibility macros and typedefs =====================
+
+// pnut-sh and pnut-awk are only support a single translation unit, so the
+// extern keyword doesn't do anything, except forward declare a variable defined
+// later in the same translation unit.
+// Because the minimal versions of pnut don't support storage class specifiers,
+// we simply ignore the extern keyword when compiling pnut-sh and pnut-awk.
+// This causes extern declarations to be compiled twice in pnut-sh and pnut-awk,
+// the first time zero-initializing the variable, and the second time
+// initializing it with its declared value.
+#ifdef PNUT_MIN
+#define extern
+#endif
+
 #ifdef NO_TERNARY_SUPPORT
 // M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
@@ -2539,6 +2552,10 @@ void init_pnut_macros() {
   init_builtin_int_macro("PNUT_X86_64", 1);
   init_builtin_int_macro("PNUT_X86_64_MAC", 1);
   init_builtin_int_macro("__x86_64__", 1);
+#endif
+
+#ifdef PNUT_BOOTSTRAP
+  init_builtin_int_macro("PNUT_MIN", 1);
 #endif
 
 }
