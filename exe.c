@@ -197,11 +197,11 @@ int grow_fs(const int words) {
   return cgc_fs;
 }
 
-const int reg_X;
-const int reg_Y;
-const int reg_Z;
-const int reg_SP;
-const int reg_glo;
+extern const int reg_X;
+extern const int reg_Y;
+extern const int reg_Z;
+extern const int reg_SP;
+extern const int reg_glo;
 
 void mov_reg_imm(int dst, int imm);             // Move 32 bit immediate to register
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -469,16 +469,16 @@ void div_for_pointer_arith(int reg, int width) {
   }
 }
 
-const int EQ; // x == y
-const int NE; // x != y
-const int LT; // x < y
-const int LT_U; // x < y  (unsigned)
-const int GE; // x >= y
-const int GE_U; // x >= y (unsigned)
-const int LE; // x <= y
-const int LE_U; // x <= y (unsigned)
-const int GT; // x > y
-const int GT_U; // x > y  (unsigned)
+extern const int EQ; // x == y
+extern const int NE; // x != y
+extern const int LT; // x < y
+extern const int LT_U; // x < y  (unsigned)
+extern const int GE; // x >= y
+extern const int GE_U; // x >= y (unsigned)
+extern const int LE; // x <= y
+extern const int LE_U; // x <= y (unsigned)
+extern const int GT; // x > y
+extern const int GT_U; // x > y  (unsigned)
 
 void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 
