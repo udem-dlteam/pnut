@@ -37,6 +37,11 @@ enum BINDING {
 #define binding_kind(binding)  heap[binding+1]
 #define binding_ident(binding) heap[binding+2]
 
+// Params, locals and globals share a layout: an offset (stack slot for locals,
+// cgc_global_alloc offset for globals) and the declared type.
+#define var_binding_offset(binding) heap[binding+3]
+#define var_binding_type(binding)   heap[binding+4]
+
 #define fun_binding_lbl(binding) heap[binding+4]
 #ifdef SUPPORT_EMULATED_INT64
 #define switch_binding_expr_type(binding) heap[binding+6]
@@ -78,15 +83,23 @@ int cgc_lookup_enclosing_loop_or_switch(int binding) {
 
 int cgc_add_local(const enum BINDING binding_type, const int ident, const ast type, int env) {
   int binding = alloc_obj(5);
-  heap[binding+0] = env;
-  heap[binding+1] = binding_type;
-  heap[binding+2] = ident;
-  heap[binding+3] = cgc_fs;
-  heap[binding+4] = type;
+  binding_next(binding) = env;
+  binding_kind(binding) = binding_type;
+  binding_ident(binding) = ident;
+  var_binding_offset(binding) = cgc_fs;
+  var_binding_type(binding) = type;
   return binding;
 }
 
 #if defined(target_sh) || defined(target_awk)
+
+// A loop binding records the glo_decls range holding the loop's end actions
+// (increment, etc.) so they can be replayed on continue and at the bottom of
+// the loop body. A switch binding records whether it is in tail position.
+#define loop_binding_action_start(binding) heap[binding+2]
+#define loop_binding_action_end(binding)   heap[binding+3]
+#define switch_binding_in_tail_position(binding) heap[binding+2]
+
 void cgc_add_local_var(const enum BINDING binding_type, const int ident, const ast type) {
   cgc_fs += 1;
   cgc_locals = cgc_add_local(binding_type, ident, type, cgc_locals);
@@ -98,18 +111,18 @@ void cgc_add_local_var(const enum BINDING binding_type, const int ident, const a
 
 void cgc_add_enclosing_loop() {
   int binding = alloc_obj(4);
-  heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_LOOP;
-  heap[binding+2] = 0; // loop end action start
-  heap[binding+3] = 0; // loop end action end
+  binding_next(binding) = cgc_locals;
+  binding_kind(binding) = BINDING_LOOP;
+  loop_binding_action_start(binding) = 0;
+  loop_binding_action_end(binding) = 0;
   cgc_locals = binding;
 }
 
 void cgc_add_enclosing_switch(const bool in_tail_position) {
   int binding = alloc_obj(3);
-  heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_SWITCH;
-  heap[binding+2] = in_tail_position;
+  binding_next(binding) = cgc_locals;
+  binding_kind(binding) = BINDING_SWITCH;
+  switch_binding_in_tail_position(binding) = in_tail_position;
   cgc_locals = binding;
 }
 
