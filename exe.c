@@ -527,6 +527,19 @@ enum {
   GOTO_LABEL,
 };
 
+// Labels are objects allocated on the heap. Every label has a kind and an
+// address: the address is negative once the label is defined, and otherwise
+// heads the list of code locations to patch (see use_label).
+// Generic labels additionally carry the name and source location used in error
+// messages, but only when they are allocated with room for them (see
+// alloc_label). Goto labels instead use offset 2 for the frame size.
+#define label_kind(lbl) heap[lbl]
+#define label_addr(lbl) heap[lbl+1]
+#define label_name(lbl) heap[lbl+2]
+#define label_file(lbl) heap[lbl+3]
+#define label_line(lbl) heap[lbl+4]
+#define goto_label_fs(lbl) heap[lbl+2]
+
 #define START_INIT_BLOCK() \
   def_label(init_next_lbl); \
   init_next_lbl = alloc_label("init_next");
@@ -548,21 +561,21 @@ void assert_all_labels_defined(int init_next_lbl) {
   // Check that all labels are defined
   for (; i < labels_ix; i++) {
     lbl = labels[i];
-    if (lbl != init_next_lbl && heap[lbl + 1] > 0) {
+    if (lbl != init_next_lbl && label_addr(lbl) > 0) {
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
-      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
+      if (label_kind(lbl) == GENERIC_LABEL && label_name(lbl) != 0) {
         def_label(lbl);
         rt_debug("Function or label is not defined\n");
         rt_debug("name = ");
-        rt_debug((char*) heap[lbl + 2]);
+        rt_debug((char*) label_name(lbl));
         rt_debug("\n");
         // TODO: This should crash but let's just return for now to see how far we can get
         ret();
       }
 #else
       putstr("Label ");
-      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
-        putstr((char*) heap[lbl + 2]);
+      if (label_kind(lbl) == GENERIC_LABEL && label_name(lbl) != 0) {
+        putstr((char*) label_name(lbl));
       } else {
         putint(lbl);
       }
@@ -581,12 +594,12 @@ void add_label(int lbl) {
 
 int alloc_label(char* name) {
   int lbl = alloc_obj(5);
-  heap[lbl] = GENERIC_LABEL;
-  heap[lbl + 1] = 0; // Address of label
-  heap[lbl + 2] = (intptr_t) name; // Name of label
-  heap[lbl + 3] = (intptr_t) fd_filepath;
+  label_kind(lbl) = GENERIC_LABEL;
+  label_addr(lbl) = 0;
+  label_name(lbl) = (intptr_t) name;
+  label_file(lbl) = (intptr_t) fd_filepath;
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  heap[lbl + 4] = line_number;
+  label_line(lbl) = line_number;
 #endif
   add_label(lbl);
   return lbl;
@@ -599,8 +612,8 @@ int alloc_label(char* name) {
 
 int alloc_label_() {
   int lbl = alloc_obj(2);
-  heap[lbl] = GENERIC_LABEL;
-  heap[lbl + 1] = 0; // Address of label
+  label_kind(lbl) = GENERIC_LABEL;
+  label_addr(lbl) = 0;
   add_label(lbl);
   return lbl;
 }
@@ -610,9 +623,9 @@ int alloc_label_() {
 
 int alloc_goto_label() {
   int lbl = alloc_obj(3);
-  heap[lbl] = GOTO_LABEL;
-  heap[lbl + 1] = 0; // Address of label
-  heap[lbl + 2] = 0; // cgc-fs of label
+  label_kind(lbl) = GOTO_LABEL;
+  label_addr(lbl) = 0;
+  goto_label_fs(lbl) = 0;
   add_label(lbl);
   return lbl;
 }
@@ -620,15 +633,15 @@ int alloc_goto_label() {
 #endif // SUPPORT_GOTO
 
 bool is_label_defined(int lbl) {
-  return heap[lbl + 1] < 0;
+  return label_addr(lbl) < 0;
 }
 
 void use_label(int lbl) {
 
-  int addr = heap[lbl + 1];
+  int addr = label_addr(lbl);
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
+  if (label_kind(lbl) != GENERIC_LABEL) fatal_error("use_label expects generic label");
 #endif
 
   if (addr < 0) {
@@ -641,7 +654,7 @@ void use_label(int lbl) {
     // the label is defined as a list stored in the code buffer. The label
     // points to the first address to patch, and the address of the next patch
     // is stored in the code buffer like so:
-    // heap[lbl + 1] = [ patch address #1 ]
+    // label_addr(lbl) = [ patch address #1 ]
     //
     // Code buffer:
     // |-----------------------------------------------
@@ -653,45 +666,45 @@ void use_label(int lbl) {
     // |-----------------------------------------------
     emit_i32_le(0); // 32 bit placeholder for distance
     code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl + 1] = code_alloc;
+    label_addr(lbl) = code_alloc;
   }
 }
 
 void def_label(int lbl) {
 
-  int addr = heap[lbl + 1];
-  int label_addr = code_alloc;
+  int addr = label_addr(lbl);
+  int def_addr = code_alloc;
   int next_addr;
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+  if (label_kind(lbl) != GENERIC_LABEL) fatal_error("def_label expects generic label");
 #endif
 
   if (addr < 0) {
 #ifdef SAFE_MODE
     putstr("Label ");
-    if (heap[lbl + 2] != 0) {
-      putstr((char*) heap[lbl + 2]);
+    if (label_name(lbl) != 0) {
+      putstr((char*) label_name(lbl));
     } else {
       putint(lbl);
     }
     putstr(" previously defined at ");
-    putstr((char*) heap[lbl + 3]);
+    putstr((char*) label_file(lbl));
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     putstr(":");
-    putint(heap[lbl + 4]);
+    putint(label_line(lbl));
 #endif
     fatal_error(" being redefined");
 #endif
   } else {
-    heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
+    label_addr(lbl) = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
       next_addr = code[addr - 1]; // get pointer to next patch address before we overwrite it
       code_alloc = addr - 4; // place code pointer to where use_label was called
-      emit_i32_le(label_addr - addr); // replace placeholder with relative address
+      emit_i32_le(def_addr - addr); // replace placeholder with relative address
       addr = next_addr;
     }
-    code_alloc = label_addr;
+    code_alloc = def_addr;
   }
 }
 
@@ -702,12 +715,12 @@ void def_label(int lbl) {
 // simply emitting the address.
 void jump_to_goto_label(int lbl) {
 
-  int addr = heap[lbl + 1];
-  int lbl_fs = heap[lbl + 2];
+  int addr = label_addr(lbl);
+  int lbl_fs = goto_label_fs(lbl);
   int start_code_alloc = code_alloc;
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
+  if (label_kind(lbl) != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
 #endif
 
   if (addr < 0) {
@@ -726,27 +739,27 @@ void jump_to_goto_label(int lbl) {
     code[code_alloc-1] = addr; // chain with previous patch address
     code[code_alloc-2] = cgc_fs; // save current frame size
     code[code_alloc-3] = start_code_alloc; // track initial code alloc so we can come back
-    heap[lbl + 1] = code_alloc;
+    label_addr(lbl) = code_alloc;
   }
 }
 
 void def_goto_label(int lbl) {
 
-  int addr = heap[lbl + 1];
-  int label_addr = code_alloc;
+  int addr = label_addr(lbl);
+  int def_addr = code_alloc;
   int next_addr;
   int goto_fs;
   int start_code_alloc;
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
+  if (label_kind(lbl) != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
 #endif
 
   if (addr < 0) {
     fatal_error("goto label defined more than once");
   } else {
-    heap[lbl + 1] = -label_addr; // define label's address
-    heap[lbl + 2] = cgc_fs;      // define label's frame size
+    label_addr(lbl) = -def_addr;    // define label's address
+    goto_label_fs(lbl) = cgc_fs;    // define label's frame size
     while (addr != 0) {
       next_addr = code[addr-1]; // get pointer to next patch address
       goto_fs = code[addr-2]; // get frame size at goto instruction
@@ -754,12 +767,12 @@ void def_goto_label(int lbl) {
       stack_grow(cgc_fs - goto_fs); // adjust stack
       start_code_alloc = code_alloc;
       jump_rel(0); // Generate dummy jump instruction to get instruction length
-      addr = label_addr - code_alloc; // compute relative address
+      addr = def_addr - code_alloc; // compute relative address
       code_alloc = start_code_alloc;
       jump_rel(addr);
       addr = next_addr;
     }
-    code_alloc = label_addr;
+    code_alloc = def_addr;
   }
 }
 
