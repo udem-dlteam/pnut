@@ -141,22 +141,22 @@ void emit_i64_le(const int n) {
 
 #ifdef SUPPORT_64_BIT_LITERALS
 void emit_i32_le_large_imm(const int imm_obj) {
-  if (imm_obj <= 0) {
+  if (!is_large_int(imm_obj)) {
     emit_i32_le(-imm_obj);
   } else {
     // Check that the number doesn't overflow 64 bits
-    if (heap[imm_obj + 1] != 0) fatal_error("emit_i32_le_large_imm: integer overflow");
-    emit_i32_le(heap[imm_obj]);
+    if (large_int_hi(imm_obj) != 0) fatal_error("emit_i32_le_large_imm: integer overflow");
+    emit_i32_le(large_int_lo(imm_obj));
   }
 }
 
 #if WORD_SIZE == 8
 void emit_i64_le_large_imm(const int imm_obj) {
-  if (imm_obj <= 0) {
+  if (!is_large_int(imm_obj)) {
     emit_i64_le(-imm_obj);
   } else {
-    emit_i32_le(heap[imm_obj]);
-    emit_i32_le(heap[imm_obj + 1]);
+    emit_i32_le(large_int_lo(imm_obj));
+    emit_i32_le(large_int_hi(imm_obj));
   }
 }
 #endif
@@ -1287,9 +1287,9 @@ ast value_type(ast node) {
 
 #ifdef SUPPORT_64_BIT_LITERALS
       // The value is encoded by pnut.c::u64_to_obj, see function for details.
-      if (get_val_(INTEGER, node) <= 0) { // Small "unboxed" int
+      if (!is_large_int(get_val_(INTEGER, node))) { // Small "unboxed" int
         return int_type;
-      } else if (I32_POSITIVE(heap[get_val_(INTEGER, node) + 1])) { // Large int with non-negative high word
+      } else if (I32_POSITIVE(large_int_hi(get_val_(INTEGER, node)))) { // Large int with non-negative high word
         return long_type;
       } else { // Large int with negative high word
         return ulong_type;
@@ -1303,11 +1303,11 @@ ast value_type(ast node) {
     else if (op == INTEGER_HEX || op == INTEGER_OCT) {
 #ifdef SUPPORT_64_BIT_LITERALS
       // Type ladder: int -> uint -> long -> ulong.
-      if (get_val(node) <= 0) { // Small "unboxed" int
+      if (!is_large_int(get_val(node))) { // Small "unboxed" int
         return int_type;
-      } else if (heap[get_val(node) + 1] == 0) { // Large int with zero high word
+      } else if (large_int_hi(get_val(node)) == 0) { // Large int with zero high word
         return uint_type;
-      } else if (I32_POSITIVE(heap[get_val(node) + 1])) { // Large int with non-negative high word
+      } else if (I32_POSITIVE(large_int_hi(get_val(node)))) { // Large int with non-negative high word
         return long_type;
       } else { // Large int with negative high word
         return ulong_type;
@@ -1323,7 +1323,7 @@ ast value_type(ast node) {
       // long and long long coincide as the 64-bit LONG_KW type here. A value
       // that doesn't fit in a signed 64-bit long -- bit 63 set, i.e. a large
       // int with a negative high word -- becomes unsigned long.
-      if (get_val(node) > 0 && I32_NEGATIVE(heap[get_val(node) + 1])) {
+      if (is_large_int(get_val(node)) && I32_NEGATIVE(large_int_hi(get_val(node)))) {
         return ulong_type;
       } else {
         return long_type;
@@ -1335,7 +1335,7 @@ ast value_type(ast node) {
 #ifdef SUPPORT_64_BIT_LITERALS
       // unsigned int -> unsigned long: a value too wide for a 32-bit unsigned
       // int (large int with a non-zero high word) becomes unsigned long.
-      if (get_val(node) > 0 && heap[get_val(node) + 1] != 0) {
+      if (is_large_int(get_val(node)) && large_int_hi(get_val(node)) != 0) {
         return ulong_type;
       } else {
         return uint_type;
@@ -2475,8 +2475,8 @@ void codegen_int64_binop(ast node, ast child0, ast child1) {
 void codegen_int64_literal(ast node) {
   int val = get_val(node);
   int lo, hi;
-  if (val > 0) { lo = heap[val]; hi = heap[val + 1]; }  // large-int object: two words
-  else         { lo = -val; hi = 0; }                   // small LL literal, fits 32 bits (non-negative)
+  if (is_large_int(val)) { lo = large_int_lo(val); hi = large_int_hi(val); }
+  else                   { lo = -val; hi = 0; }         // small LL literal, fits 32 bits (non-negative)
   mov_reg_imm(reg_X, hi);
   stack_push(reg_X);                                    // push buffer.hi
   if (lo != hi) mov_reg_imm(reg_X, lo);                 // reg_X already equals lo if lo == hi

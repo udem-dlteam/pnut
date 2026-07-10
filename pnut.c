@@ -1658,6 +1658,13 @@ void include_file(char *file_name, char *relative_to) {
 #define I32_POSITIVE(x) (((x >> 31) & 1) == 0)
 #define I32_NEGATIVE(x) ((x >> 31) & 1)
 
+// Accessors for the encoding described above: a positive value is an index to
+// a two-word heap object holding the low and high words, anything else is a
+// small int whose value is the negation of the encoding.
+#define is_large_int(v) ((v) > 0)
+#define large_int_lo(obj) heap[obj]
+#define large_int_hi(obj) heap[obj+1]
+
 // Array used to accumulate 64 bit unsigned integers on 32 bit systems
 int val_32[2];
 
@@ -1702,8 +1709,8 @@ void u64_to_obj(int *x) {
     // puthex_unsigned(x[0]);
     // putchar('\n');
     val = alloc_obj(2);
-    heap[val    ] = x[0];
-    heap[val + 1] = x[1];
+    large_int_lo(val) = x[0];
+    large_int_hi(val) = x[1];
   }
 }
 
@@ -2014,7 +2021,7 @@ int eval_constant(ast expr, bool if_macro) {
 #endif
 #ifdef SUPPORT_64_BIT_LITERALS
       // Disable large integers for now, hopefully they don't appear in TCC in enums and #if expressions
-      if (get_val(expr) > 0) fatal_error("constant expression too large");
+      if (is_large_int(get_val(expr))) fatal_error("constant expression too large");
 #endif
       return -get_val(expr);
     case CHARACTER:   return get_val_(CHARACTER, expr);
