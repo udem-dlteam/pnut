@@ -33,18 +33,17 @@ enum BINDING {
 // Some small accessor for the bindings
 // All bindings have a next pointer and a kind.
 // Most have an identifier, but not all
-#define binding_next(binding)  heap[binding]
-#define binding_kind(binding)  heap[binding+1]
-#define binding_ident(binding) heap[binding+2]
+#define binding_next(binding)                     heap[binding]
+#define binding_kind(binding)                     heap[binding+1]
+#define binding_ident(binding)                    heap[binding+2]
 
 // Params, locals and globals share a layout: an offset (stack slot for locals,
 // cgc_global_alloc offset for globals) and the declared type.
-#define var_binding_offset(binding) heap[binding+3]
-#define var_binding_type(binding)   heap[binding+4]
+#define var_binding_offset(binding)               heap[binding+3]
+#define var_binding_type(binding)                 heap[binding+4]
 
-#define fun_binding_lbl(binding) heap[binding+4]
 #ifdef SUPPORT_EMULATED_INT64
-#define switch_binding_expr_type(binding) heap[binding+6]
+#define switch_binding_expr_type(binding)         heap[binding+6]
 #endif
 
 int cgc_lookup_last_binding(const int binding_type, int binding) {
@@ -96,9 +95,9 @@ int cgc_add_local(const enum BINDING binding_type, const int ident, const ast ty
 // A loop binding records the glo_decls range holding the loop's end actions
 // (increment, etc.) so they can be replayed on continue and at the bottom of
 // the loop body. A switch binding records whether it is in tail position.
-#define loop_binding_action_start(binding) heap[binding+2]
-#define loop_binding_action_end(binding)   heap[binding+3]
-#define switch_binding_in_tail_position(binding) heap[binding+2]
+#define loop_binding_action_start(binding)        heap[binding+2]
+#define loop_binding_action_end(binding)          heap[binding+3]
+#define switch_binding_in_tail_position(binding)  heap[binding+2]
 
 void cgc_add_local_var(const enum BINDING binding_type, const int ident, const ast type) {
   cgc_fs += 1;
@@ -136,6 +135,29 @@ int cgc_loop_depth(int binding) {
   return loop_depth;
 }
 #else
+
+// Loop and switch bindings share their first two fields so that `break`, which
+// finds either kind with cgc_lookup_enclosing_loop_or_switch, can adjust the
+// stack and jump without knowing which one it got.
+#define loop_or_switch_binding_fs(binding)        heap[binding+2]
+#define loop_or_switch_binding_break_lbl(binding) heap[binding+3]
+#define loop_binding_continue_lbl(binding)        heap[binding+4]
+
+#define switch_binding_next_case_lbl(binding)     heap[binding+4]
+#define switch_binding_default_lbl(binding)       heap[binding+5]
+
+#define enum_binding_value(binding)               heap[binding+3]
+#define goto_binding_lbl(binding)                 heap[binding+3]
+
+// Struct, union and enum typedefs all record the type they name.
+#define typedef_binding_type(binding)             heap[binding+3]
+
+#define fun_binding_lbl(binding)                  heap[binding+3]
+#define fun_binding_type(binding)                 heap[binding+4]
+#ifdef ONE_PASS_GENERATOR
+// Offset of the function's slot in the forward jump table.
+#define fun_binding_glo_entry(binding)            heap[binding+5]
+#endif
 
 int cgc_lookup_binding_ident(const int binding_type, const int ident, int binding) {
   while (binding != 0) {
@@ -195,46 +217,46 @@ void cgc_add_local_var(const int ident, const int width, const ast type) {
 
 void cgc_add_enclosing_loop(const int loop_fs, const int break_lbl, const ast continue_lbl) {
   int binding = alloc_obj(5);
-  heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_LOOP;
-  heap[binding+2] = loop_fs;
-  heap[binding+3] = break_lbl;
-  heap[binding+4] = continue_lbl;
+  binding_next(binding) = cgc_locals;
+  binding_kind(binding) = BINDING_LOOP;
+  loop_or_switch_binding_fs(binding) = loop_fs;
+  loop_or_switch_binding_break_lbl(binding) = break_lbl;
+  loop_binding_continue_lbl(binding) = continue_lbl;
   cgc_locals = binding;
 }
 
 #ifdef SUPPORT_EMULATED_INT64
 void cgc_add_enclosing_switch(const int loop_fs, const int break_lbl, const int next_case_lbl, const ast type) {
   int binding = alloc_obj(7);
-  heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_SWITCH;
-  heap[binding+2] = loop_fs;
-  heap[binding+3] = break_lbl;
-  heap[binding+4] = next_case_lbl;
-  heap[binding+5] = 0; // Default label
-  heap[binding+6] = type; // Switch operand type
+  binding_next(binding) = cgc_locals;
+  binding_kind(binding) = BINDING_SWITCH;
+  loop_or_switch_binding_fs(binding) = loop_fs;
+  loop_or_switch_binding_break_lbl(binding) = break_lbl;
+  switch_binding_next_case_lbl(binding) = next_case_lbl;
+  switch_binding_default_lbl(binding) = 0;
+  switch_binding_expr_type(binding) = type;
   cgc_locals = binding;
 }
 #else
 void cgc_add_enclosing_switch(const int loop_fs, const int break_lbl, const int next_case_lbl) {
   int binding = alloc_obj(6);
-  heap[binding+0] = cgc_locals;
-  heap[binding+1] = BINDING_SWITCH;
-  heap[binding+2] = loop_fs;
-  heap[binding+3] = break_lbl;
-  heap[binding+4] = next_case_lbl;
-  heap[binding+5] = 0; // Default label
+  binding_next(binding) = cgc_locals;
+  binding_kind(binding) = BINDING_SWITCH;
+  loop_or_switch_binding_fs(binding) = loop_fs;
+  loop_or_switch_binding_break_lbl(binding) = break_lbl;
+  switch_binding_next_case_lbl(binding) = next_case_lbl;
+  switch_binding_default_lbl(binding) = 0;
   cgc_locals = binding;
 }
 #endif
 
 void cgc_add_global(const int ident, const int width, const ast type, const bool is_static_local) {
   int binding = alloc_obj(5);
-  heap[binding+0] = TERNARY(is_static_local, cgc_locals, cgc_globals);
-  heap[binding+1] = BINDING_VAR_GLOBAL;
-  heap[binding+2] = ident;
-  heap[binding+3] = cgc_global_alloc;
-  heap[binding+4] = type;
+  binding_next(binding) = TERNARY(is_static_local, cgc_locals, cgc_globals);
+  binding_kind(binding) = BINDING_VAR_GLOBAL;
+  binding_ident(binding) = ident;
+  var_binding_offset(binding) = cgc_global_alloc;
+  var_binding_type(binding) = type;
   cgc_global_alloc += width;
   if (is_static_local) {
     cgc_locals = binding;
@@ -245,18 +267,17 @@ void cgc_add_global(const int ident, const int width, const ast type, const bool
 
 void cgc_add_global_fun(const int ident, const int label, const ast type) {
 #ifdef ONE_PASS_GENERATOR
-  int binding = alloc_obj(7);
-#else
   int binding = alloc_obj(6);
+#else
+  int binding = alloc_obj(5);
 #endif
-  heap[binding+0] = cgc_globals;
-  heap[binding+1] = BINDING_FUN;
-  heap[binding+2] = ident;
-  heap[binding+3] = 0;
-  heap[binding+4] = label;
-  heap[binding+5] = type;
+  binding_next(binding) = cgc_globals;
+  binding_kind(binding) = BINDING_FUN;
+  binding_ident(binding) = ident;
+  fun_binding_lbl(binding) = label;
+  fun_binding_type(binding) = type;
 #ifdef ONE_PASS_GENERATOR
-  heap[binding+6] = cgc_global_alloc; // For forward jump table
+  fun_binding_glo_entry(binding) = cgc_global_alloc; // For forward jump table
   cgc_global_alloc += WORD_SIZE;
 #endif
   cgc_globals = binding;
@@ -264,10 +285,10 @@ void cgc_add_global_fun(const int ident, const int label, const ast type) {
 
 void cgc_add_enum(const int ident, const int value) {
   int binding = alloc_obj(4);
-  heap[binding+0] = cgc_globals;
-  heap[binding+1] = BINDING_ENUM_CST;
-  heap[binding+2] = ident;
-  heap[binding+3] = value;
+  binding_next(binding) = cgc_globals;
+  binding_kind(binding) = BINDING_ENUM_CST;
+  binding_ident(binding) = ident;
+  enum_binding_value(binding) = value;
   cgc_globals = binding;
 }
 
@@ -275,10 +296,10 @@ void cgc_add_enum(const int ident, const int value) {
 
 void cgc_add_goto_label(const int ident, const int lbl) {
   int binding = alloc_obj(5);
-  heap[binding+0] = cgc_locals_fun;
-  heap[binding+1] = BINDING_GOTO_LABEL;
-  heap[binding+2] = ident;
-  heap[binding+3] = lbl;
+  binding_next(binding) = cgc_locals_fun;
+  binding_kind(binding) = BINDING_GOTO_LABEL;
+  binding_ident(binding) = ident;
+  goto_binding_lbl(binding) = lbl;
   cgc_locals_fun = binding;
 }
 
@@ -286,10 +307,10 @@ void cgc_add_goto_label(const int ident, const int lbl) {
 
 void cgc_add_typedef(const int ident, const enum BINDING struct_or_union_or_enum, const ast type) {
   int binding = alloc_obj(4);
-  heap[binding+0] = cgc_globals;
-  heap[binding+1] = struct_or_union_or_enum;
-  heap[binding+2] = ident;
-  heap[binding+3] = type;
+  binding_next(binding) = cgc_globals;
+  binding_kind(binding) = struct_or_union_or_enum;
+  binding_ident(binding) = ident;
+  typedef_binding_type(binding) = type;
   cgc_globals = binding;
 }
 #endif

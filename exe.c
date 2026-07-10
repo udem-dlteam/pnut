@@ -983,7 +983,7 @@ ast canonicalize_type(ast type) {
     dump_ident(get_val_(IDENTIFIER, get_child(type, 1)));
     fatal_error("canonicalize_type: type is not defined");
   }
-  res = heap[binding+3];
+  res = typedef_binding_type(binding);
 
   return res;
 }
@@ -1356,13 +1356,13 @@ ast value_type(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          return heap[binding+4];
+          return var_binding_type(binding);
         case BINDING_VAR_GLOBAL:
-          return heap[binding+4];
+          return var_binding_type(binding);
         case BINDING_ENUM_CST:
           return int_type;
         case BINDING_FUN:
-          return heap[binding+5];
+          return fun_binding_type(binding);
         default:
           dump_ident(get_val_(IDENTIFIER, node));
           fatal_error("value_type: unknown identifier");
@@ -2001,7 +2001,7 @@ void emit_function_call(ast fun, int binding) {
     if (is_label_defined(fun_binding_lbl(binding))) {
       call(fun_binding_lbl(binding));
     } else {
-      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+      mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #ifdef SAFE_MODE
       // In safe mode, we check that the indirect call location is initialized
       mov_reg_imm(reg_Y, 0);
@@ -2151,7 +2151,7 @@ void codegen_goto(ast node) {
     binding = cgc_locals_fun;
   }
 
-  jump_to_goto_label(heap[binding + 3]); // Label
+  jump_to_goto_label(goto_binding_lbl(binding));
 }
 
 #endif // SUPPORT_GOTO
@@ -2173,19 +2173,19 @@ void codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          stack_push_address_of(heap[binding+3]);
+          stack_push_address_of(var_binding_offset(binding));
           break;
         case BINDING_VAR_GLOBAL:
-          mov_reg_imm(reg_X, heap[binding+3]);
+          mov_reg_imm(reg_X, var_binding_offset(binding));
           add_reg_reg(reg_X, reg_glo);
           stack_push(reg_X);
           break;
         case BINDING_FUN:
           // Function pointers are stored in the forward jump table
 #ifdef ONE_PASS_GENERATOR
-          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+          mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #else
-          mov_reg_lbl(reg_X, heap[binding+4]);
+          mov_reg_lbl(reg_X, fun_binding_lbl(binding));
 #endif
           stack_push(reg_X);
           break;
@@ -2593,38 +2593,38 @@ void codegen_rvalue(ast node) {
           // variables, so their value is also their address.
           // Array parameters (see add_function_params) are passed as pointers,
           // so we dereference the stack value to get the value of the pointer.
-          if (is_aggregate_type(heap[binding+4])) {
-            stack_push_address_of(heap[binding+3]);
+          if (is_aggregate_type(var_binding_type(binding))) {
+            stack_push_address_of(var_binding_offset(binding));
           } else {
-            stack_dereference(reg_X, heap[binding+3], type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+            stack_dereference(reg_X, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
             stack_push(reg_X);
           }
           break;
         case BINDING_VAR_GLOBAL:
           // global arrays/structs/unions are also allocated in
           // memory, so their value is their address (no dereference)
-          if (is_aggregate_type(heap[binding+4])) {
+          if (is_aggregate_type(var_binding_type(binding))) {
             mov_reg_reg(reg_X, reg_glo);
-            add_reg_imm(reg_X, heap[binding+3]);
+            add_reg_imm(reg_X, var_binding_offset(binding));
           } else {
-            load_mem_location(reg_X, reg_glo, heap[binding+3], type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+            load_mem_location(reg_X, reg_glo, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
           }
           stack_push(reg_X);
           break;
         case BINDING_ENUM_CST:
 #ifdef SUPPORT_64_BIT_LITERALS
-          mov_reg_large_imm(reg_X, get_val(heap[binding+3]));
+          mov_reg_large_imm(reg_X, get_val(enum_binding_value(binding)));
 #else
-          mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
+          mov_reg_imm(reg_X, -get_val_(INTEGER, enum_binding_value(binding)));
 #endif
           stack_push(reg_X);
           break;
 
         case BINDING_FUN:
 #ifdef ONE_PASS_GENERATOR
-          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+          mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #else
-          mov_reg_lbl(reg_X, heap[binding+4]);
+          mov_reg_lbl(reg_X, fun_binding_lbl(binding));
 #endif
           stack_push(reg_X);
           break;
@@ -2894,7 +2894,7 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   // if struct has a name and members (not a reference to an existing type)
   if (name != 0 && members != 0) {
     binding = cgc_lookup_binding_ident(kind, get_val_(IDENTIFIER, name), cgc_globals);
-    if (binding != 0 && heap[binding + 3] != node && get_child(heap[binding + 3], 2) != members) {
+    if (binding != 0 && typedef_binding_type(binding) != node && get_child(typedef_binding_type(binding), 2) != members) {
       fatal_error("codegen_struct_or_union: struct/union already declared");
     }
     cgc_add_typedef(get_val_(IDENTIFIER, name), kind, node);
@@ -3136,7 +3136,7 @@ void codegen_glo_var_decl(ast node) {
 
     if (init != 0) {
       START_INIT_BLOCK();
-      codegen_initializer(false, init, type, reg_glo, heap[binding + 3]); // heap[binding + 3] = offset
+      codegen_initializer(false, init, type, reg_glo, var_binding_offset(binding));
       END_INIT_BLOCK();
     }
   }
@@ -3164,7 +3164,7 @@ void codegen_local_var_decl(ast node) {
   stack_grow(size); // Make room for the local variable
 
   if (init != 0) {
-    // offset (cgc_fs - heap[cgc_locals + 3]) should be 0 since we just allocated the space
+    // offset (cgc_fs - var_binding_offset(cgc_locals)) should be 0 since we just allocated the space
     codegen_initializer(true, init, type, reg_SP, 0);
   }
 }
@@ -3185,7 +3185,7 @@ void codegen_static_local_var_decl(ast node) {
     skip_init_lbl = alloc_label("skip_init");
     jump(skip_init_lbl);
     START_INIT_BLOCK();
-    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
+    codegen_initializer(false, init, type, reg_glo, var_binding_offset(cgc_locals));
     END_INIT_BLOCK();
     def_label(skip_init_lbl);
   }
@@ -3351,18 +3351,18 @@ void codegen_statement(ast node) {
     jump(lbl3);
 
     // In case #2 control ends up here
-    lbl2 = heap[binding + 4]; // Reload because the label is overwritten by CASE statements
+    lbl2 = switch_binding_next_case_lbl(binding); // Reload because the label is overwritten by CASE statements
     def_label(lbl2);
     // If the default statement is present, we jump to it. Otherwise, we'll fall
     // through to the end of the switch and remove the switch operand from the
     // stack.
-    if (heap[binding + 5]) jump(heap[binding + 5]);
+    if (switch_binding_default_lbl(binding)) jump(switch_binding_default_lbl(binding));
 
     def_label(lbl3);
 
     // If we fell through the switch, break didn't restore the stack in its
     // original state so do it now.
-    reset_stack_to(heap[binding + 2]);
+    reset_stack_to(loop_or_switch_binding_fs(binding));
 
     def_label(lbl1); // End of switch label, break statements land here
 
@@ -3380,8 +3380,8 @@ void codegen_statement(ast node) {
     if (binding != 0) {
       lbl1 = alloc_label(0);                  // skip case when falling through
       jump(lbl1);
-      def_label(heap[binding + 4]);           // false jump location of previous case
-      heap[binding + 4] = alloc_label(0);     // create false jump location for current case
+      def_label(switch_binding_next_case_lbl(binding));       // false jump location of previous case
+      switch_binding_next_case_lbl(binding) = alloc_label(0); // create false jump location for current case
 #ifdef SUPPORT_EMULATED_INT64
       if (is_int64_type(switch_binding_expr_type(binding))) {
         // A scalar EQ can't compare 8-byte values: call eq_i64 on the switch
@@ -3399,7 +3399,7 @@ void codegen_statement(ast node) {
       stack_load(reg_X, cgc_fs);              // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       }
-      jump(heap[binding + 4]);                // condition is false => jump to next case
+      jump(switch_binding_next_case_lbl(binding)); // condition is false => jump to next case
       def_label(lbl1);                        // start of case conditional block
       codegen_statement(get_child_(CASE_KW, node, 1));  // case statement
     } else {
@@ -3411,9 +3411,9 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_switch(cgc_locals);
 
     if (binding != 0) {
-      if (heap[binding + 5]) fatal_error("default already defined in switch");
-      heap[binding + 5] = alloc_label(0);                 // create label for default
-      def_label(heap[binding + 5]);                       // default label
+      if (switch_binding_default_lbl(binding)) fatal_error("default already defined in switch");
+      switch_binding_default_lbl(binding) = alloc_label(0); // create label for default
+      def_label(switch_binding_default_lbl(binding));       // default label
       codegen_statement(get_child_(DEFAULT_KW, node, 0)); // default statement
     } else {
       fatal_error("default outside of switch");
@@ -3424,8 +3424,8 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
       // adjust stack and jump to break label
-      stack_grow(heap[binding+2] - cgc_fs);
-      jump(heap[binding+3]);
+      stack_grow(loop_or_switch_binding_fs(binding) - cgc_fs);
+      jump(loop_or_switch_binding_break_lbl(binding));
     } else {
       fatal_error("break is not in the body of a loop");
     }
@@ -3433,10 +3433,10 @@ void codegen_statement(ast node) {
   } else if (op == CONTINUE_KW) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
-    if (binding != 0 && heap[binding+4] != 0) {
+    if (binding != 0 && loop_binding_continue_lbl(binding) != 0) {
       // adjust stack and jump to continue label
-      stack_grow(heap[binding+2] - cgc_fs);
-      jump(heap[binding+4]);
+      stack_grow(loop_or_switch_binding_fs(binding) - cgc_fs);
+      jump(loop_binding_continue_lbl(binding));
     } else {
       fatal_error("continue is not in the body of a loop");
     }
@@ -3448,7 +3448,7 @@ void codegen_statement(ast node) {
       if (is_struct_like(current_fun_return_type)) {
         // Widening of scalar values to 64 bits done by codegen_aggregate_into
         binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
-        stack_load(reg_Y, heap[binding+3]); // load hidden parameter address
+        stack_load(reg_Y, var_binding_offset(binding)); // load hidden parameter address
         codegen_aggregate_into(reg_Y, 0, get_child_(RETURN_KW, node, 0), type_width(current_fun_return_type, true, true), current_fun_return_type);
         // The value of a struct/union expression is its address: leave the
         // caller-allocated buffer's address in reg_X.
@@ -3482,7 +3482,7 @@ void codegen_statement(ast node) {
       binding = cgc_locals_fun;
     }
 
-    def_goto_label(heap[binding + 3]);
+    def_goto_label(goto_binding_lbl(binding));
     codegen_statement(get_child_(':', node, 1)); // labelled statement
 
   } else if (op == GOTO_KW) {
@@ -3537,8 +3537,8 @@ void init_forward_jump_table(int binding) {
 #endif
 
   START_INIT_BLOCK();
-  mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
-  mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
+  mov_reg_lbl(reg_X, fun_binding_lbl(binding));
+  mov_mem_reg(reg_glo, fun_binding_glo_entry(binding), reg_X);
 
   // At this point, all labels should be defined, which means we can safely
   // output the code and overwrite the code buffer.
