@@ -8,6 +8,7 @@
 	pnut-artifact-x86 pnut-artifact-arm \
 	bootstrap-pnut-sh bootstrap-pnut-exe-from-pnut-shell bootstrap-pnut-exe-from-shell \
 	bootstrap-pnut-awk bootstrap-pnut-exe-from-pnut-awk bootstrap-pnut-exe-from-awk \
+	bootstrap-pnut-awk-from-annotations \
 	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe
 
 BUILD_DIR = build
@@ -261,6 +262,8 @@ output to the output obtained using the system compiler. This ensures that the
 output and input of adjacent steps don't diverge.
 
 For completeness, an additional recipe bootstraps pnut-sh from pnut-exe.
+When ANNOTATE_C_CODE=1 is enabled, there are extra recipes to validate
+annotation extraction for pnut-sh, pnut-awk and pnut-exe.
 endef
 
 export BOOTSTRAP_HELP
@@ -345,6 +348,19 @@ bootstrap-pnut-sh-from-annotations: pnut-sh.sh
 	$(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh -C $(BUILD_DIR)/pnut-sh.sh > $(BUILD_DIR)/pnut-sh-extracted.c
 	$(TIMEC) $(BOOTSTRAP_SHELL) $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-extracted.c > $(BUILD_DIR)/pnut-sh-from-annotations.sh
 	@if ! diff $(BUILD_DIR)/pnut-sh.sh $(BUILD_DIR)/pnut-sh-from-annotations.sh >/dev/null 2>&1; then \
+		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# Bootstrap pnut-awk from the C annotations embedded in pnut-awk.awk. This verifies
+# that the embedded C annotations are correct and can reproduce pnut-awk.awk.
+bootstrap-pnut-awk-from-annotations: pnut-awk.awk
+	@if [ "$(ANNOTATE_C_CODE)" != "1" ]; then echo "Error: This target requires ANNOTATE_C_CODE=1. Run: make $@ ANNOTATE_C_CODE=1"; exit 1; fi
+	@echo "Bootstrapping pnut-awk.awk from C annotations..."
+	$(BUILD_DIR)/pnut-awk -C $(BUILD_DIR)/pnut-awk.awk > $(BUILD_DIR)/pnut-awk-extracted.c
+	$(TIMEC) $(BUILD_DIR)/pnut-awk $(BUILD_DIR)/pnut-awk-extracted.c > $(BUILD_DIR)/pnut-awk-from-annotations.awk
+	@if ! diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-from-annotations.awk >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
 		exit 1; \
 	fi

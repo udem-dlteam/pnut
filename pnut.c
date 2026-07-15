@@ -1360,7 +1360,8 @@ void adjust_for_trailing_comment() {
 }
 
 // Output the C code corresponding to the last declaration parsed.
-// Every line is prefixed with '#' so they are treated as comments by the shell.
+// Every line is prefixed with '#' so they are treated as comments by the
+// generated backend script.
 // An additional '#' is added for lines that are already comments in the
 // original C code, replacing the '//' so the indentation of the original
 // comment is preserved in the output.
@@ -4892,45 +4893,45 @@ void output_rest_of_line(FILE * const fp, char *prefix) {
 
 void extract_c_code_from_annotated_file(char * const filename) {
   int c;
-  FILE *sh_fp = fopen(filename, "r");
+  FILE *annotated_fp = fopen(filename, "r");
 
-  if (sh_fp == 0) {
+  if (annotated_fp == 0) {
     dump_string("#include ", fp_filepath);
-    fatal_error("could not open .sh file for reading");
+    fatal_error("could not open annotated file for reading");
     return;
   }
 
   // Skip first line (#! ...)
-  drop_rest_of_line(sh_fp);
+  drop_rest_of_line(annotated_fp);
 
   // Process the rest of the file:
   // - Empty lines are kept as is
   // - Lines starting with "# " are printed without "# " (C code lines)
   // - Lines starting with "##" are printed with "//" instead (C comments lines)
   // - Other lines are ignored (shell commands or shell comments starting with "#_")
-  while ((c = fgetc(sh_fp)) != EOF) {
+  while ((c = fgetc(annotated_fp)) != EOF) {
     if (c == '\n') {
       newline_accumulated += 1;
     } else if (c == '#') {
-      c = fgetc(sh_fp);
+      c = fgetc(annotated_fp);
       if (c == ' ') {
-        output_rest_of_line(sh_fp, 0);
+        output_rest_of_line(annotated_fp, 0);
       } else if (c == '#') {
         // Line starting with "##", replace with "//"
-        output_rest_of_line(sh_fp, "//");
+        output_rest_of_line(annotated_fp, "//");
         if (c == '\n') putchar('\n');
       } else if (c == '\n') {
         // Line with only '#', keep as empty line
         putchar('\n');
       } else {
-        drop_rest_of_line(sh_fp);
+        drop_rest_of_line(annotated_fp);
       }
     } else {
-      drop_rest_of_line(sh_fp);
+      drop_rest_of_line(annotated_fp);
     }
   }
 
-  fclose(sh_fp);
+  fclose(annotated_fp);
 }
 
 #endif // SUPPORT_EXTRACT_C_ANNOTATIONS

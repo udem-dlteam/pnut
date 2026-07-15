@@ -199,6 +199,19 @@ executable version of `pnut-exe`:
 > diff build/pnut-exe-from-annotations build/pnut-exe-bootstrapped
 ```
 
+`pnut-awk` also supports annotated output and C extraction:
+
+```shell
+# Generate pnut-awk.awk with annotations
+> make pnut-awk.awk ANNOTATE_C_CODE=1
+# Extract C code
+> build/pnut-awk -C build/pnut-awk.awk > build/pnut-awk.c
+# Recompile C with pnut-awk
+> build/pnut-awk build/pnut-awk.c > build/pnut-awk-from-annotations.awk
+# Verify both awk scripts match
+> diff build/pnut-awk.awk build/pnut-awk-from-annotations.awk
+```
+
 ## Documentation
 
 You can find my slides from my presentation at the Software Language Engineering
