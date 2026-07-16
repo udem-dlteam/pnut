@@ -1,0 +1,3 @@
+            /* now we can generate the number */
+            /* XXX: should patch directly float number */
+            d = (double)bn[1] * 4294967296.0 + (double)bn[0];
