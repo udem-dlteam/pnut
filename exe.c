@@ -25,7 +25,7 @@ void generate_exe();
 #endif
 
 #if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
-#define CODE_SIZE 100000
+#define CODE_SIZE 200000
 #else
 #define CODE_SIZE 5000000
 #endif
@@ -2004,6 +2004,10 @@ void emit_function_call(ast fun, int binding) {
       int good_lbl = alloc_label(0);
       // Check if reg_X == 0 and call debug_interrupt otherwise
       jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
+      // Add rt_crash with function name as argument to the jump table for better debugging experience
+      rt_debug("Attempting to call an undefined function: ");
+      rt_debug(symbol_buf(binding_ident(binding)));
+      rt_debug("\n");
       debug_interrupt();
       def_label(good_lbl);
 #endif
