@@ -1,1 +1,0 @@
-#if defined _WIN32 == defined TCC_TARGET_PE
