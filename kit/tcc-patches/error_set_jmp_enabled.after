@@ -1,3 +1,0 @@
-#ifdef PNUT_CC
-        s1->error_set_jmp_enabled = 0;
-#endif
