@@ -4,14 +4,38 @@
 # resulting TCC to recompile itself until reaching a fixed point.
 set -e
 
-TCC_VERSION=0.9.26
+TCC_VERSION=0.9.27
 TEMP_DIR=build/tcc
+
+TCC_0_9_26_PATCHES="
+tccpp.c  array_sizeof
+libtcc.c error_set_jmp_enabled
+tccgen.c fix_stack_64_bit_operands_on_32_bit
+tccgen.c float_negation
+tccpp.c  long_long_parser
+libtcc.c sscanf_TCC_VERSION
+tcc.h    undefine_TCC_IS_NATIVE
+"
+
+TCC_0_9_27_PATCHES="
+tccpp.c   array_sizeof
+tcc.h     attribute
+tcc.h     bitfields
+tccgen.c  float_negation
+tccgen.c  float_zero_division_check
+tccgen.c  long_double_codegen
+tccpp.c   scientific-notation-parser
+libtcc.c  sscanf_TCC_VERSION
+"
+
 if [ $TCC_VERSION = 0.9.27 ]; then
   TCC_ARCHIVE=kit/tcc-0.9.27.tar.gz
   TCC_ARCHIVE_DIRNAME=tcc-0.9.27
+  TCC_PATCHES="$TCC_0_9_27_PATCHES"
 elif [ $TCC_VERSION = 0.9.26 ]; then
   TCC_ARCHIVE=kit/tcc-0.9.26.tar.gz
   TCC_ARCHIVE_DIRNAME=tcc-0.9.26-1147-gee75a10c
+  TCC_PATCHES="$TCC_0_9_26_PATCHES"
 else
   echo "Unsupported TCC version: $TCC_VERSION" >&2; exit 1
 fi
@@ -28,7 +52,8 @@ PNUT_ARCH=i386_linux
 
 : ${PNUT_OPTIONS:=} # Default to empty options
 
-PNUT_EXE_OPTIONS="$PNUT_OPTIONS -DBOOTSTRAP_LONG -Dtarget_$PNUT_ARCH -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DONE_PASS_GENERATOR"
+PNUT_EXE_BOOTSTRAP_OPTIONS="$PNUT_OPTIONS -Dtarget_$PNUT_ARCH -DONE_PASS_GENERATOR"
+PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_BOOTSTRAP_OPTIONS -DSUPPORT_EMULATED_INT64 -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DNO_BUILTIN_LIBC"
 PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dtarget_sh"
 PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS -DSH_SAVE_VARS_WITH_SET -DOPTIMIZE_CONSTANT_PARAM"
 
@@ -69,7 +94,8 @@ fi
 if [ $safe -eq 1 ]; then
   # Safe mode adds checks at run time to make sure the AST is well constructed
   # and no out-of-bounds access are done. This is mainly useful for debugging.
-  PNUT_EXE_OPTIONS="$PNUT_EXE_OPTIONS -DSAFE_MODE -DNICE_UX";
+  PNUT_EXE_BOOTSTRAP_OPTIONS="$PNUT_EXE_BOOTSTRAP_OPTIONS -DSAFE_MODE -DNICE_UX";
+  PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_TCC_OPTIONS -DSAFE_MODE -DNICE_UX";
   PNUT_SH_OPTIONS="$PNUT_SH_OPTIONS -DSAFE_MODE -DNICE_UX";
   PNUT_SH_OPTIONS_FAST="$PNUT_SH_OPTIONS_FAST -DSAFE_MODE -DNICE_UX";
 fi
@@ -111,19 +137,6 @@ revert_tcc_patches() { # $1..: patches list
   done
 }
 
-LIBC_PATCHES="
-libtcc.c sscanf_TCC_VERSION
-"
-
-TCC_0_9_26_PATCHES="
-tccpp.c  array_sizeof
-libtcc.c error_set_jmp_enabled
-tcc.h    undefine_TCC_IS_NATIVE
-tccpp.c  long_long_parser
-tccgen.c fix_stack_64_bit_operands_on_32_bit
-tccgen.c float_negation
-"
-
 # Unpack and prepare TCC and Mes libc source code
 rm -rf "$TCC_DIR" && tar -xzf "$TCC_ARCHIVE" -C "$TEMP_DIR"
 rm -rf "$MES_DIR" && tar -xzf "$MES_ARCHIVE" -C "$TEMP_DIR"
@@ -134,8 +147,7 @@ gcc -I portable_libc/include -I portable_libc/src kit/bintools.c kit/bintools-li
 
 cp kit/config.h "$TCC_DIR/config.h"
 
-apply_tcc_patches $LIBC_PATCHES
-apply_tcc_patches $TCC_0_9_26_PATCHES
+apply_tcc_patches $TCC_PATCHES
 
 if [ $mes_libc -eq 1 ]; then
   INCLUDE_PATH="$MES_DIR/include"
@@ -170,22 +182,31 @@ fi
 
 # Step 1: Bootstrap initial version of TCC (tcc-pnut)
 
-make_tcc_pnut() { # $1: C compiler to use, $2: additional options
+make_tcc_bootstrap() { # $1: C compiler to use, $2: additional options
   CC="$1"
-  if [ "$CC" = "gcc" ]; then
-    echo "Bootstrapping TCC with gcc"
-    LIBC_OPTS=""
-  else
-    echo "Bootstrapping TCC with $CC"
-    LIBC_OPTS="               \
-    -I portable_libc/include/ \
-    portable_libc/libc.c      \
-    "
-  fi
+  case "$CC" in
+    gcc*|clang*)
+      EXTRA_OPTS="              \
+        -D HAVE_FLOAT=1         \
+        -D HAVE_BITFIELD=1      \
+        -D HAVE_LONG_LONG=1     \
+        -D HAVE_SETJMP=1"
+      ;;
+    *pnut-exe*)
+      EXTRA_OPTS="              \
+      -rt arith64.c             \
+      -I portable_libc/include/ \
+      portable_libc/libc.c      \
+      "
+      ;;
+    *)
+      echo "Unknown C compiler: $CC" >&2; exit 1
+      ;;
+  esac
   $CC                                                                          \
     -D BOOTSTRAP=1                                                             \
     -D PNUT_CC=1                                                               \
-    -D HAVE_LONG_LONG=0                                                        \
+    -D HAVE_LONG_LONG=1                                                        \
     -D TCC_TARGET_${TCC_TARGET_ARCH}=1                                         \
     -D CONFIG_SYSROOT=\"/\"                                                    \
     -D CONFIG_TCC_CRTPREFIX=\"$TEMP_DIR/boot0-lib\"                            \
@@ -200,7 +221,7 @@ make_tcc_pnut() { # $1: C compiler to use, $2: additional options
     -D ONE_SOURCE=1                                                            \
     -D CONFIG_TCCDIR=\"$TEMP_DIR/boot0-lib/tcc\"                               \
     $TCC_DIR/tcc.c                                                             \
-    $LIBC_OPTS                                                                 \
+    $EXTRA_OPTS                                                                 \
     $2                                                                         \
     -o $TEMP_DIR/tcc-pnut
 
@@ -217,8 +238,8 @@ if [ $use_gcc -eq 0 ]; then
     # Here, let's create it using gcc
     gcc -std=c99 -o $TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c
     ./$TEMP_DIR/pnut-sh.exe $PNUT_SH_OPTIONS pnut.c > $TEMP_DIR/pnut-sh.sh
-    $shell $TEMP_DIR/pnut-sh.sh $PNUT_EXE_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh
-    $shell $TEMP_DIR/pnut-exe.sh $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
+    $shell $TEMP_DIR/pnut-sh.sh $PNUT_EXE_BOOTSTRAP_OPTIONS pnut.c > $TEMP_DIR/pnut-exe.sh
+    $shell $TEMP_DIR/pnut-exe.sh $PNUT_EXE_TCC_OPTIONS pnut.c > $TEMP_DIR/pnut-exe
 
   else
 
@@ -226,8 +247,14 @@ if [ $use_gcc -eq 0 ]; then
     # We know that these 2 methods reach the same executable, so no need to use
     # the slow method when developing.
 
-    gcc -std=c99 pnut.c $PNUT_EXE_OPTIONS -o $TEMP_DIR/pnut-exe-for-pnut-exe 2> /dev/null
-    ./$TEMP_DIR/pnut-exe-for-pnut-exe $PNUT_EXE_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
+    if [ $safe -eq 1 ]; then
+      # pnut-exe doesn't support printf, meaning that the error messages in safe
+      # mode are not printed. Use gcc to compile pnut-exe in safe mode.
+      gcc -std=c99 pnut.c $PNUT_EXE_TCC_OPTIONS -o $TEMP_DIR/pnut-exe
+    else
+      gcc -std=c99 pnut.c $PNUT_EXE_BOOTSTRAP_OPTIONS -o $TEMP_DIR/pnut-exe-for-pnut-exe
+      ./$TEMP_DIR/pnut-exe-for-pnut-exe $PNUT_EXE_TCC_OPTIONS -DNO_BUILTIN_LIBC pnut.c > $TEMP_DIR/pnut-exe
+    fi
 
   fi
 
@@ -235,15 +262,15 @@ if [ $use_gcc -eq 0 ]; then
   sha256sum $TEMP_DIR/pnut-exe
 
   # We can now compile TCC with pnut-exe, obtained from gcc or pnut-sh.sh.
-  make_tcc_pnut "./$TEMP_DIR/pnut-exe" "-D __intptr_t_defined=1"
+  make_tcc_bootstrap "./$TEMP_DIR/pnut-exe" "-D __intptr_t_defined=1"
 else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc.
-  make_tcc_pnut "gcc -std=c99"
+  make_tcc_bootstrap "gcc -m32 -std=c99"
 fi
 
 # Revert TCC source patches after producing the initial pnut-built compiler.
-revert_tcc_patches $(echo $TCC_0_9_26_PATCHES | tr " " "\n" | tac)
+# revert_tcc_patches $(echo $TCC_0_9_26_PATCHES | tr " " "\n" | tac)
 
 go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $2 if empty)
   CC="$1"
