@@ -95,16 +95,16 @@ portable_libc/include
 portable_libc/src
 portable_libc/libc.c
 
-kit/tcc-patches/array_sizeof.before
-kit/tcc-patches/array_sizeof.after
-kit/tcc-patches/fix_stack_64_bit_operands_on_32_bit.before
-kit/tcc-patches/fix_stack_64_bit_operands_on_32_bit.after
-kit/tcc-patches/float_negation.before
-kit/tcc-patches/float_negation.after
-kit/tcc-patches/sscanf_TCC_VERSION.before
-kit/tcc-patches/sscanf_TCC_VERSION.after
-kit/tcc-patches/undefine_TCC_IS_NATIVE.before
-kit/tcc-patches/undefine_TCC_IS_NATIVE.after
+kit/tcc-patches/0.9.26/array_sizeof.before
+kit/tcc-patches/0.9.26/array_sizeof.after
+kit/tcc-patches/0.9.26/fix_stack_64_bit_operands_on_32_bit.before
+kit/tcc-patches/0.9.26/fix_stack_64_bit_operands_on_32_bit.after
+kit/tcc-patches/0.9.26/float_negation.before
+kit/tcc-patches/0.9.26/float_negation.after
+kit/tcc-patches/0.9.26/sscanf_TCC_VERSION.before
+kit/tcc-patches/0.9.26/sscanf_TCC_VERSION.after
+kit/tcc-patches/0.9.26/undefine_TCC_IS_NATIVE.before
+kit/tcc-patches/0.9.26/undefine_TCC_IS_NATIVE.after
 
 kit/libtcc1.c
 kit/config.h
