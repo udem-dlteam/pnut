@@ -56,6 +56,7 @@ void *realloc(void *ptr, size_t size) {
   return ptr;
 }
 
+#ifdef PNUT_CC
 double strtod(const char *str, char **endptr) {
   if (strcmp(str, "0.0") == 0) {
     if (endptr) *endptr = (char *) str + 3;
@@ -75,6 +76,30 @@ double strtod(const char *str, char **endptr) {
     return 0;
   }
 }
+#else
+// Minimal strtod supporting only the float literals appearing in the TCC
+// sources compiled during the bootstrap. The IEEE bit patterns are assembled
+// with integer operations and reinterpreted as a double, since pnut supports
+// neither float literals nor int-to-float casts.
+double strtod(const char *str, char **endptr) {
+  long long res = 0;
+  if (strcmp(str, "0.0") == 0) {
+    if (endptr) *endptr = (char *) str + 3;
+    res = 0x00000000;
+  } else if (strcmp(str, "1.0") == 0) {
+    if (endptr) *endptr = (char *) str + 3;
+    res = 0x3FF00000;
+  } else if (strcmp(str, "4294967296.0") == 0) {
+    if (endptr) *endptr = (char *) str + 12;
+    res = 0x41F00000;
+  } else {
+    printf("strtod: Unknown string: %s\n", str);
+    pnut_abort("strtod: Unknown string: ");
+  }
+  res <<= 32; // Shift the high word into place (also prevents constant folding)
+  return *((double *)&res);
+}
+#endif
 
 float strtof(const char *str, char **endptr) {
   return (float) strtod(str, endptr);
