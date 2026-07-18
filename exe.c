@@ -25,7 +25,7 @@ void generate_exe();
 #endif
 
 #if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
-#define CODE_SIZE 100000
+#define CODE_SIZE 200000
 #else
 #define CODE_SIZE 5000000
 #endif
@@ -2004,6 +2004,10 @@ void emit_function_call(ast fun, int binding) {
       int good_lbl = alloc_label(0);
       // Check if reg_X == 0 and call debug_interrupt otherwise
       jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
+      // Add rt_crash with function name as argument to the jump table for better debugging experience
+      rt_debug("Attempting to call an undefined function: ");
+      rt_debug(symbol_buf(binding_ident(binding)));
+      rt_debug("\n");
       debug_interrupt();
       def_label(good_lbl);
 #endif
@@ -3676,18 +3680,18 @@ void codegen_glo_decl(ast node) {
 }
 
 void rt_putchar() {
-  push_reg(reg_X);            // Allocate buffer on stack containing the character
+  stack_push(reg_X);          // Allocate buffer on stack containing the character
   mov_reg_imm(reg_X, 1);      // reg_X = file descriptor (stdout)
   mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer address
   mov_reg_imm(reg_Z, 1);      // reg_Z = buffer size
   os_write();
-  pop_reg(reg_X);             // Deallocate buffer
+  stack_pop(reg_X);           // Deallocate buffer
 }
 
 void rt_debug(char* msg) {
   codegen_string(msg, msg + strlen(msg));
   mov_reg_imm(reg_X, 1);           // reg_X = file descriptor (stdout)
-  pop_reg(reg_Y);                  // reg_Y = buffer address
+  stack_pop(reg_Y);                // reg_Y = buffer address (undoes codegen_string's grow_fs)
   mov_reg_imm(reg_Z, strlen(msg)); // reg_Z = buffer size
   os_write();                      // Print the string
 }
@@ -3702,13 +3706,13 @@ void rt_crash(char* msg) {
 
 void rt_fgetc(int fd_reg) {
   int success_lbl = alloc_label("rt_fgetc_success");
-  push_reg(reg_X);            // Allocate buffer on stack, initialized with some random value
+  stack_push(reg_X);          // Allocate buffer on stack, initialized with some random value
   mov_reg_reg(reg_X, fd_reg); // reg_X = file descriptor (stdin)
   mov_reg_reg(reg_Y, reg_SP); // reg_Y = buffer size
   mov_reg_imm(reg_Z, 1);      // reg_Z = buffer address
   os_read();                  // reg_X = number of bytes read, buffer[0] = character
 
-  pop_reg(reg_Z);             // Get character from buffer and deallocate buffer
+  stack_pop(reg_Z);             // Get character from buffer and deallocate buffer
   mov_reg_imm(reg_Y, 0);      // If read returned 0, then we're at EOF (-1)
   jump_cond_reg_reg(NE, success_lbl, reg_X, reg_Y);
   mov_reg_imm(reg_Z, -1);     // mov  eax, -1  # -1 on EOF
@@ -4049,7 +4053,7 @@ void codegen_end() {
 #endif
   call(main_lbl);
   if (!main_returns) mov_reg_imm(reg_X, 0); // exit process with 0 if main returns void
-  push_reg(reg_X); // exit process with result of main
+  stack_push(reg_X); // exit process with result of main
   call(exit_lbl);
 
   assert_all_labels_defined(init_next_lbl);

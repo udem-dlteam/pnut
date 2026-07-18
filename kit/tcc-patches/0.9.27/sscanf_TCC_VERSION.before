@@ -1,0 +1,2 @@
+        char buffer[32]; int a,b,c;
+        sscanf(TCC_VERSION, "%d.%d.%d", &a, &b, &c);

@@ -43,7 +43,17 @@ RUN cp -r pnut ../woody/pnut; mv ../woody pnut
 WORKDIR /pnut
 
 # Create woody.sh script to enter the woody environment
-COPY woody.sh .
+# COPY woody.sh .
+RUN cat > woody.sh <<EOF
+#!/bin/bash
+
+if [ $# -eq 0 ]; then
+  chroot woody /bin/bash -c "cd /pnut; bash"
+else
+  chroot woody /bin/bash -c "cd /pnut; $@"
+fi
+EOF
+RUN chmod +x woody.sh
 
 RUN cat > fib.c <<EOF
 int fib(int n) {

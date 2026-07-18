@@ -1,0 +1,20 @@
+	    case VT_LDOUBLE:
+#ifdef HAVE_FLOAT
+#if defined TCC_IS_NATIVE_387
+                if (sizeof (long double) >= 10) /* zero pad ten-byte LD */
+                    memcpy(ptr, &vtop->c.ld, 10);
+#ifdef __TINYC__
+                else if (sizeof (long double) == sizeof (double))
+                    __asm__("fldl %1\nfstpt %0\n" : "=m" (*ptr) : "m" (vtop->c.ld));
+#endif
+                else if (vtop->c.ld == 0.0)
+                    ;
+                else
+#endif
+                if (sizeof(long double) == LDOUBLE_SIZE)
+		    *(long double*)ptr = vtop->c.ld;
+                else if (sizeof(double) == LDOUBLE_SIZE)
+		    *(double *)ptr = (double)vtop->c.ld;
+                else
+                    tcc_error("can't cross compile long double constants");
+#endif // HAVE_FLOAT
