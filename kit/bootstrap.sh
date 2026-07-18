@@ -74,7 +74,7 @@ fi
 TEMP_DIR="build"
 TCC_DIR="tcc-0.9.26-1147-gee75a10c"
 INCLUDE_PATH="portable_libc/include" # pnut libc
-PATCHES_DIR="kit/tcc-patches"
+PATCHES_DIR="kit/tcc-patches/0.9.26"
 
 TCC_TARGET_ARCH=I386
 
