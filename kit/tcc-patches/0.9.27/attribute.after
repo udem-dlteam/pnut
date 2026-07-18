@@ -2,7 +2,8 @@
 # define NORETURN __declspec(noreturn)
 # define ALIGNED(x) __declspec(align(x))
 #elif defined(PNUT_CC)
-# define __attribute__(x)
+# define NORETURN
+# define ALIGNED(x)
 #else
 # define NORETURN __attribute__((noreturn))
 # define ALIGNED(x) __attribute__((aligned(x)))
