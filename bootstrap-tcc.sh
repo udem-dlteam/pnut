@@ -328,6 +328,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -static \
       -o $TEMP_DIR/tcc-$NEW_CC \
       -D BOOTSTRAP=1 \
+      -D __SIZEOF_LONG_LONG__=8 \
       -D HAVE_FLOAT=1 \
       -D HAVE_BITFIELD=1 \
       -D HAVE_LONG_LONG=1 \
@@ -358,6 +359,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
       -static \
       -o $TEMP_DIR/tcc-$NEW_CC.o \
       -D BOOTSTRAP=1 \
+      -D __SIZEOF_LONG_LONG__=8 \
       -D HAVE_FLOAT=1 \
       -D HAVE_BITFIELD=1 \
       -D HAVE_LONG_LONG=1 \
