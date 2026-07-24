@@ -396,9 +396,9 @@ typedef int intptr_t;
 typedef int bool;
 
 // State for the reader
-//  - fp: current input file descriptor (-1 = none), read with open/read/close.
-//  - fp_filepath: path of the current file being read, used for error messages.
-//  - fp_dirname: directory of the current file, used to resolve relative paths.
+//  - fd: current input file descriptor (-1 = none), read with open/read/close.
+//  - fd_filepath: path of the current file being read, used for error messages.
+//  - fd_dirname: directory of the current file, used to resolve relative paths.
 //  - include_search_path: search path for system include files.
 //  - output_fd: the output file descriptor (1 = stdout), used by pnut-exe
 //  - line_number: line number of the current file, used for error messages.
@@ -407,9 +407,9 @@ typedef int bool;
 //  - last_tok_column_number: column number of the last token read, used for error messages.
 //  - include_stack: the stack to save the state of the reader when including a file.
 
-int fp = -1; // Current input file descriptor being read (-1 = none)
-char* fp_filepath = 0; // The path of the current file being read
-char *fp_dirname = 0; // The directory of the current file being read
+int fd = -1; // Current input file descriptor being read (-1 = none)
+char* fd_filepath = 0; // The path of the current file being read
+char *fd_dirname = 0; // The directory of the current file being read
 char* include_search_path = 0; // Search path for include files
 #ifdef SUPPORT_EMULATED_INT64
 char* runtime_file_path = 0; // Path to the 64-bit arithmetic runtime (arith64.c), set by -rt
@@ -522,10 +522,10 @@ void source_code_error(char *error_prefix, char *error_msg, int token) {
     putchar('\n');
   }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (fp_filepath != 0) {
+  if (fd_filepath != 0) {
     printf("  Location: ");
     change_color(ANSI_GREEN);
-    printf("%s:%d:%d\n", fp_filepath, last_tok_line_number, last_tok_column_number);
+    printf("%s:%d:%d\n", fd_filepath, last_tok_line_number, last_tok_column_number);
     change_color(ANSI_RESET);
   }
 #endif
@@ -535,8 +535,8 @@ void source_code_error(char *error_prefix, char *error_msg, int token) {
 #elif defined(INCLUDE_LINE_NUMBER_ON_ERROR)
 
 void source_code_error(char *error_prefix, char *error_msg, int token) {
-  if (fp_filepath != 0) {
-    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  if (fd_filepath != 0) {
+    printf("%s:%d:%d: ", fd_filepath, last_tok_line_number, last_tok_column_number);
   }
   printf("%s%s\n", error_prefix, error_msg);
   exit(1);
@@ -552,8 +552,8 @@ void source_code_error(char *error_prefix, char *error_msg, int token) {
 void fatal_error(char * const msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   // Fatal errors are simpler and without color
-  if (fp_filepath != 0) {
-    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  if (fd_filepath != 0) {
+    printf("%s:%d:%d: ", fd_filepath, last_tok_line_number, last_tok_column_number);
   }
 #endif
   putstr(msg); putchar('\n');
@@ -573,10 +573,10 @@ void parse_error(char * const msg, const int tok_) {
 void save_include_context() {
   if (include_stack_top >= INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE) fatal_error("Include stack overflow");
 
-  if (fp != -1) {
-    include_stack[include_stack_top]     = (intptr_t)fp;
-    include_stack[include_stack_top + 1] = (intptr_t)fp_filepath;
-    include_stack[include_stack_top + 2] = (intptr_t)fp_dirname;
+  if (fd != -1) {
+    include_stack[include_stack_top]     = (intptr_t)fd;
+    include_stack[include_stack_top + 1] = (intptr_t)fd_filepath;
+    include_stack[include_stack_top + 2] = (intptr_t)fd_dirname;
 
   #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     // Save the line and column number of the current file
@@ -590,14 +590,16 @@ void save_include_context() {
 void restore_include_context() {
   if (include_stack_top == 0) fatal_error("Include stack is empty");
 
-  close(fp);
-  if (fp_dirname != 0) free(fp_dirname);
+  close(fd);
+  if (fd_dirname != 0) free(fd_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
   include_stack_top -= INCLUDE_ENTRY_SIZE;
-  fp          = include_stack[include_stack_top];
-  fp_filepath = (char*) (include_stack[include_stack_top + 1]);
-  fp_dirname  = (char*) (include_stack[include_stack_top + 2]);
+  // Must add parentheses because M2-Planet parses the cast operator with higher
+  // precedence than the dereference operator.
+  fd          =          include_stack[include_stack_top];
+  fd_filepath = (char*) (include_stack[include_stack_top + 1]);
+  fd_dirname  = (char*) (include_stack[include_stack_top + 2]);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   line_number   = include_stack[include_stack_top + 3];
   column_number = include_stack[include_stack_top + 4];
@@ -1485,7 +1487,7 @@ void get_ch_() {
 #else
 void get_ch() {
 #endif
-  ch = read_char(fp);
+  ch = read_char(fd);
 
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
@@ -1614,17 +1616,17 @@ char *file_parent_directory(char *path) {
 
 void include_file(char *file_name, char *relative_to) {
   save_include_context();
-  fp_filepath = file_name;
+  fd_filepath = file_name;
   if (relative_to) {
-    fp_filepath = str_concat(relative_to, fp_filepath);
+    fd_filepath = str_concat(relative_to, fd_filepath);
   }
-  fp = open(fp_filepath, O_RDONLY, 0);
-  if (fp < 0) {
-    dump_string("#include ", fp_filepath);
+  fd = open(fd_filepath, O_RDONLY, 0);
+  if (fd < 0) {
+    dump_string("#include ", fd_filepath);
     fatal_error("Could not open file");
   }
 
-  fp_dirname = file_parent_directory(fp_filepath);
+  fd_dirname = file_parent_directory(fd_filepath);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   line_number = 1;
   column_number = 0;
@@ -2120,7 +2122,7 @@ bool handle_include() {
 
   if (tok == STRING) {
     buf = symbol_buf(val);
-    include_file(buf, fp_dirname);
+    include_file(buf, fd_dirname);
 
 #ifdef SH_SUPPORT_SHELL_INCLUDE
     ext = strrchr(buf, '.');
@@ -2694,7 +2696,7 @@ bool attempt_macro_expansion(int macro) {
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
-      tokens = cons(cons(STRING, intern_str(fp_filepath)), 0);
+      tokens = cons(cons(STRING, intern_str(fd_filepath)), 0);
     }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     else if (macro == LINE__ID) {
@@ -4885,7 +4887,7 @@ void extract_c_code_from_annotated_file(char * const filename) {
   int sh_fp = open(filename, O_RDONLY, 0);
 
   if (sh_fp < 0) {
-    dump_string("#include ", fp_filepath);
+    dump_string("#include ", fd_filepath);
     fatal_error("could not open .sh file for reading");
     return;
   }
@@ -5045,11 +5047,11 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (fp == -1) {
+  if (fd == -1) {
 #ifdef SUPPORT_STDIN_INPUT
     if (!isatty(0)) {
-      fp = 0; // Read from stdin (fd 0)
-      fp_filepath = "<stdin>";
+      fd = 0; // Read from stdin (fd 0)
+      fd_filepath = "<stdin>";
     } else
 #endif
     {
@@ -5088,7 +5090,7 @@ int main(int argc, char **argv) {
     decl = parse_declaration(false);
 #ifdef DEBUG_PARSER_SEXP
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-    printf("# %s:%d:%d\n", fp_filepath, line_number, column_number);
+    printf("# %s:%d:%d\n", fd_filepath, line_number, column_number);
 #endif
     ast_to_sexp(decl);
     putchar('\n');
