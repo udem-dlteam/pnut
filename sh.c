@@ -22,7 +22,7 @@ void handle_shell_include() {
   runtime_use_put_pstr = true;
   runtime_use_unpack_string = true;
   // Include the file as-is without any preprocessing
-  while ((c = fgetc(fp)) != EOF) {
+  while ((c = read_char(fp)) != EOF) {
     putchar(c);
   }
   putchar('\n');

@@ -8,8 +8,7 @@
 #include <string.h>
 #include <stdint.h> // for intptr_t
 #include <fcntl.h> // for open
-#include <unistd.h> // for write
-#include <unistd.h> // for isatty
+#include <unistd.h> // for read/write/close/isatty
 
 #if 0 // Removed from C annotations
 // =========================== configuration options ===========================
@@ -371,8 +370,7 @@ typedef long long int intptr_t;
 typedef int intptr_t;
 #endif
 
-typedef int FILE;
-#define fdopen(n, m) n // fdopen is a no-op, file descriptors are used directly as *FILE
+#define O_RDONLY 0
 
 #ifdef PNUT_SH
 // on pnut-sh, the file can only be opened in 3 modes: read, write and append
@@ -385,7 +383,8 @@ typedef int FILE;
 #define O_CREAT  0100
 #define O_TRUNC  01000
 #endif
-#endif
+
+#endif // PNUT_CC
 
 // =============================================================================
 
@@ -397,7 +396,7 @@ typedef int FILE;
 typedef int bool;
 
 // State for the reader
-//  - fp: current file pointer
+//  - fp: current input file descriptor (-1 = none), read with open/read/close.
 //  - fp_filepath: path of the current file being read, used for error messages.
 //  - fp_dirname: directory of the current file, used to resolve relative paths.
 //  - include_search_path: search path for system include files.
@@ -408,7 +407,7 @@ typedef int bool;
 //  - last_tok_column_number: column number of the last token read, used for error messages.
 //  - include_stack: the stack to save the state of the reader when including a file.
 
-FILE *fp = 0; // Current file pointer that's being read
+int fp = -1; // Current input file descriptor being read (-1 = none)
 char* fp_filepath = 0; // The path of the current file being read
 char *fp_dirname = 0; // The directory of the current file being read
 char* include_search_path = 0; // Search path for include files
@@ -574,7 +573,7 @@ void parse_error(char * const msg, const int tok_) {
 void save_include_context() {
   if (include_stack_top >= INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE) fatal_error("Include stack overflow");
 
-  if (fp != 0) {
+  if (fp != -1) {
     include_stack[include_stack_top]     = (intptr_t)fp;
     include_stack[include_stack_top + 1] = (intptr_t)fp_filepath;
     include_stack[include_stack_top + 2] = (intptr_t)fp_dirname;
@@ -591,14 +590,12 @@ void save_include_context() {
 void restore_include_context() {
   if (include_stack_top == 0) fatal_error("Include stack is empty");
 
-  fclose(fp);
+  close(fp);
   if (fp_dirname != 0) free(fp_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
   include_stack_top -= INCLUDE_ENTRY_SIZE;
-  // Must add parentheses because M2-Planet parses the cast operator with higher
-  // precedence than the dereference operator.
-  fp          = (FILE*) (include_stack[include_stack_top]);
+  fp          = include_stack[include_stack_top];
   fp_filepath = (char*) (include_stack[include_stack_top + 1]);
   fp_dirname  = (char*) (include_stack[include_stack_top + 2]);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
@@ -1442,6 +1439,16 @@ void output_defined_cli_macros() {
 
 #endif // ANNOTATE_WITH_C_CODE
 
+// Read the next byte from fd, returning it as an unsigned value (0..255) or EOF
+// when there's no more data. The runtimes that pnut targets (and the shell
+// runtime in particular) buffer reads per file descriptor, so we don't buffer
+// here to avoid keeping a second copy of the data.
+char read_buf[1];
+int read_char(const int fd) {
+  if (read(fd, read_buf, 1) == 1) return read_buf[0] & 0xff;
+  return EOF;
+}
+
 #ifdef SUPPORT_LINE_CONTINUATION
 // get_ch_ is reponsible for reading the next character from the input file,
 // switching to the next file if necessary and updating the line number.
@@ -1478,7 +1485,7 @@ void get_ch_() {
 #else
 void get_ch() {
 #endif
-  ch = fgetc(fp);
+  ch = read_char(fp);
 
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
@@ -1611,8 +1618,8 @@ void include_file(char *file_name, char *relative_to) {
   if (relative_to) {
     fp_filepath = str_concat(relative_to, fp_filepath);
   }
-  fp = fopen(fp_filepath, "r");
-  if (fp == 0) {
+  fp = open(fp_filepath, O_RDONLY, 0);
+  if (fp < 0) {
     dump_string("#include ", fp_filepath);
     fatal_error("Could not open file");
   }
@@ -4854,20 +4861,20 @@ void handle_macro_U(char *opt) {
 // only emit them when a non-newline character is output.
 int newline_accumulated = 0;
 
-void drop_rest_of_line(FILE * const fp) {
+void drop_rest_of_line(const int fd) {
   int c;
-  while ((c = fgetc(fp)) != EOF && c != '\n');
+  while ((c = read_char(fd)) != EOF && c != '\n');
   newline_accumulated = 0;
 }
 
-void output_rest_of_line(FILE * const fp, char *prefix) {
+void output_rest_of_line(const int fd, char *prefix) {
   int c;
   while (newline_accumulated > 0) {
     putchar('\n');
     newline_accumulated -= 1;
   }
   if (prefix) putstr(prefix);
-  while ((c = fgetc(fp)) != EOF && c != '\n') {
+  while ((c = read_char(fd)) != EOF && c != '\n') {
     putchar(c);
   }
   if (c == '\n') putchar('\n');
@@ -4875,9 +4882,9 @@ void output_rest_of_line(FILE * const fp, char *prefix) {
 
 void extract_c_code_from_annotated_file(char * const filename) {
   int c;
-  FILE *sh_fp = fopen(filename, "r");
+  int sh_fp = open(filename, O_RDONLY, 0);
 
-  if (sh_fp == 0) {
+  if (sh_fp < 0) {
     dump_string("#include ", fp_filepath);
     fatal_error("could not open .sh file for reading");
     return;
@@ -4891,11 +4898,11 @@ void extract_c_code_from_annotated_file(char * const filename) {
   // - Lines starting with "# " are printed without "# " (C code lines)
   // - Lines starting with "##" are printed with "//" instead (C comments lines)
   // - Other lines are ignored (shell commands or shell comments starting with "#_")
-  while ((c = fgetc(sh_fp)) != EOF) {
+  while ((c = read_char(sh_fp)) != EOF) {
     if (c == '\n') {
       newline_accumulated += 1;
     } else if (c == '#') {
-      c = fgetc(sh_fp);
+      c = read_char(sh_fp);
       if (c == ' ') {
         output_rest_of_line(sh_fp, 0);
       } else if (c == '#') {
@@ -4913,7 +4920,7 @@ void extract_c_code_from_annotated_file(char * const filename) {
     }
   }
 
-  fclose(sh_fp);
+  close(sh_fp);
 }
 
 #endif // SUPPORT_EXTRACT_C_ANNOTATIONS
@@ -5038,10 +5045,10 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (fp == 0) {
+  if (fp == -1) {
 #ifdef SUPPORT_STDIN_INPUT
     if (!isatty(0)) {
-      fp = fdopen(0, "r");
+      fp = 0; // Read from stdin (fd 0)
       fp_filepath = "<stdin>";
     } else
 #endif
