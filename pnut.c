@@ -1878,32 +1878,22 @@ int PNUT_TARGET_ID;
 
 void get_tok();
 
-// When we parse a macro, we generally want the tokens as they are, without expanding them.
-void get_tok_macro() {
+
+// When we parse a macro, we generally want the tokens as they are, without
+// expanding them. When force_newlines is set, newline tokens are produced. This
+// is used to end preprocessor directives.
+void get_tok_macro(int force_newlines) {
   bool prev_expand_macro = expand_macro;
   bool prev_macro_mask = if_macro_mask;
   bool skip_newlines_prev = skip_newlines;
 
   expand_macro = false;
   if_macro_mask = true;
-  skip_newlines = false;
+  if (force_newlines) skip_newlines = 0;
   get_tok();
   expand_macro = prev_expand_macro;
   if_macro_mask = prev_macro_mask;
   skip_newlines = skip_newlines_prev;
-}
-
-// Like get_tok_macro, but skips newline
-// This is useful when we want to read the arguments of a macro expansion.
-void get_tok_macro_expand() {
-  bool prev_expand_macro = expand_macro;
-  bool prev_macro_mask = if_macro_mask;
-
-  expand_macro = false;
-  if_macro_mask = true;
-  get_tok();
-  expand_macro = prev_expand_macro;
-  if_macro_mask = prev_macro_mask;
 }
 
 int lookup_macro_token(int args, int tok, int val) {
@@ -1933,11 +1923,11 @@ int read_macro_tokens(int args) {
     // Append the token/value pair to the replay list
     toks = cons(lookup_macro_token(args, tok, val), 0);
     rest = toks;
-    get_tok_macro();
+    get_tok_macro(true);
     while (tok != '\n' && tok != EOF) {
       set_cdr(rest, cons(lookup_macro_token(args, tok, val), 0));
       rest = cdr(rest); // Advance tail
-      get_tok_macro();
+      get_tok_macro(true);
     }
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
@@ -1969,25 +1959,25 @@ void handle_define() {
   macro = val;
   if (ch == '(') { // Function-like macro
     args_count = 0;
-    get_tok_macro(); // Skip macro name
-    get_tok_macro(); // Skip '('
+    get_tok_macro(true); // Skip macro name
+    get_tok_macro(true); // Skip '('
     while (tok != '\n' && tok != EOF) {
       if (tok == ',') {
         // Allow sequence of commas, this is more lenient than the standard
-        get_tok_macro();
+        get_tok_macro(true);
         continue;
       } else if (tok == ')') {
-        get_tok_macro();
+        get_tok_macro(true);
         break;
       }
-      get_tok_macro();
+      get_tok_macro(true);
       // Accumulate parameters in reverse order. That's ok because the arguments
       // to the macro will also be in reverse order.
       args = cons(val, args);
       args_count += 1;
     }
   } else {
-    get_tok_macro(); // Skip macro name
+    get_tok_macro(true); // Skip macro name
   }
 
   // Accumulate tokens so they can be replayed when the macro is used
@@ -2133,7 +2123,7 @@ bool handle_include() {
       handle_shell_include();
     }
 #endif
-    get_tok_macro(); // Skip the string
+    get_tok_macro(true); // Skip the string
     return false;
   } else if (tok == '<') {
     accum_string_until('>');
@@ -2144,7 +2134,7 @@ bool handle_include() {
       buf = symbol_buf(val);
       include_file(buf, include_search_path);
     }
-    get_tok_macro(); // Skip the string
+    get_tok_macro(true); // Skip the string
     return true;
   } else {
     dump_tok(tok);
@@ -2166,8 +2156,8 @@ void handle_preprocessor_directive() {
     bool keep_directive_code = if_macro_keep_directive_block_code;
 #endif
 
-    get_tok_macro(); // Get the # token
-    get_tok_macro(); // Get the directive
+    get_tok_macro(true); // Get the # token
+    get_tok_macro(true); // Get the directive
 
 #ifdef ANNOTATE_WITH_C_CODE
     dir_tok = tok;
@@ -2176,7 +2166,7 @@ void handle_preprocessor_directive() {
 
     if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
       temp = val;
-      get_tok_macro(); // Get the macro name
+      get_tok_macro(true); // Get the macro name
       push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
 #ifdef ANNOTATE_WITH_C_CODE
       // In ANNOTATE_WITH_C_CODE mode, we want to hide the conditional preprocessor
@@ -2185,7 +2175,7 @@ void handle_preprocessor_directive() {
       // pnut-exe from it, the C code contains the necessary directives.
       if_macro_keep_directive_block_code |= (val == PNUT_TARGET_ID || val == PNUT_CC_ID);
 #endif
-      get_tok_macro(); // Skip the macro name
+      get_tok_macro(true); // Skip the macro name
     } else if (tok == IF_KW) {
       temp = evaluate_if_condition();
       push_if_macro_mask(temp != 0);
@@ -2204,30 +2194,30 @@ void handle_preprocessor_directive() {
       } else {
         if_macro_mask = false;
       }
-      get_tok_macro(); // Skip the else keyword
+      get_tok_macro(true); // Skip the else keyword
     } else if (tok == IDENTIFIER && val == ENDIF_ID) {
       pop_if_macro_mask();
-      get_tok_macro(); // Skip the else keyword
+      get_tok_macro(true); // Skip the else keyword
     } else if (if_macro_mask) {
       if (tok == IDENTIFIER && val == INCLUDE_ID) {
-        get_tok_macro(); // Get the STRING token
+        get_tok_macro(true); // Get the STRING token
 #ifdef ANNOTATE_WITH_C_CODE
         keep_directive_code =
 #endif
         handle_include();
       }
       else if (tok == IDENTIFIER && val == UNDEF_ID) {
-        get_tok_macro(); // Get the macro name
+        get_tok_macro(true); // Get the macro name
         if (tok == IDENTIFIER || tok == MACRO) {
           // TODO: Doesn't play nice with typedefs, because they are not marked as macros
           set_symbol_type(val, IDENTIFIER); // Unmark the macro
-          get_tok_macro(); // Skip the macro name
+          get_tok_macro(true); // Skip the macro name
         } else {
           dump_tok(tok);
           syntax_error("#undef directive can only be followed by a identifier");
         }
       } else if (tok == IDENTIFIER && val == DEFINE_ID) {
-        get_tok_macro(); // Get the macro name
+        get_tok_macro(true); // Get the macro name
         handle_define();
       }
   #ifdef FULL_PREPROCESSOR_SUPPORT
@@ -2250,7 +2240,7 @@ void handle_preprocessor_directive() {
       }
     } else {
       // Skip the rest of the directive
-      while (tok != '\n' && tok != EOF) get_tok_macro();
+      while (tok != '\n' && tok != EOF) get_tok_macro(true);
     }
 
     if (tok != '\n' && tok != EOF) {
@@ -2561,7 +2551,7 @@ int macro_parse_argument() {
       set_cdr(rest, cons(cons(tok, val), 0));
       rest = cdr(rest);
     }
-    get_tok_macro_expand();
+    get_tok_macro(false);
   }
 
   return arg_tokens;
@@ -2584,11 +2574,11 @@ int get_macro_args_toks(int macro) {
   int args = 0;
   int macro_args_count = 0;
   bool prev_is_comma = tok == ',';
-  get_tok_macro_expand(); // Skip '('
+  get_tok_macro(false); // Skip '('
 
   while (tok != ')' && tok != EOF) {
     if (tok == ',') {
-      get_tok_macro_expand(); // Skip comma
+      get_tok_macro(false); // Skip comma
       if (prev_is_comma) { // Push empty arg
         args = cons(0, args);
         macro_args_count += 1;
@@ -2727,7 +2717,7 @@ bool attempt_macro_expansion(int macro) {
 void stringify() {
   int arg;
   expand_macro_arg = false;
-  get_tok_macro();
+  get_tok_macro(true);
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
     dump_tok(tok);
@@ -2764,7 +2754,7 @@ void paste_tokens(int left_tok, int left_val) {
   int right_tok;
   int right_val;
   expand_macro_arg = false;
-  get_tok_macro();
+  get_tok_macro(true);
   expand_macro_arg = true;
   // We need to handle the case where the right-hand side is a macro argument that expands to empty
   // In that case, the left-hand side is returned as is.
@@ -2775,7 +2765,7 @@ void paste_tokens(int left_tok, int left_val) {
       return;
     } else {
       begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
-      get_tok_macro();
+      get_tok_macro(true);
     }
   }
   right_tok = tok;
@@ -4295,15 +4285,15 @@ ast parse_unary_expression() {
 #endif // SUPPORT_SIZEOF
   } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
 
-    get_tok_macro();
+    get_tok_macro(true);
     if (tok == '(') {
-      get_tok_macro();
+      get_tok_macro(true);
       result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
-      get_tok_macro();
+      get_tok_macro(true);
       expect_tok(')');
     } else if (tok == IDENTIFIER || tok == MACRO) {
       result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
-      get_tok_macro();
+      get_tok_macro(true);
     } else {
       parse_error("identifier or '(' expected", tok);
       return 0;
