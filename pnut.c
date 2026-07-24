@@ -298,6 +298,39 @@
   #define SUPPORT_FULL_ARITHMETIC
 #endif
 
+// Support for 64-bit arithmetic on native 32-bit targets
+#ifdef SUPPORT_EMULATED_INT64
+  // Support for 64-bit arithmetic requires struct/union support, since
+  // `long long` are represented as 8-byte structs.
+  #ifndef SUPPORT_STRUCT_UNION
+    #define SUPPORT_STRUCT_UNION
+  #endif
+
+  // Support for 64-bit arithmetic requires full arithmetic support, since
+  // 64-bit arithmetic is implemented in the runtime library using 32-bit
+  // signed/unsigned arithmetic.
+  #ifndef SUPPORT_FULL_ARITHMETIC
+    #define SUPPORT_FULL_ARITHMETIC
+  #endif
+
+  // 64-bit literals are needed to materialize long long constants.
+  #ifndef SUPPORT_64_BIT_LITERALS
+    #define SUPPORT_64_BIT_LITERALS
+  #endif
+
+  // Octal/hex constants follow C99's unsigned type progression, which differs
+  // from decimal's (e.g. 0x80000000 is unsigned int, 2147483648 is long).
+  #ifndef PARSE_NUMERIC_LITERAL_WITH_BASE
+    #define PARSE_NUMERIC_LITERAL_WITH_BASE
+  #endif
+
+  // BOOTSTRAP_LONG makes long a 32-bit type
+  //  => incompatible with 64-bit arithmetic support.
+  #ifdef BOOTSTRAP_LONG
+    #error "SUPPORT_EMULATED_INT64 is incompatible with BOOTSTRAP_LONG"
+  #endif
+#endif
+
 #if defined(NICE_UX) || defined(SAFE_MODE)
   #define FULL_PREPROCESSOR_SUPPORT
   #define INCLUDE_LINE_NUMBER_ON_ERROR
@@ -379,6 +412,9 @@ FILE *fp = 0; // Current file pointer that's being read
 char* fp_filepath = 0; // The path of the current file being read
 char *fp_dirname = 0; // The directory of the current file being read
 char* include_search_path = 0; // Search path for include files
+#ifdef SUPPORT_EMULATED_INT64
+char* runtime_file_path = 0; // Path to the 64-bit arithmetic runtime (arith64.c), set by -rt
+#endif
 int output_fd = 1; // Output file descriptor (1 = stdout)
 
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
@@ -4942,6 +4978,22 @@ int main(int argc, char **argv) {
             include_search_path = argv[i] + 2; // skip '-I'
           }
           break;
+
+#ifdef SUPPORT_EMULATED_INT64
+        case 'r':
+          // -rt <file>: path to the 64-bit arithmetic runtime (arith64.c).
+          // It is compiled ahead of the user program (see include below),
+          // providing the runtime functions for emulated arithmetic types.
+          if (argv[i][2] != 't' || (argv[i][3] != 0 && argv[i][3] != '=')) fatal_error("unknown option");
+          if (argv[i][3] == 0) { // rest of option is in argv[i + 1]
+            if (argv[i + 1] == 0) fatal_error("missing file name for -rt option");
+            i += 1;
+            runtime_file_path = argv[i];
+          } else {
+            runtime_file_path = argv[i] + 4; // skip '-rt='
+          }
+          break;
+#endif
 #else
           case 'D':
             // pnut-sh only needs -D<macro> and no other options
@@ -4998,6 +5050,14 @@ int main(int argc, char **argv) {
       fatal_error("no input file");
     }
   }
+
+#ifdef SUPPORT_EMULATED_INT64
+  // Link the 64-bit arithmetic runtime by pushing it onto the include stack on
+  // top of the user file, equivalent to an #include at the top of the input.
+  // This ensures that the runtimeruntime's bindings are available before any
+  // 64-bit operation is encountered.
+  if (runtime_file_path != 0) include_file(runtime_file_path, 0);
+#endif
 
   ch = '\n';
 
