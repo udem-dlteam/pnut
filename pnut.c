@@ -2418,20 +2418,23 @@ void init_ident_table() {
 
 #if defined(target_sh) || defined(target_awk)
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
-  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
   EXIT_ID    = init_ident(IDENTIFIER, "exit");
   MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
   FREE_ID    = init_ident(IDENTIFIER, "free");
   PRINTF_ID  = init_ident(IDENTIFIER, "printf");
-  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
-  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
-  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
   PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
   PUTS_ID    = init_ident(IDENTIFIER, "puts");
   READ_ID    = init_ident(IDENTIFIER, "read");
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+
+#ifndef MINIMAL_RUNTIME
+  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
+  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
+  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
+  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
+#endif
 #if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
 #endif

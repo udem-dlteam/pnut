@@ -960,21 +960,6 @@ void runtime_write() {
   putstr("\n");
 }
 
-// exec $fd<&- does not work as expected so we instead have a case statement
-// that calls the appropriate exec command to open and close file descriptors.
-bool runtime_use_fopen = DEFAULT_USE;
-bool runtime_fopen_defined = false;
-void runtime_fopen() {
-  if (runtime_fopen_defined++) return;
-  runtime_open();
-  putstr("#_ Open the file and return the file descriptor directly.\n");
-  putstr("_fopen() { # $2: File name, $3: Mode\n");
-  putstr("  _open __fd $2 $((_$3 == 119)) 511\n");
-  putstr("  : $(($1 = __fd))\n");
-  putstr("}\n");
-  putstr("\n");
-}
-
 bool runtime_use_close = DEFAULT_USE;
 bool runtime_close_defined = false;
 void runtime_close() {
@@ -993,6 +978,23 @@ void runtime_close() {
   putstr("    9) exec 9<&- ;;\n");
   putstr("  esac\n");
   putstr("  : $(($1 = 0))\n");
+  putstr("}\n");
+  putstr("\n");
+}
+
+#ifndef MINIMAL_RUNTIME
+
+// exec $fd<&- does not work as expected so we instead have a case statement
+// that calls the appropriate exec command to open and close file descriptors.
+bool runtime_use_fopen = DEFAULT_USE;
+bool runtime_fopen_defined = false;
+void runtime_fopen() {
+  if (runtime_fopen_defined++) return;
+  runtime_open();
+  putstr("#_ Open the file and return the file descriptor directly.\n");
+  putstr("_fopen() { # $2: File name, $3: Mode\n");
+  putstr("  _open __fd $2 $((_$3 == 119)) 511\n");
+  putstr("  : $(($1 = __fd))\n");
   putstr("}\n");
   putstr("\n");
 }
@@ -1020,14 +1022,18 @@ void runtime_fgetc() {
   putstr("\n");
 }
 
+#endif // !MINIMAL_RUNTIME
+
 void produce_runtime() {
   if (runtime_use_defstr)               runtime_defstr();
   if (runtime_use_malloc)               runtime_malloc();
   if (runtime_use_free)                 runtime_free();
   if (runtime_use_put_pstr)             runtime_put_pstr();
+#ifndef MINIMAL_RUNTIME
   if (runtime_use_fopen)                runtime_fopen();
   if (runtime_use_fclose)               runtime_fclose();
   if (runtime_use_fgetc)                runtime_fgetc();
+#endif
   if (runtime_use_read)                 runtime_read();
   if (runtime_use_write)                runtime_write();
   if (runtime_use_open)                 runtime_open();

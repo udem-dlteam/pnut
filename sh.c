@@ -1568,9 +1568,6 @@ text comp_fun_call_code(ast node, ast assign_to) {
 
        if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
   else if (name_id == FREE_ID)    { runtime_use_free = true; }
-  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
-  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
-  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
   else if (name_id == READ_ID)    { runtime_use_read = true; }
   else if (name_id == WRITE_ID)   { runtime_use_write = true; }
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
@@ -1584,6 +1581,9 @@ text comp_fun_call_code(ast node, ast assign_to) {
 #ifndef MINIMAL_RUNTIME
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
   else if (name_id == PRINTF_ID)  { runtime_use_printf = true; }
+  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
+  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
+  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
 #endif
 #if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
