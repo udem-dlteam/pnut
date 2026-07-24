@@ -2080,7 +2080,7 @@ int eval_constant(ast expr, bool if_macro) {
   }
 }
 
-ast parse_assignment_expression();
+ast parse_constant_expression();
 
 int evaluate_if_condition() {
   bool prev_skip_newlines = skip_newlines;
@@ -2091,7 +2091,7 @@ int evaluate_if_condition() {
   if_macro_mask = true;
   skip_newlines = false; // We want to stop when we reach the first newline
   get_tok(); // Skip the #if keyword
-  expr = parse_assignment_expression();
+  expr = parse_constant_expression();
 
   // Restore the previous value
   if_macro_mask = previous_mask;
@@ -3315,7 +3315,7 @@ ast parse_comma_expression();
 ast parse_call_params();
 ast parse_cast_expression();
 ast parse_compound_statement();
-ast parse_conditional_expression();
+ast parse_assignment_expression();
 ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
 ast parse_declarator(bool abstract_decl, ast parent_type);
@@ -3442,7 +3442,7 @@ ast parse_enum() {
 
       if (tok == '=') {
         get_tok();
-        value = parse_assignment_expression();
+        value = parse_constant_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
 
         // Avoid recreating integer literal nodes unnecessarily.
@@ -3905,7 +3905,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       if (tok == ']') {
         val = 0;
       } else {
-        arr_size_expr = parse_assignment_expression();
+        arr_size_expr = parse_constant_expression();
         if (arr_size_expr == 0) parse_error("Array size must be an integer constant", tok);
         val = eval_constant(arr_size_expr, false);
       }
@@ -4283,7 +4283,7 @@ ast parse_unary_expression() {
     result = new_ast1(SIZEOF_KW, result);
 
 #endif // SUPPORT_SIZEOF
-  } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
+  } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // parse a defined(id) expression in a #if expression
 
     get_tok_macro(true);
     if (tok == '(') {
@@ -4325,228 +4325,68 @@ ast parse_cast_expression() {
   }
 }
 
-ast parse_multiplicative_expression() {
+// Operator precedence table. Higher precedence operators bind tighter than
+// lower precedence operators. Used by parse_binary_expression to determine when
+// to stop parsing a binary expression and return to the caller.
+int binop_prec(int op) {
+  if       (op == ',')                                              return 1;
+  else if ( op == '='       || op == PLUS_EQ   || op == MINUS_EQ
+         || op == STAR_EQ   || op == SLASH_EQ  || op == PERCENT_EQ
+         || op == LSHIFT_EQ || op == RSHIFT_EQ
+         || op == AMP_EQ    || op == CARET_EQ  || op == BAR_EQ
+    )                                                               return 2;
+  else if (op == '?')                                               return 3;
+  else if (op == BAR_BAR)                                           return 4;
+  else if (op == AMP_AMP)                                           return 5;
+  else if (op == '|')                                               return 6;
+  else if (op == '^')                                               return 7;
+  else if (op == '&')                                               return 8;
+  else if (op == EQ_EQ || op == EXCL_EQ)                            return 9;
+  else if (op == '<' || op == '>' || op == LT_EQ || op == GT_EQ)    return 10;
+  else if (op == LSHIFT || op == RSHIFT)                            return 11;
+  else if (op == '+' || op == '-')                                  return 12;
+  else if (op == '*' || op == '/' || op == '%')                     return 13;
+  else                                                              return 0;
+}
 
-  ast result = parse_cast_expression();
-  ast child;
+// Precedence-climbing parser for the comma operator, assignment, the ternary
+// conditional and the binary operators. min_prec is the lowest precedence this
+// call is allowed to consume. Assignment (prec 2) and the ternary (prec 3) are
+// right-associative, so they recurse at their own precedence; the comma
+// operator and the left-associative binary operators recurse one level tighter.
+ast parse_binary_expression(int min_prec) {
+  ast left = parse_cast_expression();
+  ast mid;
   int op;
+  int prec;
 
-  while (tok == '*' || tok == '/' || tok == '%') {
-
+  while ((prec = binop_prec(tok)) >= min_prec) {
     op = tok;
     get_tok();
-    child = parse_cast_expression();
-    result = new_ast2(op, result, child);
-
+    if (op == '?') {
+      // special case for ternary op, because it's sandwiched between 2 prec
+      // levels and consumes 2 expressions (in addition to left) instead of 1.
+      mid = parse_comma_expression();
+      expect_tok(':');
+      left = new_ast3('?', left, mid, parse_binary_expression(prec));
+    } else if (prec == 2) {
+      // assignment operators are right-associative
+      left = new_ast2(op, left, parse_binary_expression(prec));
+    } else {
+      // all other binary operators are left-associative
+      left = new_ast2(op, left, parse_binary_expression(prec + 1));
+    }
   }
 
-  return result;
-}
-
-ast parse_additive_expression() {
-
-  ast result = parse_multiplicative_expression();
-  ast child;
-  int op;
-
-  while (tok == '+' || tok == '-') {
-
-    op = tok;
-    get_tok();
-    child = parse_multiplicative_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_shift_expression() {
-
-  ast result = parse_additive_expression();
-  ast child;
-  int op;
-
-  while (tok == LSHIFT || tok == RSHIFT) {
-
-    op = tok;
-    get_tok();
-    child = parse_additive_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_relational_expression() {
-
-  ast result = parse_shift_expression();
-  ast child;
-  int op;
-
-  while (tok == '<' || tok == '>' || tok == LT_EQ || tok == GT_EQ) {
-
-    op = tok;
-    get_tok();
-    child = parse_shift_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_equality_expression() {
-
-  ast result = parse_relational_expression();
-  ast child;
-  int op;
-
-  while (tok == EQ_EQ || tok == EXCL_EQ) {
-
-    op = tok;
-    get_tok();
-    child = parse_relational_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_AND_expression() {
-
-  ast result = parse_equality_expression();
-  ast child;
-
-  while (tok == '&') {
-
-    get_tok();
-    child = parse_equality_expression();
-    result = new_ast2('&', result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_exclusive_OR_expression() {
-
-  ast result = parse_AND_expression();
-  ast child;
-
-  while (tok == '^') {
-
-    get_tok();
-    child = parse_AND_expression();
-    result = new_ast2('^', result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_inclusive_OR_expression() {
-
-  ast result = parse_exclusive_OR_expression();
-  ast child;
-
-  while (tok == '|') {
-
-    get_tok();
-    child = parse_exclusive_OR_expression();
-    result = new_ast2('|', result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_logical_AND_expression() {
-
-  ast result = parse_inclusive_OR_expression();
-  ast child;
-
-  while (tok == AMP_AMP) {
-
-    get_tok();
-    child = parse_inclusive_OR_expression();
-    result = new_ast2(AMP_AMP, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_logical_OR_expression() {
-
-  ast result = parse_logical_AND_expression();
-  ast child;
-
-  while (tok == BAR_BAR) {
-
-    get_tok();
-    child = parse_logical_AND_expression();
-    result = new_ast2(BAR_BAR, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_conditional_expression() {
-
-  ast result = parse_logical_OR_expression();
-  ast child1;
-  ast child2;
-
-  if (tok == '?') {
-
-    get_tok();
-    child1 = parse_comma_expression();
-    expect_tok(':');
-    child2 = parse_conditional_expression();
-    result = new_ast3('?', result, child1, child2);
-
-  }
-
-  return result;
+  return left;
 }
 
 ast parse_assignment_expression() {
-
-  ast result = parse_conditional_expression();
-  ast child;
-  int op;
-
-  if (   tok == '='       || tok == PLUS_EQ   || tok == MINUS_EQ
-      || tok == STAR_EQ   || tok == SLASH_EQ  || tok == PERCENT_EQ
-      || tok == LSHIFT_EQ || tok == RSHIFT_EQ || tok == AMP_EQ
-      || tok == CARET_EQ  || tok == BAR_EQ) {
-
-    op = tok;
-    get_tok();
-    child = parse_assignment_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
+  return parse_binary_expression(2); // prec 2 => start at assignment operators
 }
 
 ast parse_comma_expression() {
-
-  ast result = parse_assignment_expression();
-  int child;
-
-  if (tok == ',') { // avoid creating unnecessary nodes
-    get_tok();
-    child = parse_comma_expression();
-    result = new_ast2(',', result, child);
-  }
-
-  return result;
+  return parse_binary_expression(1); // prec 1 => start at comma operator
 }
 
 ast parse_call_params() {
@@ -4570,13 +4410,11 @@ ast parse_comma_expression_opt() {
   }
 }
 
-ast parse_expression() {
-  return parse_comma_expression();
-}
-
+// A constant-expression cannot be a comma or assignment expression, so the
+// precedence climb starts at the ternary level. This may still parse
+// non-constant expressions, checks are done in eval_constant.
 ast parse_constant_expression() {
-  // Note: does not enforce that the expression is actually constant
-  return parse_expression();
+  return parse_binary_expression(3); // prec 3 => start at ternary operator
 }
 
 ast parse_statement() {
