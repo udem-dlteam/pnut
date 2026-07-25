@@ -655,9 +655,6 @@ text comp_fun_call(ast name, ast params) {
 
        if (name_id == MALLOC_ID)  { runtime_use_malloc = true; }
   else if (name_id == FREE_ID)    { runtime_use_free = true; }
-  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
-  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
-  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
   else if (name_id == READ_ID)    { runtime_use_read = true; }
   else if (name_id == WRITE_ID)   { runtime_use_write = true; }
   else if (name_id == OPEN_ID)    { runtime_use_open = true; }
@@ -670,6 +667,9 @@ text comp_fun_call(ast name, ast params) {
 #endif
 #ifndef MINIMAL_RUNTIME
   else if (name_id == GETCHAR_ID) { runtime_use_getchar = true; }
+  else if (name_id == FOPEN_ID)   { runtime_use_fopen = true; }
+  else if (name_id == FCLOSE_ID)  { runtime_use_fclose = true; }
+  else if (name_id == FGETC_ID)   { runtime_use_fgetc = true; }
 #endif
 #if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   else if (name_id == ISATTY_ID)  { runtime_use_isatty = true; }
@@ -1355,7 +1355,11 @@ void codegen_end() {
   putstr("    exit 1\n");
   putstr("  }\n");
   putstr("  __ALLOC=1 # Allocation pointer\n");
-  if (runtime_use_open || runtime_use_close || runtime_use_write || runtime_use_fgetc || runtime_use_read || runtime_use_fopen || runtime_use_fclose) {
+  if (runtime_use_open || runtime_use_close || runtime_use_write
+#ifndef MINIMAL_RUNTIME
+    || runtime_use_fgetc || runtime_use_read || runtime_use_fopen || runtime_use_fclose
+#endif
+  ) {
     putstr("  __next_fd=3 # Next available file descriptor\n");
     putstr("  __rt_file[0]=\"/dev/stdin\"; __rt_file[1]=\"/dev/stdout\"; __rt_file[2]=\"/dev/stderr\"\n");
   }

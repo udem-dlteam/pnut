@@ -291,6 +291,8 @@ void runtime_read() {
   putstr("}\n\n");
 }
 
+#ifndef MINIMAL_RUNTIME
+
 bool runtime_use_fopen = DEFAULT_USE;
 bool runtime_fopen_defined = false;
 void runtime_fopen() {
@@ -312,7 +314,9 @@ void runtime_fclose() {
   putstr("}\n\n");
 }
 
-#ifdef AWK_INLINE_PUTCHAR
+#endif // !MINIMAL_RUNTIME
+
+#ifndef AWK_INLINE_PUTCHAR
 
 bool runtime_use_putchar = DEFAULT_USE;
 bool runtime_putchar_defined = false;
@@ -324,7 +328,7 @@ void runtime_putchar() {
   putstr("}\n\n");
 }
 
-#endif // AWK_INLINE_PUTCHAR
+#endif // !AWK_INLINE_PUTCHAR
 
 // other stubs
 
@@ -343,6 +347,8 @@ void runtime_make_argv() {
   putstr("}\n\n");
 }
 
+#ifndef AWK_INLINE_EXIT
+
 bool runtime_use_exit = DEFAULT_USE;
 bool runtime_exit_defined = false;
 void runtime_exit() {
@@ -351,6 +357,8 @@ void runtime_exit() {
   putstr("  exit status\n");
   putstr("}\n\n");
 }
+
+#endif // !AWK_INLINE_EXIT
 
 #ifndef MINIMAL_RUNTIME
 
@@ -392,15 +400,17 @@ void produce_runtime() {
   if (runtime_use_close)                runtime_close();
   if (runtime_use_read)                 runtime_read();
   if (runtime_use_write)                runtime_write();
+  if (runtime_use_fgetc)                runtime_fgetc();
+#ifndef MINIMAL_RUNTIME
   if (runtime_use_fopen)                runtime_fopen();
   if (runtime_use_fclose)               runtime_fclose();
-  if (runtime_use_fgetc)                runtime_fgetc();
+#endif
   if (runtime_use_make_argv)            runtime_make_argv();
 
-#ifdef AWK_INLINE_PUTCHAR
+#ifndef AWK_INLINE_PUTCHAR
   if (runtime_use_putchar)              runtime_putchar();
 #endif
-#ifdef AWK_INLINE_EXIT
+#ifndef AWK_INLINE_EXIT
   if (runtime_use_exit)                 runtime_exit();
 #endif
 

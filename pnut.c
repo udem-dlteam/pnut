@@ -8,8 +8,7 @@
 #include <string.h>
 #include <stdint.h> // for intptr_t
 #include <fcntl.h> // for open
-#include <unistd.h> // for write
-#include <unistd.h> // for isatty
+#include <unistd.h> // for read/write/close/isatty
 
 #if 0 // Removed from C annotations
 // =========================== configuration options ===========================
@@ -215,6 +214,10 @@
 
 #elif defined(target_i386_linux) || defined (target_x86_64_linux) || defined (target_x86_64_mac)
 
+  // Helper macros to detect the target platform, so we don't need to match on
+  // all possible exe targets.
+  #define target_exe
+
   // Parse numeric literals with their suffix (U, L, UL, etc).
   #define PARSE_NUMERIC_LITERAL_SUFFIX
 
@@ -371,8 +374,7 @@ typedef long long int intptr_t;
 typedef int intptr_t;
 #endif
 
-typedef int FILE;
-#define fdopen(n, m) n // fdopen is a no-op, file descriptors are used directly as *FILE
+#define O_RDONLY 0
 
 #ifdef PNUT_SH
 // on pnut-sh, the file can only be opened in 3 modes: read, write and append
@@ -385,7 +387,8 @@ typedef int FILE;
 #define O_CREAT  0100
 #define O_TRUNC  01000
 #endif
-#endif
+
+#endif // PNUT_CC
 
 // =============================================================================
 
@@ -397,9 +400,9 @@ typedef int FILE;
 typedef int bool;
 
 // State for the reader
-//  - fp: current file pointer
-//  - fp_filepath: path of the current file being read, used for error messages.
-//  - fp_dirname: directory of the current file, used to resolve relative paths.
+//  - fd: current input file descriptor (-1 = none), read with open/read/close.
+//  - fd_filepath: path of the current file being read, used for error messages.
+//  - fd_dirname: directory of the current file, used to resolve relative paths.
 //  - include_search_path: search path for system include files.
 //  - output_fd: the output file descriptor (1 = stdout), used by pnut-exe
 //  - line_number: line number of the current file, used for error messages.
@@ -408,9 +411,9 @@ typedef int bool;
 //  - last_tok_column_number: column number of the last token read, used for error messages.
 //  - include_stack: the stack to save the state of the reader when including a file.
 
-FILE *fp = 0; // Current file pointer that's being read
-char* fp_filepath = 0; // The path of the current file being read
-char *fp_dirname = 0; // The directory of the current file being read
+int fd = -1; // Current input file descriptor being read (-1 = none)
+char* fd_filepath = 0; // The path of the current file being read
+char *fd_dirname = 0; // The directory of the current file being read
 char* include_search_path = 0; // Search path for include files
 #ifdef SUPPORT_EMULATED_INT64
 char* runtime_file_path = 0; // Path to the 64-bit arithmetic runtime (arith64.c), set by -rt
@@ -523,10 +526,10 @@ void source_code_error(char *error_prefix, char *error_msg, int token) {
     putchar('\n');
   }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  if (fp_filepath != 0) {
+  if (fd_filepath != 0) {
     printf("  Location: ");
     change_color(ANSI_GREEN);
-    printf("%s:%d:%d\n", fp_filepath, last_tok_line_number, last_tok_column_number);
+    printf("%s:%d:%d\n", fd_filepath, last_tok_line_number, last_tok_column_number);
     change_color(ANSI_RESET);
   }
 #endif
@@ -536,8 +539,8 @@ void source_code_error(char *error_prefix, char *error_msg, int token) {
 #elif defined(INCLUDE_LINE_NUMBER_ON_ERROR)
 
 void source_code_error(char *error_prefix, char *error_msg, int token) {
-  if (fp_filepath != 0) {
-    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  if (fd_filepath != 0) {
+    printf("%s:%d:%d: ", fd_filepath, last_tok_line_number, last_tok_column_number);
   }
   printf("%s%s\n", error_prefix, error_msg);
   exit(1);
@@ -553,8 +556,8 @@ void source_code_error(char *error_prefix, char *error_msg, int token) {
 void fatal_error(char * const msg) {
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   // Fatal errors are simpler and without color
-  if (fp_filepath != 0) {
-    printf("%s:%d:%d: ", fp_filepath, last_tok_line_number, last_tok_column_number);
+  if (fd_filepath != 0) {
+    printf("%s:%d:%d: ", fd_filepath, last_tok_line_number, last_tok_column_number);
   }
 #endif
   putstr(msg); putchar('\n');
@@ -574,10 +577,10 @@ void parse_error(char * const msg, const int tok_) {
 void save_include_context() {
   if (include_stack_top >= INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE) fatal_error("Include stack overflow");
 
-  if (fp != 0) {
-    include_stack[include_stack_top]     = (intptr_t)fp;
-    include_stack[include_stack_top + 1] = (intptr_t)fp_filepath;
-    include_stack[include_stack_top + 2] = (intptr_t)fp_dirname;
+  if (fd != -1) {
+    include_stack[include_stack_top]     = (intptr_t)fd;
+    include_stack[include_stack_top + 1] = (intptr_t)fd_filepath;
+    include_stack[include_stack_top + 2] = (intptr_t)fd_dirname;
 
   #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     // Save the line and column number of the current file
@@ -591,16 +594,16 @@ void save_include_context() {
 void restore_include_context() {
   if (include_stack_top == 0) fatal_error("Include stack is empty");
 
-  fclose(fp);
-  if (fp_dirname != 0) free(fp_dirname);
+  close(fd);
+  if (fd_dirname != 0) free(fd_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
   include_stack_top -= INCLUDE_ENTRY_SIZE;
   // Must add parentheses because M2-Planet parses the cast operator with higher
   // precedence than the dereference operator.
-  fp          = (FILE*) (include_stack[include_stack_top]);
-  fp_filepath = (char*) (include_stack[include_stack_top + 1]);
-  fp_dirname  = (char*) (include_stack[include_stack_top + 2]);
+  fd          =          include_stack[include_stack_top];
+  fd_filepath = (char*) (include_stack[include_stack_top + 1]);
+  fd_dirname  = (char*) (include_stack[include_stack_top + 2]);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   line_number   = include_stack[include_stack_top + 3];
   column_number = include_stack[include_stack_top + 4];
@@ -948,7 +951,7 @@ ast new_ast4(const int op, const ast child0, const ast child1, const ast child2,
   return ast_result;
 }
 
-#ifndef target_sh
+#ifdef target_exe
 
 ast clone_ast(const ast orig) {
   int nb_children = get_nb_children(orig);
@@ -981,7 +984,7 @@ ast cdr_(const int expected_op, const int pair) { return get_child_opt_(LIST, ex
 #endif
 void set_car(const int pair, const int value)   { return set_child(pair, 0, value); }
 void set_cdr(const int pair, const int value)   { return set_child(pair, 1, value); }
-#ifndef target_sh
+#ifdef target_exe
 ast list1(const int child0)                     { return new_ast2(LIST, child0, 0); }
 ast list2(const int child0, const int child1)   { return new_ast2(LIST, child0, new_ast2(LIST, child1, 0)); }
 ast list3(const int child0, const int child1, const int child2) { return new_ast2(LIST, child0, new_ast2(LIST, child1, new_ast2(LIST, child2, 0))); }
@@ -1442,6 +1445,16 @@ void output_defined_cli_macros() {
 
 #endif // ANNOTATE_WITH_C_CODE
 
+// Read the next byte from fd, returning it as an unsigned value (0..255) or EOF
+// when there's no more data. The runtimes that pnut targets (and the shell
+// runtime in particular) buffer reads per file descriptor, so we don't buffer
+// here to avoid keeping a second copy of the data.
+char read_buf[1];
+int read_char(const int fd) {
+  if (read(fd, read_buf, 1) == 1) return read_buf[0] & 0xff;
+  return EOF;
+}
+
 #ifdef SUPPORT_LINE_CONTINUATION
 // get_ch_ is reponsible for reading the next character from the input file,
 // switching to the next file if necessary and updating the line number.
@@ -1478,7 +1491,7 @@ void get_ch_() {
 #else
 void get_ch() {
 #endif
-  ch = fgetc(fp);
+  ch = read_char(fd);
 
   if (ch == EOF) {
     // If it's not the last file on the stack, EOF means that we need to switch to the next file
@@ -1607,17 +1620,17 @@ char *file_parent_directory(char *path) {
 
 void include_file(char *file_name, char *relative_to) {
   save_include_context();
-  fp_filepath = file_name;
+  fd_filepath = file_name;
   if (relative_to) {
-    fp_filepath = str_concat(relative_to, fp_filepath);
+    fd_filepath = str_concat(relative_to, fd_filepath);
   }
-  fp = fopen(fp_filepath, "r");
-  if (fp == 0) {
-    dump_string("#include ", fp_filepath);
+  fd = open(fd_filepath, O_RDONLY, 0);
+  if (fd < 0) {
+    dump_string("#include ", fd_filepath);
     fatal_error("Could not open file");
   }
 
-  fp_dirname = file_parent_directory(fp_filepath);
+  fd_dirname = file_parent_directory(fd_filepath);
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   line_number = 1;
   column_number = 0;
@@ -1869,32 +1882,22 @@ int PNUT_TARGET_ID;
 
 void get_tok();
 
-// When we parse a macro, we generally want the tokens as they are, without expanding them.
-void get_tok_macro() {
+
+// When we parse a macro, we generally want the tokens as they are, without
+// expanding them. When force_newlines is set, newline tokens are produced. This
+// is used to end preprocessor directives.
+void get_tok_macro(int force_newlines) {
   bool prev_expand_macro = expand_macro;
   bool prev_macro_mask = if_macro_mask;
   bool skip_newlines_prev = skip_newlines;
 
   expand_macro = false;
   if_macro_mask = true;
-  skip_newlines = false;
+  if (force_newlines) skip_newlines = 0;
   get_tok();
   expand_macro = prev_expand_macro;
   if_macro_mask = prev_macro_mask;
   skip_newlines = skip_newlines_prev;
-}
-
-// Like get_tok_macro, but skips newline
-// This is useful when we want to read the arguments of a macro expansion.
-void get_tok_macro_expand() {
-  bool prev_expand_macro = expand_macro;
-  bool prev_macro_mask = if_macro_mask;
-
-  expand_macro = false;
-  if_macro_mask = true;
-  get_tok();
-  expand_macro = prev_expand_macro;
-  if_macro_mask = prev_macro_mask;
 }
 
 int lookup_macro_token(int args, int tok, int val) {
@@ -1924,11 +1927,11 @@ int read_macro_tokens(int args) {
     // Append the token/value pair to the replay list
     toks = cons(lookup_macro_token(args, tok, val), 0);
     rest = toks;
-    get_tok_macro();
+    get_tok_macro(true);
     while (tok != '\n' && tok != EOF) {
       set_cdr(rest, cons(lookup_macro_token(args, tok, val), 0));
       rest = cdr(rest); // Advance tail
-      get_tok_macro();
+      get_tok_macro(true);
     }
 
 #ifdef FULL_PREPROCESSOR_SUPPORT
@@ -1960,25 +1963,25 @@ void handle_define() {
   macro = val;
   if (ch == '(') { // Function-like macro
     args_count = 0;
-    get_tok_macro(); // Skip macro name
-    get_tok_macro(); // Skip '('
+    get_tok_macro(true); // Skip macro name
+    get_tok_macro(true); // Skip '('
     while (tok != '\n' && tok != EOF) {
       if (tok == ',') {
         // Allow sequence of commas, this is more lenient than the standard
-        get_tok_macro();
+        get_tok_macro(true);
         continue;
       } else if (tok == ')') {
-        get_tok_macro();
+        get_tok_macro(true);
         break;
       }
-      get_tok_macro();
+      get_tok_macro(true);
       // Accumulate parameters in reverse order. That's ok because the arguments
       // to the macro will also be in reverse order.
       args = cons(val, args);
       args_count += 1;
     }
   } else {
-    get_tok_macro(); // Skip macro name
+    get_tok_macro(true); // Skip macro name
   }
 
   // Accumulate tokens so they can be replayed when the macro is used
@@ -2081,7 +2084,7 @@ int eval_constant(ast expr, bool if_macro) {
   }
 }
 
-ast parse_assignment_expression();
+ast parse_constant_expression();
 
 int evaluate_if_condition() {
   bool prev_skip_newlines = skip_newlines;
@@ -2092,7 +2095,7 @@ int evaluate_if_condition() {
   if_macro_mask = true;
   skip_newlines = false; // We want to stop when we reach the first newline
   get_tok(); // Skip the #if keyword
-  expr = parse_assignment_expression();
+  expr = parse_constant_expression();
 
   // Restore the previous value
   if_macro_mask = previous_mask;
@@ -2113,7 +2116,7 @@ bool handle_include() {
 
   if (tok == STRING) {
     buf = symbol_buf(val);
-    include_file(buf, fp_dirname);
+    include_file(buf, fd_dirname);
 
 #ifdef SH_SUPPORT_SHELL_INCLUDE
     ext = strrchr(buf, '.');
@@ -2124,7 +2127,7 @@ bool handle_include() {
       handle_shell_include();
     }
 #endif
-    get_tok_macro(); // Skip the string
+    get_tok_macro(true); // Skip the string
     return false;
   } else if (tok == '<') {
     accum_string_until('>');
@@ -2135,7 +2138,7 @@ bool handle_include() {
       buf = symbol_buf(val);
       include_file(buf, include_search_path);
     }
-    get_tok_macro(); // Skip the string
+    get_tok_macro(true); // Skip the string
     return true;
   } else {
     dump_tok(tok);
@@ -2157,8 +2160,8 @@ void handle_preprocessor_directive() {
     bool keep_directive_code = if_macro_keep_directive_block_code;
 #endif
 
-    get_tok_macro(); // Get the # token
-    get_tok_macro(); // Get the directive
+    get_tok_macro(true); // Get the # token
+    get_tok_macro(true); // Get the directive
 
 #ifdef ANNOTATE_WITH_C_CODE
     dir_tok = tok;
@@ -2167,7 +2170,7 @@ void handle_preprocessor_directive() {
 
     if (tok == IDENTIFIER && (val == IFDEF_ID || val == IFNDEF_ID)) {
       temp = val;
-      get_tok_macro(); // Get the macro name
+      get_tok_macro(true); // Get the macro name
       push_if_macro_mask(TERNARY(temp == IFDEF_ID, tok == MACRO, tok != MACRO));
 #ifdef ANNOTATE_WITH_C_CODE
       // In ANNOTATE_WITH_C_CODE mode, we want to hide the conditional preprocessor
@@ -2176,7 +2179,7 @@ void handle_preprocessor_directive() {
       // pnut-exe from it, the C code contains the necessary directives.
       if_macro_keep_directive_block_code |= (val == PNUT_TARGET_ID || val == PNUT_CC_ID);
 #endif
-      get_tok_macro(); // Skip the macro name
+      get_tok_macro(true); // Skip the macro name
     } else if (tok == IF_KW) {
       temp = evaluate_if_condition();
       push_if_macro_mask(temp != 0);
@@ -2195,30 +2198,30 @@ void handle_preprocessor_directive() {
       } else {
         if_macro_mask = false;
       }
-      get_tok_macro(); // Skip the else keyword
+      get_tok_macro(true); // Skip the else keyword
     } else if (tok == IDENTIFIER && val == ENDIF_ID) {
       pop_if_macro_mask();
-      get_tok_macro(); // Skip the else keyword
+      get_tok_macro(true); // Skip the else keyword
     } else if (if_macro_mask) {
       if (tok == IDENTIFIER && val == INCLUDE_ID) {
-        get_tok_macro(); // Get the STRING token
+        get_tok_macro(true); // Get the STRING token
 #ifdef ANNOTATE_WITH_C_CODE
         keep_directive_code =
 #endif
         handle_include();
       }
       else if (tok == IDENTIFIER && val == UNDEF_ID) {
-        get_tok_macro(); // Get the macro name
+        get_tok_macro(true); // Get the macro name
         if (tok == IDENTIFIER || tok == MACRO) {
           // TODO: Doesn't play nice with typedefs, because they are not marked as macros
           set_symbol_type(val, IDENTIFIER); // Unmark the macro
-          get_tok_macro(); // Skip the macro name
+          get_tok_macro(true); // Skip the macro name
         } else {
           dump_tok(tok);
           syntax_error("#undef directive can only be followed by a identifier");
         }
       } else if (tok == IDENTIFIER && val == DEFINE_ID) {
-        get_tok_macro(); // Get the macro name
+        get_tok_macro(true); // Get the macro name
         handle_define();
       }
   #ifdef FULL_PREPROCESSOR_SUPPORT
@@ -2241,7 +2244,7 @@ void handle_preprocessor_directive() {
       }
     } else {
       // Skip the rest of the directive
-      while (tok != '\n' && tok != EOF) get_tok_macro();
+      while (tok != '\n' && tok != EOF) get_tok_macro(true);
     }
 
     if (tok != '\n' && tok != EOF) {
@@ -2409,20 +2412,23 @@ void init_ident_table() {
 
 #if defined(target_sh) || defined(target_awk)
   PUTCHAR_ID = init_ident(IDENTIFIER, "putchar");
-  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
   EXIT_ID    = init_ident(IDENTIFIER, "exit");
   MALLOC_ID  = init_ident(IDENTIFIER, "malloc");
   FREE_ID    = init_ident(IDENTIFIER, "free");
   PRINTF_ID  = init_ident(IDENTIFIER, "printf");
-  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
-  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
-  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
   PUTSTR_ID  = init_ident(IDENTIFIER, "putstr");
   PUTS_ID    = init_ident(IDENTIFIER, "puts");
   READ_ID    = init_ident(IDENTIFIER, "read");
   WRITE_ID   = init_ident(IDENTIFIER, "write");
   OPEN_ID    = init_ident(IDENTIFIER, "open");
   CLOSE_ID   = init_ident(IDENTIFIER, "close");
+
+#ifndef MINIMAL_RUNTIME
+  GETCHAR_ID = init_ident(IDENTIFIER, "getchar");
+  FOPEN_ID   = init_ident(IDENTIFIER, "fopen");
+  FCLOSE_ID  = init_ident(IDENTIFIER, "fclose");
+  FGETC_ID   = init_ident(IDENTIFIER, "fgetc");
+#endif
 #if !defined(MINIMAL_RUNTIME) || defined(SUPPORT_STDIN_INPUT)
   ISATTY_ID  = init_ident(IDENTIFIER, "isatty");
 #endif
@@ -2549,7 +2555,7 @@ int macro_parse_argument() {
       set_cdr(rest, cons(cons(tok, val), 0));
       rest = cdr(rest);
     }
-    get_tok_macro_expand();
+    get_tok_macro(false);
   }
 
   return arg_tokens;
@@ -2572,11 +2578,11 @@ int get_macro_args_toks(int macro) {
   int args = 0;
   int macro_args_count = 0;
   bool prev_is_comma = tok == ',';
-  get_tok_macro_expand(); // Skip '('
+  get_tok_macro(false); // Skip '('
 
   while (tok != ')' && tok != EOF) {
     if (tok == ',') {
-      get_tok_macro_expand(); // Skip comma
+      get_tok_macro(false); // Skip comma
       if (prev_is_comma) { // Push empty arg
         args = cons(0, args);
         macro_args_count += 1;
@@ -2687,7 +2693,7 @@ bool attempt_macro_expansion(int macro) {
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
-      tokens = cons(cons(STRING, intern_str(fp_filepath)), 0);
+      tokens = cons(cons(STRING, intern_str(fd_filepath)), 0);
     }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     else if (macro == LINE__ID) {
@@ -2715,7 +2721,7 @@ bool attempt_macro_expansion(int macro) {
 void stringify() {
   int arg;
   expand_macro_arg = false;
-  get_tok_macro();
+  get_tok_macro(true);
   expand_macro_arg = true;
   if (tok != MACRO_ARG) {
     dump_tok(tok);
@@ -2752,7 +2758,7 @@ void paste_tokens(int left_tok, int left_val) {
   int right_tok;
   int right_val;
   expand_macro_arg = false;
-  get_tok_macro();
+  get_tok_macro(true);
   expand_macro_arg = true;
   // We need to handle the case where the right-hand side is a macro argument that expands to empty
   // In that case, the left-hand side is returned as is.
@@ -2763,7 +2769,7 @@ void paste_tokens(int left_tok, int left_val) {
       return;
     } else {
       begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
-      get_tok_macro();
+      get_tok_macro(true);
     }
   }
   right_tok = tok;
@@ -3313,7 +3319,7 @@ ast parse_comma_expression();
 ast parse_call_params();
 ast parse_cast_expression();
 ast parse_compound_statement();
-ast parse_conditional_expression();
+ast parse_assignment_expression();
 ast parse_enum();
 ast parse_struct_or_union(int struct_or_union_tok);
 ast parse_declarator(bool abstract_decl, ast parent_type);
@@ -3348,7 +3354,7 @@ ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
 }
 
-#ifndef target_sh
+#ifdef target_exe
 
 ast function_type(ast parent_type, ast params) {
   return new_ast3('(', parent_type, params, false);
@@ -3440,7 +3446,7 @@ ast parse_enum() {
 
       if (tok == '=') {
         get_tok();
-        value = parse_assignment_expression();
+        value = parse_constant_expression();
         if (value == 0) parse_error("Enum value must be a constant expression", tok);
 
         // Avoid recreating integer literal nodes unnecessarily.
@@ -3573,7 +3579,7 @@ ast parse_type_specifier() {
     case CHAR_KW:
     case INT_KW:
     case VOID_KW:
-#ifndef target_sh
+#ifdef target_exe
     case FLOAT_KW:
     case DOUBLE_KW:
 #endif
@@ -3593,7 +3599,7 @@ ast parse_type_specifier() {
       if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
       return type_specifier;
 
-#ifndef target_sh
+#ifdef target_exe
     case UNSIGNED_KW:
       get_tok();
       type_specifier = parse_type_specifier();
@@ -3606,7 +3612,7 @@ ast parse_type_specifier() {
 
     case LONG_KW:
       get_tok();
-#ifndef target_sh
+#ifdef target_exe
       if (tok == DOUBLE_KW) {
         get_tok();
         return new_ast0(DOUBLE_KW, 0);
@@ -3702,12 +3708,12 @@ ast parse_declaration_specifiers(bool allow_typedef) {
         if (type_specifier != 0) parse_error("Multiple types not supported", tok);
         // Lookup type in the types table. It is stored in the tag of the
         // interned string object.
-#ifdef target_sh
-        // pnut-sh doesn't mutate the type nodes, so no need to clone them
-        type_specifier = symbol_tag(val);
-#else
+#ifdef target_exe
         // The type is cloned so it can be modified.
         type_specifier = clone_ast(symbol_tag(val));
+#else
+        // pnut-sh/awk don't mutate the type nodes, so no need to clone them
+        type_specifier = symbol_tag(val);
 #endif
         get_tok();
         break;
@@ -3903,7 +3909,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       if (tok == ']') {
         val = 0;
       } else {
-        arr_size_expr = parse_assignment_expression();
+        arr_size_expr = parse_constant_expression();
         if (arr_size_expr == 0) parse_error("Array size must be an integer constant", tok);
         val = eval_constant(arr_size_expr, false);
       }
@@ -3936,7 +3942,7 @@ ast parse_initializer_list() {
   expect_tok('{');
 
   while (tok != '}' && tok != EOF) {
-#ifdef target_sh
+#ifndef target_exe
     if (tok == '{') syntax_error("nested initializer lists not supported");
 #endif
     if (result == 0) {
@@ -4004,11 +4010,11 @@ void add_typedef(ast declarator) {
   int decl_ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, declarator, 0));
   ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
 
-#if defined(SUPPORT_STRUCT_UNION) && defined(target_sh)
-  // If the struct/union/enum doesn't have a name, we give it the name of the typedef.
-  // This is not correct, but it's a limitation of the current shell backend where we
-  // need the name of a struct/union/enum to compile sizeof and typedef'ed structures
-  // don't always have a name.
+#if defined(SUPPORT_STRUCT_UNION) && (defined(target_sh) || defined(target_awk))
+  // If the struct/union/enum doesn't have a name, we give it the name of the
+  // typedef. This is not correct, but it's a limitation of the current
+  // shell/awk backend where we need the name of a struct/union/enum to compile
+  // sizeof and typedef'ed structures don't always have a name.
   if (get_op(decl_type) == STRUCT_KW || get_op(decl_type) == UNION_KW || get_op(decl_type) == ENUM_KW) {
     if (get_child(decl_type, 1) != 0 && get_val_(IDENTIFIER, get_child(decl_type, 1)) != decl_ident) {
       syntax_error("typedef name must match struct/union/enum name");
@@ -4281,17 +4287,17 @@ ast parse_unary_expression() {
     result = new_ast1(SIZEOF_KW, result);
 
 #endif // SUPPORT_SIZEOF
-  } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // Parsing a macro
+  } else if (!skip_newlines && tok == IDENTIFIER && val == DEFINED_ID) { // parse a defined(id) expression in a #if expression
 
-    get_tok_macro();
+    get_tok_macro(true);
     if (tok == '(') {
-      get_tok_macro();
+      get_tok_macro(true);
       result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
-      get_tok_macro();
+      get_tok_macro(true);
       expect_tok(')');
     } else if (tok == IDENTIFIER || tok == MACRO) {
       result = new_ast2('(', new_ast0(IDENTIFIER, DEFINED_ID), tok);
-      get_tok_macro();
+      get_tok_macro(true);
     } else {
       parse_error("identifier or '(' expected", tok);
       return 0;
@@ -4323,228 +4329,68 @@ ast parse_cast_expression() {
   }
 }
 
-ast parse_multiplicative_expression() {
+// Operator precedence table. Higher precedence operators bind tighter than
+// lower precedence operators. Used by parse_binary_expression to determine when
+// to stop parsing a binary expression and return to the caller.
+int binop_prec(int op) {
+  if       (op == ',')                                              return 1;
+  else if ( op == '='       || op == PLUS_EQ   || op == MINUS_EQ
+         || op == STAR_EQ   || op == SLASH_EQ  || op == PERCENT_EQ
+         || op == LSHIFT_EQ || op == RSHIFT_EQ
+         || op == AMP_EQ    || op == CARET_EQ  || op == BAR_EQ
+    )                                                               return 2;
+  else if (op == '?')                                               return 3;
+  else if (op == BAR_BAR)                                           return 4;
+  else if (op == AMP_AMP)                                           return 5;
+  else if (op == '|')                                               return 6;
+  else if (op == '^')                                               return 7;
+  else if (op == '&')                                               return 8;
+  else if (op == EQ_EQ || op == EXCL_EQ)                            return 9;
+  else if (op == '<' || op == '>' || op == LT_EQ || op == GT_EQ)    return 10;
+  else if (op == LSHIFT || op == RSHIFT)                            return 11;
+  else if (op == '+' || op == '-')                                  return 12;
+  else if (op == '*' || op == '/' || op == '%')                     return 13;
+  else                                                              return 0;
+}
 
-  ast result = parse_cast_expression();
-  ast child;
+// Precedence-climbing parser for the comma operator, assignment, the ternary
+// conditional and the binary operators. min_prec is the lowest precedence this
+// call is allowed to consume. Assignment (prec 2) and the ternary (prec 3) are
+// right-associative, so they recurse at their own precedence; the comma
+// operator and the left-associative binary operators recurse one level tighter.
+ast parse_binary_expression(int min_prec) {
+  ast left = parse_cast_expression();
+  ast mid;
   int op;
+  int prec;
 
-  while (tok == '*' || tok == '/' || tok == '%') {
-
+  while ((prec = binop_prec(tok)) >= min_prec) {
     op = tok;
     get_tok();
-    child = parse_cast_expression();
-    result = new_ast2(op, result, child);
-
+    if (op == '?') {
+      // special case for ternary op, because it's sandwiched between 2 prec
+      // levels and consumes 2 expressions (in addition to left) instead of 1.
+      mid = parse_comma_expression();
+      expect_tok(':');
+      left = new_ast3('?', left, mid, parse_binary_expression(prec));
+    } else if (prec == 2) {
+      // assignment operators are right-associative
+      left = new_ast2(op, left, parse_binary_expression(prec));
+    } else {
+      // all other binary operators are left-associative
+      left = new_ast2(op, left, parse_binary_expression(prec + 1));
+    }
   }
 
-  return result;
-}
-
-ast parse_additive_expression() {
-
-  ast result = parse_multiplicative_expression();
-  ast child;
-  int op;
-
-  while (tok == '+' || tok == '-') {
-
-    op = tok;
-    get_tok();
-    child = parse_multiplicative_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_shift_expression() {
-
-  ast result = parse_additive_expression();
-  ast child;
-  int op;
-
-  while (tok == LSHIFT || tok == RSHIFT) {
-
-    op = tok;
-    get_tok();
-    child = parse_additive_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_relational_expression() {
-
-  ast result = parse_shift_expression();
-  ast child;
-  int op;
-
-  while (tok == '<' || tok == '>' || tok == LT_EQ || tok == GT_EQ) {
-
-    op = tok;
-    get_tok();
-    child = parse_shift_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_equality_expression() {
-
-  ast result = parse_relational_expression();
-  ast child;
-  int op;
-
-  while (tok == EQ_EQ || tok == EXCL_EQ) {
-
-    op = tok;
-    get_tok();
-    child = parse_relational_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_AND_expression() {
-
-  ast result = parse_equality_expression();
-  ast child;
-
-  while (tok == '&') {
-
-    get_tok();
-    child = parse_equality_expression();
-    result = new_ast2('&', result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_exclusive_OR_expression() {
-
-  ast result = parse_AND_expression();
-  ast child;
-
-  while (tok == '^') {
-
-    get_tok();
-    child = parse_AND_expression();
-    result = new_ast2('^', result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_inclusive_OR_expression() {
-
-  ast result = parse_exclusive_OR_expression();
-  ast child;
-
-  while (tok == '|') {
-
-    get_tok();
-    child = parse_exclusive_OR_expression();
-    result = new_ast2('|', result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_logical_AND_expression() {
-
-  ast result = parse_inclusive_OR_expression();
-  ast child;
-
-  while (tok == AMP_AMP) {
-
-    get_tok();
-    child = parse_inclusive_OR_expression();
-    result = new_ast2(AMP_AMP, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_logical_OR_expression() {
-
-  ast result = parse_logical_AND_expression();
-  ast child;
-
-  while (tok == BAR_BAR) {
-
-    get_tok();
-    child = parse_logical_AND_expression();
-    result = new_ast2(BAR_BAR, result, child);
-
-  }
-
-  return result;
-}
-
-ast parse_conditional_expression() {
-
-  ast result = parse_logical_OR_expression();
-  ast child1;
-  ast child2;
-
-  if (tok == '?') {
-
-    get_tok();
-    child1 = parse_comma_expression();
-    expect_tok(':');
-    child2 = parse_conditional_expression();
-    result = new_ast3('?', result, child1, child2);
-
-  }
-
-  return result;
+  return left;
 }
 
 ast parse_assignment_expression() {
-
-  ast result = parse_conditional_expression();
-  ast child;
-  int op;
-
-  if (   tok == '='       || tok == PLUS_EQ   || tok == MINUS_EQ
-      || tok == STAR_EQ   || tok == SLASH_EQ  || tok == PERCENT_EQ
-      || tok == LSHIFT_EQ || tok == RSHIFT_EQ || tok == AMP_EQ
-      || tok == CARET_EQ  || tok == BAR_EQ) {
-
-    op = tok;
-    get_tok();
-    child = parse_assignment_expression();
-    result = new_ast2(op, result, child);
-
-  }
-
-  return result;
+  return parse_binary_expression(2); // prec 2 => start at assignment operators
 }
 
 ast parse_comma_expression() {
-
-  ast result = parse_assignment_expression();
-  int child;
-
-  if (tok == ',') { // avoid creating unnecessary nodes
-    get_tok();
-    child = parse_comma_expression();
-    result = new_ast2(',', result, child);
-  }
-
-  return result;
+  return parse_binary_expression(1); // prec 1 => start at comma operator
 }
 
 ast parse_call_params() {
@@ -4568,13 +4414,11 @@ ast parse_comma_expression_opt() {
   }
 }
 
-ast parse_expression() {
-  return parse_comma_expression();
-}
-
+// A constant-expression cannot be a comma or assignment expression, so the
+// precedence climb starts at the ternary level. This may still parse
+// non-constant expressions, checks are done in eval_constant.
 ast parse_constant_expression() {
-  // Note: does not enforce that the expression is actually constant
-  return parse_expression();
+  return parse_binary_expression(3); // prec 3 => start at ternary operator
 }
 
 ast parse_statement() {
@@ -4854,20 +4698,20 @@ void handle_macro_U(char *opt) {
 // only emit them when a non-newline character is output.
 int newline_accumulated = 0;
 
-void drop_rest_of_line(FILE * const fp) {
+void drop_rest_of_line(const int fd) {
   int c;
-  while ((c = fgetc(fp)) != EOF && c != '\n');
+  while ((c = read_char(fd)) != EOF && c != '\n');
   newline_accumulated = 0;
 }
 
-void output_rest_of_line(FILE * const fp, char *prefix) {
+void output_rest_of_line(const int fd, char *prefix) {
   int c;
   while (newline_accumulated > 0) {
     putchar('\n');
     newline_accumulated -= 1;
   }
   if (prefix) putstr(prefix);
-  while ((c = fgetc(fp)) != EOF && c != '\n') {
+  while ((c = read_char(fd)) != EOF && c != '\n') {
     putchar(c);
   }
   if (c == '\n') putchar('\n');
@@ -4875,10 +4719,10 @@ void output_rest_of_line(FILE * const fp, char *prefix) {
 
 void extract_c_code_from_annotated_file(char * const filename) {
   int c;
-  FILE *sh_fp = fopen(filename, "r");
+  int sh_fp = open(filename, O_RDONLY, 0);
 
-  if (sh_fp == 0) {
-    dump_string("#include ", fp_filepath);
+  if (sh_fp < 0) {
+    dump_string("#include ", fd_filepath);
     fatal_error("could not open .sh file for reading");
     return;
   }
@@ -4891,11 +4735,11 @@ void extract_c_code_from_annotated_file(char * const filename) {
   // - Lines starting with "# " are printed without "# " (C code lines)
   // - Lines starting with "##" are printed with "//" instead (C comments lines)
   // - Other lines are ignored (shell commands or shell comments starting with "#_")
-  while ((c = fgetc(sh_fp)) != EOF) {
+  while ((c = read_char(sh_fp)) != EOF) {
     if (c == '\n') {
       newline_accumulated += 1;
     } else if (c == '#') {
-      c = fgetc(sh_fp);
+      c = read_char(sh_fp);
       if (c == ' ') {
         output_rest_of_line(sh_fp, 0);
       } else if (c == '#') {
@@ -4913,7 +4757,7 @@ void extract_c_code_from_annotated_file(char * const filename) {
     }
   }
 
-  fclose(sh_fp);
+  close(sh_fp);
 }
 
 #endif // SUPPORT_EXTRACT_C_ANNOTATIONS
@@ -4933,7 +4777,7 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i += 1) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
-#ifndef target_sh
+#ifdef target_exe
         case 'o':
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
@@ -5038,11 +4882,11 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (fp == 0) {
+  if (fd == -1) {
 #ifdef SUPPORT_STDIN_INPUT
     if (!isatty(0)) {
-      fp = fdopen(0, "r");
-      fp_filepath = "<stdin>";
+      fd = 0; // Read from stdin (fd 0)
+      fd_filepath = "<stdin>";
     } else
 #endif
     {
@@ -5081,7 +4925,7 @@ int main(int argc, char **argv) {
     decl = parse_declaration(false);
 #ifdef DEBUG_PARSER_SEXP
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-    printf("# %s:%d:%d\n", fp_filepath, line_number, column_number);
+    printf("# %s:%d:%d\n", fd_filepath, line_number, column_number);
 #endif
     ast_to_sexp(decl);
     putchar('\n');
