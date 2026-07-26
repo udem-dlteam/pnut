@@ -1902,7 +1902,6 @@ int PNUT_TARGET_ID;
 
 void get_tok();
 
-
 // When we parse a macro, we generally want the tokens as they are, without
 // expanding them. When force_newlines is set, newline tokens are produced. This
 // is used to end preprocessor directives.
@@ -1913,7 +1912,7 @@ void get_tok_macro(int force_newlines) {
 
   expand_macro = false;
   if_macro_mask = true;
-  if (force_newlines) skip_newlines = 0;
+  if (force_newlines) skip_newlines = false;
   get_tok();
   expand_macro = prev_expand_macro;
   if_macro_mask = prev_macro_mask;
@@ -2136,6 +2135,7 @@ bool handle_include() {
 
   if (tok == STRING) {
     buf = symbol_buf(val);
+    skip_to_end_of_line();
     include_file(buf, fd_dirname);
 
 #ifdef SH_SUPPORT_SHELL_INCLUDE
@@ -2147,7 +2147,7 @@ bool handle_include() {
       handle_shell_include();
     }
 #endif
-    get_tok_macro(true); // Skip the string
+    tok = '\n'; // signal that we're at the end of the line
     return false;
   } else if (tok == '<') {
     accum_string_until('>');
@@ -2156,9 +2156,12 @@ bool handle_include() {
     // TODO: Issue a warning to stderr when skipping the directive
     if (include_search_path != 0) {
       buf = symbol_buf(val);
+      skip_to_end_of_line(); // Skip the rest of the directive
       include_file(buf, include_search_path);
+    } else {
+      skip_to_end_of_line(); // Skip the rest of the directive
     }
-    get_tok_macro(true); // Skip the string
+    tok = '\n'; // signal that we're at the end of the line
     return true;
   } else {
     dump_tok(tok);
