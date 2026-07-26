@@ -27,7 +27,7 @@ int  init_block_id = 0; // Identifier of the current initialization block
 
 // Place prototype of mutually recursive functions here
 
-typedef enum STMT_CTX {
+enum STMT_CTX {
   // Default context
   STMT_CTX_DEFAULT      = 0,
   // Indicates that the parent statement was a else statement so that if
@@ -36,13 +36,13 @@ typedef enum STMT_CTX {
   // Indicates that we are in a switch statement where breaks mean the end of
   // the conditional block.
   STMT_CTX_SWITCH       = 2,
-} STMT_CTX;
+};
 
 #define comp_rvalue(node) comp_rvalue_go((node), 0)
 text comp_rvalue_go(ast node, int outer_op);
 text comp_fun_call(ast node, ast params);
-bool comp_body(ast node, STMT_CTX stmt_ctx);
-bool comp_statement(ast node, STMT_CTX stmt_ctx);
+bool comp_body(ast node, enum STMT_CTX stmt_ctx);
+bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
@@ -686,7 +686,7 @@ text comp_fun_call(ast name, ast params) {
                        , wrap_char(')'));
 }
 
-bool comp_body(ast node, STMT_CTX stmt_ctx) {
+bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
   int start_cgc_locals = cgc_locals;
 
   while (node != 0) {
@@ -807,7 +807,7 @@ bool comp_switch(ast node) {
   return false;
 }
 
-bool comp_if(ast node, STMT_CTX stmt_ctx) {
+bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
@@ -944,7 +944,7 @@ void comp_var_decls(ast node) {
 
 // Returns whether the statement always returns/breaks.
 // This is used to delimit the end of conditional blocks of switch statements.
-bool comp_statement(ast node, STMT_CTX stmt_ctx) {
+bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
   int op;
   text str;
   int start_cgc_locals = cgc_locals;
@@ -1229,6 +1229,7 @@ void handle_enum_struct_union_type_decl(ast type) {
   // If not an enum, struct, or union, do nothing
 }
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
 // For now, we don't do anything with the declarations in a typedef.
 // The only thing we need to do is to call handle_enum_struct_union_type_decl
 // on the type specifier.
@@ -1239,6 +1240,7 @@ void handle_typedef(ast node) {
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
 }
+#endif
 
 // This function compiles 1 top level declaration at the time.
 // The supported top level declarations are:
@@ -1301,9 +1303,13 @@ void comp_glo_decl(ast node) {
     }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
-  } else if (op == TYPEDEF_KW) {
+  }
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW
+  }
+#endif
+  else if (op == ENUM_KW
 #ifdef SUPPORT_STRUCT_UNION
     || op == STRUCT_KW || op == UNION_KW
 #endif

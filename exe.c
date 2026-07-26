@@ -3632,6 +3632,7 @@ void codegen_glo_fun_decl(ast node) {
   init_forward_jump_table(binding);
 }
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
 // For now, we don't do anything with the declarations in a typedef.
 // The only thing we need to do is to call handle_enum_struct_union_type_decl
 // on the type specifier, which is the same for all declarations.
@@ -3642,6 +3643,7 @@ void handle_typedef(ast node) {
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
 }
+#endif
 
 void codegen_glo_decl(ast node) {
   ast decls;
@@ -3662,9 +3664,13 @@ void codegen_glo_decl(ast node) {
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
-  } else if (op == TYPEDEF_KW) {
+  }
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW
+  }
+#endif
+  else if (op == ENUM_KW
 #ifdef SUPPORT_STRUCT_UNION
     || op == STRUCT_KW || op == UNION_KW
 #endif
