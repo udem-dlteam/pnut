@@ -45,7 +45,7 @@ int cumul_text_alloc = 0;
 
 // Place prototype of mutually recursive functions here
 
-typedef enum STMT_CTX {
+enum STMT_CTX {
   // Default context
   STMT_CTX_DEFAULT      = 0,
   // Indicates that the parent statement was a else statement so that if
@@ -54,7 +54,7 @@ typedef enum STMT_CTX {
   // Indicates that we are in a switch statement where breaks mean the end of
   // the conditional block.
   STMT_CTX_SWITCH       = 2,
-} STMT_CTX;
+};
 
 #ifdef SH_SUPPORT_ADDRESS_OF
 text comp_lvalue_address(ast node);
@@ -62,8 +62,8 @@ text comp_lvalue_address(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
-bool comp_body(ast node, STMT_CTX stmt_ctx);
-bool comp_statement(ast node, STMT_CTX stmt_ctx);
+bool comp_body(ast node, enum STMT_CTX stmt_ctx);
+bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
 void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
@@ -181,11 +181,11 @@ text local_var(int ident_symbol) {
 }
 
 text local_var_or_param(int ident_symbol, int binding, bool prefixed_with_dollar) {
-  if (binding_kind(binding) == BINDING_PARAM_LOCAL && is_constant_type(heap[binding + 4])) {
+  if (binding_kind(binding) == BINDING_PARAM_LOCAL && is_constant_type(var_binding_type(binding))) {
     if (prefixed_with_dollar) {
-      return wrap_int(heap[binding + 3]);
+      return wrap_int(var_binding_offset(binding));
     } else {
-      return string_concat(wrap_char('$'), wrap_int(heap[binding + 3]));
+      return string_concat(wrap_char('$'), wrap_int(var_binding_offset(binding)));
     }
   } else {
     return local_var(ident_symbol);
@@ -347,7 +347,7 @@ text save_local_vars() {
   // Save local variables and parameters
   while (env != 0) {
     ident = binding_ident(env);
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       res = concatenate_strings_with(string_concat(wrap_char('$'), local_var(ident)), res, wrap_char(' '));
     }
     env = binding_next(env);
@@ -380,7 +380,7 @@ text restore_local_vars(int params_count) {
   int env_non_cst_size = 0;
 
   while (env != 0) {
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       env_non_cst_size += 1;
     }
     env = binding_next(env);
@@ -391,7 +391,7 @@ text restore_local_vars(int params_count) {
   // Restore local variables and parameters
   while (env != 0) {
     ident = binding_ident(env);
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), local_var(ident), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
       local_var_pos += 1;
     }
@@ -495,7 +495,7 @@ text restore_local_vars(int params_count) {
 
   while (env != 0) {
     ident = binding_ident(env);
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       res = concatenate_strings_with(res, local_var(ident), wrap_char(' '));
     }
 
@@ -1633,7 +1633,7 @@ void comp_assignment(ast lhs, ast rhs) {
   }
 }
 
-bool comp_body(ast node, STMT_CTX stmt_ctx) {
+bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
   int start_in_tail_position = in_tail_position;
   int start_cgc_locals = cgc_locals;
 
@@ -1753,7 +1753,7 @@ bool comp_switch(ast node) {
   return false;
 }
 
-bool comp_if(ast node, STMT_CTX stmt_ctx) {
+bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
@@ -1803,7 +1803,7 @@ bool comp_if(ast node, STMT_CTX stmt_ctx) {
 // last_line and loop_end_stmt are mutually exclusive
 // last_line is the last line of the loop
 // loop_end_stmt is the statement that should be executed at the end of the for loop (increment, etc.)
-bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX stmt_ctx) {
+bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, enum STMT_CTX stmt_ctx) {
   // Save loop end actions from possible outer loop
   int start_cgc_locals = cgc_locals;
   int start_glo_decl_idx;
@@ -1822,10 +1822,10 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   // generated by comp_statement using undo_glo_decls and save the indices of
   // the declarations of the loop end actions so they can replayed later.
   if (loop_end_stmt) {
-    heap[loop_binding + 2] = glo_decl_ix;
+    loop_binding_action_start(loop_binding) = glo_decl_ix;
     comp_statement(loop_end_stmt, stmt_ctx);
-    undo_glo_decls(heap[loop_binding + 2]);
-    heap[loop_binding + 3] = glo_decl_ix;
+    undo_glo_decls(loop_binding_action_start(loop_binding));
+    loop_binding_action_end(loop_binding) = glo_decl_ix;
   }
 
   append_glo_decl(string_concat3(wrap_str_lit("while "), cond ? cond : wrap_char(':'), wrap_str_lit("; do")));
@@ -1833,7 +1833,7 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, STMT_CTX 
   start_glo_decl_idx = glo_decl_ix;
   always_returns = comp_statement(body, stmt_ctx);
   append_glo_decl(last_line);
-  replay_glo_decls(heap[loop_binding + 2], heap[loop_binding + 3]);
+  replay_glo_decls(loop_binding_action_start(loop_binding), loop_binding_action_end(loop_binding));
   // while loops cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
   nest_level -= 1;
@@ -1856,7 +1856,7 @@ bool comp_break() {
 bool comp_continue() {
   int binding = cgc_lookup_enclosing_loop(cgc_locals);
   if (binding == 0) fatal_error("comp_statement: continue not in loop");
-  replay_glo_decls(heap[binding + 2], heap[binding + 3]);
+  replay_glo_decls(loop_binding_action_start(binding), loop_binding_action_end(binding));
   // We could remove the continue when in tail position, but it's not worth doing
   append_glo_decl(wrap_str_lit("continue"));
   return false;
@@ -1882,7 +1882,7 @@ bool comp_return(ast return_value) {
   // ...and then we take care of the control flow part of the return statement
   // SWITCH blocks specify if they are in tail position
   if (binding != 0 && binding_kind(binding) == BINDING_SWITCH) {
-    in_tail_position |= heap[binding + 2];
+    in_tail_position |= switch_binding_in_tail_position(binding);
   }
 
   if (in_tail_position && binding != 0) {
@@ -1934,7 +1934,7 @@ void comp_var_decls(ast node) {
 
 // Returns whether the statement always returns/breaks.
 // This is used to delimit the end of conditional blocks of switch statements.
-bool comp_statement(ast node, STMT_CTX stmt_ctx) {
+bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
   int op;
   text str;
 
@@ -2282,6 +2282,7 @@ void handle_enum_struct_union_type_decl(ast type) {
   // If not an enum, struct, or union, do nothing
 }
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
 // For now, we don't do anything with the declarations in a typedef.
 // The only thing we need to do is to call handle_enum_struct_union_type_decl
 // on the type specifier.
@@ -2292,6 +2293,7 @@ void handle_typedef(ast node) {
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
 }
+#endif
 
 // This function compiles 1 top level declaration at the time.
 // The supported top level declarations are:
@@ -2306,11 +2308,14 @@ void comp_glo_decl(ast node) {
   fun_gensym_ix = 0;
 
   if (op == DECLS) { // Variable declarations
-    // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
-    // storage class for global variables since pnut-sh only supports 1
-    // translation unit.
+    // - AUTO_KW and REGISTER_KW can simply be ignored.
+    // - STATIC_KW is the default storage class for global variables since
+    //   pnut-sh only supports 1 translation unit.
+    // - EXTERN_KW forward-declares a variable defined later in the same
+    //   translation unit. Globals are plain shell variables, so the declaration
+    //   allocates nothing and emits no assignment.
 #ifdef SUPPORT_TYPE_SPECIFIERS
-    if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
+    if (get_child_(DECLS, node, 1) == EXTERN_KW) return;
 #endif
     declarations = get_child__(DECLS, LIST, node, 0);
     while (declarations != 0) { // Multiple variable declarations
@@ -2319,9 +2324,13 @@ void comp_glo_decl(ast node) {
     }
   } else if (op == FUN_DECL) {
     comp_glo_fun_decl(node);
-  } else if (op == TYPEDEF_KW) {
+  }
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW
+  }
+#endif
+  else if (op == ENUM_KW
 #ifdef SUPPORT_STRUCT_UNION
     || op == STRUCT_KW || op == UNION_KW
 #endif
@@ -2391,7 +2400,7 @@ text initialize_function_variables() {
   // Local variables and parameters
   while (env != 0) {
     ident = binding_ident(env);
-    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(heap[env + 4])) { // Skip constant params
+    if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       res = concatenate_strings_with(res, local_var(ident), wrap_str_lit(" = "));
     }
     env = binding_next(env);

@@ -141,22 +141,22 @@ void emit_i64_le(const int n) {
 
 #ifdef SUPPORT_64_BIT_LITERALS
 void emit_i32_le_large_imm(const int imm_obj) {
-  if (imm_obj <= 0) {
+  if (!is_large_int(imm_obj)) {
     emit_i32_le(-imm_obj);
   } else {
     // Check that the number doesn't overflow 64 bits
-    if (heap[imm_obj + 1] != 0) fatal_error("emit_i32_le_large_imm: integer overflow");
-    emit_i32_le(heap[imm_obj]);
+    if (large_int_hi(imm_obj) != 0) fatal_error("emit_i32_le_large_imm: integer overflow");
+    emit_i32_le(large_int_lo(imm_obj));
   }
 }
 
 #if WORD_SIZE == 8
 void emit_i64_le_large_imm(const int imm_obj) {
-  if (imm_obj <= 0) {
+  if (!is_large_int(imm_obj)) {
     emit_i64_le(-imm_obj);
   } else {
-    emit_i32_le(heap[imm_obj]);
-    emit_i32_le(heap[imm_obj + 1]);
+    emit_i32_le(large_int_lo(imm_obj));
+    emit_i32_le(large_int_hi(imm_obj));
   }
 }
 #endif
@@ -197,11 +197,11 @@ int grow_fs(const int words) {
   return cgc_fs;
 }
 
-const int reg_X;
-const int reg_Y;
-const int reg_Z;
-const int reg_SP;
-const int reg_glo;
+extern const int reg_X;
+extern const int reg_Y;
+extern const int reg_Z;
+extern const int reg_SP;
+extern const int reg_glo;
 
 void mov_reg_imm(int dst, int imm);             // Move 32 bit immediate to register
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -469,16 +469,16 @@ void div_for_pointer_arith(int reg, int width) {
   }
 }
 
-const int EQ; // x == y
-const int NE; // x != y
-const int LT; // x < y
-const int LT_U; // x < y  (unsigned)
-const int GE; // x >= y
-const int GE_U; // x >= y (unsigned)
-const int LE; // x <= y
-const int LE_U; // x <= y (unsigned)
-const int GT; // x > y
-const int GT_U; // x > y  (unsigned)
+extern const int EQ; // x == y
+extern const int NE; // x != y
+extern const int LT; // x < y
+extern const int LT_U; // x < y  (unsigned)
+extern const int GE; // x >= y
+extern const int GE_U; // x >= y (unsigned)
+extern const int LE; // x <= y
+extern const int LE_U; // x <= y (unsigned)
+extern const int GT; // x > y
+extern const int GT_U; // x > y  (unsigned)
 
 void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 
@@ -527,6 +527,19 @@ enum {
   GOTO_LABEL,
 };
 
+// Labels are objects allocated on the heap. Every label has a kind and an
+// address: the address is negative once the label is defined, and otherwise
+// heads the list of code locations to patch (see use_label).
+// Generic labels additionally carry the name and source location used in error
+// messages, but only when they are allocated with room for them (see
+// alloc_label). Goto labels instead use offset 2 for the frame size.
+#define label_kind(lbl) heap[lbl]
+#define label_addr(lbl) heap[lbl+1]
+#define label_name(lbl) heap[lbl+2]
+#define label_file(lbl) heap[lbl+3]
+#define label_line(lbl) heap[lbl+4]
+#define goto_label_fs(lbl) heap[lbl+2]
+
 #define START_INIT_BLOCK() \
   def_label(init_next_lbl); \
   init_next_lbl = alloc_label("init_next");
@@ -548,21 +561,21 @@ void assert_all_labels_defined(int init_next_lbl) {
   // Check that all labels are defined
   for (; i < labels_ix; i++) {
     lbl = labels[i];
-    if (lbl != init_next_lbl && heap[lbl + 1] > 0) {
+    if (lbl != init_next_lbl && label_addr(lbl) > 0) {
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
-      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
+      if (label_kind(lbl) == GENERIC_LABEL && label_name(lbl) != 0) {
         def_label(lbl);
         rt_debug("Function or label is not defined\n");
         rt_debug("name = ");
-        rt_debug((char*) heap[lbl + 2]);
+        rt_debug((char*) label_name(lbl));
         rt_debug("\n");
         // TODO: This should crash but let's just return for now to see how far we can get
         ret();
       }
 #else
       putstr("Label ");
-      if (heap[lbl] == GENERIC_LABEL && heap[lbl + 2] != 0) {
-        putstr((char*) heap[lbl + 2]);
+      if (label_kind(lbl) == GENERIC_LABEL && label_name(lbl) != 0) {
+        putstr((char*) label_name(lbl));
       } else {
         putint(lbl);
       }
@@ -581,12 +594,12 @@ void add_label(int lbl) {
 
 int alloc_label(char* name) {
   int lbl = alloc_obj(5);
-  heap[lbl] = GENERIC_LABEL;
-  heap[lbl + 1] = 0; // Address of label
-  heap[lbl + 2] = (intptr_t) name; // Name of label
-  heap[lbl + 3] = (intptr_t) fd_filepath;
+  label_kind(lbl) = GENERIC_LABEL;
+  label_addr(lbl) = 0;
+  label_name(lbl) = (intptr_t) name;
+  label_file(lbl) = (intptr_t) fd_filepath;
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
-  heap[lbl + 4] = line_number;
+  label_line(lbl) = line_number;
 #endif
   add_label(lbl);
   return lbl;
@@ -599,8 +612,8 @@ int alloc_label(char* name) {
 
 int alloc_label_() {
   int lbl = alloc_obj(2);
-  heap[lbl] = GENERIC_LABEL;
-  heap[lbl + 1] = 0; // Address of label
+  label_kind(lbl) = GENERIC_LABEL;
+  label_addr(lbl) = 0;
   add_label(lbl);
   return lbl;
 }
@@ -610,9 +623,9 @@ int alloc_label_() {
 
 int alloc_goto_label() {
   int lbl = alloc_obj(3);
-  heap[lbl] = GOTO_LABEL;
-  heap[lbl + 1] = 0; // Address of label
-  heap[lbl + 2] = 0; // cgc-fs of label
+  label_kind(lbl) = GOTO_LABEL;
+  label_addr(lbl) = 0;
+  goto_label_fs(lbl) = 0;
   add_label(lbl);
   return lbl;
 }
@@ -620,15 +633,15 @@ int alloc_goto_label() {
 #endif // SUPPORT_GOTO
 
 bool is_label_defined(int lbl) {
-  return heap[lbl + 1] < 0;
+  return label_addr(lbl) < 0;
 }
 
 void use_label(int lbl) {
 
-  int addr = heap[lbl + 1];
+  int addr = label_addr(lbl);
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GENERIC_LABEL) fatal_error("use_label expects generic label");
+  if (label_kind(lbl) != GENERIC_LABEL) fatal_error("use_label expects generic label");
 #endif
 
   if (addr < 0) {
@@ -641,7 +654,7 @@ void use_label(int lbl) {
     // the label is defined as a list stored in the code buffer. The label
     // points to the first address to patch, and the address of the next patch
     // is stored in the code buffer like so:
-    // heap[lbl + 1] = [ patch address #1 ]
+    // label_addr(lbl) = [ patch address #1 ]
     //
     // Code buffer:
     // |-----------------------------------------------
@@ -653,45 +666,45 @@ void use_label(int lbl) {
     // |-----------------------------------------------
     emit_i32_le(0); // 32 bit placeholder for distance
     code[code_alloc-1] = addr; // chain with previous patch address
-    heap[lbl + 1] = code_alloc;
+    label_addr(lbl) = code_alloc;
   }
 }
 
 void def_label(int lbl) {
 
-  int addr = heap[lbl + 1];
-  int label_addr = code_alloc;
+  int addr = label_addr(lbl);
+  int def_addr = code_alloc;
   int next_addr;
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GENERIC_LABEL) fatal_error("def_label expects generic label");
+  if (label_kind(lbl) != GENERIC_LABEL) fatal_error("def_label expects generic label");
 #endif
 
   if (addr < 0) {
 #ifdef SAFE_MODE
     putstr("Label ");
-    if (heap[lbl + 2] != 0) {
-      putstr((char*) heap[lbl + 2]);
+    if (label_name(lbl) != 0) {
+      putstr((char*) label_name(lbl));
     } else {
       putint(lbl);
     }
     putstr(" previously defined at ");
-    putstr((char*) heap[lbl + 3]);
+    putstr((char*) label_file(lbl));
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
     putstr(":");
-    putint(heap[lbl + 4]);
+    putint(label_line(lbl));
 #endif
     fatal_error(" being redefined");
 #endif
   } else {
-    heap[lbl + 1] = - (code_address_base + code_alloc); // define label's address
+    label_addr(lbl) = - (code_address_base + code_alloc); // define label's address
     while (addr != 0) {
       next_addr = code[addr - 1]; // get pointer to next patch address before we overwrite it
       code_alloc = addr - 4; // place code pointer to where use_label was called
-      emit_i32_le(label_addr - addr); // replace placeholder with relative address
+      emit_i32_le(def_addr - addr); // replace placeholder with relative address
       addr = next_addr;
     }
-    code_alloc = label_addr;
+    code_alloc = def_addr;
   }
 }
 
@@ -702,12 +715,12 @@ void def_label(int lbl) {
 // simply emitting the address.
 void jump_to_goto_label(int lbl) {
 
-  int addr = heap[lbl + 1];
-  int lbl_fs = heap[lbl + 2];
+  int addr = label_addr(lbl);
+  int lbl_fs = goto_label_fs(lbl);
   int start_code_alloc = code_alloc;
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
+  if (label_kind(lbl) != GOTO_LABEL) fatal_error("jump_to_goto_label expects goto label");
 #endif
 
   if (addr < 0) {
@@ -726,27 +739,27 @@ void jump_to_goto_label(int lbl) {
     code[code_alloc-1] = addr; // chain with previous patch address
     code[code_alloc-2] = cgc_fs; // save current frame size
     code[code_alloc-3] = start_code_alloc; // track initial code alloc so we can come back
-    heap[lbl + 1] = code_alloc;
+    label_addr(lbl) = code_alloc;
   }
 }
 
 void def_goto_label(int lbl) {
 
-  int addr = heap[lbl + 1];
-  int label_addr = code_alloc;
+  int addr = label_addr(lbl);
+  int def_addr = code_alloc;
   int next_addr;
   int goto_fs;
   int start_code_alloc;
 
 #ifdef SAFE_MODE
-  if (heap[lbl] != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
+  if (label_kind(lbl) != GOTO_LABEL) fatal_error("def_goto_label expects goto label");
 #endif
 
   if (addr < 0) {
     fatal_error("goto label defined more than once");
   } else {
-    heap[lbl + 1] = -label_addr; // define label's address
-    heap[lbl + 2] = cgc_fs;      // define label's frame size
+    label_addr(lbl) = -def_addr;    // define label's address
+    goto_label_fs(lbl) = cgc_fs;    // define label's frame size
     while (addr != 0) {
       next_addr = code[addr-1]; // get pointer to next patch address
       goto_fs = code[addr-2]; // get frame size at goto instruction
@@ -754,12 +767,12 @@ void def_goto_label(int lbl) {
       stack_grow(cgc_fs - goto_fs); // adjust stack
       start_code_alloc = code_alloc;
       jump_rel(0); // Generate dummy jump instruction to get instruction length
-      addr = label_addr - code_alloc; // compute relative address
+      addr = def_addr - code_alloc; // compute relative address
       code_alloc = start_code_alloc;
       jump_rel(addr);
       addr = next_addr;
     }
-    code_alloc = label_addr;
+    code_alloc = def_addr;
   }
 }
 
@@ -970,7 +983,7 @@ ast canonicalize_type(ast type) {
     dump_ident(get_val_(IDENTIFIER, get_child(type, 1)));
     fatal_error("canonicalize_type: type is not defined");
   }
-  res = heap[binding+3];
+  res = typedef_binding_type(binding);
 
   return res;
 }
@@ -1274,9 +1287,9 @@ ast value_type(ast node) {
 
 #ifdef SUPPORT_64_BIT_LITERALS
       // The value is encoded by pnut.c::u64_to_obj, see function for details.
-      if (get_val_(INTEGER, node) <= 0) { // Small "unboxed" int
+      if (!is_large_int(get_val_(INTEGER, node))) { // Small "unboxed" int
         return int_type;
-      } else if (I32_POSITIVE(heap[get_val_(INTEGER, node) + 1])) { // Large int with non-negative high word
+      } else if (I32_POSITIVE(large_int_hi(get_val_(INTEGER, node)))) { // Large int with non-negative high word
         return long_type;
       } else { // Large int with negative high word
         return ulong_type;
@@ -1290,11 +1303,11 @@ ast value_type(ast node) {
     else if (op == INTEGER_HEX || op == INTEGER_OCT) {
 #ifdef SUPPORT_64_BIT_LITERALS
       // Type ladder: int -> uint -> long -> ulong.
-      if (get_val(node) <= 0) { // Small "unboxed" int
+      if (!is_large_int(get_val(node))) { // Small "unboxed" int
         return int_type;
-      } else if (heap[get_val(node) + 1] == 0) { // Large int with zero high word
+      } else if (large_int_hi(get_val(node)) == 0) { // Large int with zero high word
         return uint_type;
-      } else if (I32_POSITIVE(heap[get_val(node) + 1])) { // Large int with non-negative high word
+      } else if (I32_POSITIVE(large_int_hi(get_val(node)))) { // Large int with non-negative high word
         return long_type;
       } else { // Large int with negative high word
         return ulong_type;
@@ -1310,7 +1323,7 @@ ast value_type(ast node) {
       // long and long long coincide as the 64-bit LONG_KW type here. A value
       // that doesn't fit in a signed 64-bit long -- bit 63 set, i.e. a large
       // int with a negative high word -- becomes unsigned long.
-      if (get_val(node) > 0 && I32_NEGATIVE(heap[get_val(node) + 1])) {
+      if (is_large_int(get_val(node)) && I32_NEGATIVE(large_int_hi(get_val(node)))) {
         return ulong_type;
       } else {
         return long_type;
@@ -1322,7 +1335,7 @@ ast value_type(ast node) {
 #ifdef SUPPORT_64_BIT_LITERALS
       // unsigned int -> unsigned long: a value too wide for a 32-bit unsigned
       // int (large int with a non-zero high word) becomes unsigned long.
-      if (get_val(node) > 0 && heap[get_val(node) + 1] != 0) {
+      if (is_large_int(get_val(node)) && large_int_hi(get_val(node)) != 0) {
         return ulong_type;
       } else {
         return uint_type;
@@ -1343,13 +1356,13 @@ ast value_type(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          return heap[binding+4];
+          return var_binding_type(binding);
         case BINDING_VAR_GLOBAL:
-          return heap[binding+4];
+          return var_binding_type(binding);
         case BINDING_ENUM_CST:
           return int_type;
         case BINDING_FUN:
-          return heap[binding+5];
+          return fun_binding_type(binding);
         default:
           dump_ident(get_val_(IDENTIFIER, node));
           fatal_error("value_type: unknown identifier");
@@ -1988,7 +2001,7 @@ void emit_function_call(ast fun, int binding) {
     if (is_label_defined(fun_binding_lbl(binding))) {
       call(fun_binding_lbl(binding));
     } else {
-      mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+      mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #ifdef SAFE_MODE
       // In safe mode, we check that the indirect call location is initialized
       mov_reg_imm(reg_Y, 0);
@@ -2138,7 +2151,7 @@ void codegen_goto(ast node) {
     binding = cgc_locals_fun;
   }
 
-  jump_to_goto_label(heap[binding + 3]); // Label
+  jump_to_goto_label(goto_binding_lbl(binding));
 }
 
 #endif // SUPPORT_GOTO
@@ -2160,19 +2173,19 @@ void codegen_lvalue(ast node) {
       switch (binding_kind(binding)) {
         case BINDING_PARAM_LOCAL:
         case BINDING_VAR_LOCAL:
-          stack_push_address_of(heap[binding+3]);
+          stack_push_address_of(var_binding_offset(binding));
           break;
         case BINDING_VAR_GLOBAL:
-          mov_reg_imm(reg_X, heap[binding+3]);
+          mov_reg_imm(reg_X, var_binding_offset(binding));
           add_reg_reg(reg_X, reg_glo);
           stack_push(reg_X);
           break;
         case BINDING_FUN:
           // Function pointers are stored in the forward jump table
 #ifdef ONE_PASS_GENERATOR
-          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+          mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #else
-          mov_reg_lbl(reg_X, heap[binding+4]);
+          mov_reg_lbl(reg_X, fun_binding_lbl(binding));
 #endif
           stack_push(reg_X);
           break;
@@ -2462,8 +2475,8 @@ void codegen_int64_binop(ast node, ast child0, ast child1) {
 void codegen_int64_literal(ast node) {
   int val = get_val(node);
   int lo, hi;
-  if (val > 0) { lo = heap[val]; hi = heap[val + 1]; }  // large-int object: two words
-  else         { lo = -val; hi = 0; }                   // small LL literal, fits 32 bits (non-negative)
+  if (is_large_int(val)) { lo = large_int_lo(val); hi = large_int_hi(val); }
+  else                   { lo = -val; hi = 0; }         // small LL literal, fits 32 bits (non-negative)
   mov_reg_imm(reg_X, hi);
   stack_push(reg_X);                                    // push buffer.hi
   if (lo != hi) mov_reg_imm(reg_X, lo);                 // reg_X already equals lo if lo == hi
@@ -2580,38 +2593,38 @@ void codegen_rvalue(ast node) {
           // variables, so their value is also their address.
           // Array parameters (see add_function_params) are passed as pointers,
           // so we dereference the stack value to get the value of the pointer.
-          if (is_aggregate_type(heap[binding+4])) {
-            stack_push_address_of(heap[binding+3]);
+          if (is_aggregate_type(var_binding_type(binding))) {
+            stack_push_address_of(var_binding_offset(binding));
           } else {
-            stack_dereference(reg_X, heap[binding+3], type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+            stack_dereference(reg_X, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
             stack_push(reg_X);
           }
           break;
         case BINDING_VAR_GLOBAL:
           // global arrays/structs/unions are also allocated in
           // memory, so their value is their address (no dereference)
-          if (is_aggregate_type(heap[binding+4])) {
+          if (is_aggregate_type(var_binding_type(binding))) {
             mov_reg_reg(reg_X, reg_glo);
-            add_reg_imm(reg_X, heap[binding+3]);
+            add_reg_imm(reg_X, var_binding_offset(binding));
           } else {
-            load_mem_location(reg_X, reg_glo, heap[binding+3], type_width(heap[binding+4], false, false), is_signed_numeric_type(heap[binding+4]));
+            load_mem_location(reg_X, reg_glo, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
           }
           stack_push(reg_X);
           break;
         case BINDING_ENUM_CST:
 #ifdef SUPPORT_64_BIT_LITERALS
-          mov_reg_large_imm(reg_X, get_val(heap[binding+3]));
+          mov_reg_large_imm(reg_X, get_val(enum_binding_value(binding)));
 #else
-          mov_reg_imm(reg_X, -get_val_(INTEGER, heap[binding+3]));
+          mov_reg_imm(reg_X, -get_val_(INTEGER, enum_binding_value(binding)));
 #endif
           stack_push(reg_X);
           break;
 
         case BINDING_FUN:
 #ifdef ONE_PASS_GENERATOR
-          mov_reg_mem(reg_X, reg_glo, heap[binding+6]);
+          mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #else
-          mov_reg_lbl(reg_X, heap[binding+4]);
+          mov_reg_lbl(reg_X, fun_binding_lbl(binding));
 #endif
           stack_push(reg_X);
           break;
@@ -2881,7 +2894,7 @@ void codegen_struct_or_union(ast node, enum BINDING kind) {
   // if struct has a name and members (not a reference to an existing type)
   if (name != 0 && members != 0) {
     binding = cgc_lookup_binding_ident(kind, get_val_(IDENTIFIER, name), cgc_globals);
-    if (binding != 0 && heap[binding + 3] != node && get_child(heap[binding + 3], 2) != members) {
+    if (binding != 0 && typedef_binding_type(binding) != node && get_child(typedef_binding_type(binding), 2) != members) {
       fatal_error("codegen_struct_or_union: struct/union already declared");
     }
     cgc_add_typedef(get_val_(IDENTIFIER, name), kind, node);
@@ -3123,7 +3136,7 @@ void codegen_glo_var_decl(ast node) {
 
     if (init != 0) {
       START_INIT_BLOCK();
-      codegen_initializer(false, init, type, reg_glo, heap[binding + 3]); // heap[binding + 3] = offset
+      codegen_initializer(false, init, type, reg_glo, var_binding_offset(binding));
       END_INIT_BLOCK();
     }
   }
@@ -3151,7 +3164,7 @@ void codegen_local_var_decl(ast node) {
   stack_grow(size); // Make room for the local variable
 
   if (init != 0) {
-    // offset (cgc_fs - heap[cgc_locals + 3]) should be 0 since we just allocated the space
+    // offset (cgc_fs - var_binding_offset(cgc_locals)) should be 0 since we just allocated the space
     codegen_initializer(true, init, type, reg_SP, 0);
   }
 }
@@ -3172,7 +3185,7 @@ void codegen_static_local_var_decl(ast node) {
     skip_init_lbl = alloc_label("skip_init");
     jump(skip_init_lbl);
     START_INIT_BLOCK();
-    codegen_initializer(false, init, type, reg_glo, heap[cgc_locals + 3]); // heap[cgc_locals + 3] = offset
+    codegen_initializer(false, init, type, reg_glo, var_binding_offset(cgc_locals));
     END_INIT_BLOCK();
     def_label(skip_init_lbl);
   }
@@ -3338,18 +3351,18 @@ void codegen_statement(ast node) {
     jump(lbl3);
 
     // In case #2 control ends up here
-    lbl2 = heap[binding + 4]; // Reload because the label is overwritten by CASE statements
+    lbl2 = switch_binding_next_case_lbl(binding); // Reload because the label is overwritten by CASE statements
     def_label(lbl2);
     // If the default statement is present, we jump to it. Otherwise, we'll fall
     // through to the end of the switch and remove the switch operand from the
     // stack.
-    if (heap[binding + 5]) jump(heap[binding + 5]);
+    if (switch_binding_default_lbl(binding)) jump(switch_binding_default_lbl(binding));
 
     def_label(lbl3);
 
     // If we fell through the switch, break didn't restore the stack in its
     // original state so do it now.
-    reset_stack_to(heap[binding + 2]);
+    reset_stack_to(loop_or_switch_binding_fs(binding));
 
     def_label(lbl1); // End of switch label, break statements land here
 
@@ -3367,8 +3380,8 @@ void codegen_statement(ast node) {
     if (binding != 0) {
       lbl1 = alloc_label(0);                  // skip case when falling through
       jump(lbl1);
-      def_label(heap[binding + 4]);           // false jump location of previous case
-      heap[binding + 4] = alloc_label(0);     // create false jump location for current case
+      def_label(switch_binding_next_case_lbl(binding));       // false jump location of previous case
+      switch_binding_next_case_lbl(binding) = alloc_label(0); // create false jump location for current case
 #ifdef SUPPORT_EMULATED_INT64
       if (is_int64_type(switch_binding_expr_type(binding))) {
         // A scalar EQ can't compare 8-byte values: call eq_i64 on the switch
@@ -3386,7 +3399,7 @@ void codegen_statement(ast node) {
       stack_load(reg_X, cgc_fs);              // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);
       }
-      jump(heap[binding + 4]);                // condition is false => jump to next case
+      jump(switch_binding_next_case_lbl(binding)); // condition is false => jump to next case
       def_label(lbl1);                        // start of case conditional block
       codegen_statement(get_child_(CASE_KW, node, 1));  // case statement
     } else {
@@ -3398,9 +3411,9 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_switch(cgc_locals);
 
     if (binding != 0) {
-      if (heap[binding + 5]) fatal_error("default already defined in switch");
-      heap[binding + 5] = alloc_label(0);                 // create label for default
-      def_label(heap[binding + 5]);                       // default label
+      if (switch_binding_default_lbl(binding)) fatal_error("default already defined in switch");
+      switch_binding_default_lbl(binding) = alloc_label(0); // create label for default
+      def_label(switch_binding_default_lbl(binding));       // default label
       codegen_statement(get_child_(DEFAULT_KW, node, 0)); // default statement
     } else {
       fatal_error("default outside of switch");
@@ -3411,8 +3424,8 @@ void codegen_statement(ast node) {
     binding = cgc_lookup_enclosing_loop_or_switch(cgc_locals);
     if (binding != 0) {
       // adjust stack and jump to break label
-      stack_grow(heap[binding+2] - cgc_fs);
-      jump(heap[binding+3]);
+      stack_grow(loop_or_switch_binding_fs(binding) - cgc_fs);
+      jump(loop_or_switch_binding_break_lbl(binding));
     } else {
       fatal_error("break is not in the body of a loop");
     }
@@ -3420,10 +3433,10 @@ void codegen_statement(ast node) {
   } else if (op == CONTINUE_KW) {
 
     binding = cgc_lookup_enclosing_loop(cgc_locals);
-    if (binding != 0 && heap[binding+4] != 0) {
+    if (binding != 0 && loop_binding_continue_lbl(binding) != 0) {
       // adjust stack and jump to continue label
-      stack_grow(heap[binding+2] - cgc_fs);
-      jump(heap[binding+4]);
+      stack_grow(loop_or_switch_binding_fs(binding) - cgc_fs);
+      jump(loop_binding_continue_lbl(binding));
     } else {
       fatal_error("continue is not in the body of a loop");
     }
@@ -3435,7 +3448,7 @@ void codegen_statement(ast node) {
       if (is_struct_like(current_fun_return_type)) {
         // Widening of scalar values to 64 bits done by codegen_aggregate_into
         binding = cgc_lookup_var(0, cgc_locals); // hidden parameter
-        stack_load(reg_Y, heap[binding+3]); // load hidden parameter address
+        stack_load(reg_Y, var_binding_offset(binding)); // load hidden parameter address
         codegen_aggregate_into(reg_Y, 0, get_child_(RETURN_KW, node, 0), type_width(current_fun_return_type, true, true), current_fun_return_type);
         // The value of a struct/union expression is its address: leave the
         // caller-allocated buffer's address in reg_X.
@@ -3469,7 +3482,7 @@ void codegen_statement(ast node) {
       binding = cgc_locals_fun;
     }
 
-    def_goto_label(heap[binding + 3]);
+    def_goto_label(goto_binding_lbl(binding));
     codegen_statement(get_child_(':', node, 1)); // labelled statement
 
   } else if (op == GOTO_KW) {
@@ -3524,8 +3537,8 @@ void init_forward_jump_table(int binding) {
 #endif
 
   START_INIT_BLOCK();
-  mov_reg_lbl(reg_X, fun_binding_lbl(binding));   // heap[binding + 4] = label
-  mov_mem_reg(reg_glo, heap[binding + 6], reg_X); // heap[binding + 6] = entry
+  mov_reg_lbl(reg_X, fun_binding_lbl(binding));
+  mov_mem_reg(reg_glo, fun_binding_glo_entry(binding), reg_X);
 
   // At this point, all labels should be defined, which means we can safely
   // output the code and overwrite the code buffer.
@@ -3619,6 +3632,7 @@ void codegen_glo_fun_decl(ast node) {
   init_forward_jump_table(binding);
 }
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
 // For now, we don't do anything with the declarations in a typedef.
 // The only thing we need to do is to call handle_enum_struct_union_type_decl
 // on the type specifier, which is the same for all declarations.
@@ -3629,18 +3643,22 @@ void handle_typedef(ast node) {
 
   handle_enum_struct_union_type_decl(get_type_specifier(type));
 }
+#endif
 
 void codegen_glo_decl(ast node) {
   ast decls;
   int op = get_op(node);
 
   if (op == DECLS) {
-    // AUTO_KW and REGISTER_KW can simply be ignored. STATIC_KW is the default
-    // storage class for global variables since pnut-sh only supports 1
-    // translation unit.
-#ifdef SUPPORT_TYPE_SPECIFIERS
-    if (get_child_(DECLS, node, 1) == EXTERN_KW) fatal_error("Extern storage class specifier not supported");
-#endif
+    // - AUTO_KW and REGISTER_KW can simply be ignored.
+    // - STATIC_KW is the default storage class for global variables since pnut-sh
+    //   only supports 1 translation unit.
+    // - EXTERN_KW forward-declares a variable defined later in the same
+    //   translation unit. This is treated like tentative declarations, i.e.
+    //   the variable is allocated and initialized to 0 if it's not defined
+    //   later in the translation unit. When the extern variable is defined,
+    //   codegen_glo_var_decl will find the existing binding in cgc_globals and
+    //   use it instead of creating a new one.
 
     decls = get_child__(DECLS, LIST, node, 0); // Declaration list
     while (decls != 0) { // Multiple variable declarations
@@ -3649,9 +3667,13 @@ void codegen_glo_decl(ast node) {
     }
   } else if (op == FUN_DECL) {
     codegen_glo_fun_decl(node);
-  } else if (op == TYPEDEF_KW) {
+  }
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (op == TYPEDEF_KW) {
     handle_typedef(node);
-  } else if (op == ENUM_KW
+  }
+#endif
+  else if (op == ENUM_KW
 #ifdef SUPPORT_STRUCT_UNION
     || op == STRUCT_KW || op == UNION_KW
 #endif

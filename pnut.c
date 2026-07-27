@@ -354,6 +354,19 @@
 // #define PRINT_MEMORY_STATS
 
 // ===================== Compatibility macros and typedefs =====================
+
+// pnut-sh and pnut-awk are only support a single translation unit, so the
+// extern keyword doesn't do anything, except forward declare a variable defined
+// later in the same translation unit.
+// Because the minimal versions of pnut don't support storage class specifiers,
+// we simply ignore the extern keyword when compiling pnut-sh and pnut-awk.
+// This causes extern declarations to be compiled twice in pnut-sh and pnut-awk,
+// the first time zero-initializing the variable, and the second time
+// initializing it with its declared value.
+#ifdef PNUT_MIN
+#define extern
+#endif
+
 #ifdef NO_TERNARY_SUPPORT
 // M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
@@ -369,9 +382,9 @@
 // On 64 bit platforms, intptr_t is a long long int.
 // On 32 bit (including shells) platforms, intptr_t is an int.
 #if defined(PNUT_EXE_64)
-typedef long long int intptr_t;
+#define intptr_t long long int
 #else
-typedef int intptr_t;
+#define intptr_t int
 #endif
 
 #define O_RDONLY 0
@@ -393,11 +406,10 @@ typedef int intptr_t;
 // =============================================================================
 
 #define ast int
+#define bool int
 #define true 1
 #define false 0
 #define EOF (-1)
-
-typedef int bool;
 
 // State for the reader
 //  - fd: current input file descriptor (-1 = none), read with open/read/close.
@@ -629,7 +641,6 @@ enum TOKEN {
   SIZEOF_KW,
 #endif
   SWITCH_KW,
-  TYPEDEF_KW,
   WHILE_KW,
 
 // Type qualifiers and storage class specifiers
@@ -637,10 +648,11 @@ enum TOKEN {
 #ifdef SUPPORT_TYPE_SPECIFIERS
   AUTO_KW,
   EXTERN_KW,
+  INLINE_KW,
   REGISTER_KW,
   STATIC_KW,
+  TYPEDEF_KW,
   VOLATILE_KW,
-  INLINE_KW,
 #endif
 
   // Type specifiers
@@ -1658,6 +1670,13 @@ void include_file(char *file_name, char *relative_to) {
 #define I32_POSITIVE(x) (((x >> 31) & 1) == 0)
 #define I32_NEGATIVE(x) ((x >> 31) & 1)
 
+// Accessors for the encoding described above: a positive value is an index to
+// a two-word heap object holding the low and high words, anything else is a
+// small int whose value is the negation of the encoding.
+#define is_large_int(v) ((v) > 0)
+#define large_int_lo(obj) heap[obj]
+#define large_int_hi(obj) heap[obj+1]
+
 // Array used to accumulate 64 bit unsigned integers on 32 bit systems
 int val_32[2];
 
@@ -1702,8 +1721,8 @@ void u64_to_obj(int *x) {
     // puthex_unsigned(x[0]);
     // putchar('\n');
     val = alloc_obj(2);
-    heap[val    ] = x[0];
-    heap[val + 1] = x[1];
+    large_int_lo(val) = x[0];
+    large_int_hi(val) = x[1];
   }
 }
 
@@ -1882,7 +1901,6 @@ int PNUT_TARGET_ID;
 
 void get_tok();
 
-
 // When we parse a macro, we generally want the tokens as they are, without
 // expanding them. When force_newlines is set, newline tokens are produced. This
 // is used to end preprocessor directives.
@@ -1893,7 +1911,7 @@ void get_tok_macro(int force_newlines) {
 
   expand_macro = false;
   if_macro_mask = true;
-  if (force_newlines) skip_newlines = 0;
+  if (force_newlines) skip_newlines = false;
   get_tok();
   expand_macro = prev_expand_macro;
   if_macro_mask = prev_macro_mask;
@@ -2014,7 +2032,7 @@ int eval_constant(ast expr, bool if_macro) {
 #endif
 #ifdef SUPPORT_64_BIT_LITERALS
       // Disable large integers for now, hopefully they don't appear in TCC in enums and #if expressions
-      if (get_val(expr) > 0) fatal_error("constant expression too large");
+      if (is_large_int(get_val(expr))) fatal_error("constant expression too large");
 #endif
       return -get_val(expr);
     case CHARACTER:   return get_val_(CHARACTER, expr);
@@ -2116,6 +2134,7 @@ bool handle_include() {
 
   if (tok == STRING) {
     buf = symbol_buf(val);
+    skip_to_end_of_line();
     include_file(buf, fd_dirname);
 
 #ifdef SH_SUPPORT_SHELL_INCLUDE
@@ -2127,7 +2146,7 @@ bool handle_include() {
       handle_shell_include();
     }
 #endif
-    get_tok_macro(true); // Skip the string
+    tok = '\n'; // signal that we're at the end of the line
     return false;
   } else if (tok == '<') {
     accum_string_until('>');
@@ -2136,9 +2155,12 @@ bool handle_include() {
     // TODO: Issue a warning to stderr when skipping the directive
     if (include_search_path != 0) {
       buf = symbol_buf(val);
+      skip_to_end_of_line(); // Skip the rest of the directive
       include_file(buf, include_search_path);
+    } else {
+      skip_to_end_of_line(); // Skip the rest of the directive
     }
-    get_tok_macro(true); // Skip the string
+    tok = '\n'; // signal that we're at the end of the line
     return true;
   } else {
     dump_tok(tok);
@@ -2363,7 +2385,6 @@ void init_ident_table() {
   init_ident(SIZEOF_KW,   "sizeof");
 #endif
   init_ident(SWITCH_KW,   "switch");
-  init_ident(TYPEDEF_KW,  "typedef");
   init_ident(WHILE_KW,    "while");
 
   // Type specifiers
@@ -2383,10 +2404,11 @@ void init_ident_table() {
 #ifdef SUPPORT_TYPE_SPECIFIERS
   init_ident(AUTO_KW,     "auto");
   init_ident(EXTERN_KW,   "extern");
+  init_ident(INLINE_KW,   "inline");
   init_ident(REGISTER_KW, "register");
   init_ident(STATIC_KW,   "static");
+  init_ident(TYPEDEF_KW,  "typedef");
   init_ident(VOLATILE_KW, "volatile");
-  init_ident(INLINE_KW,   "inline");
 #endif
 
 #ifdef SUPPORT_GOTO
@@ -2532,6 +2554,10 @@ void init_pnut_macros() {
   init_builtin_int_macro("PNUT_X86_64", 1);
   init_builtin_int_macro("PNUT_X86_64_MAC", 1);
   init_builtin_int_macro("__x86_64__", 1);
+#endif
+
+#ifdef PNUT_BOOTSTRAP
+  init_builtin_int_macro("PNUT_MIN", 1);
 #endif
 
 }
@@ -3332,6 +3358,7 @@ ast parse_initializer();
 #define MK_TYPE_SPECIFIER(tok) (1 << (tok - CONST_KW))
 #define TEST_TYPE_SPECIFIER(specifier, tok) ((specifier) & (1 << (tok - CONST_KW)))
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
 ast get_type_specifier(ast type_or_decl) {
   while (1) {
     switch (get_op(type_or_decl)) {
@@ -3349,6 +3376,7 @@ ast get_type_specifier(ast type_or_decl) {
     }
   }
 }
+#endif
 
 ast pointer_type(ast parent_type, bool is_const) {
   return new_ast2('*', TERNARY(is_const, MK_TYPE_SPECIFIER(CONST_KW), 0), parent_type);
@@ -3393,19 +3421,17 @@ bool is_type_starter(int tok) {
     case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
     case TYPE:                                              // User defined types
     case CONST_KW:
-#ifdef SUPPORT_TYPE_SPECIFIERS
-    case VOLATILE_KW:                                       // Type attributes
-#endif
     case ENUM_KW:                                           // Enum
 #ifdef SUPPORT_STRUCT_UNION
     case STRUCT_KW: case UNION_KW:                          // Struct, union
 #endif
     // Storage class specifiers are not always valid type starters in all
     // contexts, but we allow them here
-    case TYPEDEF_KW:
 #ifdef SUPPORT_TYPE_SPECIFIERS
-    case STATIC_KW: case AUTO_KW: case REGISTER_KW: case EXTERN_KW:
-    case INLINE_KW:
+    case AUTO_KW:   case EXTERN_KW:
+    case INLINE_KW: case REGISTER_KW:
+    case STATIC_KW: case TYPEDEF_KW:
+    case VOLATILE_KW:
 #endif
       return true;
     default:
@@ -3639,14 +3665,17 @@ ast parse_type_specifier() {
 // A declaration is split in 2 parts:
 //    1. specifiers and qualifiers
 //    2. declarators and initializers
-// This function parses the first part
-// Storage class specifiers affect declarations instead of types, so it's easier to extract it from the type
+// This function parses the first part.
+#ifdef SUPPORT_TYPE_SPECIFIERS
 int glo_specifier_storage_class = 0;
+#endif
 ast parse_declaration_specifiers(bool allow_typedef) {
   ast type_specifier = 0;
   int type_qualifier = 0;
   bool loop = true;
+#ifdef SUPPORT_TYPE_SPECIFIERS
   int specifier_storage_class = 0;
+#endif
 
   while (loop) {
     switch (tok) {
@@ -3655,13 +3684,13 @@ ast parse_declaration_specifiers(bool allow_typedef) {
       case REGISTER_KW:
       case STATIC_KW:
       case EXTERN_KW:
-#endif
       case TYPEDEF_KW:
         if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
         if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
         specifier_storage_class = tok;
         get_tok();
         break;
+#endif
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
       case INLINE_KW:
@@ -3735,7 +3764,10 @@ ast parse_declaration_specifiers(bool allow_typedef) {
     // Set the type qualifier, keeping the storage class specifier from the typedef if it exists
     set_child(type_specifier, 0, get_child(type_specifier, 0) | type_qualifier);
   }
+
+#ifdef SUPPORT_TYPE_SPECIFIERS
   glo_specifier_storage_class = specifier_storage_class;
+#endif
 
   return type_specifier;
 }
@@ -4006,6 +4038,8 @@ ast parse_declarators(bool is_for_typedef, ast type_specifier, ast first_declara
   return declarators;
 }
 
+#ifdef SUPPORT_TYPE_SPECIFIERS
+
 void add_typedef(ast declarator) {
   int decl_ident = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, declarator, 0));
   ast decl_type = get_child_(DECL, declarator, 1); // child#1 is the type
@@ -4027,6 +4061,8 @@ void add_typedef(ast declarator) {
   set_symbol_type(decl_ident, TYPE);
   set_symbol_tag(decl_ident, decl_type);
 }
+
+#endif // SUPPORT_TYPE_SPECIFIERS
 
 ast parse_fun_def(ast declarator) {
   ast fun_type = get_child__(DECL, '(', declarator, 1);
@@ -4061,12 +4097,16 @@ ast parse_declaration(bool local) {
       ) {
       parse_error("enum/struct/union declaration expected", tok);
     }
+#ifdef SUPPORT_TYPE_SPECIFIERS
     // If the specifier is a typedef, we add the typedef'ed type to the type table
     // Note: Should this return a DECL node instead of a ENUM, STRUCT, or UNION node?
     // It doesn't have a name so maybe it makes more sense to have a separate node type?
     if (glo_specifier_storage_class == TYPEDEF_KW) add_typedef(new_ast3(DECL, 0, type_specifier, 0));
+#endif
     result = type_specifier;
-  } else if (glo_specifier_storage_class == TYPEDEF_KW) {
+  }
+#ifdef SUPPORT_TYPE_SPECIFIERS
+  else if (glo_specifier_storage_class == TYPEDEF_KW) {
     // The type_specifier contained a typedef, it can't be a function or a
     // variable declaration, and the declarators cannot be initialized.
     // The typedef'ed types will be added to the type table.
@@ -4078,7 +4118,9 @@ ast parse_declaration(bool local) {
       declarators = get_child_opt_(LIST, LIST, declarators, 1);
     }
     result = new_ast1(TYPEDEF_KW, type_specifier);
-  } else {
+  }
+#endif
+  else {
     // Then we parse the declarators and initializers
     declarator = parse_declarator_and_initializer(false, type_specifier);
 
@@ -4089,7 +4131,11 @@ ast parse_declaration(bool local) {
     }
 
     declarators = parse_declarators(false, type_specifier, declarator);
+#ifdef SUPPORT_TYPE_SPECIFIERS
     result = new_ast2(DECLS, declarators, glo_specifier_storage_class); // child#1 is the storage class specifier
+#else
+    result = new_ast2(DECLS, declarators, 0);
+#endif
   }
 
   expect_tok(';');
