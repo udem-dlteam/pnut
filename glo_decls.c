@@ -3,8 +3,42 @@
 text glo_decls[GLO_DECL_SIZE];  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
+int pending_glo_decl_fixups = 0;
+bool force_buffered_glo_decls = false;
+
+void reset_glo_decls() {
+  glo_decl_ix = 0;
+  pending_glo_decl_fixups = 0;
+  force_buffered_glo_decls = false;
+}
+
+int use_glo_decl_ix() {
+  force_buffered_glo_decls = true;
+  return glo_decl_ix;
+}
+
+void print_glo_decl(int level, text decl) {
+  if (decl != 0) {
+    while (level > 0) {
+      putchar(' '); putchar(' ');
+      level -= 1;
+    }
+    print_text(decl);
+    putchar('\n');
+  }
+}
 
 void append_glo_decl(text decl) {
+#ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
+  if (!force_buffered_glo_decls && pending_glo_decl_fixups == 0) {
+    if (glo_decl_ix > 0) {
+      print_glo_decls();
+      glo_decl_ix = 0;
+    }
+    print_glo_decl(nest_level, decl);
+    return;
+  }
+#endif
   if (glo_decl_ix + GLO_DECL_ENTRY_SIZE >= GLO_DECL_SIZE) fatal_error("glo_decls overflow");
   glo_decls[glo_decl_ix] = nest_level;
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
@@ -19,6 +53,7 @@ int append_glo_decl_fixup() {
   glo_decls[glo_decl_ix] = - (nest_level + 1);
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = 0;
+  pending_glo_decl_fixups += 1;
   glo_decl_ix += GLO_DECL_ENTRY_SIZE;
   return glo_decl_ix - GLO_DECL_ENTRY_SIZE;
 }
@@ -28,6 +63,7 @@ void fixup_glo_decl(int fixup_ix, text decl) {
 
   glo_decls[fixup_ix] = -glo_decls[fixup_ix] - 1; // Make nest level positive
   glo_decls[fixup_ix + 2] = decl;
+  pending_glo_decl_fixups -= 1;
 }
 
 // Remove the n last declarations by decrementing the active field.
@@ -80,17 +116,10 @@ text replay_glo_decls_inline(int start, int end) {
 
 void print_glo_decls() {
   int i = 0;
-  int level;
   while (i < glo_decl_ix) {
     if (glo_decls[i + 1] == 1) { // Skip inactive declarations
       if (glo_decls[i + 2] != 0) {
-        level = glo_decls[i];
-        while (level > 0) {
-          putchar(' '); putchar(' ');
-          level -= 1;
-        }
-        print_text(glo_decls[i + 2]);
-        putchar('\n');
+        print_glo_decl(glo_decls[i], glo_decls[i + 2]);
       }
     }
     i += GLO_DECL_ENTRY_SIZE;

@@ -823,7 +823,7 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
         ));
 
   nest_level += 1;
-  start_glo_decl_idx = glo_decl_ix;
+  start_glo_decl_idx = use_glo_decl_ix();
   termination_lhs = comp_statement(get_child_(IF_KW, node, 1), stmt_ctx);
   nest_level -= 1;
 
@@ -834,7 +834,7 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
     } else {
       append_glo_decl(wrap_str_lit("} else {"));
       nest_level += 1;
-      start_glo_decl_idx = glo_decl_ix;
+      start_glo_decl_idx = use_glo_decl_ix();
       termination_rhs = comp_statement(get_child_(IF_KW, node, 2), stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
       if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
       nest_level -= 1;
@@ -1331,7 +1331,7 @@ void codegen_begin() {
 void codegen_glo_decl(ast decl) {
 #ifndef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   // Reset text and glo decls buffers
-  glo_decl_ix = 0;
+  reset_glo_decls();
   text_alloc = 1;
 #endif
 
