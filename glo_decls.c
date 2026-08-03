@@ -5,6 +5,7 @@ int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
 int pending_glo_decl_fixups = 0;
 bool force_buffered_glo_decls = false;
+void print_glo_decls();
 
 void reset_glo_decls() {
   glo_decl_ix = 0;
