@@ -169,7 +169,7 @@
   // #define INCLUDE_ALL_RUNTIME
 
   // Only emit shell code output at the end of the compilation.
-  // This is used to evaluate the negative performance impact of allocating
+  // This is used to measure the negative performance impact of allocating
   // There is no practical reason to enable this option.
   // #define ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
 
@@ -371,7 +371,7 @@
 // M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
 // Note that unlike the standard ternary operator, both sides are always
-// evaluated, and the condition expression is evaluated twice.
+// computed, and the condition expression is computed twice.
 #define TERNARY(cond, if_true, if_false) (((cond) == 0) * (if_false) + ((cond) != 0) * (if_true))
 #else
 #define TERNARY(cond, if_true, if_false) ((cond) ? (if_true) : (if_false))
@@ -2009,9 +2009,9 @@ void handle_define() {
 int compute_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
 
-  int val0, val1; // Results of evaluating child0 and child1, for non-lazy operators
+  int val0, val1; // Results of computing child0 and child1, for non-lazy operators
   if (op != '?' && op != AMP_AMP && op != BAR_BAR && op != '(') {
-    // For non-lazy operators, we can pre-evaluate the children.
+    // For non-lazy operators, we can precompute the children.
     // This makes compute_constant's shell version much shorter and easier to review.
     if (get_nb_children(expr) >= 1) val0 = compute_constant(get_child(expr, 0), if_macro);
     if (get_nb_children(expr) >= 2) val1 = compute_constant(get_child(expr, 1), if_macro);
@@ -2093,7 +2093,7 @@ int compute_constant(ast expr, bool if_macro) {
         syntax_error("identifiers are not allowed in constant expression");
       }
 
-      return 0; // Undefined identifiers evaluate to 0
+      return 0; // Undefined identifiers count as 0
 
     default:
       dump_op(op);
@@ -3492,7 +3492,7 @@ ast parse_enum() {
 #endif
             break;
           default:
-            // Evaluate the constant expression to get its integer value
+            // Compute the constant expression to get its integer value
             value = new_ast0(last_literal_type, -compute_constant(value, false)); // negative value to indicate it's a small integer
         }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative

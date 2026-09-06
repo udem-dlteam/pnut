@@ -753,7 +753,7 @@ bool comp_switch(ast node) {
       // For "atomic" scrutinees, use them directly in the comparisons
       break;
     default:
-      // Otherwise, evaluate the scrutinee into a temporary variable
+      // Otherwise, compute the scrutinee into a temporary variable
       append_glo_decl(string_concat(wrap_str_lit("__scrutinee = "), scrutinee_text));
       scrutinee_text = wrap_str_lit("__scrutinee");
   }

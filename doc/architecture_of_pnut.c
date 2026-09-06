@@ -130,7 +130,7 @@
 //  - handle_preprocessor_directive(): entry point for handling cpp directives
 //  - handle_define(): handles #define directives
 //  - handle_include(): handles #include directives
-//  - compute_if_condition(): evaluates the condition of #if and #elif
+//  - compute_if_condition(): computes the condition of #if and #elif
 //  - begin_macro_expansion/return_to_parent_macro(): manage expansion context
 //  - attempt_macro_expansion(): starts expansion when a macro token is found
 //

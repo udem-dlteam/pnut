@@ -638,7 +638,7 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
     start_gensym_ix = gensym_ix;
 
     // At this point, the temporary identifier of the variable is not live and
-    // can be used to evaluate the function arguments. This reduces the number
+    // can be used to compute the function arguments. This reduces the number
     // of temporary variables.
     gensym_ix -= 1;
   }
