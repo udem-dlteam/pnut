@@ -1742,7 +1742,7 @@ bool comp_switch(ast node) {
   // Returning not-false is only important for nested switch statements.
   // It could be useful to remove the need for the redundant trailing return
   // when nesting switch statements that we know are exhaustive such as in
-  // eval_constant.
+  // compute_constant.
   //
   // I tried to make it return true if all cases of a switch end with a return
   // but it wasn't working well because we don't know if the switch delimits the
