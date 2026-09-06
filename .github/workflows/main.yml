@@ -43,6 +43,23 @@ jobs:
             done
           done
 
+  check-no-eval: # Ensure the generated .sh/.awk files never contain the string "eval"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install gcc
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Generate .sh/.awk files and check for "eval"
+        run: |
+          set -e
+          make check-no-eval
+
   catch-bad-whitespace:
     runs-on: ubuntu-latest
     steps:
@@ -679,6 +696,7 @@ jobs:
   success-message:
     runs-on: ubuntu-latest
     needs: [ build-without-warnings
+           , check-no-eval
            , catch-bad-whitespace
            , compile-in-safe-mode
            , portable-libc-tests
