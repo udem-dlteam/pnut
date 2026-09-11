@@ -181,6 +181,22 @@ pnut-exe-bootstrapped: pnut-exe
 	$(BUILD_DIR)/pnut-exe $(BUILD_OPT_EXE) pnut.c -o $(BUILD_DIR)/pnut-exe-bootstrapped
 	@chmod +x $(BUILD_DIR)/pnut-exe-bootstrapped
 
+# Generated .sh/.awk files produced by the targets above. All the other .sh/.awk
+# files the makefile can create (bootstrapped/annotated variants) are diffed
+# against these, so checking these is sufficient.
+NO_EVAL_TARGETS = pnut-sh.sh pnut-awk.awk pnut-exe.sh pnut-exe.awk
+NO_EVAL_FILES = $(addprefix $(BUILD_DIR)/,$(NO_EVAL_TARGETS))
+
+# Fail if a generated .sh/.awk file contains the string "eval".
+check-no-eval: $(NO_EVAL_TARGETS)
+	@echo "Checking that generated .sh/.awk files do not contain 'eval'..."
+	@if grep -n "eval" $(NO_EVAL_FILES) >/dev/null; then \
+		echo "ERROR: 'eval' found in generated files:"; \
+		grep -n "eval" $(NO_EVAL_FILES); \
+		exit 1; \
+	fi
+	@echo "Success: no 'eval' in generated .sh/.awk files"
+
 kit/bintools.c:
 	./utils/process-includes.sh kit/bintools/bintools-base.c > kit/bintools.c
 

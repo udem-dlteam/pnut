@@ -638,7 +638,7 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
     start_gensym_ix = gensym_ix;
 
     // At this point, the temporary identifier of the variable is not live and
-    // can be used to evaluate the function arguments. This reduces the number
+    // can be used to compute the function arguments. This reduces the number
     // of temporary variables.
     gensym_ix -= 1;
   }
@@ -1742,7 +1742,7 @@ bool comp_switch(ast node) {
   // Returning not-false is only important for nested switch statements.
   // It could be useful to remove the need for the redundant trailing return
   // when nesting switch statements that we know are exhaustive such as in
-  // eval_constant.
+  // compute_constant.
   //
   // I tried to make it return true if all cases of a switch end with a return
   // but it wasn't working well because we don't know if the switch delimits the

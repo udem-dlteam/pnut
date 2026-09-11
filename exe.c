@@ -1753,15 +1753,15 @@ ast narrowed_rvalue_type(ast node);
 // versions of codegen_rvalue, which are defined differently depending on the
 // compilation flags:
 //  - codegen_rvalue_coerced:
-//      Evaluate an rvalue expression and convert the result to the
+//      Compute an rvalue expression and convert the result to the
 //      representation of target_type. Temporaries that are allocated are not
 //      dropped, and must be freed by the caller or are freed when the
 //      expression is consumed.
 //
 //  - codegen_rvalue_coerced_no_temps:
-//      Evaluate an rvalue expression and convert the result to the
+//      Compute an rvalue expression and convert the result to the
 //      representation of target_type. Enforces that any temporaries allocated
-//      during evaluation must be freed, fails if the expression returns an
+//      during computation must be freed, fails if the expression returns an
 //      array backed by a temporary.
 //
 // =============================================================================
@@ -1809,7 +1809,7 @@ void codegen_rvalue_coerced(ast node, ast target_type) {
 #ifdef SUPPORT_STRUCT_UNION
 
 // Compile node as rvalue, converting result to target type. Free any
-// temporaries allocated during evaluation, leaving the value directly on top of
+// temporaries allocated during computation, leaving the value directly on top of
 // the stack.
 // target_type == 0 (varargs/unknown parameter) means no coercion.
 void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
@@ -1851,11 +1851,11 @@ void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
 //
 // However, there are cases where a temporary must be freed before the end of
 // the statement to keep the stack balanced:
-//  - When evaluating a condition, the temporary never escapes the condition
+//  - When computing a condition, the temporary never escapes the condition
 //    expression, and would pile up on the stack during loops if not freed right
 //    away.
 //    Handled by `codegen_rvalue_and_cmp_0`.
-//  - When evaluating a ternary operator arm, since the individual arms may
+//  - When computing a ternary operator arm, since the individual arms may
 //    allocate a different number of temporaries while both must leave the same
 //    stack shape at the join point.
 //    Handled by `codegen_aggregate` for struct/union-typed ternaries, and
@@ -1864,11 +1864,11 @@ void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
 //    arguments and/or function pointer (for indirect calls).
 //    Handled by `codegen_rvalue_no_temps` for scalar arguments, and
 //    `codegen_aggregate` for by-value struct/union arguments.
-//  - When evaluating a scalar assignment or local variable initializer, since
+//  - When computing a scalar assignment or local variable initializer, since
 //    temporary values would offset the destination address / the local
 //    variable's SP-relative offset which are assumed to not change.
 //    Handled by `codegen_rvalue_no_temps`.
-//  - When evaluating the right operand of a binary operator, since
+//  - When computing the right operand of a binary operator, since
 //    codegen_binop expects its two operand words to be adjacent on top of the
 //    stack (the left operand's temporaries can stay buried below its value
 //    word, so the left operand doesn't need this).
@@ -1883,10 +1883,10 @@ void codegen_rvalue_coerced_no_temps(ast node, ast target_type) {
 // =============================================================================
 
 
-// Evaluate an rvalue expression for contexts that require the value to be
+// Compute an rvalue expression for contexts that require the value to be
 // exactly one word on top of the stack with no temporaries left behind
 // (binop operands, function arguments, ternary arms, scalar assignments and
-// initializers): any temporaries allocated during evaluation are freed, the
+// initializers): any temporaries allocated during computation are freed, the
 // value word being preserved. Aggregate temporaries can't be dropped when the
 // expression's value is a pointer into them, so array-typed expressions that
 // allocate temporaries (e.g. f().arr with f returning a struct by value) are
@@ -1902,7 +1902,7 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width, as
   codegen_rvalue_coerced(node, target_type);
   stack_pop(reg_X); // source aggregate address
   if (dst_reg == reg_SP) {
-    // Account for temporaries allocated during evaluation
+    // Account for temporaries allocated during computation
     dst_offset += (cgc_fs - save_fs) * WORD_SIZE;
   } else {
     // Reload destination register, saved below the temporaries
@@ -1912,9 +1912,9 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width, as
   reset_stack_to(save_fs);
 }
 
-// Evaluate an aggregate rvalue and place it directly on top of the stack,
-// dropping any temporaries allocated during evaluation. The buffer is
-// allocated before evaluating the expression so that the value is copied
+// Compute an aggregate rvalue and place it directly on top of the stack,
+// dropping any temporaries allocated during computation. The buffer is
+// allocated before computing the expression so that the value is copied
 // directly into place, below the temporaries (in which the value may live,
 // hence the copy-then-drop order).
 void codegen_aggregate(ast node, ast target_type) {
@@ -1937,7 +1937,7 @@ void codegen_aggregate(ast node, ast target_type) {
 
 #endif // SUPPORT_STRUCT_UNION
 
-// Evaluate an rvalue for use as a function argument, coercing it to the
+// Compute an rvalue for use as a function argument, coercing it to the
 // parameter's declared type if needed.
 void codegen_param(ast param, ast target_type) {
   if (target_type == 0) target_type = value_type(param);
@@ -1957,7 +1957,7 @@ void codegen_param(ast param, ast target_type) {
   }
 }
 
-// Evaluate the call arguments, converting the them to their expected types.
+// Compute the call arguments, converting the them to their expected types.
 #ifdef SAFE_MODE
 void codegen_params(ast params, ast params_type, bool allow_extra_params) {
 #else
@@ -2836,7 +2836,7 @@ void codegen_rvalue(ast node) {
   }
 }
 
-// Evaluate a condition expression and jump to lbl if the condition is true,
+// Compute a condition expression and jump to lbl if the condition is true,
 // fallthrough otherwise.
 void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
 #ifdef SUPPORT_STRUCT_UNION
@@ -2855,7 +2855,7 @@ void codegen_rvalue_and_cmp_0(int cond, int lbl, ast node) {
 #ifdef SUPPORT_STRUCT_UNION
   // The node's value is immediately consumed by a conditional jump, so it can
   // be collected right away. This also ensures that temporaries don't pile up
-  // during loops, where the condition is evaluated multiple times.
+  // during loops, where the condition is computed multiple times.
   reset_stack_to(save_fs);
 #endif
 
@@ -3337,7 +3337,7 @@ void codegen_statement(ast node) {
     // exists.
     //
     // The code is laid out as follows:
-    //  [eval switch opnd]
+    //  [compute switch opnd]
     //  [cases]
     //  ...
     //   <- Control is here
@@ -3394,7 +3394,7 @@ void codegen_statement(ast node) {
       } else
 #endif
       {
-      codegen_rvalue(get_child_(CASE_KW, node, 0)); // evaluate case expression and compare it
+      codegen_rvalue(get_child_(CASE_KW, node, 0)); // compute case expression and compare it
       stack_pop(reg_Y);                       // get case value
       stack_load(reg_X, cgc_fs);              // get switch operand without popping it
       jump_cond_reg_reg(EQ, lbl1, reg_X, reg_Y);

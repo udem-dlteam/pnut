@@ -42,8 +42,9 @@
 // - How functions (local variables, parameters, return values) are implemented.
 // - Character and string literals.
 //
-// Importantly, this is done without dynamic code evaluation (`eval` command)
-// that would make the code more difficult to read and audit.
+// Importantly, this is done without dynamic code execution of strings
+// (`e_v_a_l` command), which would make the code more difficult to read and
+// audit.
 //
 // Features that don't have a direct mapping to shell (goto, switch
 // fall-through, floating point numbers), or that are not used in pnut's source

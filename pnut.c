@@ -169,7 +169,7 @@
   // #define INCLUDE_ALL_RUNTIME
 
   // Only emit shell code output at the end of the compilation.
-  // This is used to evaluate the negative performance impact of allocating
+  // This is used to measure the negative performance impact of allocating
   // There is no practical reason to enable this option.
   // #define ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
 
@@ -371,7 +371,7 @@
 // M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
 // Note that unlike the standard ternary operator, both sides are always
-// evaluated, and the condition expression is evaluated twice.
+// computed, and the condition expression is computed twice.
 #define TERNARY(cond, if_true, if_false) (((cond) == 0) * (if_false) + ((cond) != 0) * (if_true))
 #else
 #define TERNARY(cond, if_true, if_false) ((cond) ? (if_true) : (if_false))
@@ -2006,15 +2006,15 @@ void handle_define() {
   set_symbol_tag(macro, cons(read_macro_tokens(args), args_count));
 }
 
-int eval_constant(ast expr, bool if_macro) {
+int compute_constant(ast expr, bool if_macro) {
   int op = get_op(expr);
 
-  int val0, val1; // Results of evaluating child0 and child1, for non-lazy operators
+  int val0, val1; // Results of computing child0 and child1, for non-lazy operators
   if (op != '?' && op != AMP_AMP && op != BAR_BAR && op != '(') {
-    // For non-lazy operators, we can pre-evaluate the children.
-    // This makes eval_constant's shell version much shorter and easier to review.
-    if (get_nb_children(expr) >= 1) val0 = eval_constant(get_child(expr, 0), if_macro);
-    if (get_nb_children(expr) >= 2) val1 = eval_constant(get_child(expr, 1), if_macro);
+    // For non-lazy operators, we can precompute the children.
+    // This makes compute_constant's shell version much shorter and easier to review.
+    if (get_nb_children(expr) >= 1) val0 = compute_constant(get_child(expr, 0), if_macro);
+    if (get_nb_children(expr) >= 2) val1 = compute_constant(get_child(expr, 1), if_macro);
   }
 
   switch (op) {
@@ -2063,19 +2063,19 @@ int eval_constant(ast expr, bool if_macro) {
       }
 
     case '?':
-      val0 = eval_constant(get_child(expr, 0), if_macro);
+      val0 = compute_constant(get_child(expr, 0), if_macro);
       if (val0) {
-        return eval_constant(get_child(expr, 1), if_macro);
+        return compute_constant(get_child(expr, 1), if_macro);
       } else {
-        return eval_constant(get_child(expr, 2), if_macro);
+        return compute_constant(get_child(expr, 2), if_macro);
       }
 
     case AMP_AMP:
     case BAR_BAR:
-      val0 = eval_constant(get_child(expr, 0), if_macro);
+      val0 = compute_constant(get_child(expr, 0), if_macro);
       if (op == AMP_AMP && !val0) return 0;
       else if (op == BAR_BAR && val0) return 1;
-      else return eval_constant(get_child(expr, 1), if_macro);
+      else return compute_constant(get_child(expr, 1), if_macro);
 
     case '(': // defined operators are represented as fun calls
       if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
@@ -2093,7 +2093,7 @@ int eval_constant(ast expr, bool if_macro) {
         syntax_error("identifiers are not allowed in constant expression");
       }
 
-      return 0; // Undefined identifiers evaluate to 0
+      return 0; // Undefined identifiers count as 0
 
     default:
       dump_op(op);
@@ -2104,7 +2104,7 @@ int eval_constant(ast expr, bool if_macro) {
 
 ast parse_constant_expression();
 
-int evaluate_if_condition() {
+int compute_if_condition() {
   bool prev_skip_newlines = skip_newlines;
   int previous_mask = if_macro_mask;
   ast expr;
@@ -2118,7 +2118,7 @@ int evaluate_if_condition() {
   // Restore the previous value
   if_macro_mask = previous_mask;
   skip_newlines = prev_skip_newlines;
-  return eval_constant(expr, true);
+  return compute_constant(expr, true);
 }
 
 #ifdef SH_SUPPORT_SHELL_INCLUDE
@@ -2203,10 +2203,10 @@ void handle_preprocessor_directive() {
 #endif
       get_tok_macro(true); // Skip the macro name
     } else if (tok == IF_KW) {
-      temp = evaluate_if_condition();
+      temp = compute_if_condition();
       push_if_macro_mask(temp != 0);
     } else if (tok == IDENTIFIER && val == ELIF_ID) {
-      temp = evaluate_if_condition() ;
+      temp = compute_if_condition() ;
       if (prev_macro_mask() && !if_macro_executed) {
         if_macro_mask = temp != 0;
         if_macro_executed |= if_macro_mask;
@@ -3492,8 +3492,8 @@ ast parse_enum() {
 #endif
             break;
           default:
-            // Evaluate the constant expression to get its integer value
-            value = new_ast0(last_literal_type, -eval_constant(value, false)); // negative value to indicate it's a small integer
+            // Compute the constant expression to get its integer value
+            value = new_ast0(last_literal_type, -compute_constant(value, false)); // negative value to indicate it's a small integer
         }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
         last_literal_type = get_op(value);
@@ -3943,7 +3943,7 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
       } else {
         arr_size_expr = parse_constant_expression();
         if (arr_size_expr == 0) parse_error("Array size must be an integer constant", tok);
-        val = eval_constant(arr_size_expr, false);
+        val = compute_constant(arr_size_expr, false);
       }
       result = new_ast2('[', get_inner_type(parent_type_parent), val);
       update_inner_type(parent_type_parent, result);
@@ -4462,7 +4462,7 @@ ast parse_comma_expression_opt() {
 
 // A constant-expression cannot be a comma or assignment expression, so the
 // precedence climb starts at the ternary level. This may still parse
-// non-constant expressions, checks are done in eval_constant.
+// non-constant expressions, checks are done in compute_constant.
 ast parse_constant_expression() {
   return parse_binary_expression(3); // prec 3 => start at ternary operator
 }
