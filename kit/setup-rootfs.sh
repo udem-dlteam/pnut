@@ -24,6 +24,8 @@ BOOTSTRAP_SHELL="bash-static"
 INCLUDE_UTILS=0
 SKIP_SHELL_BOOTSTRAP=0
 EXECUTE_BOOTSTRAP=0
+TCC_VERSION="0.9.27"
+TCC_LIBC="pnut_libc" # or mes_libc
 
 while [ $# -gt 0 ]; do
   case $1 in

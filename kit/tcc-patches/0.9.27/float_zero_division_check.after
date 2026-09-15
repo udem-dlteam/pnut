@@ -1,0 +1,7 @@
+#if HAVE_FLOAT
+            if (f2 == 0.0) {
+                if (const_wanted)
+                    tcc_error("division by zero in constant");
+                goto general_case;
+            }
+#endif
