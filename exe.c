@@ -25,7 +25,7 @@ void generate_exe();
 #endif
 
 #if defined(ONE_PASS_GENERATOR) && !defined(ONE_PASS_GENERATOR_NO_EARLY_OUTPUT)
-#define CODE_SIZE 100000
+#define CODE_SIZE 200000
 #else
 #define CODE_SIZE 5000000
 #endif
