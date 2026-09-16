@@ -56,19 +56,34 @@ void *realloc(void *ptr, size_t size) {
   return ptr;
 }
 
+// Assemble 64-bit floating point numbers from two 32-bit integers.
+double assemble_double(int high, int low) {
+  long long res = high;
+  res <<= 32;
+  res |= low;
+  return *((double *)&res);
+}
+
+// Minimal strtod supporting only the float literals appearing in the TCC and
+// mes libc sources compiled during the bootstrap. The IEEE bit patterns are
+// assembled with integer operations and reinterpreted as a double, to work
+// around the lact of support for float literals and int-to-float casts.
 double strtod(const char *str, char **endptr) {
   if (strcmp(str, "0.0") == 0) {
     if (endptr) *endptr = (char *) str + 3;
-    return 0x0000000000000000;
+    return assemble_double(0x00000000, 0x00000000);
+  } else if (strcmp(str, "0.9999") == 0) {
+    if (endptr) *endptr = (char *) str + 6;
+    return assemble_double(0x3FEFFF2E, 0x48E8A71E);
   } else if (strcmp(str, "1.0") == 0) {
     if (endptr) *endptr = (char *) str + 3;
-    return 0x3FF0000000000000;
+    return assemble_double(0x3FF00000, 0x00000000);
   } else if (strcmp(str, "4294967296.0") == 0) {
     if (endptr) *endptr = (char *) str + 12;
-    return 0x41F0000000000000;
+    return assemble_double(0x41F00000, 0x00000000);
   } else {
     printf("strtod: Unknown string: %s\n", str);
-    pnut_abort("stdtod: Unknown string: ");
+    pnut_abort("strtod: Unknown string: ");
     return 0;
   }
 }
