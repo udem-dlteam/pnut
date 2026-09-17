@@ -1,0 +1,5 @@
+            /* now we can generate the number */
+            /* XXX: should patch directly float number */
+#ifdef HAVE_FLOAT
+            d = (double)bn[1] * 4294967296.0 + (double)bn[0];
+#endif
