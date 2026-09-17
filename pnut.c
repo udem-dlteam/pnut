@@ -54,12 +54,6 @@
 //    General purpose profile used to build pnut-exe for real world usage. This
 //    profile strikes a balance between features, usability and code size.
 //
-// - BOOTSTRAP_TCC:
-//    Profile used to bootstrap TCC from pnut-exe. This profile enables partial
-//    support for a few more features needed to compile TCC. These features are
-//    not implemented correctly, and so are not enabled in the general purpose
-//    profile.
-//
 // Additionally, if compilation time and code size are not a concern, or to help
 // debugging, the NICE_UX and SAFE_MODE options can be enabled to turn on extra
 // runtime checks and better error messages.
@@ -234,11 +228,6 @@
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
-  #endif
-
-  #ifdef BOOTSTRAP_TCC
-    #define BOOTSTRAP_LONG
-    #define NO_BUILTIN_LIBC
   #endif
 
   // Disabled options:
