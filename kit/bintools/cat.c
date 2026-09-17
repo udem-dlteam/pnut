@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #ifndef ENTRY_POINT
 #define ENTRY_POINT main
@@ -15,18 +16,29 @@
 
 #define BUF_SIZE 1024
 
+void cat_file_error(char *filename) {
+  printf("cp: %s: no such file or directory\n", filename);
+  exit(1);
+}
+
+void cat_fd_error(char *filename) {
+  printf("cp: %s: failed to read or write\n", filename);
+  exit(1);
+}
+
 void cat_fd(int fd) {
   char buf[BUF_SIZE];
   int n = BUF_SIZE;
   while (n == BUF_SIZE) {
     n = read(fd, buf, BUF_SIZE);
-    if (n < 0 || write(1, buf, n) != n) exit(1);
+    if (n < 0) cat_fd_error("stdin");
+    if (write(1, buf, n) != n) cat_fd_error("stdout");
   }
 }
 
 void cat_file(char *filename) {
   int fd = open(filename, 0);
-  if (fd < 0) exit(1);
+  if (fd < 0) cat_file_error(filename);
   cat_fd(fd);
   close(fd);
 }
