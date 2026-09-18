@@ -1716,10 +1716,6 @@ void u64_to_obj(int *x) {
   if (I32_POSITIVE(x[0]) && x[1] == 0) { // "small int"
     val = -x[0];
   } else {
-    // putstr("0x");
-    // puthex_unsigned(x[1]);
-    // puthex_unsigned(x[0]);
-    // putchar('\n');
     val = alloc_obj(2);
     large_int_lo(val) = x[0];
     large_int_hi(val) = x[1];
