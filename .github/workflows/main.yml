@@ -603,7 +603,7 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils coreutils time
+          sudo apt-get install -y build-essential binutils coreutils time gcc-multilib
 
       - name: Bootstrap tcc from pnut and gcc
         run: |
