@@ -20,6 +20,7 @@ log() {
 : ${INSTALL_EXECS:=0}       # Default to not installing
 : ${MES_LIBC_VERSION:=0.27} # Default mes libc version
 : ${USE_GCC:=0}             # Default to not using gcc for bootstrapping TCC
+: ${STOP_AT_PNUT_EXE:=0}    # Default to not stopping at pnut bootstrap
 
 # MUST BE KEPT IN SYNC WITH kit/setup-rootfs.sh
 PNUT_ARCH=i386_linux
@@ -66,11 +67,17 @@ if [ $INSTALL_EXECS -eq 1 ]; then
   ./bintools cp ./pnut-exe /usr/bin/pnut-exe
   ./bintools chmod 755 /usr/bin/pnut-exe
 else
-  log "Skipping installation of bintools and pnut-exe as requested"
+  log "Skipping installation of bintools and pnut-exe because INSTALL_EXECS=0"
 fi
 
 # 6. Extract the rest of the files (now that mkdir is available)
 $BOOTSTRAP_SHELL ./jammed-no-exec.sh --force-no-exec
+
+# Early stop if requested, to allow testing the pnut-exe bootstrap.
+if [ $STOP_AT_PNUT_EXE -eq 1 ]; then
+  log "Stopping after pnut-exe bootstrap because STOP_AT_PNUT_EXE=1"
+  exit 0
+fi
 
 ################################################################################
 ################################ TCC bootstrap #################################
