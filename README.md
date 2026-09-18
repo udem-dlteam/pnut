@@ -126,35 +126,8 @@ To bootstrap `tcc` from `pnut-sh.sh`, the following steps are taken:
 3. Compile the `kit/bintools.c` using `pnut-exe` to produce binary utilities used for bootstrapping.
 4. Compile TCC using `pnut-exe`, then recompile it with TCC (a few times) to get the final `tcc` executable.
 
-The `./kit/setup-rootfs.sh` script can be used to create an isolated environment
-where the first 3 steps can be performed:
-
-```shell
-# Make jammed.sh archive (self-extracting shell script)
-> make kit/jammed.sh
-# Setup isolated root filesystem in "island" directory
-> ./kit/setup-rootfs.sh --dir "island" --path-to-jammed kit/jammed.sh --include-utils
-```
-
-To enter the isolated environment and run the bootstrap process, use:
-
-```shell
-# Enter the chroot environment
-> sudo chroot island /bin/bash
-# List files in the chroot
-bash-5.3$ . ls.sh
-# Extract files to initiate bootstrap
-bash-5.3$ . jammed.sh
-# Run the bootstrap process from the extracted files
-bash-5.3$ . bootstrap.sh
-```
-
-After the `bootstrap.sh` script finishes, the `pnut-exe` executable will be
-installed in `/usr/bin/`, along with the following utilities: `chmod`, `cp`,
-`mkdir`, `sha256sum`, `simple-patch`, `ungz`. These tools can then be used to
-compile TCC from source, like how it is done in
-[live-bootstrap](https://github.com/fosslinux/live-bootstrap/). Work to extend
-the bootstrap script to include TCC and GCC is ongoing.
+See [kit/README.md](kit/README.md) for more details on how to bootstrap TCC from
+`pnut-sh.sh`.
 
 ### Annotated Shell Scripts
 
