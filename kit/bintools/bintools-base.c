@@ -2,8 +2,9 @@
  * bintools.c: A bootstrap utility for various binary tools.
  *
  * Supported commands:
- *  cp: Copy files
  *  cat: Concatenate files
+ *  chmod: Change file permissions
+ *  cp: Copy files
  *  mkdir: Create directories
  *  sha256sum: Compute SHA256 checksums
  *  simple-patch: Apply simple patches
