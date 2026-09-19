@@ -540,6 +540,15 @@ jobs:
     strategy:
       matrix:
         bootstrap-shell: ["bash-i386-woody", "dash-i386-lenny", "ksh-i386-sarge", "zsh-i386-sarge"]
+        include:
+          - bootstrap-shell: bash-i386-woody
+            shell_executable: bash
+          - bootstrap-shell: dash-i386-lenny
+            shell_executable: dash
+          - bootstrap-shell: ksh-i386-sarge
+            shell_executable: ksh
+          - bootstrap-shell: zsh-i386-sarge
+            shell_executable: zsh
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -560,8 +569,10 @@ jobs:
 
           ./kit/setup-rootfs.sh \
             --dir "$ROOTFS_DIR" \
-            --bootstrap-shell "${{ matrix.bootstrap-shell }}" \
-            --execute-bootstrap
+            --bootstrap-shell "${{ matrix.bootstrap-shell }}"
+
+          sudo chroot $ROOTFS_DIR /bin/sh -c \
+            "sh jammed.sh && STOP_AT_PNUT_EXE=1 INSTALL_EXECS=1 BOOTSTRAP_SHELL=${{ matrix.shell_executable }} USE_GCC=0 sh bootstrap.sh"
 
           if [ ! -x "$ROOTFS_DIR/pnut-exe" ]; then
             echo "Missing or non-executable /pnut-exe in $ROOTFS_DIR"
@@ -581,6 +592,28 @@ jobs:
             echo "Unexpected exit code: $EXIT_CODE (expected 42)"
             exit 1
           fi
+
+  tcc-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils coreutils time gcc-multilib
+
+      - name: Bootstrap tcc from pnut and gcc
+        run: |
+          set -e
+
+          ./kit/test-bootstrap.sh --tcc-version 0.9.26
+          ./kit/test-bootstrap.sh --tcc-version 0.9.27
+
+          ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.26
+          ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.27
 
   pnut-variants-run:
     runs-on: ubuntu-latest

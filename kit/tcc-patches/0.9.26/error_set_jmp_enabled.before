@@ -1,0 +1,4 @@
+        s1->nb_errors = 0;
+        s1->error_set_jmp_enabled = 1;
+
+        preprocess_start(s1);

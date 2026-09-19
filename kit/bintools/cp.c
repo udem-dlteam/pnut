@@ -24,7 +24,7 @@
 #define O_WRONLY 1
 #endif
 
-void file_error(char *filename) {
+void cp_file_error(char *filename) {
   printf("cp: %s: no such file or directory\n", filename);
   exit(1);
 }
@@ -45,8 +45,8 @@ int ENTRY_POINT(int argc, char **argv) {
   src = open(argv[1], O_RDONLY);
   dst = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-  if (src <= 0) { file_error(argv[1]); }
-  if (dst <= 0) { file_error(argv[2]); }
+  if (src <= 0) { cp_file_error(argv[1]); }
+  if (dst <= 0) { cp_file_error(argv[2]); }
 
   while ((len = read(src, buffer, BUF_SIZE)) != 0) {
     write(dst, buffer, len);

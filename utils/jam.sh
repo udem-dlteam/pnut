@@ -237,9 +237,21 @@ process_dir() { # $1: directory to process
   done
 }
 
+# if interactive shell, read stdin to get the list of files to include, otherwise, use the command line arguments
+if [ -t 0 ]; then
+  if [ $# -eq 0 ]; then
+    error "No files specified. Please provide files as arguments or pipe them to stdin."
+  fi
+else
+  # Read from stdin as long as there are lines
+  while IFS= read -r line; do
+    set -- "$@" "$line"
+  done
+fi
+
 gen_header
 
-# Loop over the arguments, if it's a file, then
+# Loop over the arguments
 for arg in "$@"; do
   # if the file has a ':' character in it, overwrite the path with whatever is after the ':'
   path=${arg##*:}

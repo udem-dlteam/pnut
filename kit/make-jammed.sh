@@ -1,128 +1,13 @@
 #! /bin/sh
-# make-jammed.sh: Create the jammed.sh shell archive script containing all
-#                 required files for bootstrapping pnut and beyond!
+# make-jammed.sh: simple wrapper over list-bootstrap-files.sh and jam.sh to
+#                 create a self-extracting archive of the bootstrap files.
 # Example usage:
-#   ./kit/make-jammed.sh
-#
-# Options:
-#   -b, --binary: Pass the --binary option to the jam utility
-#   --include-utils: Include some debug scripts in the jammed archive.
+#   ./kit/make-jammed.sh <list-bootstrap-files.sh options>
 
-set -e -u
+set -eu
 
-error() {
-  printf "Error: %s\n" "$1" >&2
-  exit 1
-}
-
-readonly TEMP_DIR="kit"
-
-: ${PNUT_OPTIONS:=} # Default to empty options
-JAM_OPT=""
-INCLUDE_UTILS=0
-
-while [ $# -gt 0 ]; do
-  case $1 in
-    -b|--binary)     JAM_OPT="$JAM_OPT --binary"; shift 1 ;;
-    --include-utils) INCLUDE_UTILS=1;             shift 1 ;;
-    *)               error "Unknown option: $1"           ;;
-  esac
-done
-
-mkdir -p "$TEMP_DIR"
-
-program_dependencies() {
-  file="$1"
-  comp_options="$2"
-
-  echo $(gcc -MM "$file" $comp_options | tr ':' '\n' | tr '\\' ' ' | sed '1d')
-}
-
-# Prepare pnut-sh.sh
-PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dtarget_sh -DPNUT_BOOTSTRAP"
-gcc -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
-./$TEMP_DIR/pnut-sh $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
-
-# Prepare bintools
-make kit/bintools.c
-
-FILES_TO_INCLUDE="
-$TEMP_DIR/pnut-sh.sh:pnut-sh.sh
-$(program_dependencies "pnut.c" "-Dtarget_i386_linux -DBOOTSTRAP_TCC")
-kit/bintools.c:bintools.c
-portable_libc/include/fcntl.h:fcntl.h
-portable_libc/include/math.h:math.h
-portable_libc/include/pnut_lib.h:pnut_lib.h
-portable_libc/include/setjmp.h:setjmp.h
-portable_libc/include/stdio.h:stdio.h
-portable_libc/include/stdlib.h:stdlib.h
-portable_libc/include/string.h:string.h
-portable_libc/include/sys/stat.h:stat.h
-portable_libc/include/sys/types.h:types.h
-portable_libc/include/unistd.h:unistd.h
-portable_libc/include/stdarg.h:stdarg.h
-portable_libc/src/math.c:math.c
-portable_libc/src/pnut_lib.c:pnut_lib.c
-portable_libc/src/setjmp.c:setjmp.c
-portable_libc/src/stdio.c:stdio.c
-portable_libc/src/stdlib.c:stdlib.c
-portable_libc/src/string.c:string.c
-kit/bintools-libc.c:bintools-libc.c
-
-portable_libc/include
-portable_libc/src
-portable_libc/libc.c
-
-kit/bootstrap.sh:bootstrap.sh
-"
-
-if [ $INCLUDE_UTILS -eq 1 ]; then
-FILES_TO_INCLUDE="$FILES_TO_INCLUDE
-utils/cat.sh:cat.sh
-utils/ls.sh:ls.sh
-utils/touch.sh:touch.sh
-utils/wc.sh:wc.sh
-"
-fi
-
-FILES=""    # Paths of all files added to jam archive
-JAM_ARGS="" # Paths of all files to include (with path override)
-
-traverse_dir() {
-  dir=$1
-
-  if [ -d "$dir" ]; then
-    for file in "$dir"/*; do
-      traverse "$file"
-    done
-  fi
-}
-
-traverse() { # $1: file, $2: extraction path (optional), $3: parent directory substitution (optional)
-  file=$1
-
-  if [ -d "$file" ]; then
-    traverse_dir "$file"
-  elif [ -f "$file" ]; then
-    # Just a simple file, add it
-    JAM_ARGS="$JAM_ARGS $file${2:+:$2}"
-    FILES="$FILES $file"
-  else
-    printf "Error: '$file' not a file or directory.\n" >&2
-    exit 1
-  fi
-}
-
-for file in $FILES_TO_INCLUDE; do
-  path=${file##*:}
-  if [ "$path" != "$file" ]; then
-    traverse "${file%:*}" "$path"
-  else
-    traverse "$file"
-  fi
-done
-
-cat << 'EOF' > "$TEMP_DIR/jammed.sh"
+# Fail during extract if the extract bit is not set.
+cat << 'EOF'
 #! /bin/sh
 #
 # Check that the script is executable.
@@ -138,16 +23,4 @@ fi
 
 EOF
 
-./utils/jam.sh $JAM_OPT $JAM_ARGS >> "$TEMP_DIR/jammed.sh"
-
-# Evaluate disk usage:
-jammed_size=$(wc -c "$TEMP_DIR/jammed.sh" | awk '{print $1}')
-
-# Compare to the sum of each file
-files_size=$(wc -c $FILES | grep total | awk '{print $1}')
-
-echo "$TEMP_DIR/jammed.sh: $jammed_size bytes"
-echo "Individual files size: $files_size bytes"
-echo "Ratio: $(echo "scale=3; $jammed_size / $files_size" | bc -l)"
-
-# wc $FILES
+PNUT_OPTIONS="${PNUT_OPTIONS:-}" kit/list-bootstrap-files.sh $@ | ./utils/jam.sh

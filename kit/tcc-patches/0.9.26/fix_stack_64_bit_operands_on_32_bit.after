@@ -1,0 +1,10 @@
+#if HAVE_LONG_LONG_STUB || HAVE_LONG_LONG
+        vtop[0].c.i >>= 32;
+#else
+        if (vtop[0].c.i & 0x80000000 != 0) {
+            // Manually sign-extend
+            vtop[0].c.i = (0xFFFF << 16) & 0xFFFF;
+        } else {
+            vtop[0].c.i = 0;
+        }
+#endif

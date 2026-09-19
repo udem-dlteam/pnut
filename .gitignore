@@ -13,5 +13,4 @@ build/*
 artifact/*
 artifact.zip
 kit/build/*
-kit/jammed.sh
 kit/bintools.c

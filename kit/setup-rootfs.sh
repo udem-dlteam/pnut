@@ -2,13 +2,19 @@
 # setup-rootfs.sh: Setup a minimal root filesystem for bootstrapping pnut
 #
 # Example usage:
-#   ./kit/setup-rootfs.sh --dir island --jammed-path build/kit/jammed.sh
+#   ./kit/setup-rootfs.sh --dir island --bootstrap-shell bash-static --execute-bootstrap
 # Options:
 #   --dir <path>: Path to create the root filesystem in (required)
-#   --path-to-jammed <path>: Path to the jammed.sh script (required)
 #   --bootstrap-shell <shell_name>: Name of the bootstrap shell to use (default: bash)
-#   --include-utils: Include some scripts outside the jammed archive.
 #   --skip-shell-bootstrap: Skip bootstrapping pnut-exe from the shell
+#   --execute-bootstrap: Execute the bootstrap scripts inside the chroot after setup
+#
+# The following options are passed directly to make-jammed.sh and control which
+# files are included in the jammed.sh archive seed:
+#   --include-utils: Seed the environment with debugging scripts.
+#   --extract-archives: Extract .tar.gz files instead of passing them to jam.sh
+#   --mes-libc: Use mes libc instead of pnut libc (default: pnut libc)
+#   --tcc-version: Version of tcc to use (default: 0.9.27)
 
 set -e -u
 
@@ -21,9 +27,9 @@ readonly TEMP_DIR="build/kit"
 
 CHROOT_DIR=""
 BOOTSTRAP_SHELL="bash-static"
-INCLUDE_UTILS=0
 SKIP_SHELL_BOOTSTRAP=0
 EXECUTE_BOOTSTRAP=0
+JAMMED_OPTS=""
 
 while [ $# -gt 0 ]; do
   case $1 in
@@ -37,10 +43,6 @@ while [ $# -gt 0 ]; do
       BOOTSTRAP_SHELL="$2"
       shift 2
       ;;
-    --include-utils)
-      INCLUDE_UTILS=1
-      shift 1
-      ;;
     --skip-shell-bootstrap)
       SKIP_SHELL_BOOTSTRAP=1
       shift 1
@@ -49,6 +51,20 @@ while [ $# -gt 0 ]; do
       # Executes the bootstrap scripts inside of the chroot after setup.
       EXECUTE_BOOTSTRAP=1
       shift 1
+      ;;
+
+    # The following options are passed to make-jammed.sh to control which files
+    # are included in the jammed.sh archive.
+    --include-utils|--extract-archives|--mes-libc)
+      # These options are passed to list-bootstrap-files.sh to control which files are included in the jammed.sh archive.
+      # They are not used directly by this script, but are forwarded to list-bootstrap-files.sh when creating the jammed.sh archive.
+      JAMMED_OPTS="$JAMMED_OPTS $1"
+      shift 1
+      ;;
+    --tcc-version)
+      if [ $# -lt 2 ]; then error "Missing argument for --tcc-version option."; fi
+      JAMMED_OPTS="$JAMMED_OPTS $1 $2"
+      shift 2
       ;;
     *) error "Unknown option: $1";;
   esac
@@ -82,79 +98,63 @@ case $BOOTSTRAP_SHELL in
     ;;
   "bash-i386-woody")
     if [ ! -f "kit/scavenge-shells/bash-i386-woody.tar" ]; then
-      echo "Please run kit/scavenge-shells/bash-i386-woody.sh to prepare the scavenged bash-2.05a from Debian 3.0."
-      exit 1
+      error "Please run kit/scavenge-shells/bash-i386-woody.sh to prepare the scavenged bash-2.05a from Debian 3.0."
     fi
     tar -xf "kit/scavenge-shells/bash-i386-woody.tar" -C "$TEMP_DIR"
     bash "$TEMP_DIR/install.sh" "$TEMP_DIR" "$CHROOT_DIR"
-    PNUT_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT -DSH_PRINTF_PERCENT_B_COMPAT"
+    EXTRA_PNUT_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT -DSH_PRINTF_PERCENT_B_COMPAT"
     SHELL_EXE="bash"
     ;;
   "zsh-i386-sarge")
     if [ ! -f "kit/scavenge-shells/zsh-i386-sarge.tar" ]; then
-      echo "Please run kit/scavenge-shells/zsh-i386-sarge.sh to prepare the scavenged zsh-4.2.5 from Debian 3.1."
-      exit 1
+      error "Please run kit/scavenge-shells/zsh-i386-sarge.sh to prepare the scavenged zsh-4.2.5 from Debian 3.1."
     fi
     tar -xf "kit/scavenge-shells/zsh-i386-sarge.tar" -C "$TEMP_DIR"
     bash "$TEMP_DIR/install.sh" "$TEMP_DIR" "$CHROOT_DIR"
-    PNUT_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT"
+    EXTRA_PNUT_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT"
     SHELL_EXE="zsh"
     ;;
   "ksh-i386-sarge")
     if [ ! -f "kit/scavenge-shells/ksh-i386-sarge.tar" ]; then
-      echo "Please run kit/scavenge-shells/ksh-i386-sarge.sh to prepare the scavenged ksh-88-r6 from Debian 3.1."
-      exit 1
+      error "Please run kit/scavenge-shells/ksh-i386-sarge.sh to prepare the scavenged ksh-88-r6 from Debian 3.1."
     fi
     tar -xf "kit/scavenge-shells/ksh-i386-sarge.tar" -C "$TEMP_DIR"
     bash "$TEMP_DIR/install.sh" "$TEMP_DIR" "$CHROOT_DIR"
-    PNUT_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT -DSH_PRINTF_PERCENT_B_COMPAT"
+    EXTRA_PNUT_OPTIONS="-DRT_FREE_UNSETS_VARS_NOT -DSH_PRINTF_PERCENT_B_COMPAT"
     SHELL_EXE="ksh"
     ;;
   "dash-i386-lenny")
     if [ ! -f "kit/scavenge-shells/dash-i386-lenny.tar" ]; then
-      echo "Please run kit/scavenge-shells/dash-i386-lenny.sh to prepare the scavenged dash-0.5.4 from Debian 5.0."
-      exit 1
+      error "Please run kit/scavenge-shells/dash-i386-lenny.sh to prepare the scavenged dash-0.5.4 from Debian 5.0."
     fi
     tar -xf "kit/scavenge-shells/dash-i386-lenny.tar" -C "$TEMP_DIR"
     bash "$TEMP_DIR/install.sh" "$TEMP_DIR" "$CHROOT_DIR"
-    PNUT_OPTIONS="-DNO_TERNARY_SUPPORT -DSH_PRINTF_PERCENT_B_COMPAT -DSH_SHORT_PRINTF_LINES"
+    EXTRA_PNUT_OPTIONS="-DNO_TERNARY_SUPPORT -DSH_PRINTF_PERCENT_B_COMPAT -DSH_SHORT_PRINTF_LINES"
     SHELL_EXE="dash"
     ;;
   *)
-    echo "Error: Unsupported bootstrap shell: $BOOTSTRAP_SHELL"
-    exit 1
+    error "Error: Unsupported bootstrap shell: $BOOTSTRAP_SHELL"
     ;;
 esac
 
-# Prepare jammed.sh
-PNUT_OPTIONS="${PNUT_OPTIONS:-}" ./kit/make-jammed.sh --include-utils > "$TEMP_DIR/jammed.sh"
-
-# Copy jammed.sh
-cp "kit/jammed.sh" "$CHROOT_DIR/jammed.sh"
+PNUT_OPTIONS="${EXTRA_PNUT_OPTIONS:-}" ./kit/make-jammed.sh $JAMMED_OPTS > "$TEMP_DIR/jammed.sh"
+cp "$TEMP_DIR/jammed.sh" "$CHROOT_DIR/jammed.sh"
 chmod +x "$CHROOT_DIR/jammed.sh"
 
-# Optionally include some utility scripts
-if [ $INCLUDE_UTILS -eq 1 ]; then
-  cp utils/cat.sh   "$CHROOT_DIR/cat.sh"
-  cp utils/ls.sh    "$CHROOT_DIR/ls.sh"
-  cp utils/touch.sh "$CHROOT_DIR/touch.sh"
-  cp utils/wc.sh    "$CHROOT_DIR/wc.sh"
-  cp utils/sift.sh  "$CHROOT_DIR/sift.sh"
-  cp utils/more.sh  "$CHROOT_DIR/more.sh"
-fi
-
 if [ $SKIP_SHELL_BOOTSTRAP -eq 1 ]; then
-  echo "Skipping shell bootstrap as requested."
   # Prebuild pnut-exe with gcc to skip slow shell bootstrap
-  echo "Prebuilding pnut-exe with gcc..."
-  PNUT_EXE_OPTIONS="-Dtarget_i386_linux -DONE_PASS_GENERATOR -DSAFE_MODE"
-  gcc pnut.c \
+  echo "Skipping shell bootstrap by precompiling pnut-exe"
+  # MUST BE KEPT IN SYNC WITH kit/bootstrap.sh
+  readonly PNUT_ARCH=i386_linux
+  readonly PNUT_EXE_OPTIONS="$EXTRA_PNUT_OPTIONS -Dtarget_$PNUT_ARCH -DONE_PASS_GENERATOR"
+  readonly PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_OPTIONS -DSUPPORT_EMULATED_INT64 -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DNO_BUILTIN_LIBC"
+  cc -std=c99 pnut.c \
     $PNUT_EXE_OPTIONS \
-    -o $TEMP_DIR/pnut-exe-by-gcc
+    -o $TEMP_DIR/pnut-exe-by-cc
 
-  ./$TEMP_DIR/pnut-exe-by-gcc pnut.c \
+  ./$TEMP_DIR/pnut-exe-by-cc pnut.c \
      -DBOOTSTRAP_TCC \
-     $PNUT_EXE_OPTIONS \
+     $PNUT_EXE_TCC_OPTIONS \
      -o "$CHROOT_DIR/pnut-exe"
 fi
 
@@ -162,8 +162,8 @@ if [ $EXECUTE_BOOTSTRAP -eq 1 ]; then
   echo "Executing bootstrap script inside chroot..."
   sudo chroot "$CHROOT_DIR" /bin/sh -c "sh jammed.sh && INSTALL_EXECS=1 BOOTSTRAP_SHELL=/bin/$SHELL_EXE sh bootstrap.sh"
 else
-  echo "Bootstrap environment setup. You can now chroot into $CHROOT_DIR and run the jammed script:"
+  echo "You can now chroot into the bootstrap environment at $CHROOT_DIR and run the jammed script:"
   echo "  sudo chroot $CHROOT_DIR /bin/sh"
   echo "  $ sh jammed.sh"
-  echo "  $ INSTALL_EXECS=1 BOOTSTRAP_SHELL=sh sh bootstrap.sh"
+  echo "  $ INSTALL_EXECS=0 BOOTSTRAP_SHELL=/bin/$SHELL_EXE sh bootstrap.sh"
 fi

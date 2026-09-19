@@ -12,7 +12,7 @@ printf_timing() {
 }
 
 # Make sure the jammed.sh script is up-to-date
-./kit/make-jammed.sh
+./kit/make-jammed.sh > "$TEMP_DIR/jammed.sh"
 
 for BOOTSTRAP_SHELL in ksh dash bash yash osh zsh; do
   root_dir=$(pwd)
