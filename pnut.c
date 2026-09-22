@@ -4458,7 +4458,9 @@ ast parse_statement() {
   ast child1;
   ast child2;
   ast child3;
+#ifdef SUPPORT_GOTO
   int start_tok;
+#endif
 
   if (tok == IF_KW) {
 
@@ -4572,10 +4574,15 @@ ast parse_statement() {
 
   } else {
 
+#ifdef SUPPORT_GOTO
     start_tok = tok;
+#endif
 
     result = parse_comma_expression_opt();
 
+#ifdef SUPPORT_GOTO
+
+    // labeled statement: an unparenthesized identifier followed by a colon
     if (tok == ':' && start_tok != '(' && get_op(result) == IDENTIFIER) {
 
       get_tok(); // Skip :
@@ -4589,6 +4596,11 @@ ast parse_statement() {
       expect_tok(';');
 
     }
+#else
+
+    expect_tok(';');
+
+#endif
   }
 
   return result;
