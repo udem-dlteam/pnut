@@ -2661,9 +2661,7 @@ void begin_macro_expansion(int ident, int tokens, int args) {
 // The macro_is_already_expanding function is buggy and has false positives in
 // the repl example. Disable it until we rework macro argument expansion as
 // described in https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html.
-#ifdef ALLOW_RECURSIVE_MACROS
-#define macro_is_already_expanding(ident) false
-#else
+#ifndef ALLOW_RECURSIVE_MACROS
 // Search the macro stack to see if the macro is already expanding.
 bool macro_is_already_expanding(int ident) {
   int i = macro_stack_ix;
@@ -2696,11 +2694,14 @@ bool attempt_macro_expansion(int macro) {
   // We must save the tokens because the macro may be redefined while reading the arguments
   int tokens = car(symbol_tag(macro));
 
+#ifndef ALLOW_RECURSIVE_MACROS
   if (macro_is_already_expanding(macro)) { // Self referencing macro
     tok = IDENTIFIER;
     val = macro;
     return false;
-  } else if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
+  } else
+#endif
+  if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
