@@ -444,12 +444,13 @@ void putstr(char *str) {
 }
 
 #if defined(PNUT_SH) || defined(PNUT_AWK)
+
 // When compiling pnut-sh or pnut-awk, we use the built-in printf function to
 // output integers in decimal, hex and octal.
 
 #define putint(n) printf("%d", n)
-#define puthex_unsigned(n) printf("%x", n)
-#define putoct_unsigned(n) printf("%o", n)
+#define puthex_unsigned(n) printf("0x%x", n)
+#define putoct_unsigned(n) printf("0%o", n)
 
 #else
 
@@ -468,22 +469,37 @@ void putint(int n) {
   }
 }
 
-#if defined(target_sh) || defined(target_awk)
+// note: in #else of #if defined(PNUT_SH) || defined(PNUT_AWK)
+#if defined(target_sh) && (defined(target_sh) || defined(target_awk))
 
-// Output unsigned integer in hex
-void puthex_unsigned(int n) {
+// Output unsigned integer in hex, no 0x prefix
+void puthex_unsigned_aux(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if ((n >> 4) & 0x0fffffff) puthex_unsigned((n >> 4) & 0x0fffffff);
+  if ((n >> 4) & 0x0fffffff) puthex_unsigned_aux((n >> 4) & 0x0fffffff);
   putchar("0123456789abcdef"[n & 15]);
 }
 
-// Output unsigned integer in octal
-void putoct_unsigned(int n) {
+// Output unsigned integer in hex, with 0x prefix
+void puthex_unsigned(int n) {
+  putchar('0');
+  putchar('x');
+  puthex_unsigned_aux(n);
+}
+
+// Output unsigned integer in octal, no 0 prefix
+void putoct_unsigned_aux(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
+  if ((n >> 3) & 0x1fffffff) putoct_unsigned_aux((n >> 3) & 0x1fffffff);
   putchar('0' + (n & 7));
 }
-#endif // defined(target_sh) || defined(target_awk)
+
+// Output unsigned integer in octal, with 0 prefix
+void putoct_unsigned(int n) {
+  putchar('0');
+  putoct_unsigned_aux(n);
+}
+
+#endif // defined(PARSE_NUMERIC_LITERAL_WITH_BASE) && (defined(target_sh) || defined(target_awk))
 
 #endif // defined(PNUT_SH) || defined(PNUT_AWK)
 
