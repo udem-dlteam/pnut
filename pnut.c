@@ -3389,7 +3389,7 @@ ast get_type_specifier(ast type_or_decl) {
         type_or_decl = get_child_('[', type_or_decl, 0);
         break;
       case '*':
-        type_or_decl = get_child_('*', type_or_decl, 0);
+        type_or_decl = get_child_('*', type_or_decl, 1);
         break;
       default:
         return type_or_decl;
