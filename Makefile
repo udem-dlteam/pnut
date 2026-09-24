@@ -1,3 +1,6 @@
+# Disable built-in suffix rules.
+.SUFFIXES:
+
 .PHONY: \
 	pnut-sh pnut-sh.sh pnut-sh-bootstrapped.sh \
 	pnut-awk pnut-awk.awk pnut-awk-bootstrapped.awk \

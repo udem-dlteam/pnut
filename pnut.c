@@ -444,12 +444,13 @@ void putstr(char *str) {
 }
 
 #if defined(PNUT_SH) || defined(PNUT_AWK)
+
 // When compiling pnut-sh or pnut-awk, we use the built-in printf function to
 // output integers in decimal, hex and octal.
 
 #define putint(n) printf("%d", n)
-#define puthex_unsigned(n) printf("%x", n)
-#define putoct_unsigned(n) printf("%o", n)
+#define puthex_unsigned(n) printf("0x%x", n)
+#define putoct_unsigned(n) printf("0%o", n)
 
 #else
 
@@ -468,22 +469,37 @@ void putint(int n) {
   }
 }
 
-#if defined(target_sh) || defined(target_awk)
+// note: in #else of #if defined(PNUT_SH) || defined(PNUT_AWK)
+#if defined(target_sh) && (defined(target_sh) || defined(target_awk))
 
-// Output unsigned integer in hex
-void puthex_unsigned(int n) {
+// Output unsigned integer in hex, no 0x prefix
+void puthex_unsigned_aux(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if ((n >> 4) & 0x0fffffff) puthex_unsigned((n >> 4) & 0x0fffffff);
+  if ((n >> 4) & 0x0fffffff) puthex_unsigned_aux((n >> 4) & 0x0fffffff);
   putchar("0123456789abcdef"[n & 15]);
 }
 
-// Output unsigned integer in octal
-void putoct_unsigned(int n) {
+// Output unsigned integer in hex, with 0x prefix
+void puthex_unsigned(int n) {
+  putchar('0');
+  putchar('x');
+  puthex_unsigned_aux(n);
+}
+
+// Output unsigned integer in octal, no 0 prefix
+void putoct_unsigned_aux(int n) {
   // Because n is signed, we clear the upper bits after shifting in case n was negative
-  if ((n >> 3) & 0x1fffffff) putoct_unsigned((n >> 3) & 0x1fffffff);
+  if ((n >> 3) & 0x1fffffff) putoct_unsigned_aux((n >> 3) & 0x1fffffff);
   putchar('0' + (n & 7));
 }
-#endif // defined(target_sh) || defined(target_awk)
+
+// Output unsigned integer in octal, with 0 prefix
+void putoct_unsigned(int n) {
+  putchar('0');
+  putoct_unsigned_aux(n);
+}
+
+#endif // defined(PARSE_NUMERIC_LITERAL_WITH_BASE) && (defined(target_sh) || defined(target_awk))
 
 #endif // defined(PNUT_SH) || defined(PNUT_AWK)
 
@@ -764,55 +780,63 @@ int alloc_obj(const int size) {
   return (heap_alloc - size);
 }
 
-int get_op(const ast node) {
-  return heap[node] & 1023;
-}
-
-ast get_nb_children(const ast node) {
-  return heap[node] >> 10;
-}
-
 // Because everything is an int in pnut, it's easy to make mistakes and pass the
 // wrong node type to a function. These versions of get_child take the input
 // and/or output node type and checks that the node has the expected type before
 // returning the child node.
 // It also checks that the index is within bounds.
 #ifdef SAFE_MODE
+int get_op_checked(char* file, int line, ast node) {
+  if (node <= 0 || node >= heap_alloc) {
+    printf("%s:%d: get_op: node %d out of bounds (heap_alloc = %d)\n", file, line, node, heap_alloc);
+    exit(1);
+  }
+  return heap[node] & 1023;
+}
+
+ast get_nb_children_checked(char* file, int line, const ast node) {
+  if (node <= 0 || node >= heap_alloc) {
+    printf("%s:%d: get_nb_children: node %d out of bounds (heap_alloc = %d)\n", file, line, node, heap_alloc);
+    exit(1);
+  }
+  return heap[node] >> 10;
+}
+
 int get_val_checked(char* file, int line, ast node) {
-  if (get_nb_children(node) != 0) {
-    printf("%s:%d: get_val called on node %d with %d children\n", file, line, get_op(node), get_nb_children(node));
+  if (get_nb_children_checked(file, line, node) != 0) {
+    printf("%s:%d: get_val called on node %d with %d children\n", file, line, get_op_checked(file, line, node), get_nb_children_checked(file, line, node));
     exit(1);
   }
   return heap[node+1];
 }
 
 int get_val_go(char* file, int line, int expected_node, ast node) {
-  if (get_op(node) != expected_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_node, get_op_checked(file, line, node));
     exit(1);
   }
   return get_val_checked(file, line, node);
 }
 
 void set_val_checked(char* file, int line, ast node, int val) {
-  if (get_nb_children(node) != 0) {
-    printf("%s:%d: set_val called on node %d with %d children\n", file, line, get_op(node), get_nb_children(node));
+  if (get_nb_children_checked(file, line, node) != 0) {
+    printf("%s:%d: set_val called on node %d with %d children\n", file, line, get_op_checked(file, line, node), get_nb_children_checked(file, line, node));
     exit(1);
   }
   heap[node+1] = val;
 }
 
 ast get_child_checked(char* file, int line, ast node, int i) {
-  if (i != 0 && i >= get_nb_children(node)) {
-    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op(node));
+  if (i != 0 && i >= get_nb_children_checked(file, line, node)) {
+    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op_checked(file, line, node));
     exit(1);
   }
   return heap[node+i+1];
 }
 
 void set_child_checked(char* file, int line, ast node, int i, ast child) {
-  if (i != 0 && i >= get_nb_children(node)) {
-    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op(node));
+  if (i != 0 && i >= get_nb_children_checked(file, line, node)) {
+    printf("%s:%d: Index %d out of bounds for node %d\n", file, line, i, get_op_checked(file, line, node));
     exit(1);
   }
   heap[node+i+1] = child;
@@ -822,8 +846,8 @@ void set_child_checked(char* file, int line, ast node, int i, ast child) {
 // returning the child node.
 ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i) {
   ast res = get_child_checked(file, line, node, i);
-  if (get_op(node) != expected_parent_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op_checked(file, line, node));
     exit(1);
   }
   return res;
@@ -833,12 +857,12 @@ ast get_child_go(char* file, int line, int expected_parent_node, ast node, int i
 // the child node has the expected operator before returning the child node.
 ast get_child__go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
   ast res = get_child_checked(file, line, node, i);
-  if (get_op(node) != expected_parent_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op_checked(file, line, node));
     exit(1);
   }
-  if (get_op(res) != expected_node) {
-    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(res));
+  if (get_op_checked(file, line, res) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op_checked(file, line, res));
     exit(1);
   }
   return res;
@@ -849,17 +873,19 @@ ast get_child__go(char* file, int line, int expected_parent_node, int expected_n
 // returning the child node.
 ast get_child_opt_go(char* file, int line, int expected_parent_node, int expected_node, ast node, int i) {
   ast res = get_child_checked(file, line, node, i);
-  if (get_op(node) != expected_parent_node) {
-    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op(node));
+  if (get_op_checked(file, line, node) != expected_parent_node) {
+    printf("%s:%d: Expected node %d, got %d\n", file, line, expected_parent_node, get_op_checked(file, line, node));
     exit(1);
   }
-  if (res > 0 && get_op(res) != expected_node) {
-    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op(res));
+  if (res > 0 && get_op_checked(file, line, res) != expected_node) {
+    printf("%s:%d: Expected child node %d, got %d\n", file, line, expected_node, get_op_checked(file, line, res));
     exit(1);
   }
   return res;
 }
 
+#define get_op(node) get_op_checked(__FILE__, __LINE__, node)
+#define get_nb_children(node) get_nb_children_checked(__FILE__, __LINE__, node)
 #define get_val(node) get_val_checked(__FILE__, __LINE__, node)
 #define get_val_(expected_node, node) get_val_go(__FILE__, __LINE__, expected_node, node)
 #define set_val(node, val) set_val_checked(__FILE__, __LINE__, node, val)
@@ -870,6 +896,14 @@ ast get_child_opt_go(char* file, int line, int expected_parent_node, int expecte
 #define get_child_opt_(expected_parent_node, expected_node, node, i) get_child_opt_go(__FILE__, __LINE__, expected_parent_node, expected_node, node, i)
 
 #else
+
+int get_op(const ast node) {
+  return heap[node] & 1023;
+}
+
+ast get_nb_children(const ast node) {
+  return heap[node] >> 10;
+}
 
 int get_val(const ast node) {
   return heap[node+1];
@@ -2661,9 +2695,7 @@ void begin_macro_expansion(int ident, int tokens, int args) {
 // The macro_is_already_expanding function is buggy and has false positives in
 // the repl example. Disable it until we rework macro argument expansion as
 // described in https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html.
-#ifdef ALLOW_RECURSIVE_MACROS
-#define macro_is_already_expanding(ident) false
-#else
+#ifndef ALLOW_RECURSIVE_MACROS
 // Search the macro stack to see if the macro is already expanding.
 bool macro_is_already_expanding(int ident) {
   int i = macro_stack_ix;
@@ -2696,11 +2728,14 @@ bool attempt_macro_expansion(int macro) {
   // We must save the tokens because the macro may be redefined while reading the arguments
   int tokens = car(symbol_tag(macro));
 
+#ifndef ALLOW_RECURSIVE_MACROS
   if (macro_is_already_expanding(macro)) { // Self referencing macro
     tok = IDENTIFIER;
     val = macro;
     return false;
-  } else if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
+  } else
+#endif
+  if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
@@ -3354,7 +3389,7 @@ ast get_type_specifier(ast type_or_decl) {
         type_or_decl = get_child_('[', type_or_decl, 0);
         break;
       case '*':
-        type_or_decl = get_child_('*', type_or_decl, 0);
+        type_or_decl = get_child_('*', type_or_decl, 1);
         break;
       default:
         return type_or_decl;
@@ -4458,7 +4493,9 @@ ast parse_statement() {
   ast child1;
   ast child2;
   ast child3;
+#ifdef SUPPORT_GOTO
   int start_tok;
+#endif
 
   if (tok == IF_KW) {
 
@@ -4572,10 +4609,15 @@ ast parse_statement() {
 
   } else {
 
+#ifdef SUPPORT_GOTO
     start_tok = tok;
+#endif
 
     result = parse_comma_expression_opt();
 
+#ifdef SUPPORT_GOTO
+
+    // labeled statement: an unparenthesized identifier followed by a colon
     if (tok == ':' && start_tok != '(' && get_op(result) == IDENTIFIER) {
 
       get_tok(); // Skip :
@@ -4589,6 +4631,11 @@ ast parse_statement() {
       expect_tok(';');
 
     }
+#else
+
+    expect_tok(';');
+
+#endif
   }
 
   return result;

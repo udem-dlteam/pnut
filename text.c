@@ -224,10 +224,8 @@ void print_escaped_text(text t, bool for_printf) {
   }
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
   else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
-    putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
-    putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   }
 #endif
@@ -263,10 +261,8 @@ void print_text(text t) {
   }
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
   else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_HEX)) {
-    putchar('0'); putchar('x');
     puthex_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER_OCT)) {
-    putchar('0'); // Note: This is not supported by zsh by default
     putoct_unsigned(TEXT_TO_INT(text_pool[t + 1]));
   }
 #endif

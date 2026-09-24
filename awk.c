@@ -359,7 +359,6 @@ text comp_rvalue_go(ast node, int outer_op) {
 #endif
           default:
             dump_node(child0);
-            dump_node(get_child(child0, 1));
             fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
             return 0;
         }
@@ -772,7 +771,7 @@ bool comp_switch(ast node) {
   }
 
   if (node == 0 || get_op(node) != '{') fatal_error("comp_statement: switch without body");
-  while (get_op(node) == '{') {
+  while (node != 0 &&get_op(node) == '{') {
     statement = get_child_('{', node, 0);
     node = get_child_('{', node, 1);
 
@@ -789,7 +788,7 @@ bool comp_switch(ast node) {
     // We keep compiling statements until we encounter a statement that returns or breaks.
     // Case and default nodes contain the first statement of the block so we process that one first.
     if (!comp_statement(statement, STMT_CTX_SWITCH)) {
-      while (get_op(node) == '{') {
+      while (node != 0 && get_op(node) == '{') {
         statement = get_child_('{', node, 0);
         node = get_child_('{', node, 1);
         if (comp_statement(statement, STMT_CTX_SWITCH)) break;
@@ -812,6 +811,7 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
   bool termination_lhs = false;
   bool termination_rhs = false;
   int start_cgc_locals = cgc_locals;
+  ast else_node = get_child_(IF_KW, node, 2);
 
   bool else_if = stmt_ctx & STMT_CTX_ELSE_IF;
   stmt_ctx = stmt_ctx & ~STMT_CTX_ELSE_IF; // Clear STMT_CTX_ELSE_IF bit to not pass it to the next if statement
@@ -827,15 +827,15 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
   termination_lhs = comp_statement(get_child_(IF_KW, node, 1), stmt_ctx);
   nest_level -= 1;
 
-  if (get_child_(IF_KW, node, 2) != 0) {
+  if (else_node != 0) {
     // Compile sequence of if else if using elif
-    if (get_op(get_child_(IF_KW, node, 2)) == IF_KW) {
-      termination_rhs = comp_if(get_child_(IF_KW, node, 2), stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
+    if (get_op(else_node) == IF_KW) {
+      termination_rhs = comp_if(else_node, stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
     } else {
       append_glo_decl(wrap_str_lit("} else {"));
       nest_level += 1;
       start_glo_decl_idx = glo_decl_ix;
-      termination_rhs = comp_statement(get_child_(IF_KW, node, 2), stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
+      termination_rhs = comp_statement(else_node, stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
       if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
       nest_level -= 1;
     }
