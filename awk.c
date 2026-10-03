@@ -531,11 +531,11 @@ void handle_printf_call(char *format_str, ast params) {
         case '4': case '5': case '6':
         case '7': case '8': case '9':
           if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
-          while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
+          while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
           has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
           has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
-          state += 1;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
-          format_str -= 1; // Reprocess non-numeric character
+          ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+          --format_str; // Reprocess non-numeric character
           break;
 
         // Precision
@@ -566,7 +566,7 @@ void handle_printf_call(char *format_str, ast params) {
         // The following options are the same between the shell's printf and C's printf
         case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X': case 'c':
           if (*format_str == 'l') {
-            while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
+            while (*format_str == 'l') ++format_str; // Skip the 'l' for long
             if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
               dump_string("format_str = ", specifier_start);
               fatal_error("printf: unsupported format specifier");
@@ -614,7 +614,7 @@ void handle_printf_call(char *format_str, ast params) {
     }
 
     // Keep accumulating the format string
-    format_str += 1;
+    ++format_str;
   }
 
   // Dump the remaining format string
@@ -759,7 +759,7 @@ bool comp_switch(ast node) {
 
   cgc_add_enclosing_switch(false);
 
-  nest_level += 1;
+  ++nest_level;
 
   node = get_child_(SWITCH_KW, node, 1);
 
@@ -783,7 +783,7 @@ bool comp_switch(ast node) {
     first_case = false;
     statement = last_stmt; // last_stmt is set by make_switch_pattern
 
-    nest_level += 1;
+    ++nest_level;
 
     // We keep compiling statements until we encounter a statement that returns or breaks.
     // Case and default nodes contain the first statement of the block so we process that one first.
@@ -795,10 +795,10 @@ bool comp_switch(ast node) {
       }
     }
 
-    nest_level -= 1;
+    --nest_level;
   }
 
-  nest_level -= 1;
+  --nest_level;
   append_glo_decl(wrap_str_lit("}")); // End of emulated case statement
 
   cgc_locals = start_cgc_locals;
@@ -822,10 +822,10 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
           wrap_str_lit(") {")
         ));
 
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
   termination_lhs = comp_statement(get_child_(IF_KW, node, 1), stmt_ctx);
-  nest_level -= 1;
+  --nest_level;
 
   if (else_node != 0) {
     // Compile sequence of if else if using elif
@@ -833,11 +833,11 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
       termination_rhs = comp_if(else_node, stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
     } else {
       append_glo_decl(wrap_str_lit("} else {"));
-      nest_level += 1;
+      ++nest_level;
       start_glo_decl_idx = glo_decl_ix;
       termination_rhs = comp_statement(else_node, stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
       if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-      nest_level -= 1;
+      --nest_level;
     }
   }
   if (!else_if) append_glo_decl(wrap_str_lit("}"));
@@ -960,9 +960,9 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
     append_glo_decl(string_concat3(wrap_str_lit("while ("),
                                    comp_rvalue(get_child_(WHILE_KW, node, 0)),
                                    wrap_str_lit(") {")));
-    nest_level += 1;
+    ++nest_level;
     comp_statement(get_child_(WHILE_KW, node, 1), stmt_ctx);
-    nest_level -= 1;
+    --nest_level;
     append_glo_decl(wrap_str_lit("}"));
     cgc_locals = start_cgc_locals;
     return false;
@@ -970,9 +970,9 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
   } else if (op == DO_KW) {
     cgc_add_enclosing_loop();
     append_glo_decl(wrap_str_lit("do {"));
-    nest_level += 1;
+    ++nest_level;
     comp_statement(get_child_(DO_KW, node, 0), stmt_ctx);
-    nest_level -= 1;
+    --nest_level;
     append_glo_decl(string_concat3(wrap_str_lit("} while ("),
                                    comp_rvalue(get_child_(DO_KW, node, 1)),
                                    wrap_str_lit(");")));
@@ -989,9 +989,9 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
     append_glo_decl(string_concat3(wrap_str_lit("for ("),
                                    str,
                                    wrap_str_lit(") {")));
-    nest_level += 1;
+    ++nest_level;
     comp_statement(get_child_(FOR_KW, node, 3), stmt_ctx);
-    nest_level -= 1;
+    --nest_level;
     append_glo_decl(wrap_str_lit("}"));
     cgc_locals = start_cgc_locals;
     return false;
@@ -1075,9 +1075,9 @@ void comp_glo_fun_decl(ast node) {
 
   local_vars_decl_fixup = append_glo_decl_fixup(); // Fixup is done after compiling body
 
-  nest_level += 1;
+  ++nest_level;
   comp_body(body, STMT_CTX_DEFAULT);
-  nest_level -= 1;
+  --nest_level;
   append_glo_decl(wrap_str_lit("}\n"));
 
   // Fixup local variable declarations
@@ -1262,7 +1262,7 @@ void comp_glo_decl(ast node) {
     // variables, so that variables are initialized in the correct order.
     if (!init_block_open) {
       init_block_open = true;
-      init_block_id += 1;
+      ++init_block_id;
       append_glo_decl(string_concat3(
         wrap_str_lit("function setup_"),
         wrap_int(init_block_id),
@@ -1275,13 +1275,13 @@ void comp_glo_decl(ast node) {
           wrap_str_lit("()")
         ));
       }
-      nest_level += 1;
+      ++nest_level;
     }
   } else {
     // Close init block if opened
     if (init_block_open) {
       init_block_open = false;
-      nest_level -= 1;
+      --nest_level;
       append_glo_decl(wrap_str_lit("}\n"));
     }
   }
@@ -1347,7 +1347,7 @@ void codegen_glo_decl(ast decl) {
 #ifdef PRINT_MEMORY_STATS
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
-  cumul_text_alloc += text_alloc;
+  cumul_text_alloc = cumul_text_alloc + text_alloc;
 #endif
 }
 

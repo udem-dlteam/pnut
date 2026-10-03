@@ -36,7 +36,7 @@ void print_tok_string(int symbol) {
 
   while (string_start < string_end) {
     print_string_char(*string_start);
-    string_start += 1;
+    ++string_start;
   }
 }
 
@@ -44,7 +44,7 @@ int print_tok_indent_level = 0;
 int print_tok_preceding_nl_count = 0;
 void print_tok_indent() {
   int i;
-  for (i = 0; i < print_tok_indent_level; i += 1) putchar(' ');
+  for (i = 0; i < print_tok_indent_level; ++i) { putchar(' '); putchar(' '); }
 }
 
 void print_tok(int tok, int val) {
@@ -59,16 +59,16 @@ void print_tok(int tok, int val) {
 
   if (tok == '\n') {
     if (print_tok_preceding_nl_count >= 2) return; // Skip consecutive newlines
-    print_tok_preceding_nl_count += 1;
+    ++print_tok_preceding_nl_count;
     putchar('\n');
     return;
   } else if (tok == '{') {
     print_tok_indent();
     putchar(tok);
-    print_tok_indent_level += 2;
+    ++print_tok_indent_level;
     return;
   } else if (tok == '}') {
-    print_tok_indent_level -= 2;
+    --print_tok_indent_level;
     print_tok_indent();
     putchar(tok);
     return;
@@ -551,7 +551,7 @@ void ast_to_sexp(ast obj) {
       putchar('(');
       print_tok_type(get_op(obj));
       putchar(' ');
-      for (; i < get_nb_children(obj); i += 1) {
+      for (; i < get_nb_children(obj); ++i) {
         ast_to_sexp(get_child(obj, i));
         if (get_child(obj, i) != 0 && i < get_nb_children(obj) - 1) putchar(' ');
       }
@@ -607,7 +607,7 @@ void print_macro_stack() {
   while (3 * i < macro_stack_ix) {
     print_macro_ctx(i, macro_stack[i * 3 + 2], macro_stack[i * 3], macro_stack[i * 3 + 1]);
     putchar('\n');
-    i += 1;
+    ++i;
   }
   print_macro_ctx(i, macro_ident, macro_tok_lst, macro_args);
   putstr("\n################################\n");

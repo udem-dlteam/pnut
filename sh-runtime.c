@@ -74,7 +74,7 @@
 bool runtime_use_local_vars = DEFAULT_USE;
 bool runtime_local_vars_defined = false;
 void runtime_local_vars() {
-  if (runtime_local_vars_defined++) return;
+  if (++runtime_local_vars_defined - 1) return;
   putstr("#_ Local variables\n");
   putstr("__=0\n");
 #ifndef SH_SAVE_VARS_WITH_SET
@@ -106,7 +106,7 @@ void runtime_local_vars() {
 bool runtime_use_char_to_int = DEFAULT_USE;
 bool runtime_char_to_int_defined = false;
 void runtime_char_to_int() {
-  if (runtime_char_to_int_defined++) return;
+  if (++runtime_char_to_int_defined - 1) return;
 #ifndef RT_COMPACT
 #ifdef RT_USE_LOOKUP_TABLE
 #ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
@@ -284,7 +284,7 @@ void runtime_char_to_int() {
 bool runtime_use_unpack_string_to_buf = DEFAULT_USE;
 bool runtime_unpack_string_to_buf_defined = false;
 void runtime_unpack_string_to_buf() {
-  if (runtime_unpack_string_to_buf_defined++) return;
+  if (++runtime_unpack_string_to_buf_defined - 1) return;
   runtime_char_to_int();
   putstr("#_ Unpack a Shell string into an appropriately sized buffer\n");
   putstr("unpack_string_to_buf() { # $1: Shell string, $2: Buffer, $3: Ends with EOF?\n");
@@ -325,7 +325,7 @@ void runtime_unpack_string_to_buf() {
 bool runtime_use_malloc = DEFAULT_USE;
 bool runtime_malloc_defined = false;
 void runtime_malloc() {
-  if (runtime_malloc_defined++) return;
+  if (++runtime_malloc_defined - 1) return;
   putstr("__ALLOC=1 # Starting heap at 1 because 0 is the null pointer.\n\n");
   putstr("_malloc() { # $2 = object size\n");
 #ifdef RT_FREE_UNSETS_VARS
@@ -346,7 +346,7 @@ void runtime_malloc() {
 bool runtime_use_initialize = DEFAULT_USE;
 bool runtime_initialize_defined = false;
 void runtime_initialize() {
-  if (runtime_initialize_defined++) return;
+  if (++runtime_initialize_defined - 1) return;
   putstr("#_ Initialize memory with the list of values.\n");
 #ifndef RT_NO_INIT_GLOBALS
   putstr("#_ When the expected number of elements is higher than the actual number of\n");
@@ -377,7 +377,7 @@ void runtime_initialize() {
 bool runtime_use_defarr = DEFAULT_USE;
 bool runtime_defarr_defined = false;
 void runtime_defarr() {
-  if (runtime_defarr_defined++) return;
+  if (++runtime_defarr_defined - 1) return;
   runtime_malloc();
 #ifdef RT_NO_INIT_GLOBALS
 #ifdef SUPPORT_COMPLEX_INITIALIZER
@@ -405,7 +405,7 @@ void runtime_defarr() {
 bool runtime_use_free = DEFAULT_USE;
 bool runtime_free_defined = false;
 void runtime_free() {
-  if (runtime_free_defined++) return;
+  if (++runtime_free_defined - 1) return;
   putstr("_free() { # $2 = object to free\n");
 #ifdef RT_FREE_UNSETS_VARS
   putstr("  __ptr=$(($2 - 1))          # Start of object\n");
@@ -423,7 +423,7 @@ void runtime_free() {
 bool runtime_use_make_argv = DEFAULT_USE;
 bool runtime_make_argv_defined = false;
 void runtime_make_argv() {
-  if (runtime_make_argv_defined++) return;
+  if (++runtime_make_argv_defined - 1) return;
   runtime_malloc();
   runtime_unpack_string_to_buf();
   putstr("make_argv() {\n");
@@ -483,7 +483,7 @@ void runtime_make_argv() {
 bool runtime_use_unpack_escaped_string = DEFAULT_USE;
 bool runtime_unpack_escaped_string_defined = false;
 void runtime_unpack_escaped_string() {
-  if (runtime_unpack_escaped_string_defined++) return;
+  if (++runtime_unpack_escaped_string_defined - 1) return;
   runtime_malloc();
   runtime_char_to_int();
 #ifdef SH_OPTIMIZE_LONG_LINES
@@ -527,7 +527,7 @@ void runtime_unpack_escaped_string() {
 bool runtime_use_defstr = DEFAULT_USE;
 bool runtime_defstr_defined = false;
 void runtime_defstr() {
-  if (runtime_defstr_defined++) return;
+  if (++runtime_defstr_defined - 1) return;
   runtime_unpack_escaped_string();
   putstr("#_ Define a string, and return a reference to it in the varible taken as argument.\n");
   putstr("#_ If the variable is already defined, this function does nothing.\n");
@@ -551,7 +551,7 @@ void runtime_defstr() {
 bool runtime_use_exit = DEFAULT_USE;
 bool runtime_exit_defined = false;
 void runtime_exit() {
-  if (runtime_exit_defined++) return;
+  if (++runtime_exit_defined - 1) return;
   putstr("_exit() { # $2: exit status\n");
   putstr("  exit $2\n");
   putstr("}\n");
@@ -564,7 +564,7 @@ void runtime_exit() {
 bool runtime_use_putchar = DEFAULT_USE;
 bool runtime_putchar_defined = false;
 void runtime_putchar() {
-  if (runtime_putchar_defined++) return;
+  if (++runtime_putchar_defined - 1) return;
   putstr("_putchar() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  printf " PRINTF_OCTAL_PATTERN "$(($1/64))$(($1/8%8))$(($1%8))\n");
@@ -578,7 +578,7 @@ void runtime_putchar() {
 bool runtime_use_getchar = DEFAULT_USE;
 bool runtime_getchar_defined = false;
 void runtime_getchar() {
-  if (runtime_getchar_defined++) return;
+  if (++runtime_getchar_defined - 1) return;
   runtime_char_to_int();
   putstr("__stdin_buf=\n");
   putstr("__stdin_line_ending=0 # Line ending, either -1 (EOF) or 10 ('\\n')\n");
@@ -635,7 +635,7 @@ void runtime_getchar() {
 bool runtime_use_put_pstr = DEFAULT_USE;
 bool runtime_put_pstr_defined = false;
 void runtime_put_pstr() {
-  if (runtime_put_pstr_defined++) return;
+  if (++runtime_put_pstr_defined - 1) return;
   putstr("_put_pstr() {\n");
   putstr("  : $(($1 = 0)); shift # Return 0\n");
   putstr("  __addr=$1; shift\n");
@@ -654,7 +654,7 @@ void runtime_put_pstr() {
 bool runtime_use_printf = DEFAULT_USE;
 bool runtime_printf_defined = false;
 void runtime_printf() {
-  if (runtime_printf_defined++) return;
+  if (++runtime_printf_defined - 1) return;
   runtime_put_pstr();
   putstr("read_int() {\n");
   putstr("  __int=\n");
@@ -772,7 +772,7 @@ void runtime_printf() {
 bool runtime_use_unpack_string = DEFAULT_USE;
 bool runtime_unpack_string_defined = false;
 void runtime_unpack_string() {
-  if (runtime_unpack_string_defined++) return;
+  if (++runtime_unpack_string_defined - 1) return;
   runtime_malloc();
   runtime_unpack_string_to_buf();
   putstr("#_ Unpack a Shell string into a newly allocated buffer\n");
@@ -791,7 +791,7 @@ void runtime_unpack_string() {
 bool runtime_use_isatty = DEFAULT_USE;
 bool runtime_isatty_defined = false;
 void runtime_isatty() {
-  if (runtime_isatty_defined++) return;
+  if (++runtime_isatty_defined - 1) return;
   putstr("_isatty() { # $2: fd\n");
   putstr("  [ -t $2 ] && : $(($1 = 1)) || : $(($1 = 0))\n");
   putstr("}\n\n");
@@ -802,7 +802,7 @@ void runtime_isatty() {
 bool runtime_use_open = DEFAULT_USE;
 bool runtime_open_defined = false;
 void runtime_open() {
-  if (runtime_open_defined++) return;
+  if (++runtime_open_defined - 1) return;
   runtime_malloc();
   runtime_put_pstr();
   putstr("_malloc __buffer_fd0 1000   # Allocate buffer\n");
@@ -876,7 +876,7 @@ void runtime_open() {
 bool runtime_use_read_byte = DEFAULT_USE;
 bool runtime_read_byte_defined = false;
 void runtime_read_byte() {
-  if (runtime_read_byte_defined++) return;
+  if (++runtime_read_byte_defined - 1) return;
   runtime_malloc();
   runtime_free();
   runtime_char_to_int();
@@ -927,7 +927,7 @@ void runtime_read_byte() {
 bool runtime_use_read = DEFAULT_USE;
 bool runtime_read_defined = false;
 void runtime_read() {
-  if (runtime_read_defined++) return;
+  if (++runtime_read_defined - 1) return;
   runtime_read_byte();
   runtime_open();
   putstr("_read() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
@@ -946,7 +946,7 @@ void runtime_read() {
 bool runtime_use_write = DEFAULT_USE;
 bool runtime_write_defined = false;
 void runtime_write() {
-  if (runtime_write_defined++) return;
+  if (++runtime_write_defined - 1) return;
   runtime_open();
   putstr("_write() { : $((__fd = $2)) $((__buf = $3)) $((__count = $4))\n");
   putstr("  : $((__i = 0))\n");
@@ -963,7 +963,7 @@ void runtime_write() {
 bool runtime_use_close = DEFAULT_USE;
 bool runtime_close_defined = false;
 void runtime_close() {
-  if (runtime_close_defined++) return;
+  if (++runtime_close_defined - 1) return;
   runtime_open();
   runtime_free();
   putstr("_close() { # $2: fd\n");
@@ -989,7 +989,7 @@ void runtime_close() {
 bool runtime_use_fopen = DEFAULT_USE;
 bool runtime_fopen_defined = false;
 void runtime_fopen() {
-  if (runtime_fopen_defined++) return;
+  if (++runtime_fopen_defined - 1) return;
   runtime_open();
   putstr("#_ Open the file and return the file descriptor directly.\n");
   putstr("_fopen() { # $2: File name, $3: Mode\n");
@@ -1002,7 +1002,7 @@ void runtime_fopen() {
 bool runtime_use_fclose = DEFAULT_USE;
 bool runtime_fclose_defined = false;
 void runtime_fclose() {
-  if (runtime_fclose_defined++) return;
+  if (++runtime_fclose_defined - 1) return;
   runtime_free();
   runtime_close();
   putstr("_fclose() { # $2: file\n");
@@ -1014,7 +1014,7 @@ void runtime_fclose() {
 bool runtime_use_fgetc = DEFAULT_USE;
 bool runtime_fgetc_defined = false;
 void runtime_fgetc() {
-  if (runtime_fgetc_defined++) return;
+  if (++runtime_fgetc_defined - 1) return;
   runtime_read_byte();
   putstr("_fgetc() { # $2: file\n");
   putstr("  read_byte $1 $2\n");

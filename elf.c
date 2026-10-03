@@ -117,6 +117,6 @@ void generate_exe() {
 
   while (i < code_alloc) {
     write_i8(code[i]);
-    i += 1;
+    ++i;
   }
 }

@@ -124,12 +124,12 @@ void generate_exe() {
 
   while (i < code_alloc) {
     write_i8(code[i]);
-    i += 1;
+    ++i;
   }
 
   // Fill the rest of the file with zeros (Mach-O files must be at least 4096 bytes)
   while (file_size < 4096) {
     write_i8(0x00);
-    file_size += 1;
+    ++file_size;
   }
 }

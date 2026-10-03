@@ -100,7 +100,7 @@ void init_comp_context() {
   // Initialize characters_useds table
   while (i < 16) {
     characters_useds[i] = 0;
-    i += 1;
+    ++i;
   }
 
 #ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
@@ -117,14 +117,14 @@ void init_comp_context() {
   i = 0;
   while (i < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
     preallocated_fresh_idents[i] = new_ast0(IDENTIFIER_INTERNAL, i);
-    i += 1;
+    ++i;
   }
 
   // Initialize preallocated_dollar_idents
   i = 0;
   while (i < IDENTIFIER_DOLLAR_PREALLOC_SIZE) {
     preallocated_dollar_idents[i] = new_ast0(IDENTIFIER_DOLLAR, i);
-    i += 1;
+    ++i;
   }
 }
 
@@ -240,7 +240,7 @@ ast new_fresh_ident(int ix) {
 }
 
 ast fresh_ident() {
-  gensym_ix += 1;
+  ++gensym_ix;
   fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
   max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
 
@@ -253,7 +253,7 @@ ast fresh_string_ident(int string_symbol) {
   // This allows comp_defstr to use the same string variable for the same string.
   int index = symbol_defstr_index(string_symbol);
   if (index == 0) { // index defaults to 0
-    set_symbol_defstr_index(string_symbol, string_counter += 1); // Mark the string as defined
+    set_symbol_defstr_index(string_symbol, ++string_counter); // Mark the string as defined
     index = string_counter;
 
   }
@@ -356,7 +356,7 @@ text save_local_vars() {
   // Save internal variables
   while (counter > 0) {
     res = concatenate_strings_with(res, string_concat(wrap_char('$'), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1)), wrap_char(' '));
-    counter -= 1;
+    --counter;
   }
 
   if (res) {
@@ -381,7 +381,7 @@ text restore_local_vars(int params_count) {
 
   while (env != 0) {
     if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
-      env_non_cst_size += 1;
+      ++env_non_cst_size;
     }
     env = binding_next(env);
   }
@@ -393,7 +393,7 @@ text restore_local_vars(int params_count) {
     ident = binding_ident(env);
     if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), local_var(ident), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
-      local_var_pos += 1;
+      ++local_var_pos;
     }
     env = binding_next(env);
   }
@@ -401,8 +401,8 @@ text restore_local_vars(int params_count) {
   // Restore internal variables
   while (counter > 0) {
     res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
-    local_var_pos += 1;
-    counter -= 1;
+    ++local_var_pos;
+    --counter;
   }
 
   if (res) {
@@ -435,10 +435,10 @@ text let_params(int params) {
                                     , sep_str);
     }
     params = tail(params);
-    params_ix += 1;
+    ++params_ix;
   }
 
-  runtime_use_local_vars |= res != 0;
+  runtime_use_local_vars = runtime_use_local_vars | (res != 0);
 
   if (res != 0) res = string_concat(wrap_char(' '), res);
 
@@ -460,7 +460,7 @@ text save_local_vars() {
                                                 , format_special_var(ident, true))
                                   , res
                                   , sep_str);
-    counter -= 1;
+    --counter;
   }
 
   // Save local variables and parameters
@@ -473,7 +473,7 @@ text save_local_vars() {
     env = binding_next(env);
   }
 
-  runtime_use_local_vars |= res != 0;
+  runtime_use_local_vars = runtime_use_local_vars | (res != 0);
 
   return res;
 }
@@ -490,7 +490,7 @@ text restore_local_vars(int params_count) {
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
-    counter -= 1;
+    --counter;
   }
 
   while (env != 0) {
@@ -564,7 +564,7 @@ text test_op_to_str(int op) {
 text character_ident(int c) {
   // Mark character as used
   text res = 0;
-  characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
+  characters_useds[c / CHARACTERS_BITFIELD_SIZE] = characters_useds[c / CHARACTERS_BITFIELD_SIZE] | (1 << (c % CHARACTERS_BITFIELD_SIZE));
   any_character_used = true;
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
@@ -640,7 +640,7 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
     // At this point, the temporary identifier of the variable is not live and
     // can be used to compute the function arguments. This reduces the number
     // of temporary variables.
-    gensym_ix -= 1;
+    --gensym_ix;
   }
 
   // Traverse the arguments and replace them with the result of
@@ -841,7 +841,7 @@ int initializer_list_len(ast node) {
 
   // Each element of the list has size 1 since nested initializers are not allowed
   while (node != 0) {
-    res += 1;
+    ++res;
     node = tail(node);
   }
 
@@ -1210,7 +1210,7 @@ text comp_rvalue(ast node, int context) {
   } else {
     result = comp_rvalue_go(simple_ast, context, 0, 0);
   }
-  contains_side_effects |= contains_side_effects2;
+  contains_side_effects = contains_side_effects | contains_side_effects2;
   return result;
 }
 
@@ -1412,11 +1412,11 @@ void handle_printf_call(char *format_str, ast params) {
         case '4': case '5': case '6':
         case '7': case '8': case '9':
           if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
-          while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
+          while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
           has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
           has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
-          state += 1;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
-          format_str -= 1; // Reprocess non-numeric character
+          ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+          --format_str; // Reprocess non-numeric character
           break;
 
         // Precision
@@ -1450,7 +1450,7 @@ void handle_printf_call(char *format_str, ast params) {
         // The following options are the same between the shell's printf and C's printf
         case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
           if (*format_str == 'l') {
-            while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
+            while (*format_str == 'l') ++format_str; // Skip the 'l' for long
             if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
               dump_string("format_str = ", specifier_start);
               fatal_error("printf: unsupported format specifier");
@@ -1526,7 +1526,7 @@ void handle_printf_call(char *format_str, ast params) {
     }
 
     // Keep accumulating the format string
-    format_str += 1;
+    ++format_str;
   }
 
   // Dump the remaining format string
@@ -1696,7 +1696,7 @@ bool comp_switch(ast node) {
     ));
 
   cgc_add_enclosing_switch(in_tail_position);
-  nest_level += 1;
+  ++nest_level;
 
   node = get_child_(SWITCH_KW, node, 1);
 
@@ -1715,7 +1715,7 @@ bool comp_switch(ast node) {
     append_glo_decl(make_switch_pattern(statement));
     statement = last_stmt; // last_stmt is set by make_switch_pattern
 
-    nest_level += 1;
+    ++nest_level;
 
     // Since we don't know if the switch is exhaustive, we can't compile in tail
     // position mode, see comment below.
@@ -1731,11 +1731,11 @@ bool comp_switch(ast node) {
       }
     }
 
-    nest_level -= 1;
+    --nest_level;
     append_glo_decl(wrap_str_lit(";;"));
   }
 
-  nest_level -= 1;
+  --nest_level;
   append_glo_decl(wrap_str_lit("esac"));
 
   cgc_locals = start_cgc_locals;
@@ -1770,12 +1770,12 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
           wrap_str_lit(" ; then")
         ));
 
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
   termination_lhs = comp_statement(get_child_(IF_KW, node, 1), stmt_ctx);
   // ifs cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-  nest_level -= 1;
+  --nest_level;
 
   if (else_node != 0) {
     // Compile sequence of if else if using elif
@@ -1783,11 +1783,11 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
       termination_rhs = comp_if(else_node, stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
     } else {
       append_glo_decl(wrap_str_lit("else"));
-      nest_level += 1;
+      ++nest_level;
       start_glo_decl_idx = glo_decl_ix;
       termination_rhs = comp_statement(else_node, stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
       if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-      nest_level -= 1;
+      --nest_level;
     }
   }
   if (!else_if) append_glo_decl(wrap_str_lit("fi"));
@@ -1831,14 +1831,14 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, enum STMT
   }
 
   append_glo_decl(string_concat3(wrap_str_lit("while "), cond ? cond : wrap_char(':'), wrap_str_lit("; do")));
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
   always_returns = comp_statement(body, stmt_ctx);
   append_glo_decl(last_line);
   replay_glo_decls(loop_binding_action_start(loop_binding), loop_binding_action_end(loop_binding));
   // while loops cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-  nest_level -= 1;
+  --nest_level;
   append_glo_decl(wrap_str_lit("done"));
   cgc_locals = start_cgc_locals;
 
@@ -1884,7 +1884,7 @@ bool comp_return(ast return_value) {
   // ...and then we take care of the control flow part of the return statement
   // SWITCH blocks specify if they are in tail position
   if (binding != 0 && binding_kind(binding) == BINDING_SWITCH) {
-    in_tail_position |= switch_binding_in_tail_position(binding);
+    in_tail_position = in_tail_position | switch_binding_in_tail_position(binding);
   }
 
   if (in_tail_position && binding != 0) {
@@ -2058,7 +2058,7 @@ void comp_glo_fun_decl(ast node) {
     }
 #endif
     params = tail(params);
-    params_ix += 1;
+    ++params_ix;
   }
   if (function_comment != 0) function_comment = string_concat(wrap_str_lit(" # "), function_comment);
 
@@ -2071,7 +2071,7 @@ void comp_glo_fun_decl(ast node) {
   ));
 
   in_tail_position = true;
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
 
   save_loc_vars_fixup = append_glo_decl_fixup(); // Fixup is done after compiling body
@@ -2088,7 +2088,7 @@ void comp_glo_fun_decl(ast node) {
       comp_assignment(get_child_(DECL, decl, 0), new_dollar_ident(params_ix));
     }
     params = tail(params);
-    params_ix += 1;
+    ++params_ix;
   }
 #endif
 
@@ -2110,7 +2110,7 @@ void comp_glo_fun_decl(ast node) {
   // functions cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
-  nest_level -= 1;
+  --nest_level;
 
   append_glo_decl(wrap_str_lit("}\n"));
 }
@@ -2353,7 +2353,7 @@ void codegen_end() {
 
   if (any_character_used) {
     putstr("#_ Character constants\n");
-    for(c = 0; c < 256; c += 1) {
+    for(c = 0; c < 256; ++c) {
       if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
         putstr("readonly ");
         print_text(character_ident(c));
@@ -2396,7 +2396,7 @@ text initialize_function_variables() {
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str_lit(" = "));
-    counter -= 1;
+    --counter;
   }
 
   // Local variables and parameters
@@ -2451,6 +2451,6 @@ void codegen_glo_decl(ast decl) {
 #ifdef PRINT_MEMORY_STATS
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
-  cumul_text_alloc += text_alloc;
+  cumul_text_alloc = cumul_text_alloc + text_alloc;
 #endif
 }

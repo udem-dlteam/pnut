@@ -439,7 +439,7 @@ int include_stack_top = 0; // Point to top of the stack, i.e. the next free entr
 void putstr(char *str) {
   while (*str) {
     putchar(*str);
-    str += 1;
+    ++str;
   }
 }
 
@@ -604,7 +604,7 @@ void save_include_context() {
     include_stack[include_stack_top + 3] = line_number;
     include_stack[include_stack_top + 4] = column_number;
   #endif
-    include_stack_top += INCLUDE_ENTRY_SIZE;
+    include_stack_top = include_stack_top + INCLUDE_ENTRY_SIZE;
   }
 }
 
@@ -615,7 +615,7 @@ void restore_include_context() {
   if (fd_dirname != 0) free(fd_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
-  include_stack_top -= INCLUDE_ENTRY_SIZE;
+  include_stack_top = include_stack_top - INCLUDE_ENTRY_SIZE;
   // Must add parentheses because M2-Planet parses the cast operator with higher
   // precedence than the dereference operator.
   fd          =          include_stack[include_stack_top];
@@ -773,7 +773,7 @@ int heap_alloc = HASH_PRIME;
 
 int alloc_obj(const int size) {
 
-  if ((heap_alloc += size) > HEAP_SIZE) {
+  if ((heap_alloc = heap_alloc + size) > HEAP_SIZE) {
     fatal_error("heap overflow");
   }
 
@@ -998,7 +998,7 @@ ast clone_ast(const ast orig) {
   ast_result = alloc_obj(nb_children + 1);
 
   heap[ast_result] = heap[orig]; // copy operator and nb of children
-  for (i = 0; i < nb_children; i += 1) {
+  for (i = 0; i < nb_children; i = i + 1) {
     set_child(ast_result, i, get_child(orig, i));
   }
 
@@ -1098,7 +1098,7 @@ void begin_symbol() {
 void accum_symbol_char(const char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
-  string_pool_alloc += 1;
+  ++string_pool_alloc;
   if (string_pool_alloc >= STRING_POOL_SIZE) {
     fatal_error("string pool overflow");
   }
@@ -1110,7 +1110,7 @@ void accum_symbol_string(const int string_symbol) {
   char *string_end = string_start + symbol_len(string_symbol);
   while (string_start < string_end) {
     accum_symbol_char(*string_start);
-    string_start += 1;
+    ++string_start;
   }
 }
 
@@ -1145,7 +1145,7 @@ int curr_symbol;
 int end_symbol() {
   end_symbol_len = string_pool_alloc - string_start; // exclude terminator
   string_pool[string_pool_alloc] = 0; // terminate string
-  string_pool_alloc += 1; // account for terminator
+  ++string_pool_alloc; // account for terminator
 
   curr_symbol = hash;
 
@@ -1160,8 +1160,8 @@ int end_symbol() {
     c2 = string_pool + heap[symbol + 1];
     symbol_end = c1 + end_symbol_len;
     while (c1 < symbol_end && *c1 == *c2) {
-      c1 += 1;
-      c2 += 1;
+      ++c1;
+      ++c2;
     }
 
     if (c1 == symbol_end) {
@@ -1294,7 +1294,7 @@ void push_if_macro_mask(bool new_mask) {
   // Once if_macro_keep_directive_block_code is set, it is kept for all nested blocks.
   if_macro_stack[if_macro_stack_ix + 2] = if_macro_keep_directive_block_code;
 #endif
-  if_macro_stack_ix += IFDEF_STACK_ENTRY_SIZE;
+  if_macro_stack_ix = if_macro_stack_ix + IFDEF_STACK_ENTRY_SIZE;
 
   // If the current block is masked off, then the new mask is the logical AND of the current mask and the new mask
   new_mask = if_macro_mask & new_mask;
@@ -1307,7 +1307,7 @@ void pop_if_macro_mask() {
   if (if_macro_stack_ix == 0) {
     fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
   }
-  if_macro_stack_ix -= IFDEF_STACK_ENTRY_SIZE;
+  if_macro_stack_ix = if_macro_stack_ix - IFDEF_STACK_ENTRY_SIZE;
   if_macro_mask = if_macro_stack[if_macro_stack_ix];
   if_macro_executed = if_macro_stack[if_macro_stack_ix + 1];
 #ifdef ANNOTATE_WITH_C_CODE
@@ -1346,12 +1346,12 @@ void remove_c_code_substr(int start, int end) {
     // Nothing to remove
   } else {
     // Move the characters after the removed substring to the start position
-    for (i = end; i < code_char_buf_ix; i += 1) {
+    for (i = end; i < code_char_buf_ix; ++i) {
       code_char_buf[start + i - end] = code_char_buf[i];
     }
-    code_char_buf_ix -= (end - start);
+    code_char_buf_ix = code_char_buf_ix - (end - start);
     // Adjust last_tok_code_buf_ix
-    last_tok_code_buf_ix -= (end - start);
+    last_tok_code_buf_ix = last_tok_code_buf_ix - (end - start);
   }
 }
 
@@ -1364,7 +1364,7 @@ void adjust_for_trailing_comment() {
   int last_tok_code_buf_ix_save = last_tok_code_buf_ix;
   while (code_char_buf[last_tok_code_buf_ix + 1] == ' ' ||
           code_char_buf[last_tok_code_buf_ix + 1] == '\t') {
-    last_tok_code_buf_ix += 1;
+    ++last_tok_code_buf_ix;
   }
 
   if (code_char_buf[last_tok_code_buf_ix + 1] == '/'
@@ -1372,7 +1372,7 @@ void adjust_for_trailing_comment() {
     // Trailing comment, move last_tok_code_buf_ix to the end of the line
     while (code_char_buf[last_tok_code_buf_ix] != '\n' &&
             last_tok_code_buf_ix < code_char_buf_ix) {
-      last_tok_code_buf_ix += 1;
+      ++last_tok_code_buf_ix;
     }
   } else {
     // No trailing comment, back to original position
@@ -1398,7 +1398,7 @@ void output_declaration_c_code() {
   adjust_for_trailing_comment();
 
   // Skip leading newlines if any.
-  while (code_char_buf[i] == '\n') i += 1;
+  while (code_char_buf[i] == '\n') ++i;
 
   putchar('#');
   if (i + 2 < last_tok_code_buf_ix
@@ -1407,12 +1407,12 @@ void output_declaration_c_code() {
     // If the next 2 characters are "//", use "##" instead of "# //" to
     // preserve the indentation of the original comment.
     putchar('#');
-    i += 2;
+    i = i + 2;
   } else {
     putchar(' ');
   }
 
-  for (; i < last_tok_code_buf_ix; i += 1) {
+  for (; i < last_tok_code_buf_ix; ++i) {
     if (code_char_buf[i] == '\n') {
       putchar('\n');
       putchar('#');
@@ -1422,7 +1422,7 @@ void output_declaration_c_code() {
         // If the next 2 characters are "//", use "##" instead of "# //" to
         // preserve the indentation of the original comment.
         putchar('#');
-        i += 2;
+        i = i + 2;
       } else {
         putchar(' ');
       }
@@ -1539,16 +1539,16 @@ void get_ch() {
   }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   else if (ch == '\n') {
-    line_number += 1;
+    ++line_number;
     column_number = 0;
   } else {
-    column_number += 1;
+    ++column_number;
   }
 #endif
 #ifdef ANNOTATE_WITH_C_CODE
   // Save C code chars so they can be displayed with the shell code
   code_char_buf[code_char_buf_ix] = ch;
-  code_char_buf_ix += 1;
+  ++code_char_buf_ix;
   if (code_char_buf_ix >= C_CODE_BUF_LEN) {
     fatal_error("C code buffer overflow");
   }
@@ -1587,13 +1587,13 @@ bool skip_inactive_line() {
 
 int strlen(char *str) {
   int i = 0;
-  while (str[i] != '\0') i += 1;
+  while (str[i] != '\0') ++i;
   return i;
 }
 
 void memcpy(char *dest, char *src, int n) {
   int i;
-  for (i = 0; i < n; i += 1) {
+  for (i = 0; i < n; i = i + 1) {
     dest[i] = src[i];
   }
 }
@@ -1604,7 +1604,7 @@ char *strrchr(char *str, int c) {
   char *last = 0;
   while (*str != '\0') {
     if (*str == c) last = str;
-    str += 1;
+    ++str;
   }
   return last;
 }
@@ -1614,8 +1614,8 @@ char *strrchr(char *str, int c) {
 int strcmp(char *s1, char *s2) {
   while (*s1 != '\0' && *s2 != '\0') {
     if (*s1 != *s2) break;
-    s1 += 1;
-    s2 += 1;
+    ++s1;
+    ++s2;
   }
   return (*s1 - *s2);
 }
@@ -1945,7 +1945,7 @@ int lookup_macro_token(int args, int tok, int val) {
   while (args != 0) {
     if (car(args) == val) break; // Found!
     args = cdr(args);
-    ix += 1;
+    ++ix;
   }
 
   if (args == 0) { // Identifier is not a macro argument
@@ -2015,7 +2015,7 @@ void handle_define() {
       // Accumulate parameters in reverse order. That's ok because the arguments
       // to the macro will also be in reverse order.
       args = cons(val, args);
-      args_count += 1;
+      ++args_count;
     }
   } else {
     get_tok_macro(true); // Skip macro name
@@ -2218,7 +2218,7 @@ void handle_preprocessor_directive() {
       // directives from the C code buffer, except for those using PNUT_SH
       // so that when we extract the C code from pnut-exe.sh and bootstrap
       // pnut-exe from it, the C code contains the necessary directives.
-      if_macro_keep_directive_block_code |= (val == PNUT_TARGET_ID || val == PNUT_CC_ID);
+      if_macro_keep_directive_block_code = if_macro_keep_directive_block_code | (val == PNUT_TARGET_ID || val == PNUT_CC_ID);
 #endif
       get_tok_macro(true); // Skip the macro name
     } else if (tok == IF_KW) {
@@ -2228,7 +2228,7 @@ void handle_preprocessor_directive() {
       temp = compute_if_condition() ;
       if (prev_macro_mask() && !if_macro_executed) {
         if_macro_mask = temp != 0;
-        if_macro_executed |= if_macro_mask;
+        if_macro_executed = if_macro_executed | if_macro_mask;
       } else {
         if_macro_mask = false;
       }
@@ -2309,11 +2309,11 @@ void handle_preprocessor_directive() {
       // and the newline before the directive.
       int last_newline_ix = code_char_buf_ix;
       while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
-        last_newline_ix -= 1;
+        --last_newline_ix;
       }
       int directive_line_start_ix = hash_code_buf_ix;
       while (directive_line_start_ix > 0 && code_char_buf[directive_line_start_ix - 1] != '\n') {
-        directive_line_start_ix -= 1;
+        --directive_line_start_ix;
       }
 
       // Remove between the end of the directive and the last newline
@@ -2334,7 +2334,7 @@ void handle_preprocessor_directive() {
       if (!if_macro_keep_directive_block_code && !keep_directive_code) {
         code_char_buf_ix = hash_code_buf_ix - 1; // -1 to overwrite the '#'
         code_char_buf[code_char_buf_ix] = '#';
-        code_char_buf_ix += 1;
+        ++code_char_buf_ix;
         if (code_char_buf_ix >= C_CODE_BUF_LEN) {
           fatal_error("C code buffer overflow");
         }
@@ -2368,7 +2368,7 @@ int intern_str(char* name) {
 
   while (*name != 0) {
     accum_symbol_char(*name);
-    name += 1;
+    ++name;
   }
 
   return end_symbol();
@@ -2386,7 +2386,7 @@ void init_ident_table() {
 
   while (i < HASH_PRIME) {
     heap[i] = 0;
-    i += 1;
+    ++i;
   }
 
   init_ident(BREAK_KW,    "break");
@@ -2630,7 +2630,7 @@ int get_macro_args_toks(int macro) {
       get_tok_macro(false); // Skip comma
       if (prev_is_comma) { // Push empty arg
         args = cons(0, args);
-        macro_args_count += 1;
+        ++macro_args_count;
       }
       prev_is_comma = true;
       continue;
@@ -2639,14 +2639,14 @@ int get_macro_args_toks(int macro) {
     }
 
     args = cons(macro_parse_argument(), args);
-    macro_args_count += 1;
+    ++macro_args_count;
   }
 
   if (tok != ')') parse_error("unterminated macro argument list", tok);
 
   if (prev_is_comma) {
     args = cons(0, args); // Push empty arg
-    macro_args_count += 1;
+    ++macro_args_count;
   }
 
   check_macro_arity(macro_args_count, macro);
@@ -2659,7 +2659,7 @@ int get_macro_arg(int ix) {
   while (ix > 0) {
     if (arg == 0) fatal_error("get_macro_arg: argument index out of range");
     arg = cdr(arg);
-    ix -= 1;
+    --ix;
   }
   return car(arg);
 }
@@ -2669,7 +2669,7 @@ int get_macro_arg(int ix) {
 void return_to_parent_macro() {
   if (macro_stack_ix == 0) fatal_error("return_to_parent_macro: no parent macro");
 
-  macro_stack_ix -= 3;
+  macro_stack_ix = macro_stack_ix - 3;
   macro_tok_lst   = macro_stack[macro_stack_ix];
   macro_args      = macro_stack[macro_stack_ix + 1];
   macro_ident     = macro_stack[macro_stack_ix + 2];
@@ -2685,7 +2685,7 @@ void begin_macro_expansion(int ident, int tokens, int args) {
   macro_stack[macro_stack_ix]     = macro_tok_lst;
   macro_stack[macro_stack_ix + 1] = macro_args;
   macro_stack[macro_stack_ix + 2] = macro_ident;
-  macro_stack_ix += 3;
+  macro_stack_ix = macro_stack_ix + 3;
 
   macro_ident   = ident;
   macro_tok_lst = tokens;
@@ -2704,7 +2704,7 @@ bool macro_is_already_expanding(int ident) {
 
   // Traverse the stack to see if the macro is already expanding
   while (i > 0) {
-    i -= 3;
+    i = i - 3;
     if (macro_stack[i + 2] == ident) return true;
   }
   return false;
@@ -2793,8 +2793,8 @@ int paste_integers(int left_val, int right_val) {
   if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
 #endif
   while (right_digits > 0) {
-    result *= 10;
-    right_digits /= 10;
+    result = result * 10;
+    right_digits = right_digits / 10;
   }
   return result + right_val;
 }
@@ -3519,7 +3519,7 @@ ast parse_enum() {
         last_literal_type = get_op(value);
       } else {
         value = new_ast0(last_literal_type, next_value);
-        next_value -= 1;
+        --next_value;
       }
 
       if (result == 0) {
@@ -3722,7 +3722,7 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 #ifdef SUPPORT_TYPE_SPECIFIERS
       case VOLATILE_KW:
 #endif
-        type_qualifier |= MK_TYPE_SPECIFIER(tok);
+        type_qualifier = type_qualifier | MK_TYPE_SPECIFIER(tok);
         get_tok();
         break;
 
@@ -4718,18 +4718,18 @@ void handle_macro_D(char *opt) {
 
   while (*opt != 0 && *opt != '=') {
     accum_symbol_char(*opt);
-    opt += 1;
+    ++opt;
   }
 
   macro_symbol = end_symbol();
   set_symbol_type(macro_symbol, MACRO); // Mark as macro
 
   if (*opt == '=') {
-    opt += 1;
+    ++opt;
     if (*opt == '"') { // Start of string literal
-      opt += 1;
+      ++opt;
       start = opt;
-      while (*opt != 0 && *opt != '"') opt += 1;
+      while (*opt != 0 && *opt != '"') ++opt;
       if (*opt == 0) fatal_error("Unterminated string literal");
       *opt = 0; // Temporarily terminate the string
       value_symbol = intern_str(start);
@@ -4738,9 +4738,9 @@ void handle_macro_D(char *opt) {
     } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
       acc = 0;
       while ('0' <= *opt && *opt <= '9') {
-        acc *= 10;
-        acc += *opt - '0';
-        opt += 1;
+        acc = acc * 10;
+        acc = acc + (*opt - '0');
+        ++opt;
       }
       if (*opt != 0) fatal_error("Invalid macro definition value");
       set_builtin_int_macro(macro_symbol, acc);
@@ -4786,7 +4786,7 @@ void output_rest_of_line(const int fd, char *prefix) {
   int c;
   while (newline_accumulated > 0) {
     putchar('\n');
-    newline_accumulated -= 1;
+    --newline_accumulated;
   }
   if (prefix) putstr(prefix);
   while ((c = read_char(fd)) != EOF && c != '\n') {
@@ -4815,7 +4815,7 @@ void extract_c_code_from_annotated_file(char * const filename) {
   // - Other lines are ignored (shell commands or shell comments starting with "#_")
   while ((c = read_char(sh_fp)) != EOF) {
     if (c == '\n') {
-      newline_accumulated += 1;
+      ++newline_accumulated;
     } else if (c == '#') {
       c = read_char(sh_fp);
       if (c == ' ') {
@@ -4852,7 +4852,7 @@ int main(int argc, char **argv) {
 
   init_pnut_macros();
 
-  for (i = 1; i < argc; i += 1) {
+  for (i = 1; i < argc; ++i) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
 #ifdef target_exe
@@ -4860,7 +4860,7 @@ int main(int argc, char **argv) {
           // Output file name
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
-            i += 1;
+            ++i;
             output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
           } else {
             output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
@@ -4872,7 +4872,7 @@ int main(int argc, char **argv) {
         case 'D':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
-            i += 1;
+            ++i;
             handle_macro_D(argv[i]);
           } else {
             handle_macro_D(argv[i] + 2); // skip '-D'
@@ -4882,7 +4882,7 @@ int main(int argc, char **argv) {
         case 'U':
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
-            i += 1;
+            ++i;
             handle_macro_U(argv[i]);
           } else {
             handle_macro_U(argv[i] + 2); // skip '-U'
@@ -4894,7 +4894,7 @@ int main(int argc, char **argv) {
 
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing path for -I option");
-            i += 1;
+            ++i;
             include_search_path = argv[i];
           } else {
             include_search_path = argv[i] + 2; // skip '-I'
@@ -4909,7 +4909,7 @@ int main(int argc, char **argv) {
           if (argv[i][2] != 't' || (argv[i][3] != 0 && argv[i][3] != '=')) fatal_error("unknown option");
           if (argv[i][3] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing file name for -rt option");
-            i += 1;
+            ++i;
             runtime_file_path = argv[i];
           } else {
             runtime_file_path = argv[i] + 4; // skip '-rt='
@@ -4932,7 +4932,7 @@ int main(int argc, char **argv) {
           // and extracts the C code included in it.
           if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
             if (argv[i + 1] == 0) fatal_error("missing input file name for -C option");
-            i += 1;
+            ++i;
             extract_c_code_from_annotated_file(argv[i]);
           } else {
             extract_c_code_from_annotated_file(argv[i] + 2);

@@ -104,7 +104,7 @@ int code_alloc_max = 0;
 
 #ifdef ONE_PASS_GENERATOR
 void reset_code_buffer() {
-  code_address_base += code_alloc;
+  code_address_base = code_address_base + code_alloc;
   code_alloc = 0;
 }
 #endif
@@ -114,7 +114,7 @@ void emit_i8(const int a) {
     fatal_error("code buffer overflow");
   }
   code[code_alloc] = (a & 0xff);
-  code_alloc += 1;
+  ++code_alloc;
 }
 
 void emit_2_i8(const int a, const int b) {
@@ -193,7 +193,7 @@ ast current_fun_return_type = 0;
 int grow_fs(const int words) {
   // avoid `return (cgc_fs += words)` because some shells parse assignment ops
   // with lower precedence than assignment.
-  cgc_fs += words;
+  cgc_fs = cgc_fs + words;
   return cgc_fs;
 }
 
@@ -284,7 +284,7 @@ void stack_grow(const int words) {
 void reset_stack_to(const int to_cgc_fs) {
   if (to_cgc_fs != cgc_fs) {
     stack_grow(to_cgc_fs - cgc_fs);
-    cgc_fs += (to_cgc_fs - cgc_fs);
+    cgc_fs = to_cgc_fs;
   }
 }
 
@@ -362,13 +362,13 @@ void write_mem_location(int base, int offset, int src, int width) {
 void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int width) {
   int i;
   // move the words
-  for (i = 0; i < width / WORD_SIZE; i += 1) {
+  for (i = 0; i < width / WORD_SIZE; ++i) {
     mov_reg_mem(reg_Z, src_base, src_offset + i * WORD_SIZE);
     mov_mem_reg(dst_base, dst_offset + i * WORD_SIZE, reg_Z);
   }
 
   // then move the remaining bytes
-  for (i = width - width % WORD_SIZE; i < width; i += 1) {
+  for (i = width - width % WORD_SIZE; i < width; ++i) {
     mov_reg_mem8(reg_Z, src_base, src_offset + i);
     mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
   }
@@ -382,10 +382,10 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
 void initialize_memory(int val, int base, int offset, int width) {
   int i;
   mov_reg_imm(reg_Z, val);
-  for (i = 0; i < width / WORD_SIZE; i += 1) {
+  for (i = 0; i < width / WORD_SIZE; ++i) {
     mov_mem_reg(base, offset + i * WORD_SIZE, reg_Z);
   }
-  for (i = width - width % WORD_SIZE; i < width; i += 1) {
+  for (i = width - width % WORD_SIZE; i < width; ++i) {
     mov_mem8_reg(base, offset + i, reg_Z);
   }
 }
@@ -399,8 +399,8 @@ int is_power_of_2(int n) {
 int power_of_2_log(int n) {
   int i = 0;
   while (n > 1) {
-    n /= 2;
-    i += 1;
+    n = n / 2;
+    ++i;
   }
   return i;
 }
@@ -411,7 +411,7 @@ void mul_for_pointer_arith(int reg, int width) {
 
   if (is_power_of_2(width)) {
     while (width > 1) {
-      width /= 2;
+      width = width / 2;
       add_reg_reg(reg, reg);
     }
   } else {
@@ -559,7 +559,7 @@ void assert_all_labels_defined(int init_next_lbl) {
   int i = 0;
   int lbl;
   // Check that all labels are defined
-  for (; i < labels_ix; i++) {
+  for (; i < labels_ix; ++i) {
     lbl = labels[i];
     if (lbl != init_next_lbl && label_addr(lbl) > 0) {
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
@@ -589,7 +589,7 @@ void assert_all_labels_defined(int init_next_lbl) {
 void add_label(int lbl) {
   if (labels_ix >= LABELS_ARR_SIZE) fatal_error("labels array is full");
 
-  labels[labels_ix++] = lbl;
+  labels[++labels_ix - 1] = lbl;
 }
 
 int alloc_label(char* name) {
@@ -1023,7 +1023,7 @@ int struct_union_size(ast type) {
     member_size = type_width(member_type, true, false);
     largest_submember_size = type_largest_member(member_type);
     if (member_size != 0) sum_size = align_to(largest_submember_size, sum_size); // Align the member to the word size
-    sum_size += member_size;                                          // Struct size is the sum of its members
+    sum_size = sum_size + member_size;                                // Struct size is the sum of its members
     if (member_size > max_size) max_size = member_size;               // Union size is the max of its members
     if (largest_member_size < largest_submember_size) largest_member_size = largest_submember_size;
   }
@@ -1059,7 +1059,7 @@ int struct_member_offset_go(ast struct_type, ast member_ident) {
       // final offset is not 0.
       member_size = type_width(get_child_(DECL, decl, 1), true, false);
       if (member_size != 0) offset = align_to(type_largest_member(get_child_(DECL, decl, 1)), offset);
-      offset += member_size;
+      offset = offset + member_size;
     }
     members = tail(members);
   }
@@ -1903,7 +1903,7 @@ void codegen_aggregate_into(int dst_reg, int dst_offset, ast node, int width, as
   stack_pop(reg_X); // source aggregate address
   if (dst_reg == reg_SP) {
     // Account for temporaries allocated during computation
-    dst_offset += (cgc_fs - save_fs) * WORD_SIZE;
+    dst_offset = dst_offset + (cgc_fs - save_fs) * WORD_SIZE;
   } else {
     // Reload destination register, saved below the temporaries
     stack_load(dst_reg, (save_fs + 1));
@@ -2295,7 +2295,7 @@ void codegen_string(char *string_start, char *string_end) {
 
   while (string_start != string_end) {
     emit_i8(*string_start);
-    string_start += 1;
+    ++string_start;
   }
 
   emit_i8(0);
@@ -2947,7 +2947,7 @@ void codegen_initializer_string(int string_symbol, ast type, int base_reg, int o
     if (str_len > arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
 
     // Place the bytes of the string in the memory location allocated for the array
-    for (; i < arr_len; i += 1) {
+    for (; i < arr_len; ++i) {
       mov_reg_imm(reg_X, TERNARY(i < str_len, string_start[i], 0));
       write_mem_location(base_reg, offset + i, reg_X, 1);
     }
@@ -2993,9 +2993,9 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 
           while (init != 0 && arr_len != 0) {
             codegen_initializer(local, car(init), inner_type, base_reg, offset);
-            offset += inner_type_width;
+            offset = offset + inner_type_width;
             init = tail(init);
-            arr_len -= 1; // decrement the number of elements left to initialize to make sure we don't overflow
+            --arr_len; // decrement the number of elements left to initialize to make sure we don't overflow
           }
 
           if (init != 0) {
@@ -3014,7 +3014,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           while (init != 0 && members != 0) {
             inner_type = get_child_(DECL, car_(DECL, members), 1);
             codegen_initializer(local, car(init), inner_type, base_reg, offset);
-            offset += type_width(inner_type, true, false);
+            offset = offset + type_width(inner_type, true, false);
             init = tail(init);
             members = tail(members);
           }
@@ -3023,7 +3023,7 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
           while (local && members != 0) {
             inner_type = get_child_(DECL, car_(DECL, members), 1);
             initialize_memory(0, base_reg, offset, type_width(inner_type, true, false));
-            offset += type_width(inner_type, true, false);
+            offset = offset + type_width(inner_type, true, false);
             members = tail(members);
           }
           break;
@@ -3087,7 +3087,7 @@ int initializer_size(ast initializer) {
     case INITIALIZER_LIST:
       initializer = get_child_(INITIALIZER_LIST, initializer, 0);
       while (initializer != 0) {
-        size += 1;
+        ++size;
         initializer = tail(initializer);
       }
       return size;
@@ -3798,7 +3798,7 @@ void codegen_builtin_movs(ast params) {
     }
     mov_reg_mem(reg, reg_SP, WORD_SIZE * (i + 1)); // Get parameter from stack
     params = cdr(params);
-    i += 1;
+    ++i;
   }
 }
 
@@ -4013,7 +4013,7 @@ void codegen_begin() {
   // Make room for heap start and malloc bump pointer.
   // reg_glo[0]: heap start
   // reg_glo[WORD_SIZE]: malloc bump pointer
-  cgc_global_alloc += 2 * WORD_SIZE;
+  cgc_global_alloc = cgc_global_alloc + 2 * WORD_SIZE;
 
   one_literal = new_ast0(INTEGER, -1);
   int_type = new_ast0(INT_KW, 0);
