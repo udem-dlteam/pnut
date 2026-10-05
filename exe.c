@@ -1704,7 +1704,6 @@ void codegen_int64_narrow(ast node, ast target_type);
 void codegen_int64_truthy(ast node);
 char *int64_resolve_binop_name(int op, ast left_type, ast right_type);
 void codegen_int64_binop(ast node, ast child0, ast child1);
-void codegen_int64_unary(int op, ast child0);
 void codegen_int64_literal(ast node);
 ast narrowed_rvalue_type(ast node);
 
