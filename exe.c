@@ -1994,6 +1994,10 @@ void codegen_params(ast params, ast params_type) {
 }
 
 void emit_function_call(ast fun, int binding) {
+#ifdef SAFE_MODE
+  int good_lbl;
+#endif
+
   // Generate a fast path for direct calls
   if (binding != 0) {
 #ifdef ONE_PASS_GENERATOR
@@ -2005,7 +2009,7 @@ void emit_function_call(ast fun, int binding) {
 #ifdef SAFE_MODE
       // In safe mode, we check that the indirect call location is initialized
       mov_reg_imm(reg_Y, 0);
-      int good_lbl = alloc_label(0);
+      good_lbl = alloc_label(0);
       // Check if reg_X == 0 and call debug_interrupt otherwise
       jump_cond_reg_reg(NE, good_lbl, reg_X, reg_Y);
       // Add rt_crash with function name for better debugging experience
@@ -2051,6 +2055,9 @@ void codegen_call(ast node) {
   ast type = value_type(fun);
   int save_fs = cgc_fs;
   int binding = 0;
+#ifdef SAFE_MODE
+  bool allow_extra_params;
+#endif
 
 #ifdef SUPPORT_STRUCT_UNION
   int buf_words = 0;
@@ -2092,7 +2099,7 @@ void codegen_call(ast node) {
 
 #ifdef SAFE_MODE
   // allow_extra_params is true if the function is called indirectly or is variadic
-  bool allow_extra_params = binding == 0;
+  allow_extra_params = binding == 0;
   if (get_child_('(', type, 2)) allow_extra_params = true;
   codegen_params(params, get_child_opt_('(', LIST, type, 1), allow_extra_params);
 #else
@@ -3957,7 +3964,6 @@ void codegen_builtin() {
 }
 
 void init_memory_spaces(int glo_size) {
-  glo_size = word_size_align(glo_size);
   // Allocate some space for the global variables.
   //
   // By default, the global variables are placed in a mmapped region, but not
@@ -4045,7 +4051,7 @@ void codegen_end() {
 #ifndef ONE_PASS_GENERATOR
   def_label(setup_lbl);
   // Initialize the global variable table and heap for malloc
-  init_memory_spaces(cgc_global_alloc);
+  init_memory_spaces(word_size_align(cgc_global_alloc));
   // Jump to the initialization code
   jump(init_start_lbl);
 #endif

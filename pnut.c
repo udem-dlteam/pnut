@@ -2190,15 +2190,21 @@ bool handle_include() {
 
 // Handles preprocessor directives
 void handle_preprocessor_directive() {
+#ifdef ANNOTATE_WITH_C_CODE
+  int hash_code_buf_ix;
+  int dir_tok, dir_val;
+  bool keep_directive_code;
+  int last_newline_ix;
+  int directive_line_start_ix;
+#endif
   int temp;
   while (1) {
 #ifdef ANNOTATE_WITH_C_CODE
-    int hash_code_buf_ix = code_char_buf_ix;
-    int dir_tok, dir_val;
+    hash_code_buf_ix = code_char_buf_ix;
     // Forces the inclusion of the directive code in the C code buffer.
     // Used for system include directives, and trailing directives of conditional
     // blocks when if_macro_keep_directive_block_code is set.
-    bool keep_directive_code = if_macro_keep_directive_block_code;
+    keep_directive_code = if_macro_keep_directive_block_code;
 #endif
 
     get_tok_macro(true); // Get the # token
@@ -2307,11 +2313,11 @@ void handle_preprocessor_directive() {
       // code_char_buf_ix points to the character after the newline following
       // the directive. So we need to find the last newline after the directive
       // and the newline before the directive.
-      int last_newline_ix = code_char_buf_ix;
+      last_newline_ix = code_char_buf_ix;
       while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
         --last_newline_ix;
       }
-      int directive_line_start_ix = hash_code_buf_ix;
+      directive_line_start_ix = hash_code_buf_ix;
       while (directive_line_start_ix > 0 && code_char_buf[directive_line_start_ix - 1] != '\n') {
         --directive_line_start_ix;
       }

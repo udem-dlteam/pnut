@@ -326,8 +326,9 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 }
 
 void handle_function_params(ast lst) {
+  ast decl;
   while (lst != 0) {
-    ast decl = car_(DECL, lst);
+    decl = car_(DECL, lst);
     assert_var_decl_is_safe(decl, true);
     add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = tail(lst);
