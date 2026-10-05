@@ -64,7 +64,6 @@ text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
 bool comp_body(ast node, enum STMT_CTX stmt_ctx);
 bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
-void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
 

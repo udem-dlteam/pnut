@@ -43,7 +43,6 @@ text comp_rvalue_go(ast node, int outer_op);
 text comp_fun_call(ast node, ast params);
 bool comp_body(ast node, enum STMT_CTX stmt_ctx);
 bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
-void mark_mutable_variables_body(ast node);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
 
