@@ -55,16 +55,16 @@ text wrap_int_oct(const int i) {
 }
 
 text wrap_integer(const int multiply, const int obj) {
-  switch (get_op(obj)) {
-    case INTEGER:
-      return wrap_int(multiply * -get_val_(INTEGER, obj));
-    case INTEGER_HEX:
-      return wrap_int_hex(multiply * -get_val_(INTEGER_HEX, obj));
-    case INTEGER_OCT:
-      return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
-    default:
-      fatal_error("wrap_integer: unknown integer type");
-      return 0;
+  int op = get_op(obj);
+  if (op == INTEGER) {
+    return wrap_int(multiply * -get_val_(INTEGER, obj));
+  } else if (op == INTEGER_HEX) {
+    return wrap_int_hex(multiply * -get_val_(INTEGER_HEX, obj));
+  } else if (op == INTEGER_OCT) {
+    return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
+  } else {
+    fatal_error("wrap_integer: unknown integer type");
+    return 0;
   }
 }
 #else

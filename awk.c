@@ -342,24 +342,22 @@ text comp_rvalue_go(ast node, int outer_op) {
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
-        switch (get_op(child0)) {
-          case INT_KW:
-          case SHORT_KW:
-          case LONG_KW:
-          case CHAR_KW:
-          case VOID_KW:
-          case ENUM_KW:
-          case '*': // If it's a pointer
-            return wrap_int(1);
-
+        op = get_op(child0);
+        if (op == INT_KW || op == SHORT_KW || op == LONG_KW || op == CHAR_KW || op == VOID_KW
+          || op == ENUM_KW || op == '*') {
+          return wrap_int(1);
+        }
 #ifdef SUPPORT_STRUCT_UNION
-          case STRUCT_KW:
-            return struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1));
+        else if (op == STRUCT_KW) {
+          return struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1));
+        } else if (op == UNION_KW) {
+          return struct_sizeof_var(get_child__(UNION_KW, IDENTIFIER, child0, 1));
+        }
 #endif
-          default:
-            dump_node(child0);
-            fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
-            return 0;
+        else {
+          dump_node(child0);
+          fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+          return 0;
         }
       } else {
         dump_node(child0);
@@ -518,91 +516,82 @@ void handle_printf_call(char *format_str, ast params) {
     }
 
     if (mod) {
-      switch (*format_str) {
-        case ' ': case '#': case '+': case '-': case '0': // Flags
-          // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
-          // 16 bits meaning we can easily convert char -> bit if we wanted to.
-          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
-          break;
-
-        // Width or precision literal
-        case '1': case '2': case '3':
-        case '4': case '5': case '6':
-        case '7': case '8': case '9':
-          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
-          while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
-          has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
-          has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
-          ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
-          --format_str; // Reprocess non-numeric character
-          break;
-
-        // Precision
-        case '.':
-          if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
-          state = PRINTF_STATE_PRECISION;
-          break;
-
-        case '*':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          if (state == PRINTF_STATE_FLAGS) {
-            width_text = comp_rvalue(param);
-            has_width = true;
-          } else if (state == PRINTF_STATE_PRECISION) {
-            precision_text = comp_rvalue(param);
-            has_precision = true;
-          } else {
-            fatal_error("printf: width or precision already specified");
-          }
-          param = 0;
-          break;
-
-        case '%':
-          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
-          mod = false;
-          break;
-
+      if (*format_str == ' ' || *format_str == '#' || *format_str == '+' || *format_str == '-' || *format_str == '0') { // Flags
+        // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
+        // 16 bits meaning we can easily convert char -> bit if we wanted to.
+        if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
+      }
+      else if ('0' <= *format_str && *format_str <= '9') { // Width or precision literal
+        if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
+        while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
+        has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
+        has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
+        ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+        --format_str; // Reprocess non-numeric character
+      }
+      else if (*format_str == '.') { // Precision
+        if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
+        state = PRINTF_STATE_PRECISION;
+      }
+      else if (*format_str == '*') { // Width or precision from parameter
+        if (param == 0) fatal_error("printf: not enough parameters");
+        if (state == PRINTF_STATE_FLAGS) {
+          width_text = comp_rvalue(param);
+          has_width = true;
+        } else if (state == PRINTF_STATE_PRECISION) {
+          precision_text = comp_rvalue(param);
+          has_precision = true;
+        } else {
+          fatal_error("printf: width or precision already specified");
+        }
+        param = 0;
+      }
+      else if (*format_str == '%') { // Literal %
+        if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
+        mod = false;
+      }
+      else if (*format_str == 'l' || *format_str == 'd'
+            || *format_str == 'o' || *format_str == 'u'
+            || *format_str == 'x' || *format_str == 'X'
+            || *format_str == 'c' || *format_str == 'i') { // Specifier
         // The following options are the same between the shell's printf and C's printf
-        case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X': case 'c':
-          if (*format_str == 'l') {
-            while (*format_str == 'l') ++format_str; // Skip the 'l' for long
-            if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
-              dump_string("format_str = ", specifier_start);
-              fatal_error("printf: unsupported format specifier");
-            }
+        if (*format_str == 'l') {
+          while (*format_str == 'l') ++format_str; // Skip the 'l' for long
+          if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
+            dump_string("format_str = ", specifier_start);
+            fatal_error("printf: unsupported format specifier");
           }
+        }
 
-          if (param == 0) fatal_error("printf: not enough parameters");
-          params_text = concatenate_strings_with(params_text, width_text, wrap_str_lit(", "));     // Add width param if needed
-          params_text = concatenate_strings_with(params_text, precision_text, wrap_str_lit(", ")); // Add precision param if needed
-          params_text = concatenate_strings_with(params_text, comp_rvalue(param), wrap_str_lit(", ")); // Add the parameter
-          param = 0; // Consume param
-          mod = false;
-          break;
-
+        if (param == 0) fatal_error("printf: not enough parameters");
+        params_text = concatenate_strings_with(params_text, width_text, wrap_str_lit(", "));     // Add width param if needed
+        params_text = concatenate_strings_with(params_text, precision_text, wrap_str_lit(", ")); // Add precision param if needed
+        params_text = concatenate_strings_with(params_text, comp_rvalue(param), wrap_str_lit(", ")); // Add the parameter
+        param = 0; // Consume param
+        mod = false;
+      }
+      else if (*format_str == 's') {
         // We can't a string to printf directly, it needs to be unpacked first.
-        case 's':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          runtime_use_put_pstr = true;
-          // If the format specifier has width or precision, we have to pack the string and call then printf.
-          // Otherwise, we can call _put_pstr directly and avoid the subshell.
-          if (has_width || has_precision) {
-            fatal_error("printf: width and precision for strings not supported");
-          } else {
-            // Generate printf call with what we have so far
-            append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
-            // New format string starts after the %
-            format_start = format_str + 1;
-            // Compile printf("...%s...", str) to _put_pstr str
-            append_glo_decl(string_concat3(wrap_str_lit("_put_pstr("), comp_rvalue(param), wrap_char(')')));
-          }
-          param = 0; // Consume param
-          mod = false;
-          break;
-
-        default:
-          dump_string("format_str = ", specifier_start);
-          fatal_error("printf: unsupported format specifier");
+        if (param == 0) fatal_error("printf: not enough parameters");
+        runtime_use_put_pstr = true;
+        // If the format specifier has width or precision, we have to pack the string and call then printf.
+        // Otherwise, we can call _put_pstr directly and avoid the subshell.
+        if (has_width || has_precision) {
+          fatal_error("printf: width and precision for strings not supported");
+        } else {
+          // Generate printf call with what we have so far
+          append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+          // New format string starts after the %
+          format_start = format_str + 1;
+          // Compile printf("...%s...", str) to _put_pstr str
+          append_glo_decl(string_concat3(wrap_str_lit("_put_pstr("), comp_rvalue(param), wrap_char(')')));
+        }
+        param = 0; // Consume param
+        mod = false;
+      }
+      else {
+        dump_string("format_str = ", specifier_start);
+        fatal_error("printf: unsupported format specifier");
       }
     } else if (*format_str == '%') {
       mod = true;
@@ -706,29 +695,28 @@ bool comp_body(ast node, int stmt_ctx) {
 ast last_stmt;
 text make_switch_pattern(ast statement, text scrutinee_text) {
   text str = 0;
+  int op;
 
   while (1) { // statement will never be null
-    switch (get_op(statement)) {
-      case DEFAULT_KW:
-        str = wrap_int(1); // Default case always matches
-        statement = get_child_(DEFAULT_KW, statement, 0);
-        break;
-
-      case CASE_KW:
-        // This is much more permissive than what a C compiler would allow,
-        // but Shell allows matching on arbitrary expression in case
-        // patterns so it's fine. If we wanted to do this right, we'd check
-        // that the pattern is a numeric literal or an enum identifier.
-        str = concatenate_strings_with(str,
-          string_concat3(comp_rvalue(get_child_(CASE_KW, statement, 0)), wrap_str_lit(" == "), scrutinee_text),
-          wrap_str_lit(" || "));
-        statement = get_child_(CASE_KW, statement, 1);
-        break;
-
-      default:
-        if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
-        last_stmt = statement;
-        return str;
+    op = get_op(statement);
+    if (op == DEFAULT_KW) {
+      str = wrap_int(1); // Default case always matches
+      statement = get_child_(DEFAULT_KW, statement, 0);
+    }
+    else if (op == CASE_KW) {
+      // This is much more permissive than what a C compiler would allow,
+      // but Shell allows matching on arbitrary expression in case
+      // patterns so it's fine. If we wanted to do this right, we'd check
+      // that the pattern is a numeric literal or an enum identifier.
+      str = concatenate_strings_with(str,
+        string_concat3(comp_rvalue(get_child_(CASE_KW, statement, 0)), wrap_str_lit(" == "), scrutinee_text),
+        wrap_str_lit(" || "));
+      statement = get_child_(CASE_KW, statement, 1);
+    }
+    else {
+      if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
+      last_stmt = statement;
+      return str;
     }
   }
 }
@@ -743,17 +731,15 @@ bool comp_switch(ast node) {
   ast statement;
   int start_cgc_locals = cgc_locals;
   bool first_case = true; // Whether we're compiling the first case/default statement or subsequent ones
+  int op;
 
   text scrutinee_text = comp_rvalue(get_child_(SWITCH_KW, node, 0));
-  switch (get_op(get_child_(SWITCH_KW, node, 0))) {
-    case IDENTIFIER:
-    case INTEGER:
-      // For "atomic" scrutinees, use them directly in the comparisons
-      break;
-    default:
-      // Otherwise, compute the scrutinee into a temporary variable
-      append_glo_decl(string_concat(wrap_str_lit("__scrutinee = "), scrutinee_text));
-      scrutinee_text = wrap_str_lit("__scrutinee");
+  op = get_op(get_child_(SWITCH_KW, node, 0));
+  if (op != IDENTIFIER && op != INTEGER) {
+    // For "atomic" scrutinees, use them directly in the comparisons
+    // Otherwise, compute the scrutinee into a temporary variable
+    append_glo_decl(string_concat(wrap_str_lit("__scrutinee = "), scrutinee_text));
+    scrutinee_text = wrap_str_lit("__scrutinee");
   }
 
   cgc_add_enclosing_switch(false);
@@ -920,12 +906,10 @@ void comp_var_decls(ast node) {
   ast var_decl;
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
-  switch (get_child_(DECLS, node, 1)) {
+  int spec = get_child_(DECLS, node, 1);
+  if (spec == EXTERN_KW || spec == STATIC_KW) {
     // AUTO_KW and REGISTER_KW can simply be ignored.
-    case EXTERN_KW:
-    case STATIC_KW:
-      fatal_error("Extern and static storage class specifier not supported on local variables");
-      break;
+    fatal_error("Extern and static storage class specifier not supported on local variables");
   }
 #endif
   node = get_child_opt_(DECLS, LIST, node, 0);

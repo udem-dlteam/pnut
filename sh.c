@@ -141,27 +141,30 @@ void init_comp_context() {
 // the variable is not local.
 text format_special_var(ast ident, bool prefixed_with_dollar) {
   int i;
-  switch (get_op(ident)) {
-    case IDENTIFIER_INTERNAL:
-      return INTERNAL_VAR_FORMAT(get_val_(IDENTIFIER_INTERNAL, ident));
-    case IDENTIFIER_STRING:
-      return STRING_VAR_FORMAT(get_val_(IDENTIFIER_STRING, ident));
-    case IDENTIFIER_DOLLAR:
-      i = get_val_(IDENTIFIER_DOLLAR, ident);
-      if (prefixed_with_dollar) {
-          if (i <= 9) {
-            return wrap_int(i);
-        } else {
-            return string_concat3(wrap_char('{'), wrap_int(i), wrap_char('}'));
-        }
+  int op = get_op(ident);
+  if (op == IDENTIFIER_INTERNAL) {
+    return INTERNAL_VAR_FORMAT(get_val_(IDENTIFIER_INTERNAL, ident));
+  }
+  else if (op == IDENTIFIER_STRING) {
+    return STRING_VAR_FORMAT(get_val_(IDENTIFIER_STRING, ident));
+  }
+  else if (op == IDENTIFIER_DOLLAR) {
+    i = get_val_(IDENTIFIER_DOLLAR, ident);
+    if (prefixed_with_dollar) {
+      if (i <= 9) {
+        return wrap_int(i);
       } else {
-          if (i <= 9) {
-            return string_concat(wrap_char('$'), wrap_int(i));
-        } else {
-            return string_concat3(wrap_str_lit("${"), wrap_int(i), wrap_char('}'));
-        }
+        return string_concat3(wrap_char('{'), wrap_int(i), wrap_char('}'));
       }
-    default:
+    } else {
+      if (i <= 9) {
+        return string_concat(wrap_char('$'), wrap_int(i));
+      } else {
+        return string_concat3(wrap_str_lit("${"), wrap_int(i), wrap_char('}'));
+      }
+    }
+  }
+  else {
       fatal_error("format_special_var: unknown identifier type");
       return 0;
   }
@@ -853,34 +856,34 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
   text args = 0;
   ast element;
   ast str_ident;
+  int op;
 
   runtime_use_initialize = true;
 
   while (initializer_list != 0) {
     element = car(initializer_list);
-    switch (get_op(element)) {
-      case INTEGER:
-        args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
-        break;
+    op = get_op(element);
+    if (op == INTEGER) {
+      args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
+    }
 #ifndef PARSE_NUMERIC_LITERAL_WITH_BASE
-      case INTEGER_HEX:
-      case INTEGER_OCT:
-        // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
-        args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
-        break;
+    else if (op == INTEGER_HEX || op == INTEGER_OCT) {
+      // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
+      args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
+    }
 #endif
-      case CHARACTER:
-        // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
-        args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
-        break;
-      case STRING:
-        str_ident = fresh_string_ident(get_val_(STRING, element));
-        comp_defstr(str_ident, get_val_(STRING, element), -1);
-        args = concatenate_strings_with(args, string_concat(wrap_char('$'), format_special_var(str_ident, true)), wrap_char(' '));
-        break;
-      default:
-        // TODO: Support nested initializers and constant expressions
-        fatal_error("comp_initializer: unexpected operator");
+    else if (op == CHARACTER) {
+      // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
+      args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
+    }
+    else if (op == STRING) {
+      str_ident = fresh_string_ident(get_val_(STRING, element));
+      comp_defstr(str_ident, get_val_(STRING, element), -1);
+      args = concatenate_strings_with(args, string_concat(wrap_char('$'), format_special_var(str_ident, true)), wrap_char(' '));
+    }
+    else {
+      // TODO: Support nested initializers and constant expressions
+      fatal_error("comp_initializer: unexpected operator");
     }
     initializer_list = tail(initializer_list);
   }
@@ -1045,24 +1048,20 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
-        switch (get_op(child0)) {
-          case INT_KW:
-          case SHORT_KW:
-          case LONG_KW:
-          case CHAR_KW:
-          case VOID_KW:
-          case ENUM_KW:
-          case '*': // If it's a pointer
-            return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
-
+        op = get_op(child0);
+        if (op == INT_KW || op == SHORT_KW || op == LONG_KW || op == CHAR_KW || op == VOID_KW
+          || op == ENUM_KW || op == '*') {
+          return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
+        }
 #ifdef SUPPORT_STRUCT_UNION
-          case STRUCT_KW:
-            return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+        else if (op == STRUCT_KW) {
+          return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+        }
 #endif
-          default:
-            dump_node(child0);
-            fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
-            return 0;
+        else {
+          dump_node(child0);
+          fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+          return 0;
         }
       } else {
         dump_node(child0);
@@ -1400,121 +1399,111 @@ void handle_printf_call(char *format_str, ast params) {
     }
 
     if (mod) {
-      switch (*format_str) {
+      // The flags/width/precision state machine is only compiled in when
+      // SH_MINIMAL_PRINTF is off. When it is on, the "literal %" branch below
+      // becomes the first branch of the chain.
+      if (*format_str == '%') { // Literal %
+        mod = false;
+      }
 #ifndef SH_MINIMAL_PRINTF
-        case ' ': case '#': case '+': case '-': case '0': // Flags
-          // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
-          // 16 bits meaning we can easily convert char -> bit if we wanted to.
-          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
-          break;
-
-        // Width or precision literal
-        case '1': case '2': case '3':
-        case '4': case '5': case '6':
-        case '7': case '8': case '9':
-          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
-          while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
-          has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
-          has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
-          ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
-          --format_str; // Reprocess non-numeric character
-          break;
-
-        // Precision
-        case '.':
-          if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
-          state = PRINTF_STATE_PRECISION;
-          break;
-
-        case '*':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          if (state == PRINTF_STATE_FLAGS) {
-            width_text = comp_rvalue(param, RVALUE_CTX_BASE);
-            has_width = true;
-          } else if (state == PRINTF_STATE_PRECISION) {
-            precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
-            has_precision = true;
-          } else {
-            fatal_error("printf: width or precision already specified");
-          }
-          param = 0;
-          break;
-#endif
-
-        case '%':
-#ifndef SH_MINIMAL_PRINTF
-          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
-#endif
-          mod = false;
-          break;
-
+      else if (*format_str == ' ' || *format_str == '#' || *format_str == '+' || *format_str == '-' || *format_str == '0') { // Flags
+        // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
+        // 16 bits meaning we can easily convert char -> bit if we wanted to.
+        if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
+      }
+      else if ('0' <= *format_str && *format_str <= '9') { // Width or precision literal
+        if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
+        while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
+        has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
+        has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
+        ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+        --format_str; // Reprocess non-numeric character
+      }
+      else if (*format_str == '.') { // Precision
+        if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
+        state = PRINTF_STATE_PRECISION;
+      }
+      else if (*format_str == '*') { // Width or precision from parameter
+        if (param == 0) fatal_error("printf: not enough parameters");
+        if (state == PRINTF_STATE_FLAGS) {
+          width_text = comp_rvalue(param, RVALUE_CTX_BASE);
+          has_width = true;
+        } else if (state == PRINTF_STATE_PRECISION) {
+          precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
+          has_precision = true;
+        } else {
+          fatal_error("printf: width or precision already specified");
+        }
+        param = 0;
+      }
+#endif // SH_MINIMAL_PRINTF
+      else if (*format_str == 'l' || *format_str == 'd'
+            || *format_str == 'o' || *format_str == 'u'
+            || *format_str == 'x' || *format_str == 'X'
+            || *format_str == 'i') { // Specifier
         // The following options are the same between the shell's printf and C's printf
-        case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
-          if (*format_str == 'l') {
-            while (*format_str == 'l') ++format_str; // Skip the 'l' for long
-            if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
-              dump_string("format_str = ", specifier_start);
-              fatal_error("printf: unsupported format specifier");
-            }
+        if (*format_str == 'l') {
+          while (*format_str == 'l') ++format_str; // Skip the 'l' for long
+          if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
+            dump_string("format_str = ", specifier_start);
+            fatal_error("printf: unsupported format specifier");
           }
+        }
 
-          if (param == 0) fatal_error("printf: not enough parameters");
+        if (param == 0) fatal_error("printf: not enough parameters");
 #ifndef SH_MINIMAL_PRINTF
-          params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
-          params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+        params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
+        params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
 #endif
-          params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
-          param = 0; // Consume param
-          mod = false;
-          break;
-
+        params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
+        param = 0; // Consume param
+        mod = false;
+      }
+      else if (*format_str == 'c') {
         // We can't pass characters to printf directly because %c has a different meaning.
         // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
-        case 'c':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          // TODO: Find way to support width that's not too verbose
+        if (param == 0) fatal_error("printf: not enough parameters");
+        // TODO: Find way to support width that's not too verbose
 #ifndef SH_MINIMAL_PRINTF
-          if (has_width) fatal_error("printf: width not supported for %c");
+        if (has_width) fatal_error("printf: width not supported for %c");
 #endif
+        // Generate printf call with what we have so far
+        append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+        // New format string starts after the %
+        format_start = format_str + 1;
+        // Generate the printf call for the character
+        append_glo_decl(comp_putchar_inline(param));
+        param = 0; // Consume param
+        params_text = 0; // Reset the parameters
+        mod = false;
+      }
+      else if (*format_str == 's') {
+        // We can't a string to printf directly, it needs to be unpacked first.
+        if (param == 0) fatal_error("printf: not enough parameters");
+        // If the format specifier has width or precision, we have to pack the string and call then printf.
+        // Otherwise, we can call _put_pstr directly and avoid the subshell.
+        runtime_use_put_pstr = true;
+#ifndef SH_MINIMAL_PRINTF
+        if (has_width || has_precision) {
+          params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
+          params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+          params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("\"$(_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE), wrap_str_lit(")\"")), wrap_char(' ')); // Add the parameter
+        } else
+#endif
+        {
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
           // New format string starts after the %
           format_start = format_str + 1;
-          // Generate the printf call for the character
-          append_glo_decl(comp_putchar_inline(param));
-          param = 0; // Consume param
-          params_text = 0; // Reset the parameters
-          mod = false;
-          break;
-
-        // We can't a string to printf directly, it needs to be unpacked first.
-        case 's':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          // If the format specifier has width or precision, we have to pack the string and call then printf.
-          // Otherwise, we can call _put_pstr directly and avoid the subshell.
-          runtime_use_put_pstr = true;
-#ifndef SH_MINIMAL_PRINTF
-          if (has_width || has_precision) {
-            params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
-            params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
-            params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("\"$(_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE), wrap_str_lit(")\"")), wrap_char(' ')); // Add the parameter
-          } else
-#endif
-          {
-            // Generate printf call with what we have so far
-            append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
-            // New format string starts after the %
-            format_start = format_str + 1;
-            // Compile printf("...%s...", str) to _put_pstr str
-            append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE)));
-          }
-          param = 0; // Consume param
-          mod = false;
-          break;
-
-        default:
-          dump_string("format_str = ", specifier_start);
-          fatal_error("printf: unsupported format specifier");
+          // Compile printf("...%s...", str) to _put_pstr str
+          append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE)));
+        }
+        param = 0; // Consume param
+        mod = false;
+      }
+      else {
+        dump_string("format_str = ", specifier_start);
+        fatal_error("printf: unsupported format specifier");
       }
     } else if (*format_str == '%') {
       mod = true;
@@ -1661,27 +1650,26 @@ bool comp_body(ast node, int stmt_ctx) {
 ast last_stmt;
 text make_switch_pattern(ast statement) {
   text str = 0;
+  int op;
 
   while (1) { // statement will never be null
-    switch (get_op(statement)) {
-      case DEFAULT_KW:
-        str = wrap_char('*');
-        statement = get_child_(DEFAULT_KW, statement, 0);
-        break;
-
-      case CASE_KW:
-        // This is much more permissive than what a C compiler would allow,
-        // but Shell allows matching on arbitrary expression in case
-        // patterns so it's fine. If we wanted to do this right, we'd check
-        // that the pattern is a numeric literal or an enum identifier.
-        str = concatenate_strings_with(str, comp_rvalue(get_child_(CASE_KW, statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
-        statement = get_child_(CASE_KW, statement, 1);
-        break;
-
-      default:
-        if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
-        last_stmt = statement;
-        return string_concat(str, wrap_char(')'));
+    op = get_op(statement);
+    if (op == DEFAULT_KW) {
+      str = wrap_char('*');
+      statement = get_child_(DEFAULT_KW, statement, 0);
+    }
+    else if (op == CASE_KW) {
+      // This is much more permissive than what a C compiler would allow,
+      // but Shell allows matching on arbitrary expression in case
+      // patterns so it's fine. If we wanted to do this right, we'd check
+      // that the pattern is a numeric literal or an enum identifier.
+      str = concatenate_strings_with(str, comp_rvalue(get_child_(CASE_KW, statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
+      statement = get_child_(CASE_KW, statement, 1);
+    }
+    else {
+      if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
+      last_stmt = statement;
+      return string_concat(str, wrap_char(')'));
     }
   }
 }
@@ -1914,12 +1902,10 @@ void comp_var_decls(ast node) {
   ast var_decl;
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
-  switch (get_child_(DECLS, node, 1)) {
+  int spec = get_child_(DECLS, node, 1);
+  if (spec == EXTERN_KW || spec == STATIC_KW) {
     // AUTO_KW and REGISTER_KW can simply be ignored.
-    case EXTERN_KW:
-    case STATIC_KW:
-      fatal_error("Extern and static storage class specifier not supported on local variables");
-      break;
+    fatal_error("Extern and static storage class specifier not supported on local variables");
   }
 #endif
   node = get_child_opt_(DECLS, LIST, node, 0);
