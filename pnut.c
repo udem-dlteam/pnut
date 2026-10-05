@@ -282,6 +282,7 @@
   #define SUPPORT_EXTRACT_C_ANNOTATIONS
   #define SUPPORT_COMPLEX_INITIALIZER
   #define SUPPORT_DO_WHILE
+  #define SUPPORT_FOR
   #define SUPPORT_GOTO
   #define SUPPORT_SIZEOF
   #define SUPPORT_STRUCT_UNION
@@ -639,7 +640,9 @@ enum TOKEN {
   DO_KW,
 #endif
   ELSE_KW,
+#ifdef SUPPORT_FOR
   FOR_KW,
+#endif
   IF_KW,
   RETURN_KW,
 #ifdef SUPPORT_SIZEOF
@@ -2408,7 +2411,9 @@ void init_ident_table() {
   init_ident(DO_KW,       "do");
 #endif
   init_ident(ELSE_KW,     "else");
+#ifdef SUPPORT_FOR
   init_ident(FOR_KW,      "for");
+#endif
   init_ident(IF_KW,       "if");
   init_ident(RETURN_KW,   "return");
 #ifdef SUPPORT_SIZEOF
@@ -4503,7 +4508,9 @@ ast parse_statement() {
   ast result;
   ast child1;
   ast child2;
+#ifdef SUPPORT_FOR
   ast child3;
+#endif
 #ifdef SUPPORT_GOTO
   int start_tok;
 #endif
@@ -4568,6 +4575,7 @@ ast parse_statement() {
     result = new_ast2(DO_KW, result, child1);
 #endif // SUPPORT_DO_WHILE
 
+#ifdef SUPPORT_FOR
   } else if (tok == FOR_KW) {
 
     get_tok();
@@ -4581,6 +4589,7 @@ ast parse_statement() {
     child3 = parse_statement();
 
     result = new_ast4(FOR_KW, result, child1, child2, child3);
+#endif
 
 #ifdef SUPPORT_GOTO
   } else if (tok == GOTO_KW) {

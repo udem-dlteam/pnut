@@ -3291,6 +3291,7 @@ void codegen_statement(ast node) {
     jump(lbl1);
     def_label(lbl2);
 
+#ifdef SUPPORT_FOR
   } else if (op == FOR_KW) {
 
     lbl1 = alloc_label(0); // while statement start
@@ -3312,6 +3313,7 @@ void codegen_statement(ast node) {
     codegen_statement(get_child_(FOR_KW, node, 3));
     jump(lbl1);
     def_label(lbl2);
+#endif
 
 #ifdef SUPPORT_DO_WHILE
 

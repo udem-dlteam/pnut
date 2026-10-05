@@ -1965,6 +1965,7 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
                      stmt_ctx
                      );
 #endif
+#ifdef SUPPORT_FOR
   } else if (op == FOR_KW) {
     comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT);
 
@@ -1979,6 +1980,7 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
                      0, // No last line
                      stmt_ctx
                      );
+#endif
   } else if (op == SWITCH_KW) {
     return comp_switch(node);
   } else if (op == BREAK_KW) {

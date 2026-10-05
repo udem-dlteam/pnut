@@ -91,7 +91,9 @@ void print_tok(int tok, int val) {
   else if (tok == DO_KW)        putstr("do");
 #endif
   else if (tok == ELSE_KW)      putstr("else");
+#ifdef SUPPORT_FOR
   else if (tok == FOR_KW)       putstr("for");
+#endif
   else if (tok == IF_KW)        putstr("if");
   else if (tok == RETURN_KW)    putstr("return");
 #ifdef SUPPORT_SIZEOF
@@ -235,7 +237,9 @@ void print_tok_type(int tok) {
   else if (tok == DO_KW)        putstr("do");
 #endif
   else if (tok == ELSE_KW)      putstr("else");
+#ifdef SUPPORT_FOR
   else if (tok == FOR_KW)       putstr("for");
+#endif
   else if (tok == IF_KW)        putstr("if");
   else if (tok == RETURN_KW)    putstr("return");
 #ifdef SUPPORT_SIZEOF

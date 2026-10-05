@@ -978,6 +978,7 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
     cgc_locals = start_cgc_locals;
     return false;
 #endif
+#ifdef SUPPORT_FOR
   } else if (op == FOR_KW) {
     cgc_add_enclosing_loop();
     str = comp_rvalue(get_child_(FOR_KW, node, 0));
@@ -994,6 +995,7 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
     append_glo_decl(wrap_str_lit("}"));
     cgc_locals = start_cgc_locals;
     return false;
+#endif
   } else if (op == SWITCH_KW) {
     return comp_switch(node);
   } else if (op == BREAK_KW) {
