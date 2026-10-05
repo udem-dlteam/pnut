@@ -563,6 +563,7 @@ text test_op_to_str(int op) {
 text character_ident(int c) {
   // Mark character as used
   text res = 0;
+  char* str;
   characters_useds[c / CHARACTERS_BITFIELD_SIZE] = characters_useds[c / CHARACTERS_BITFIELD_SIZE] | (1 << (c % CHARACTERS_BITFIELD_SIZE));
   any_character_used = true;
 
@@ -570,7 +571,7 @@ text character_ident(int c) {
     res = wrap_char(c);
   } else if (c < 32) {
     // First 32 characters are control characters.
-    char* control_character_identifiers =
+    str =
       "NUL\0"     "SOH\0"     "STX\0"     "ETX\0"
       "EOT\0"     "ENQ\0"     "ACK\0"     "BEL\0"
       "BS\0\0"    "HT\0\0"    "LF\0\0"    "VT\0\0"
@@ -581,37 +582,37 @@ text character_ident(int c) {
       "FS\0\0"    "GS\0\0"    "RS\0\0"    "US\0\0"
     ;
     // Control characters
-    res = wrap_str_lit(control_character_identifiers + (c * 4)); // Each string has length 3 + null terminator
+    res = wrap_str_lit(str + (c * 4)); // Each string has length 3 + null terminator
   } else if (c < '0') {
     // Symbols from space to /
-    char* printable_character_identifiers1 =
+    str =
       "SPACE\0\0\0"     "EXCL\0\0\0\0"    "DQUOTE\0\0"        "HASH\0\0\0\0"
       "DOLLAR\0\0"      "PERCENT\0"       "AMP\0\0\0\0\0"     "QUOTE\0\0\0"
       "LPAREN\0\0"      "RPAREN\0\0"      "STAR\0\0\0\0"      "PLUS\0\0\0\0"
       "COMMA\0\0\0"     "MINUS\0\0\0"     "PERIOD\0\0"        "SLASH\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 8); // Each string has length 7 + null terminator
+    res = wrap_str_lit(str + (c - ' ') * 8); // Each string has length 7 + null terminator
   } else if (c <= 'A') {
     // Symbols from : to @
-    char* printable_character_identifiers2 =
+    str =
       "COLON\0\0\0\0\0"     "SEMICOLON\0"         "LT\0\0\0\0\0\0\0\0"    "EQ\0\0\0\0\0\0\0\0"
       "GT\0\0\0\0\0\0\0\0"  "QUESTION\0\0"        "AT\0\0\0\0\0\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers2 + (c - ':') * 10); // Each string has length 9 + null terminator
+    res = wrap_str_lit(str + (c - ':') * 10); // Each string has length 9 + null terminator
   } else if (c <= 'a') {
     // Symbols from [ to `
-    char* printable_character_identifiers3 =
+    str =
       "LBRACK\0\0\0\0\0"      "BACKSLASH\0\0"         "RBRACK\0\0\0\0\0"        "CARET\0\0\0\0\0\0"
       "UNDERSCORE\0"          "BACKTICK\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers3 + (c - '[') * 11); // Each string has length 10 + null terminator
+    res = wrap_str_lit(str + (c - '[') * 11); // Each string has length 10 + null terminator
   } else if (c <= 127) {
     // Symbols from { to ~ and DEL (127)
-    char* printable_character_identifiers4 =
+    str =
       "LBRACE\0"      "BAR\0\0\0\0"   "RBRACE\0"        "TILDE\0\0"
       "DEL\0\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers4 + (c - '{') * 7); // Each string has length 6 + null terminator
+    res = wrap_str_lit(str + (c - '{') * 7); // Each string has length 6 + null terminator
   } else {
     dump_char(c);
     fatal_error("character_ident: invalid character");
