@@ -1325,6 +1325,9 @@ void comp_glo_decl(ast node) {
 
 // Required codegen interface functions
 void codegen_begin() {
+  text_pool = malloc(TEXT_POOL_SIZE * sizeof(intptr_t));
+  glo_decls = malloc(GLO_DECL_SIZE * sizeof(text));
+
   print_awk_shebang();
   putchar('\n');
 }

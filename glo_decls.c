@@ -1,6 +1,6 @@
 #define GLO_DECL_SIZE 100000
 #define GLO_DECL_ENTRY_SIZE 3
-text glo_decls[GLO_DECL_SIZE];  // Generated code
+text *glo_decls;  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
 

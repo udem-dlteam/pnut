@@ -77,7 +77,7 @@ ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a
 bool main_defined = false;      // If the main function is defined
 
 #define CHARACTERS_BITFIELD_SIZE 16
-int characters_useds[16];        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
+int *characters_useds;        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
 bool any_character_used = false; // If any character is used
 
 // Internal identifier node types used by the compiler
@@ -89,10 +89,10 @@ enum IDENTIFIER_TYPE {
 
 // Pre-allocated internal identifier nodes to reduce memory usage.
 #define IDENTIFIER_INTERNAL_PREALLOC_SIZE 10
-int preallocated_fresh_idents[IDENTIFIER_INTERNAL_PREALLOC_SIZE]; // 1 to 10
+int *preallocated_fresh_idents; // 1 to 10
 
 #define IDENTIFIER_DOLLAR_PREALLOC_SIZE 10 // 1 to 10
-int preallocated_dollar_idents[IDENTIFIER_DOLLAR_PREALLOC_SIZE]; // 1 to 10
+int *preallocated_dollar_idents; // 1 to 10
 
 void init_comp_context() {
   int i = 0;
@@ -2419,6 +2419,12 @@ text initialize_function_variables() {
 }
 
 void codegen_begin() {
+  text_pool = malloc(TEXT_POOL_SIZE * sizeof(intptr_t));
+  characters_useds = malloc(CHARACTERS_BITFIELD_SIZE * sizeof(int));
+  preallocated_fresh_idents = malloc(IDENTIFIER_INTERNAL_PREALLOC_SIZE * sizeof(int));
+  preallocated_dollar_idents = malloc(IDENTIFIER_DOLLAR_PREALLOC_SIZE * sizeof(int));
+  glo_decls = malloc(GLO_DECL_SIZE * sizeof(text));
+
   init_comp_context();
 
   putstr("#!/bin/sh\n");

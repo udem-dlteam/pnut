@@ -77,6 +77,8 @@
     #define SH_MINIMAL_PRINTF
     // Support switch/case statements
     #define SUPPORT_SWITCH
+    // For global array initialization
+    #define SUPPORT_SIZEOF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -182,12 +184,13 @@
 
 #elif defined(target_awk)
 
-
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
     #define MINIMAL_RUNTIME
     // Support switch/case statements
     #define SUPPORT_SWITCH
+    // For global array initialization
+    #define SUPPORT_SIZEOF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -230,6 +233,8 @@
 
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
+    // For global array initialization
+    #define SUPPORT_SIZEOF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -440,7 +445,7 @@ int last_tok_column_number = 0;
 
 #define INCLUDE_STACK_DEPTH 10
 
-intptr_t include_stack[INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE];
+intptr_t *include_stack;
 int include_stack_top = 0; // Point to top of the stack, i.e. the next free entry
 
 void putstr(char *str) {
@@ -765,7 +770,7 @@ int val;
 
 // String pool for C keywords, identifiers and string literals
 #define STRING_POOL_SIZE 250000
-char string_pool[STRING_POOL_SIZE];
+char *string_pool;
 int string_pool_alloc = 0;
 int string_start;
 int hash;
@@ -779,7 +784,7 @@ int hash;
 #else
 #define HEAP_SIZE 786432 // 768 KB
 #endif
-intptr_t heap[HEAP_SIZE];
+intptr_t *heap;
 int heap_alloc = HASH_PRIME;
 
 int alloc_obj(const int size) {
@@ -1261,7 +1266,7 @@ void dump_op(int op) {
 #endif
 
 #define IFDEF_DEPTH_MAX 20
-int if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
+int *if_macro_stack; // Stack of if macro states
 int if_macro_stack_ix = 0;
 bool if_macro_mask = true;      // Indicates if the current if/elif block is being executed
 bool if_macro_executed = false; // If any of the previous if/elif conditions were true
@@ -1282,7 +1287,7 @@ bool expand_macro_arg = true;
 bool skip_newlines = true;
 
 #define MACRO_RECURSION_MAX 180 // Supports up to 60 (180 / 3) nested macro expansions.
-int macro_stack[MACRO_RECURSION_MAX];
+int *macro_stack;
 int macro_stack_ix = 0;
 
 int macro_tok_lst = 0;  // Current list of tokens to replay for the macro being expanded
@@ -1499,9 +1504,9 @@ void output_defined_cli_macros() {
 // when there's no more data. The runtimes that pnut targets (and the shell
 // runtime in particular) buffer reads per file descriptor, so we don't buffer
 // here to avoid keeping a second copy of the data.
-char read_buf[1];
+char *io_buf;
 int read_char(const int fd) {
-  if (read(fd, read_buf, 1) == 1) return read_buf[0] & 0xff;
+  if (read(fd, io_buf, 1) == 1) return io_buf[0] & 0xff;
   return EOF;
 }
 
@@ -1718,7 +1723,7 @@ void include_file(char *file_name, char *relative_to) {
 #define large_int_hi(obj) heap[obj+1]
 
 // Array used to accumulate 64 bit unsigned integers on 32 bit systems
-int val_32[2];
+int *val_32;
 
 // x = x * y
 void u64_mul_u32(int *x, int y) {
@@ -3950,7 +3955,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
     if (tok == '[') {
       // Check if not a void array
       if (get_op(result) == VOID_KW) parse_error("void array not allowed", tok);
-        get_tok();
+
+      get_tok(); // Skip the '[' token
       if (tok == ']') {
         val = 0;
       } else {
@@ -4843,6 +4849,16 @@ void extract_c_code_from_annotated_file(char * const filename) {
 int main(int argc, char **argv) {
   int i = 1;
   ast decl;
+
+  include_stack  = malloc(INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE * sizeof(intptr_t));
+  string_pool    = malloc(STRING_POOL_SIZE * sizeof(char));
+  heap           = malloc(HEAP_SIZE * sizeof(intptr_t));
+  if_macro_stack = malloc(IFDEF_DEPTH_MAX * sizeof(int));
+  macro_stack    = malloc(MACRO_RECURSION_MAX * sizeof(int));
+  io_buf         = malloc(1);
+#ifdef SUPPORT_64_BIT_LITERALS
+  val_32         = malloc(2 * sizeof(int));
+#endif
 
 #ifdef HANDLE_SIGNALS
   signal(SIGINT, signal_callback_handler);

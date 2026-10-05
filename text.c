@@ -1,7 +1,7 @@
 #define text int
 #define TEXT_POOL_SIZE 1000000
 
-intptr_t text_pool[TEXT_POOL_SIZE];
+intptr_t *text_pool;
 int text_alloc = 1; // Start at 1 because 0 is the empty text
 
 // Text pool nodes

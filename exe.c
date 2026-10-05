@@ -29,7 +29,7 @@ void generate_exe();
 #else
 #define CODE_SIZE 5000000
 #endif
-int code[CODE_SIZE];
+int *code;
 // Index of the next free byte in the code buffer
 int code_alloc = 0;
 // Total number of bytes emitted
@@ -162,10 +162,9 @@ void emit_i64_le_large_imm(const int imm_obj) {
 #endif
 #endif
 
-char write_buf[1];
 void write_i8(const int n) {
-  write_buf[0] = (n & 0xff);
-  write(output_fd, write_buf, 1);
+  io_buf[0] = (n & 0xff);
+  write(output_fd, io_buf, 1);
 }
 
 void write_2_i8(const int a, const int b) {
@@ -549,7 +548,7 @@ enum {
 
 #if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
 #define LABELS_ARR_SIZE 100000
-int labels[LABELS_ARR_SIZE];
+int *labels;
 int labels_ix = 0;
 
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
@@ -3975,6 +3974,10 @@ void init_memory_spaces(int glo_size) {
 }
 
 void codegen_begin() {
+  code = malloc(sizeof(int) * CODE_SIZE);
+#if defined (UNDEFINED_LABELS_ARE_RUNTIME_ERRORS) || defined (SAFE_MODE)
+  labels = malloc(sizeof(int) * LABELS_ARR_SIZE);
+#endif
 
   setup_lbl = alloc_label("setup");
   init_start_lbl = alloc_label("init_start");
