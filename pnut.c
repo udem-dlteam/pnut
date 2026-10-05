@@ -75,8 +75,6 @@
     // Remove support for complex printf specifiers (flags, width, precision).
     // This results in smaller code for the compiler.
     #define SH_MINIMAL_PRINTF
-    // Support switch/case statements
-    #define SUPPORT_SWITCH
     // For global array initialization
     #define SUPPORT_SIZEOF
   #else
@@ -187,8 +185,6 @@
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
     #define MINIMAL_RUNTIME
-    // Support switch/case statements
-    #define SUPPORT_SWITCH
     // For global array initialization
     #define SUPPORT_SIZEOF
   #else

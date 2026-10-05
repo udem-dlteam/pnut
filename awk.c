@@ -685,6 +685,7 @@ bool comp_body(ast node, int stmt_ctx) {
   return node != 0; // If node is not null, it means the block was terminated early
 }
 
+#ifdef SUPPORT_SWITCH
 
 // Assemble switch pattern from case and default statements.
 // Case and default statements are like labelled statements, meaning that they
@@ -790,6 +791,8 @@ bool comp_switch(ast node) {
 
   return false;
 }
+
+#endif // SUPPORT_SWITCH
 
 bool comp_if(ast node, int stmt_ctx) {
   int start_glo_decl_idx;
@@ -929,7 +932,9 @@ void comp_var_decls(ast node) {
 // This is used to delimit the end of conditional blocks of switch statements.
 bool comp_statement(ast node, int stmt_ctx) {
   int op;
+#ifdef SUPPORT_FOR
   text str;
+#endif
   int start_cgc_locals = cgc_locals;
 
   if (node == 0) return false; // Empty statement never returns
@@ -980,8 +985,10 @@ bool comp_statement(ast node, int stmt_ctx) {
     cgc_locals = start_cgc_locals;
     return false;
 #endif
+#ifdef SUPPORT_SWITCH
   } else if (op == SWITCH_KW) {
     return comp_switch(node);
+#endif
   } else if (op == BREAK_KW) {
     return comp_break(); // Break out of switch statement
   } else if (op == CONTINUE_KW) {
@@ -1003,9 +1010,11 @@ bool comp_statement(ast node, int stmt_ctx) {
     fatal_error("goto statements not supported");
     return false;
 #endif
+#ifdef SUPPORT_SWITCH
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;
+#endif
   } else if (op == DECLS) {
     comp_var_decls(node);
     return false;
