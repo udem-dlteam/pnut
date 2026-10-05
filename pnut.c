@@ -990,7 +990,7 @@ ast new_ast4(const int op, const ast child0, const ast child1, const ast child2,
 
 ast clone_ast(const ast orig) {
   int nb_children = get_nb_children(orig);
-  int i;
+  int i = 0;
 
   // Account for the value of ast nodes with no child
   nb_children = TERNARY(nb_children > 0, nb_children, 1);
@@ -998,8 +998,9 @@ ast clone_ast(const ast orig) {
   ast_result = alloc_obj(nb_children + 1);
 
   heap[ast_result] = heap[orig]; // copy operator and nb of children
-  for (i = 0; i < nb_children; i = i + 1) {
+  while (i < nb_children) {
     set_child(ast_result, i, get_child(orig, i));
+    ++i;
   }
 
   return ast_result;
@@ -1335,19 +1336,20 @@ bool code_annotations_quiet_mode = false;
 ast cli_macros = 0;
 
 void remove_c_code_substr(int start, int end) {
-  int i;
+  int i = end;
   if (code_annotations_quiet_mode) {
     // Discard C code and output nothing
     code_char_buf_ix = 0;
     return;
-  } else  if (start < 0 || end > code_char_buf_ix || start > end) {
+  } else if (start < 0 || end > code_char_buf_ix || start > end) {
     fatal_error("remove_c_code_substr: Invalid start or end index");
   } else if (start == end) {
     // Nothing to remove
   } else {
     // Move the characters after the removed substring to the start position
-    for (i = end; i < code_char_buf_ix; ++i) {
+    while (i < code_char_buf_ix) {
       code_char_buf[start + i - end] = code_char_buf[i];
+      ++i;
     }
     code_char_buf_ix = code_char_buf_ix - (end - start);
     // Adjust last_tok_code_buf_ix
@@ -1412,7 +1414,7 @@ void output_declaration_c_code() {
     putchar(' ');
   }
 
-  for (; i < last_tok_code_buf_ix; ++i) {
+  while (i < last_tok_code_buf_ix) {
     if (code_char_buf[i] == '\n') {
       putchar('\n');
       putchar('#');
@@ -1429,6 +1431,7 @@ void output_declaration_c_code() {
     } else {
       putchar(code_char_buf[i]);
     }
+    ++i;
   }
 
   putchar('\n');
@@ -1592,9 +1595,11 @@ int strlen(char *str) {
 }
 
 void memcpy(char *dest, char *src, int n) {
-  int i;
-  for (i = 0; i < n; i = i + 1) {
-    dest[i] = src[i];
+  while (n > 0) {
+    *dest = *src;
+    ++dest;
+    ++src;
+    --n;
   }
 }
 
@@ -4847,7 +4852,7 @@ void extract_c_code_from_annotated_file(char * const filename) {
 #endif // SUPPORT_EXTRACT_C_ANNOTATIONS
 
 int main(int argc, char **argv) {
-  int i;
+  int i = 1;
   ast decl;
 
 #ifdef HANDLE_SIGNALS
@@ -4858,7 +4863,7 @@ int main(int argc, char **argv) {
 
   init_pnut_macros();
 
-  for (i = 1; i < argc; ++i) {
+  while (i < argc) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
 #ifdef target_exe
@@ -4964,6 +4969,7 @@ int main(int argc, char **argv) {
       // Options that don't start with '-' are file names
       include_file(argv[i], 0);
     }
+    ++i;
   }
 
   if (fd == -1) {

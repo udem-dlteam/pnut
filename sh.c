@@ -2346,7 +2346,7 @@ void comp_glo_decl(ast node) {
 }
 
 void codegen_end() {
-  int c;
+  int c = 0;
 
 #ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   print_glo_decls();
@@ -2354,12 +2354,13 @@ void codegen_end() {
 
   if (any_character_used) {
     putstr("#_ Character constants\n");
-    for(c = 0; c < 256; ++c) {
+    while (c < 256) {
       if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
         putstr("readonly ");
         print_text(character_ident(c));
         putchar('='); putint(c); putchar('\n');
       }
+      ++c;
     }
   }
 

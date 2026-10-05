@@ -43,8 +43,11 @@ void print_tok_string(int symbol) {
 int print_tok_indent_level = 0;
 int print_tok_preceding_nl_count = 0;
 void print_tok_indent() {
-  int i;
-  for (i = 0; i < print_tok_indent_level; ++i) { putchar(' '); putchar(' '); }
+  int i = 0;
+  while (i < print_tok_indent_level) {
+    putchar(' '); putchar(' ');
+    ++i;
+  }
 }
 
 void print_tok(int tok, int val) {
@@ -551,9 +554,10 @@ void ast_to_sexp(ast obj) {
       putchar('(');
       print_tok_type(get_op(obj));
       putchar(' ');
-      for (; i < get_nb_children(obj); ++i) {
+      while (i < get_nb_children(obj)) {
         ast_to_sexp(get_child(obj, i));
         if (get_child(obj, i) != 0 && i < get_nb_children(obj) - 1) putchar(' ');
+        ++i;
       }
       putchar(')');
       break;

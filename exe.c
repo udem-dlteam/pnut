@@ -360,17 +360,20 @@ void write_mem_location(int base, int offset, int src, int width) {
 #ifdef SUPPORT_STRUCT_UNION
 
 void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int width) {
-  int i;
+  int i = 0;
   // move the words
-  for (i = 0; i < width / WORD_SIZE; ++i) {
+  while (i < width / WORD_SIZE) {
     mov_reg_mem(reg_Z, src_base, src_offset + i * WORD_SIZE);
     mov_mem_reg(dst_base, dst_offset + i * WORD_SIZE, reg_Z);
+    ++i;
   }
 
   // then move the remaining bytes
-  for (i = width - width % WORD_SIZE; i < width; ++i) {
+  i = width - width % WORD_SIZE;
+  while (i < width) {
     mov_reg_mem8(reg_Z, src_base, src_offset + i);
     mov_mem8_reg(dst_base, dst_offset + i, reg_Z);
+    ++i;
   }
 }
 
@@ -380,13 +383,16 @@ void copy_obj(int dst_base, int dst_offset, int src_base, int src_offset, int wi
 
 // Initialize a memory location with a value
 void initialize_memory(int val, int base, int offset, int width) {
-  int i;
+  int i = 0;
   mov_reg_imm(reg_Z, val);
-  for (i = 0; i < width / WORD_SIZE; ++i) {
+  while (i < width / WORD_SIZE) {
     mov_mem_reg(base, offset + i * WORD_SIZE, reg_Z);
+    ++i;
   }
-  for (i = width - width % WORD_SIZE; i < width; ++i) {
+  i = width - width % WORD_SIZE;
+  while (i < width) {
     mov_mem8_reg(base, offset + i, reg_Z);
+    ++i;
   }
 }
 
@@ -559,7 +565,7 @@ void assert_all_labels_defined(int init_next_lbl) {
   int i = 0;
   int lbl;
   // Check that all labels are defined
-  for (; i < labels_ix; ++i) {
+  while (i < labels_ix) {
     lbl = labels[i];
     if (lbl != init_next_lbl && label_addr(lbl) > 0) {
 #ifdef UNDEFINED_LABELS_ARE_RUNTIME_ERRORS
@@ -583,6 +589,7 @@ void assert_all_labels_defined(int init_next_lbl) {
       exit(1);
 #endif
     }
+    ++i;
   }
 }
 
@@ -2954,9 +2961,10 @@ void codegen_initializer_string(int string_symbol, ast type, int base_reg, int o
     if (str_len > arr_len) fatal_error("codegen_initializer: string initializer is too long for char[]");
 
     // Place the bytes of the string in the memory location allocated for the array
-    for (; i < arr_len; ++i) {
+    while (i < arr_len) {
       mov_reg_imm(reg_X, TERNARY(i < str_len, string_start[i], 0));
       write_mem_location(base_reg, offset + i, reg_X, 1);
+      ++i;
     }
   } else if (get_op(type) == '*' && get_op(get_child_('*', type, 1)) == CHAR_KW) {
     // Create the string and assign global variable to the pointer
