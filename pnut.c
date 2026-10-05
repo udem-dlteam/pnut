@@ -75,6 +75,8 @@
     // Remove support for complex printf specifiers (flags, width, precision).
     // This results in smaller code for the compiler.
     #define SH_MINIMAL_PRINTF
+    // Support switch/case statements
+    #define SUPPORT_SWITCH
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -180,9 +182,12 @@
 
 #elif defined(target_awk)
 
+
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
     #define MINIMAL_RUNTIME
+    // Support switch/case statements
+    #define SUPPORT_SWITCH
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -284,6 +289,7 @@
   #define SUPPORT_DO_WHILE
   #define SUPPORT_FOR
   #define SUPPORT_GOTO
+  #define SUPPORT_SWITCH
   #define SUPPORT_SIZEOF
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_TYPE_SPECIFIERS
@@ -633,7 +639,9 @@ enum TOKEN {
   // C keywords
   KEYWORDS_START = 300,
   BREAK_KW,
+#ifdef SUPPORT_SWITCH
   CASE_KW,
+#endif
   CONTINUE_KW,
   DEFAULT_KW,
 #ifdef SUPPORT_DO_WHILE
@@ -2403,7 +2411,9 @@ void init_ident_table() {
   }
 
   init_ident(BREAK_KW,    "break");
+#ifdef SUPPORT_SWITCH
   init_ident(CASE_KW,     "case");
+#endif
   init_ident(CONTINUE_KW, "continue");
   init_ident(DEFAULT_KW,  "default");
 #ifdef SUPPORT_DO_WHILE
@@ -2418,7 +2428,9 @@ void init_ident_table() {
 #ifdef SUPPORT_SIZEOF
   init_ident(SIZEOF_KW,   "sizeof");
 #endif
+#ifdef SUPPORT_SWITCH
   init_ident(SWITCH_KW,   "switch");
+#endif
   init_ident(WHILE_KW,    "while");
 
   // Type specifiers
@@ -4493,6 +4505,7 @@ ast parse_statement() {
 
     result = new_ast3(IF_KW, result, child1, child2);
 
+#ifdef SUPPORT_SWITCH
   } else if (tok == SWITCH_KW) {
 
     get_tok();
@@ -4509,6 +4522,8 @@ ast parse_statement() {
     child1 = parse_statement();
 
     result = new_ast2(CASE_KW, result, child1);
+
+#endif
 
   } else if (tok == DEFAULT_KW) {
 

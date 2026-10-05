@@ -84,7 +84,9 @@ void print_tok(int tok, int val) {
 
 
   if      (tok == BREAK_KW)     putstr("break");
+#ifdef SUPPORT_SWITCH
   else if (tok == CASE_KW)      putstr("case");
+#endif
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
 #ifdef SUPPORT_DO_WHILE
@@ -99,7 +101,9 @@ void print_tok(int tok, int val) {
 #ifdef SUPPORT_SIZEOF
   else if (tok == SIZEOF_KW)    putstr("sizeof");
 #endif
+#ifdef SUPPORT_SWITCH
   else if (tok == SWITCH_KW)    putstr("switch");
+#endif
   else if (tok == TYPEDEF_KW)   putstr("typedef");
   else if (tok == WHILE_KW)     putstr("while");
   else if (tok == CHAR_KW)      putstr("char");
@@ -230,7 +234,9 @@ void print_tok(int tok, int val) {
 void print_tok_type(int tok) {
 
   if      (tok == BREAK_KW)     putstr("break");
+#ifdef SUPPORT_SWITCH
   else if (tok == CASE_KW)      putstr("case");
+#endif
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
 #ifdef SUPPORT_DO_WHILE
@@ -245,7 +251,9 @@ void print_tok_type(int tok) {
 #ifdef SUPPORT_SIZEOF
   else if (tok == SIZEOF_KW)    putstr("sizeof");
 #endif
+#ifdef SUPPORT_SWITCH
   else if (tok == SWITCH_KW)    putstr("switch");
+#endif
   else if (tok == TYPEDEF_KW)   putstr("typedef");
   else if (tok == WHILE_KW)     putstr("while");
   else if (tok == CHAR_KW)      putstr("char");

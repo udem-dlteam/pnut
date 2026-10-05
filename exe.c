@@ -3281,6 +3281,8 @@ void codegen_statement(ast node) {
 
 #endif // SUPPORT_DO_WHILE
 
+#ifdef SUPPORT_SWITCH
+
   } else if (op == SWITCH_KW) {
 
     lbl1 = alloc_label(0); // lbl1: end of switch
@@ -3377,6 +3379,8 @@ void codegen_statement(ast node) {
     } else {
       fatal_error("case outside of switch");
     }
+
+#endif
 
   } else if (op == DEFAULT_KW) {
 
