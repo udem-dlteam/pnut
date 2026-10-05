@@ -3209,7 +3209,11 @@ void codegen_body(ast node) {
 
 void codegen_statement(ast node) {
   int op;
+#if defined(SUPPORT_FOR) || defined(SUPPORT_SWITCH)
   int lbl1, lbl2, lbl3;
+#else
+  int lbl1, lbl2;
+#endif
   int save_fs = cgc_fs;
   int save_locals = cgc_locals;
   int binding;
