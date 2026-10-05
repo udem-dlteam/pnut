@@ -1975,7 +1975,7 @@ void codegen_params(ast params, ast params_type) {
 }
 
 void emit_function_call(ast fun, int binding) {
-#ifdef SAFE_MODE
+#if defined(ONE_PASS_GENERATOR) && defined(SAFE_MODE)
   int good_lbl;
 #endif
 
