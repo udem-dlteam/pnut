@@ -1456,12 +1456,13 @@ void output_declaration_c_code() {
 void output_defined_cli_macros() {
   ast macros = cli_macros;
   ast macro_tokens;
+  ast macro;
   int macro_tok;
   int macro_val;
   if (cli_macros != 0) putstr("## Macros defined from the command line:\n");
 
   while (macros != 0) {
-    ast macro = car(macros);
+    macro = car(macros);
     putstr(symbol_type(macro) == MACRO ? "# #define " : "# #undef ");
     putstr(symbol_buf(macro));
     // For macros with a single value token, we print it on the same line
@@ -1740,14 +1741,14 @@ void u64_add_u32(int *x, int y) {
   if (y > 255) fatal_error("u64_add_u32: Only small integers can be added to large integers");
 #endif
   // y is a single digit (< base <= 16), so a carry out of the low word can only
-  // clear bit 31, never set it. Detect it with a bit test, not `lo < 0`: a low
+  // clear bit 31, never set it. Detect it with a bit test, not `y < 0`: a low
   // word with bit 31 set is negative under GCC's 32-bit signed ints but positive
   // in the shell/awk runtime, so a signed test disagrees between runtimes.
-  int lo = x[0] + y;
-  x[1] = x[1] + (I32_NEGATIVE(x[0]) && I32_POSITIVE(lo));
+  y = x[0] + y; // low word addition, may overflow into high word
+  x[1] = x[1] + (I32_NEGATIVE(x[0]) && I32_POSITIVE(y));
   // Mask lo to 32 bits (awk's + doesn't wrap) by reassembling from its 16-bit
   // halves, avoiding the 0xffffffff literal which also serializes host-dependently.
-  x[0] = (I32_LOGICAL_RSHIFT_16(lo) << 16) + (lo & 0xffff);
+  x[0] = (I32_LOGICAL_RSHIFT_16(y) << 16) + (y & 0xffff);
 }
 
 // Pack a 64 bit unsigned integer into an object or immediate.
@@ -1771,6 +1772,7 @@ void u64_to_obj(int *x) {
 int accum_digit(int base) {
   int digit = 99;
   int MININT = -2147483648;
+  int limit;
   if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
   } else if ('A' <= ch && ch <= 'Z') {
@@ -1781,7 +1783,7 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; // character is not a digit in that base
   } else {
-    int limit = MININT / base;
+    limit = MININT / base;
     if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
       syntax_error("literal integer overflow");
     }
