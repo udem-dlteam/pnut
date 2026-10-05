@@ -211,7 +211,6 @@ void mov_reg_reg(int dst, int src);
 void mov_mem8_reg(int base, int offset, int src);
 void mov_mem16_reg(int base, int offset, int src);
 void mov_mem32_reg(int base, int offset, int src);
-void mov_mem64_reg(int base, int offset, int src);
 void mov_mem8_reg(int base, int offset, int src);
 void mov_reg_mem8(int dst, int base, int offset);
 void mov_reg_mem16(int dst, int base, int offset);
@@ -219,12 +218,13 @@ void mov_reg_mem32(int dst, int base, int offset);
 void mov_reg_mem8_sign_ext(int dst, int base, int offset);
 void mov_reg_mem16_sign_ext(int dst, int base, int offset);
 void mov_reg_mem32_sign_ext(int dst, int base, int offset);
-void mov_reg_mem64(int dst, int base, int offset);
 
 #if WORD_SIZE == 4
 #define mov_mem_reg(base, offset, src) mov_mem32_reg(base, offset, src)
 #define mov_reg_mem(dst, base, offset) mov_reg_mem32(dst, base, offset)
 #elif WORD_SIZE == 8
+void mov_mem64_reg(int base, int offset, int src);
+void mov_reg_mem64(int dst, int base, int offset);
 #define mov_mem_reg(base, offset, src) mov_mem64_reg(base, offset, src)
 #define mov_reg_mem(dst, base, offset) mov_reg_mem64(dst, base, offset)
 #endif
@@ -318,27 +318,22 @@ void stack_push_address_of(const int ix) {
 
 void load_mem_location(int dst, int base, int offset, int width, bool is_signed) {
   if (is_signed) {
-    switch (width) {
-      case 1: mov_reg_mem8_sign_ext(dst, base, offset);  break;
-      case 2: mov_reg_mem16_sign_ext(dst, base, offset); break;
+    if      (width == 1) mov_reg_mem8_sign_ext(dst, base, offset);
+    else if (width == 2) mov_reg_mem16_sign_ext(dst, base, offset);
 #if WORD_SIZE == 4
-      case 4: mov_reg_mem32(dst, base, offset); break;
+    else if (width == 4) mov_reg_mem32(dst, base, offset);
 #elif WORD_SIZE == 8
-      case 4: mov_reg_mem32_sign_ext(dst, base, offset); break; // This instruction is only available in 64-bit mode
-      case 8: mov_reg_mem64(dst, base, offset);          break; // no sign extension needed
+    else if (width == 4) mov_reg_mem32_sign_ext(dst, base, offset);
+    else if (width == 8) mov_reg_mem64(dst, base, offset); // no sign extension needed
 #endif
-      default: fatal_error("load_mem_location: unknown width");
-    }
+    else fatal_error("load_mem_location: unknown width");
   } else {
-    switch (width) {
-      case 1: mov_reg_mem8(dst, base, offset);  break;
-      case 2: mov_reg_mem16(dst, base, offset); break;
-      case 4: mov_reg_mem32(dst, base, offset); break;
+    if      (width == 1) mov_reg_mem8(dst, base, offset);
+    else if (width == 2) mov_reg_mem16(dst, base, offset);
+    else if (width == 4) mov_reg_mem32(dst, base, offset);
 #if WORD_SIZE == 8
-      case 8: mov_reg_mem64(dst, base, offset); break;
+    else if (width == 8) mov_reg_mem64(dst, base, offset);
 #endif
-      default: fatal_error("load_mem_location: unknown width");
-    }
   }
 }
 
@@ -348,13 +343,13 @@ void write_mem_location(int base, int offset, int src, int width) {
     fatal_error("write_mem_location: width > WORD_SIZE");
   }
 
-  switch (width) {
-    case 1: mov_mem8_reg(base, offset, src); break;
-    case 2: mov_mem16_reg(base, offset, src); break;
-    case 4: mov_mem32_reg(base, offset, src); break;
-    case 8: mov_mem64_reg(base, offset, src); break;
-    default: fatal_error("write_mem_location: unknown width");
-  }
+  if      (width == 1) mov_mem8_reg(base, offset, src);
+  else if (width == 2) mov_mem16_reg(base, offset, src);
+  else if (width == 4) mov_mem32_reg(base, offset, src);
+#if WORD_SIZE == 8
+  else if (width == 8) mov_mem64_reg(base, offset, src);
+#endif
+  else fatal_error("write_mem_location: unknown width");
 }
 
 #ifdef SUPPORT_STRUCT_UNION
@@ -800,15 +795,15 @@ ast void_type;
 ast void_star_type;
 
 ast dereference_type(ast type) {
-  switch (get_op(type)) {
-    case '[': // Array type
-      return get_child_('[', type, 0);
-    case '*': // Pointer type
-      return get_child_('*', type, 1);
-    default:
-      dump_op(get_op(type));
-      fatal_error("dereference_type: non pointer is being dereferenced with *");
-      return -1;
+  ast op = get_op(type);
+  if (op == '[') {
+    return get_child_('[', type, 0);
+  } else if (op == '*') {
+    return get_child_('*', type, 1);
+  } else {
+    dump_op(op);
+    fatal_error("dereference_type: non pointer is being dereferenced with *");
+    return -1;
   }
 }
 
@@ -882,31 +877,17 @@ bool is_aggregate_type(ast type) {
 }
 
 bool is_numeric_type(ast type) {
-  switch (get_op(type)) {
-    case CHAR_KW:
-    case INT_KW:
-    case FLOAT_KW:
-    case DOUBLE_KW:
-    case SHORT_KW:
-    case LONG_KW:
-    case ENUM_KW: // Enums are considered numeric types
-      return true;
-    default: // Struct/union/pointer/array
-      return false;
-  }
+  int op = get_op(type);
+  return op == CHAR_KW || op == INT_KW || op == FLOAT_KW || op == DOUBLE_KW || op == SHORT_KW || op == LONG_KW
+      || op == ENUM_KW; // Enums are considered numeric types
 }
 
 bool is_signed_numeric_type(ast type) {
-  switch (get_op(type)) {
-    case CHAR_KW:
-    case INT_KW:
-    case FLOAT_KW:
-    case DOUBLE_KW:
-    case SHORT_KW:
-    case LONG_KW:
-      return !TEST_TYPE_SPECIFIER(get_val(type), UNSIGNED_KW);
-    default:
-      return true; // Not a numeric type => it's a struct/union/pointer/array and we consider it signed
+  int op = get_op(type);
+  if (op == CHAR_KW || op == INT_KW || op == FLOAT_KW || op == DOUBLE_KW || op == SHORT_KW || op == LONG_KW) {
+    return !TEST_TYPE_SPECIFIER(get_val(type), UNSIGNED_KW);
+  } else {
+    return true; // Not a numeric type => it's a struct/union/pointer/array and we consider it signed
   }
 }
 
@@ -917,8 +898,8 @@ bool is_signed_numeric_type(ast type) {
 int type_width(ast type, bool array_value, bool word_align) {
   int width = 1;
   // Basic type kw
-  switch (get_op(type)) {
-    case '[':
+  int op = get_op(type);
+  if (op == '[') {
       // In certain contexts, we want to know the static size of the array (i.e.
       // sizeof, in struct definitions, etc.) while in other contexts we care
       // about the pointer (i.e. when passing an array to a function, etc.)
@@ -927,30 +908,27 @@ int type_width(ast type, bool array_value, bool word_align) {
       } else {
         width = WORD_SIZE; // Array is a pointer to the first element
       }
-      break;
-    case '*':      width = WORD_SIZE; break;
-    case VOID_KW:  width = 1;         break; // Default to 1 byte for void so pointer arithmetic and void casts work
-    case CHAR_KW:  width = 1;         break;
-    case SHORT_KW: width = 2;         break;
-    case INT_KW:   width = 4;         break;
-    case LONG_KW:
-#if WORD_SIZE == 8 || defined (SUPPORT_EMULATED_INT64)
-      width = 8;
-      break;
-#elif defined (BOOTSTRAP_LONG)
+  } else if (op == '*') {
+      width = WORD_SIZE; // Pointer is a word
+  } else if (op == VOID_KW || op == CHAR_KW) {
+      width = 1; // Default to 1 byte for void so pointer arithmetic and void casts work
+  } else if (op == SHORT_KW) {
+      width = 2;
+  } else if (op == INT_KW) {
       width = 4;
-      break;
-#else
-      fatal_error("type_width: long type not supported");
-      return -1;
+#if WORD_SIZE == 8 || defined (SUPPORT_EMULATED_INT64)
+  } else if (op == LONG_KW) {
+      width = 8;
+#elif defined (BOOTSTRAP_LONG)
+  } else if (op == LONG_KW) {
+      width = 4;
 #endif
 #ifdef SUPPORT_STRUCT_UNION
-    case STRUCT_KW:
-    case UNION_KW:
+  } else if (op == STRUCT_KW || op == UNION_KW) {
       width = struct_union_size(type);
-      break;
-#endif // SUPPORT_STRUCT_UNION
-    default:       width = WORD_SIZE; break;
+#endif
+  } else {
+    width = WORD_SIZE; // Default to word size for unknown types
   }
 
   if (word_align) width = word_size_align(width);
@@ -1001,16 +979,15 @@ ast canonicalize_type(ast type) {
 int struct_union_size_largest_member = 0;
 
 int type_largest_member(ast type) {
-  switch (get_op(type)) {
-    case STRUCT_KW:
-    case UNION_KW:
-      struct_union_size_largest_member = 0;
-      struct_union_size(type); // Compute struct_union_size_largest_member global
-      return struct_union_size_largest_member;
-    case '[':
-      return type_largest_member(get_child_('[', type, 0));
-    default:
-      return type_width(type, true, false);
+  int op = get_op(type);
+  if (op == STRUCT_KW || op == UNION_KW) {
+    struct_union_size_largest_member = 0;
+    struct_union_size(type); // Compute struct_union_size_largest_member global
+    return struct_union_size_largest_member;
+  } else if (op == '[') {
+    return type_largest_member(get_child_('[', type, 0));
+  } else {
+    return type_width(type, true, false);
   }
 }
 
@@ -1144,14 +1121,13 @@ int resolve_identifier(int ident_symbol) {
 // Integer conversion rank.
 // Note that the parser maps "long" to INT_KW and "long long" to LONG_KW.
 int type_rank(const ast type) {
-  switch (get_op(type)) {
-    case CHAR_KW:   return 1;
-    case SHORT_KW:  return 2;
-    case LONG_KW:   return 4;
-    case FLOAT_KW:  return 5;
-    case DOUBLE_KW: return 6;
-    default:        return 3; // INT_KW, ENUM_KW
-  }
+  int op = get_op(type);
+  if      (op == CHAR_KW)   return 1;
+  else if (op == SHORT_KW)  return 2;
+  else if (op == LONG_KW)   return 4;
+  else if (op == FLOAT_KW)  return 5;
+  else if (op == DOUBLE_KW) return 6;
+  else                      return 3; // INT_KW, ENUM_KW
 }
 
 // Integer promotions (C99 6.3.1.1): types narrower than int are widened to int.
@@ -1360,20 +1336,18 @@ ast value_type(ast node) {
       return string_type;
     } else if (op == IDENTIFIER) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
-      switch (binding_kind(binding)) {
-        case BINDING_PARAM_LOCAL:
-        case BINDING_VAR_LOCAL:
-          return var_binding_type(binding);
-        case BINDING_VAR_GLOBAL:
-          return var_binding_type(binding);
-        case BINDING_ENUM_CST:
-          return int_type;
-        case BINDING_FUN:
-          return fun_binding_type(binding);
-        default:
-          dump_ident(get_val_(IDENTIFIER, node));
-          fatal_error("value_type: unknown identifier");
-          return -1;
+      if (binding_kind(binding) == BINDING_PARAM_LOCAL
+       || binding_kind(binding) == BINDING_VAR_LOCAL
+       || binding_kind(binding) == BINDING_VAR_GLOBAL) {
+        return var_binding_type(binding);
+      } else if (binding_kind(binding) == BINDING_ENUM_CST) {
+        return int_type;
+      } else if (binding_kind(binding) == BINDING_FUN) {
+        return fun_binding_type(binding);
+      } else {
+        dump_ident(get_val_(IDENTIFIER, node));
+        fatal_error("value_type: unknown identifier");
+        return -1;
       }
     } else {
       dump_node(node);
@@ -2188,28 +2162,24 @@ void codegen_lvalue(ast node) {
   if (nb_children == 0) {
     if (op == IDENTIFIER) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
-      switch (binding_kind(binding)) {
-        case BINDING_PARAM_LOCAL:
-        case BINDING_VAR_LOCAL:
-          stack_push_address_of(var_binding_offset(binding));
-          break;
-        case BINDING_VAR_GLOBAL:
-          mov_reg_imm(reg_X, var_binding_offset(binding));
-          add_reg_reg(reg_X, reg_glo);
-          stack_push(reg_X);
-          break;
-        case BINDING_FUN:
-          // Function pointers are stored in the forward jump table
+      if (binding_kind(binding) == BINDING_PARAM_LOCAL || binding_kind(binding) == BINDING_VAR_LOCAL) {
+        stack_push_address_of(var_binding_offset(binding));
+      } else if (binding_kind(binding) == BINDING_VAR_GLOBAL) {
+        mov_reg_imm(reg_X, var_binding_offset(binding));
+        add_reg_reg(reg_X, reg_glo);
+        stack_push(reg_X);
+      } else if (binding_kind(binding) == BINDING_FUN) {
+//     Function pointers are stored in the forward jump table
 #ifdef ONE_PASS_GENERATOR
-          mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
+        // When compiling in one pass mode, forward jumps must go through the
+        // jump table which stores the function pointers.
+        mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #else
-          mov_reg_lbl(reg_X, fun_binding_lbl(binding));
+        mov_reg_lbl(reg_X, fun_binding_lbl(binding));
 #endif
-          stack_push(reg_X);
-          break;
-        default:
-          fatal_error("codegen_lvalue: identifier not found");
-          break;
+        stack_push(reg_X);
+      } else {
+        fatal_error("codegen_lvalue: identifier not found");
       }
     } else {
 #ifdef SUPPORT_EMULATED_INT64
@@ -2380,27 +2350,25 @@ char *int64_resolve_binop_name(int op, ast left_type, ast right_type) {
   ast comp_common_type = usual_arith_conv(left_type, right_type);
   ast arith_common_type = arith_value_type(op, left_type, right_type);
 
-  switch (op) {
-    case '+':     case PLUS_EQ:     return "add_i64";
-    case '-':     case MINUS_EQ:    return "sub_i64";
-    case '*':     case STAR_EQ:     return "mul_i64";
-    case '&':     case AMP_EQ:      return "and_i64";
-    case '|':     case BAR_EQ:      return "or_i64";
-    case '^':     case CARET_EQ:    return "xor_i64";
-    case LSHIFT:  case LSHIFT_EQ:   return "shl_i64";
-    case '/':     case SLASH_EQ:    return TERNARY(is_signed_numeric_type(arith_common_type), "div_i64", "div_u64");
-    case '%':     case PERCENT_EQ:  return TERNARY(is_signed_numeric_type(arith_common_type), "rem_i64", "rem_u64");
-    case RSHIFT:  case RSHIFT_EQ:   return TERNARY(is_signed_numeric_type(arith_common_type), "shr_i64", "shr_u64");
-    case '<':                       return TERNARY(is_signed_numeric_type(comp_common_type), "lt_i64", "lt_u64");
-    case '>':                       return TERNARY(is_signed_numeric_type(comp_common_type), "gt_i64", "gt_u64");
-    case LT_EQ:                     return TERNARY(is_signed_numeric_type(comp_common_type), "le_i64", "le_u64");
-    case GT_EQ:                     return TERNARY(is_signed_numeric_type(comp_common_type), "ge_i64", "ge_u64");
-    case EQ_EQ:                     return "eq_i64";
-    case EXCL_EQ:                   return "ne_i64";
-    default:                        {
-      fatal_error("int64_resolve_binop_name: unexpected operator");
-      return 0;
-    }
+  if      (op == '+' || op == PLUS_EQ)      return "add_i64";
+  else if (op == '-' || op == MINUS_EQ)     return "sub_i64";
+  else if (op == '*' || op == STAR_EQ)      return "mul_i64";
+  else if (op == '&' || op == AMP_EQ)       return "and_i64";
+  else if (op == '|' || op == BAR_EQ)       return "or_i64";
+  else if (op == '^' || op == CARET_EQ)     return "xor_i64";
+  else if (op == LSHIFT || op == LSHIFT_EQ) return "shl_i64";
+  else if (op == '/' || op == SLASH_EQ)     return TERNARY(is_signed_numeric_type(arith_common_type), "div_i64", "div_u64");
+  else if (op == '%' || op == PERCENT_EQ)   return TERNARY(is_signed_numeric_type(arith_common_type), "rem_i64", "rem_u64");
+  else if (op == RSHIFT || op == RSHIFT_EQ) return TERNARY(is_signed_numeric_type(arith_common_type), "shr_i64", "shr_u64");
+  else if (op == '<')                       return TERNARY(is_signed_numeric_type(comp_common_type), "lt_i64", "lt_u64");
+  else if (op == '>')                       return TERNARY(is_signed_numeric_type(comp_common_type), "gt_i64", "gt_u64");
+  else if (op == LT_EQ)                     return TERNARY(is_signed_numeric_type(comp_common_type), "le_i64", "le_u64");
+  else if (op == GT_EQ)                     return TERNARY(is_signed_numeric_type(comp_common_type), "ge_i64", "ge_u64");
+  else if (op == EQ_EQ)                     return "eq_i64";
+  else if (op == EXCL_EQ)                   return "ne_i64";
+  else {
+    fatal_error("int64_resolve_binop_name: unexpected operator");
+    return 0;
   }
 }
 
@@ -2602,55 +2570,46 @@ void codegen_rvalue(ast node) {
       stack_push(reg_X);
     } else if (op == IDENTIFIER) {
       binding = resolve_identifier(get_val_(IDENTIFIER, node));
-      switch (binding_kind(binding)) {
-        case BINDING_PARAM_LOCAL:
-        case BINDING_VAR_LOCAL:
-          // structs and unions locals and parameters are always on the stack,
-          // so their value is their address.
-          // Arrays are allocated on the stack only when they are local
-          // variables, so their value is also their address.
-          // Array parameters (see add_function_params) are passed as pointers,
-          // so we dereference the stack value to get the value of the pointer.
-          if (is_aggregate_type(var_binding_type(binding))) {
-            stack_push_address_of(var_binding_offset(binding));
-          } else {
-            stack_dereference(reg_X, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
-            stack_push(reg_X);
-          }
-          break;
-        case BINDING_VAR_GLOBAL:
-          // global arrays/structs/unions are also allocated in
-          // memory, so their value is their address (no dereference)
-          if (is_aggregate_type(var_binding_type(binding))) {
-            mov_reg_reg(reg_X, reg_glo);
-            add_reg_imm(reg_X, var_binding_offset(binding));
-          } else {
-            load_mem_location(reg_X, reg_glo, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
-          }
+      if (binding_kind(binding) == BINDING_PARAM_LOCAL || binding_kind(binding) == BINDING_VAR_LOCAL) {
+        // structs and unions locals and parameters are always on the stack,
+        // so their value is their address.
+        // Arrays are allocated on the stack only when they are local
+        // variables, so their value is also their address.
+        // Array parameters (see add_function_params) are passed as pointers,
+        // so we dereference the stack value to get the value of the pointer.
+        if (is_aggregate_type(var_binding_type(binding))) {
+          stack_push_address_of(var_binding_offset(binding));
+        } else {
+          stack_dereference(reg_X, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
           stack_push(reg_X);
-          break;
-        case BINDING_ENUM_CST:
+        }
+      } else if (binding_kind(binding) == BINDING_VAR_GLOBAL) {
+        // global arrays/structs/unions are also allocated in
+        // memory, so their value is their address (no dereference)
+        if (is_aggregate_type(var_binding_type(binding))) {
+          mov_reg_reg(reg_X, reg_glo);
+          add_reg_imm(reg_X, var_binding_offset(binding));
+        } else {
+          load_mem_location(reg_X, reg_glo, var_binding_offset(binding), type_width(var_binding_type(binding), false, false), is_signed_numeric_type(var_binding_type(binding)));
+        }
+        stack_push(reg_X);
+      } else if (binding_kind(binding) == BINDING_ENUM_CST) {
 #ifdef SUPPORT_64_BIT_LITERALS
-          mov_reg_large_imm(reg_X, get_val(enum_binding_value(binding)));
+        mov_reg_large_imm(reg_X, get_val(enum_binding_value(binding)));
 #else
-          mov_reg_imm(reg_X, -get_val_(INTEGER, enum_binding_value(binding)));
+        mov_reg_imm(reg_X, -get_val_(INTEGER, enum_binding_value(binding)));
 #endif
-          stack_push(reg_X);
-          break;
-
-        case BINDING_FUN:
+        stack_push(reg_X);
+      } else if (binding_kind(binding) == BINDING_FUN) {
 #ifdef ONE_PASS_GENERATOR
-          mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
+        mov_reg_mem(reg_X, reg_glo, fun_binding_glo_entry(binding));
 #else
-          mov_reg_lbl(reg_X, fun_binding_lbl(binding));
+        mov_reg_lbl(reg_X, fun_binding_lbl(binding));
 #endif
-          stack_push(reg_X);
-          break;
-
-        default:
-          dump_ident(get_val_(IDENTIFIER, node));
-          fatal_error("codegen_rvalue: identifier not found");
-          break;
+        stack_push(reg_X);
+      } else {
+        dump_ident(get_val_(IDENTIFIER, node));
+        fatal_error("codegen_rvalue: identifier not found");
       }
     } else if (op == STRING) {
       codegen_string(symbol_buf(get_val_(STRING, node)), symbol_buf_end(get_val_(STRING, node)));
@@ -2978,6 +2937,8 @@ void codegen_initializer_string(int string_symbol, ast type, int base_reg, int o
 
 // Initialize a variable with an initializer
 void codegen_initializer(bool local, ast init, ast type, int base_reg, int offset) {
+  int op_init = get_op(init);
+  int op_type = get_op(type);
 #ifdef SUPPORT_COMPLEX_INITIALIZER
   ast members;
   ast inner_type;
@@ -2987,106 +2948,99 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 
   type = canonicalize_type(type);
 
-  switch (get_op(init)) {
-    case STRING:
-      codegen_initializer_string(get_val_(STRING, init), type, base_reg, offset);
-      break;
+  if (op_init == STRING) {
+    codegen_initializer_string(get_val_(STRING, init), type, base_reg, offset);
+    return;
+  }
 
 #ifdef SUPPORT_COMPLEX_INITIALIZER
-    case INITIALIZER_LIST:
-      init = get_child_(INITIALIZER_LIST, init, 0);
-      // Acceptable types are:
-      //  arrays
-      //  structs
-      //  union   (if the initializer list has only one element)
-      //  scalars (if the initializer list has only one element)
-      switch (get_op(type)) {
-        case '[':
-          inner_type = get_child_('[', type, 0);
-          arr_len = get_child_('[', type, 1);
-          inner_type_width = type_width(get_child_('[', type, 0), true, false);
+  else if (op_init == INITIALIZER_LIST) {
+    init = get_child_(INITIALIZER_LIST, init, 0);
+    // Acceptable types are:
+    //  arrays
+    //  structs
+    //  union   (if the initializer list has only one element)
+    //  scalars (if the initializer list has only one element)
+    if (op_type == '[') {
+      inner_type = get_child_('[', type, 0);
+      arr_len = get_child_('[', type, 1);
+      inner_type_width = type_width(get_child_('[', type, 0), true, false);
 
-          while (init != 0 && arr_len != 0) {
-            codegen_initializer(local, car(init), inner_type, base_reg, offset);
-            offset = offset + inner_type_width;
-            init = tail(init);
-            --arr_len; // decrement the number of elements left to initialize to make sure we don't overflow
-          }
-
-          if (init != 0) {
-            fatal_error("codegen_initializer: too many elements in initializer list");
-          }
-
-          // If there are still elements to initialize, set them to 0.
-          // If it's not a local variable, we don't need to initialize the
-          // memory since the stack is zeroed during setup.
-          if (local && arr_len > 0) initialize_memory(0, base_reg, offset, inner_type_width * arr_len);
-          break;
-
-#ifdef SUPPORT_STRUCT_UNION
-        case STRUCT_KW:
-          members = get_child_(STRUCT_KW, type, 2);
-          while (init != 0 && members != 0) {
-            inner_type = get_child_(DECL, car_(DECL, members), 1);
-            codegen_initializer(local, car(init), inner_type, base_reg, offset);
-            offset = offset + type_width(inner_type, true, false);
-            init = tail(init);
-            members = tail(members);
-          }
-
-          // Initialize rest of the members to 0
-          while (local && members != 0) {
-            inner_type = get_child_(DECL, car_(DECL, members), 1);
-            initialize_memory(0, base_reg, offset, type_width(inner_type, true, false));
-            offset = offset + type_width(inner_type, true, false);
-            members = tail(members);
-          }
-          break;
-
-        case UNION_KW:
-          members = get_child_(STRUCT_KW, type, 2);
-          if (tail(init) != 0) {
-            fatal_error("codegen_initializer: union initializer list has more than one element");
-          } else if (members == 0) {
-            fatal_error("codegen_initializer: union has no members");
-          }
-          codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset);
-          break;
-#endif // SUPPORT_STRUCT_UNION
-
-        default:
-          if (tail(init) != 0 // More than 1 element
-           || get_op(car(init)) == INITIALIZER_LIST) { // Or nested initializer list
-            fatal_error("codegen_initializer: scalar initializer list has more than one element");
-          }
-          // Single scalar/struct element wrapped in braces, same as a simple
-          // scalar initializer.
-          codegen_initializer(local, car(init), type, base_reg, offset);
-          break;
+      while (init != 0 && arr_len != 0) {
+        codegen_initializer(local, car(init), inner_type, base_reg, offset);
+        offset = offset + inner_type_width;
+        init = tail(init);
+        --arr_len; // decrement the number of elements left to initialize to make sure we don't overflow
       }
 
-      break;
+      if (init != 0) {
+        fatal_error("codegen_initializer: too many elements in initializer list");
+      }
 
+      // If there are still elements to initialize, set them to 0.
+      // If it's not a local variable, we don't need to initialize the
+      // memory since the stack is zeroed during setup.
+      if (local && arr_len > 0) initialize_memory(0, base_reg, offset, inner_type_width * arr_len);
+    }
+
+#ifdef SUPPORT_STRUCT_UNION
+    else if (op_type == STRUCT_KW) {
+      members = get_child_(STRUCT_KW, type, 2);
+      while (init != 0 && members != 0) {
+        inner_type = get_child_(DECL, car_(DECL, members), 1);
+        codegen_initializer(local, car(init), inner_type, base_reg, offset);
+        offset = offset + type_width(inner_type, true, false);
+        init = tail(init);
+        members = tail(members);
+      }
+
+      // Initialize rest of the members to 0
+      while (local && members != 0) {
+        inner_type = get_child_(DECL, car_(DECL, members), 1);
+        initialize_memory(0, base_reg, offset, type_width(inner_type, true, false));
+        offset = offset + type_width(inner_type, true, false);
+        members = tail(members);
+      }
+    }
+    else if (op_type == UNION_KW) {
+      members = get_child_(STRUCT_KW, type, 2);
+      if (tail(init) != 0) {
+        fatal_error("codegen_initializer: union initializer list has more than one element");
+      } else if (members == 0) {
+        fatal_error("codegen_initializer: union has no members");
+      }
+      codegen_initializer(local, car(init), get_child_(DECL, car_(DECL, members), 1), base_reg, offset);
+    }
+#endif // SUPPORT_STRUCT_UNION
+    else {
+      if (tail(init) != 0 // More than 1 element
+        || get_op(car(init)) == INITIALIZER_LIST) { // Or nested initializer list
+        fatal_error("codegen_initializer: scalar initializer list has more than one element");
+      }
+      // Single scalar/struct element wrapped in braces, same as a simple
+      // scalar initializer.
+      codegen_initializer(local, car(init), type, base_reg, offset);
+    }
+  }
 #endif // SUPPORT_COMPLEX_INITIALIZER
 
-    default:
+  else {
 #ifdef SUPPORT_STRUCT_UNION
-      if (is_struct_like(type)) {
-        // Struct assignment, we copy the struct.
-        codegen_aggregate_into(base_reg, offset, init, type_width(type, true, true), type);
-      } else
+    if (is_struct_like(type)) {
+      // Struct assignment, we copy the struct.
+      codegen_aggregate_into(base_reg, offset, init, type_width(type, true, true), type);
+    } else
 #endif // SUPPORT_STRUCT_UNION
-      if (get_op(type) != '[') {
-        // The value is scalar (the type is neither an array nor a
-        // struct/union/int64), so the temporaries do get flushed and the
-        // SP-relative offset stays valid for the write below.
-        codegen_rvalue_coerced_no_temps(init, type);
-        stack_pop(reg_X);
-        write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
-      } else {
-        fatal_error("codegen_initializer: cannot initialize array with scalar value");
-      }
-      break;
+    if (op_type != '[') {
+      // The value is scalar (the type is neither an array nor a
+      // struct/union/int64), so the temporaries do get flushed and the
+      // SP-relative offset stays valid for the write below.
+      codegen_rvalue_coerced_no_temps(init, type);
+      stack_pop(reg_X);
+      write_mem_location(base_reg, offset, reg_X, type_width(type, true, false));
+    } else {
+      fatal_error("codegen_initializer: cannot initialize array with scalar value");
+    }
   }
 }
 
@@ -3096,23 +3050,23 @@ void codegen_initializer(bool local, ast init, ast type, int base_reg, int offse
 // If it's an initializer list, return the number of elements
 // If it's a string, return the length of the string and delimiter.
 int initializer_size(ast initializer) {
+  int op = get_op(initializer);
   int size = 0;
 
-  switch (get_op(initializer)) {
-    case INITIALIZER_LIST:
-      initializer = get_child_(INITIALIZER_LIST, initializer, 0);
-      while (initializer != 0) {
-        ++size;
-        initializer = tail(initializer);
-      }
-      return size;
-
-    case STRING:
-      return symbol_len(get_val_(STRING, initializer)) + 1; // +1 for null terminator
-
-    default:
-      fatal_error("initializer_size: unknown initializer");
-      return -1;
+  if (op == INITIALIZER_LIST) {
+    initializer = get_child_(INITIALIZER_LIST, initializer, 0);
+    while (initializer != 0) {
+      ++size;
+      initializer = tail(initializer);
+    }
+    return size;
+  }
+  else if (op == STRING) {
+    return symbol_len(get_val_(STRING, initializer)) + 1; // +1 for null terminator
+  }
+  else {
+    fatal_error("initializer_size: unknown initializer");
+    return -1;
   }
 }
 
@@ -3215,16 +3169,13 @@ void codegen_static_local_var_decl(ast node) {
 void codegen_local_var_decls(ast node) {
 #ifdef SUPPORT_TYPE_SPECIFIERS
   bool is_static = false;
+  int spec = get_child_(DECLS, node, 1);
 
-  switch (get_child_(DECLS, node, 1)) {
-    // AUTO_KW and REGISTER_KW can simply be ignored.
-    case STATIC_KW:
-      is_static = true;
-      break;
-    case EXTERN_KW:
-      fatal_error("Extern class specifier not supported");
-      break;
-  }
+  if (spec == STATIC_KW) {
+    is_static = true;
+  } else if (spec == EXTERN_KW) {
+    fatal_error("Extern class specifier not supported");
+  } // AUTO_KW and REGISTER_KW can simply be ignored
 #endif // SUPPORT_TYPE_SPECIFIERS
 
   node = get_child__(DECLS, LIST, node, 0);
@@ -3606,15 +3557,12 @@ void codegen_glo_fun_decl(ast node) {
   if (name_symbol == MAIN_ID) {
     main_lbl = fun_binding_lbl(binding);
     // Check if main returns an exit code.
-    switch (get_op(fun_return_type)) {
-      case VOID_KW:
-        main_returns = false;
-        break;
-      case INT_KW:
-        main_returns = true;
-        break;
-      default:
-         fatal_error("main has unsupported return type");
+    if (get_op(fun_return_type) == VOID_KW) {
+      main_returns = false;
+    } else if (get_op(fun_return_type) == INT_KW) {
+      main_returns = true;
+    } else {
+      fatal_error("main has unsupported return type");
     }
   }
 
@@ -3807,12 +3755,11 @@ void codegen_builtin_movs(ast params) {
   int i = 0;
   int reg;
   while (params != 0) {
-    switch (i) {
-      case 0: reg = reg_X; break;
-      case 1: reg = reg_Y; break;
-      case 2: reg = reg_Z; break;
-      default: fatal_error("declare_builtin: too many parameters");
-    }
+    if      (i == 0) reg = reg_X;
+    else if (i == 1) reg = reg_Y;
+    else if (i == 2) reg = reg_Z;
+    else fatal_error("declare_builtin: too many parameters");
+
     mov_reg_mem(reg, reg_SP, WORD_SIZE * (i + 1)); // Get parameter from stack
     params = cdr(params);
     ++i;

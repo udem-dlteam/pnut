@@ -2044,88 +2044,87 @@ int compute_constant(ast expr, bool if_macro) {
     if (get_nb_children(expr) >= 2) val1 = compute_constant(get_child(expr, 1), if_macro);
   }
 
-  switch (op) {
-    case INTEGER:
+  if (op == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-    case INTEGER_L:
-    case INTEGER_LL:
-    case INTEGER_U:
-    case INTEGER_UL:
-    case INTEGER_ULL:
+    || op == INTEGER_L
+    || op == INTEGER_LL
+    || op == INTEGER_U
+    || op == INTEGER_UL
+    || op == INTEGER_ULL
 #endif
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-    case INTEGER_HEX:
-    case INTEGER_OCT:
+    || op == INTEGER_HEX
+    || op == INTEGER_OCT
 #endif
+  ) {
 #ifdef SUPPORT_64_BIT_LITERALS
       // Disable large integers for now, hopefully they don't appear in TCC in enums and #if expressions
       if (is_large_int(get_val(expr))) fatal_error("constant expression too large");
 #endif
       return -get_val(expr);
-    case CHARACTER:   return get_val_(CHARACTER, expr);
-    case '~':         return ~val0;
-    case '!':         return !val0;
-    case '*':         return val0 *  val1;
-    case '/':         return val0 /  val1;
-    case '%':         return val0 %  val1;
-    case '&':         return val0 &  val1;
-    case '|':         return val0 |  val1;
-    case '^':         return val0 ^  val1;
-    case LSHIFT:      return val0 << val1;
-    case RSHIFT:      return val0 >> val1;
-    case EQ_EQ:       return val0 == val1;
-    case EXCL_EQ:     return val0 != val1;
-    case LT_EQ:       return val0 <= val1;
-    case GT_EQ:       return val0 >= val1;
-    case '<':         return val0 <  val1;
-    case '>':         return val0 >  val1;
+  }
+  else if (op == CHARACTER) return get_val_(CHARACTER, expr);
+  else if (op == '~')       return ~val0;
+  else if (op == '!')       return !val0;
+  else if (op == '*')       return val0 *  val1;
+  else if (op == '/')       return val0 /  val1;
+  else if (op == '%')       return val0 %  val1;
+  else if (op == '&')       return val0 &  val1;
+  else if (op == '|')       return val0 |  val1;
+  else if (op == '^')       return val0 ^  val1;
+  else if (op == LSHIFT)    return val0 << val1;
+  else if (op == RSHIFT)    return val0 >> val1;
+  else if (op == EQ_EQ)     return val0 == val1;
+  else if (op == EXCL_EQ)   return val0 != val1;
+  else if (op == LT_EQ)     return val0 <= val1;
+  else if (op == GT_EQ)     return val0 >= val1;
+  else if (op == '<')       return val0 <  val1;
+  else if (op == '>')       return val0 >  val1;
 
-    // - and + can be unary or binary
-    case '-':
-    case '+':
-      if (get_nb_children(expr) == 1) {
-        return TERNARY(op == '-', -val0, val0);
-      } else {
-        return TERNARY(op == '-', (val0 - val1), (val0 + val1));
-      }
+  else if (op == '-' || op == '+') {
+    if (get_nb_children(expr) == 1) {
+      return TERNARY(op == '-', -val0, val0);
+    } else {
+      return TERNARY(op == '-', (val0 - val1), (val0 + val1));
+    }
+  } else if (op == '?') {
+    val0 = compute_constant(get_child(expr, 0), if_macro);
+    if (val0) {
+      return compute_constant(get_child(expr, 1), if_macro);
+    } else {
+      return compute_constant(get_child(expr, 2), if_macro);
+    }
+  }
 
-    case '?':
-      val0 = compute_constant(get_child(expr, 0), if_macro);
-      if (val0) {
-        return compute_constant(get_child(expr, 1), if_macro);
-      } else {
-        return compute_constant(get_child(expr, 2), if_macro);
-      }
+  else if (op == AMP_AMP || op == BAR_BAR) {
+    val0 = compute_constant(get_child(expr, 0), if_macro);
+    if      (op == AMP_AMP && !val0) return 0;
+    else if (op == BAR_BAR && val0)  return 1;
+    else return compute_constant(get_child(expr, 1), if_macro);
+  }
 
-    case AMP_AMP:
-    case BAR_BAR:
-      val0 = compute_constant(get_child(expr, 0), if_macro);
-      if (op == AMP_AMP && !val0) return 0;
-      else if (op == BAR_BAR && val0) return 1;
-      else return compute_constant(get_child(expr, 1), if_macro);
-
-    case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
-        return get_child(expr, 1) == MACRO;
-      } else {
-        syntax_error("unknown function call in constant expressions");
-        return 0;
-      }
-
-    case IDENTIFIER:
-      if (!if_macro) {
-        // At this point, macros have already been expanded so we can't have a
-        // macro identifier, which means we're dealing with a regular identifier.
-        // TODO: Enums when outside of if_macro
-        syntax_error("identifiers are not allowed in constant expression");
-      }
-
-      return 0; // Undefined identifiers count as 0
-
-    default:
-      dump_op(op);
-      syntax_error("unsupported operator in constant expression");
+  else if (op == '(') { // defined operators are represented as fun calls
+    if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
+      return get_child(expr, 1) == MACRO;
+    } else {
+      syntax_error("unknown function call in constant expressions");
       return 0;
+    }
+  }
+
+  else if (op == IDENTIFIER) {
+    if (!if_macro) {
+      // At this point, macros have already been expanded so we can't have a
+      // macro identifier, which means we're dealing with a regular identifier.
+      syntax_error("identifiers are not allowed in constant expression");
+    }
+    return 0; // Undefined identifiers count as 0
+  }
+
+  else {
+    dump_op(op);
+    syntax_error("unsupported operator in constant expression");
+    return 0;
   }
 }
 
@@ -3396,19 +3395,17 @@ ast parse_initializer();
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
 ast get_type_specifier(ast type_or_decl) {
+  int op;
   while (1) {
-    switch (get_op(type_or_decl)) {
-      case DECL:
-        type_or_decl = get_child_(DECL, type_or_decl, 1);
-        break;
-      case '[':
-        type_or_decl = get_child_('[', type_or_decl, 0);
-        break;
-      case '*':
-        type_or_decl = get_child_('*', type_or_decl, 1);
-        break;
-      default:
-        return type_or_decl;
+    op = get_op(type_or_decl);
+    if (op == DECL) {
+      type_or_decl = get_child_(DECL, type_or_decl, 1);
+    } else if (op == '[') {
+      type_or_decl = get_child_('[', type_or_decl, 0);
+    } else if (op == '*') {
+      type_or_decl = get_child_('*', type_or_decl, 1);
+    } else {
+      return type_or_decl;
     }
   }
 }
@@ -3438,12 +3435,12 @@ ast make_variadic_func(ast func_type) {
 #if defined(SH_OPTIMIZE_CONSTANT_PARAMS)
 // Used to optimize constant parameters of function
 bool is_constant_type(ast type) {
-  switch (get_op(type)) {
-    case '[': return false; // Array declarators cannot be marked as constant
-    case '(': return false; // Function declarators cannot be marked as constant
-    case '*': return TEST_TYPE_SPECIFIER(get_child_('*', type, 0), CONST_KW);
-    default:  return TEST_TYPE_SPECIFIER(get_child(type, 0), CONST_KW);
-  }
+  int op = get_op(type);
+
+  if      (op == '[') return false; // Array declarators cannot be marked as constant
+  else if (op == '(') return false; // Function declarators cannot be marked as constant
+  else if (op == '*') return TEST_TYPE_SPECIFIER(get_child_('*', type, 0), CONST_KW);
+  else                return TEST_TYPE_SPECIFIER(get_child(type, 0), CONST_KW);
 }
 #else
 #define is_constant_type(type) false
@@ -3451,28 +3448,24 @@ bool is_constant_type(ast type) {
 
 // Type and declaration parser
 bool is_type_starter(int tok) {
-  switch (tok) {
-    case INT_KW: case CHAR_KW: case SHORT_KW: case LONG_KW: // Numeric types
-    case VOID_KW: case FLOAT_KW: case DOUBLE_KW:            // Void and floating point types
-    case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
-    case TYPE:                                              // User defined types
-    case CONST_KW:
-    case ENUM_KW:                                           // Enum
+  return (tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW // Numeric types
+       || tok == VOID_KW || tok == FLOAT_KW || tok == DOUBLE_KW                // Void and floating point types
+       || tok == SIGNED_KW || tok == UNSIGNED_KW                               // Signedness
+       || tok == TYPE
+       || tok == CONST_KW
+       || tok == ENUM_KW                                                       // Enum
 #ifdef SUPPORT_STRUCT_UNION
-    case STRUCT_KW: case UNION_KW:                          // Struct, union
+       || tok == STRUCT_KW || tok == UNION_KW                                  // Struct, union
 #endif
-    // Storage class specifiers are not always valid type starters in all
-    // contexts, but we allow them here
 #ifdef SUPPORT_TYPE_SPECIFIERS
-    case AUTO_KW:   case EXTERN_KW:
-    case INLINE_KW: case REGISTER_KW:
-    case STATIC_KW: case TYPEDEF_KW:
-    case VOLATILE_KW:
+       // Storage class specifiers are not always valid type starters in all
+       // contexts, but we allow them here
+       || tok == AUTO_KW || tok == EXTERN_KW
+       || tok == INLINE_KW || tok == REGISTER_KW
+       || tok == STATIC_KW || tok == TYPEDEF_KW
+       || tok == VOLATILE_KW
 #endif
-      return true;
-    default:
-      return false;
-  }
+       );
 }
 
 ast parse_enum() {
@@ -3483,6 +3476,7 @@ ast parse_enum() {
   ast value = 0;
   int next_value = 0;
   int last_literal_type = INTEGER; // Default to decimal integer for enum values
+  int op;
 
   expect_tok(ENUM_KW);
 
@@ -3514,22 +3508,19 @@ ast parse_enum() {
         // Avoid recreating integer literal nodes unnecessarily.
         // Preserve the type of integer literals (dec/hex/oct), we use the last
         // literal type to determine which type to use when creating a new node.
-        switch (get_op(value)) {
-          case INTEGER:
+        op = get_op(value);
+        if (op != INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-          case INTEGER_HEX: case INTEGER_OCT:
+          && op != INTEGER_HEX && op != INTEGER_OCT
 #endif
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-          case INTEGER_U:
-          case INTEGER_UL:
-          case INTEGER_ULL:
-          case INTEGER_L:
-          case INTEGER_LL:
+          && op != INTEGER_U
+          && op != INTEGER_UL && op != INTEGER_ULL
+          && op != INTEGER_L  && op != INTEGER_LL
 #endif
-            break;
-          default:
-            // Compute the constant expression to get its integer value
-            value = new_ast0(last_literal_type, -compute_constant(value, false)); // negative value to indicate it's a small integer
+        ) {
+          // Compute the constant expression to get its integer value
+          value = new_ast0(last_literal_type, -compute_constant(value, false)); // negative value to indicate it's a small integer
         }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
         last_literal_type = get_op(value);
@@ -3637,64 +3628,56 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
 ast parse_type_specifier() {
   ast type_specifier = 0;
-  switch (tok) {
-    case CHAR_KW:
-    case INT_KW:
-    case VOID_KW:
+  if (tok == CHAR_KW || tok == INT_KW || tok == VOID_KW
 #ifdef target_exe
-    case FLOAT_KW:
-    case DOUBLE_KW:
+      || tok == FLOAT_KW || tok == DOUBLE_KW
 #endif
-      type_specifier = new_ast0(tok, 0);
-      get_tok();
-      return type_specifier;
-
-    case SHORT_KW:
-      get_tok();
-      if (tok == INT_KW) get_tok(); // Just "short" is equivalent to "short int"
-      return new_ast0(SHORT_KW, 0);
-
-    case SIGNED_KW:
-      get_tok();
-      type_specifier = parse_type_specifier();
-      // Just "signed" is equivalent to "signed int"
-      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
-      return type_specifier;
-
+  ) {
+    type_specifier = new_ast0(tok, 0);
+    get_tok();
+    return type_specifier;
+  } else if (tok == SHORT_KW) {
+    get_tok();
+    if (tok == INT_KW) get_tok(); // Just "short" is equivalent to "short int"
+    return new_ast0(SHORT_KW, 0);
+  } else if (tok == SIGNED_KW) {
+    get_tok();
+    type_specifier = parse_type_specifier();
+    // Just "signed" is equivalent to "signed int"
+    if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
+    return type_specifier;
 #ifdef target_exe
-    case UNSIGNED_KW:
-      get_tok();
-      type_specifier = parse_type_specifier();
-      // Just "unsigned" is equivalent to "unsigned int"
-      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
-      // Set the unsigned flag
-      else set_val(type_specifier, get_val(type_specifier) | MK_TYPE_SPECIFIER(UNSIGNED_KW));
-      return type_specifier;
+  } else if (tok == UNSIGNED_KW) {
+    get_tok();
+    type_specifier = parse_type_specifier();
+    // Just "unsigned" is equivalent to "unsigned int"
+    if (type_specifier == 0) type_specifier = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+    // Set the unsigned flag
+    else set_val(type_specifier, get_val(type_specifier) | MK_TYPE_SPECIFIER(UNSIGNED_KW));
+    return type_specifier;
 #endif
-
-    case LONG_KW:
-      get_tok();
+  } else if (tok == LONG_KW) {
+    get_tok();
 #ifdef target_exe
-      if (tok == DOUBLE_KW) {
+    if (tok == DOUBLE_KW) {
+      get_tok();
+      return new_ast0(DOUBLE_KW, 0);
+    } else
+#endif
+    {
+      if (tok == LONG_KW) {
         get_tok();
-        return new_ast0(DOUBLE_KW, 0);
-      } else
-#endif
-      {
-        if (tok == LONG_KW) {
-          get_tok();
-          if (tok == INT_KW) get_tok(); // Just "long long" is equivalent to "long long int"
-          return new_ast0(LONG_KW, 0);
-        } else if (tok == INT_KW) {
-          get_tok(); // Just "long" is equivalent to "long int", which we treat as "int"
-          return new_ast0(INT_KW, 0);
-        } else {
-          return new_ast0(INT_KW, 0);
-        }
+        if (tok == INT_KW) get_tok(); // Just "long long" is equivalent to "long long int"
+        return new_ast0(LONG_KW, 0);
+      } else if (tok == INT_KW) {
+        get_tok(); // Just "long" is equivalent to "long int", which we treat as "int"
+        return new_ast0(INT_KW, 0);
+      } else {
+        return new_ast0(INT_KW, 0);
       }
-
-    default:
-      return 0;
+    }
+  } else {
+    return 0;
   }
 }
 
@@ -3714,78 +3697,67 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 #endif
 
   while (loop) {
-    switch (tok) {
+    if (tok == CHAR_KW || tok == INT_KW     || tok == VOID_KW
+    || tok == SHORT_KW || tok == SIGNED_KW  || tok == UNSIGNED_KW
+    || tok == LONG_KW  || tok == FLOAT_KW   || tok == DOUBLE_KW) {
+      if (type_specifier != 0) parse_error("Unexpected C type specifier", tok);
+      type_specifier = parse_type_specifier();
+      if (type_specifier == 0) parse_error("Failed to parse type specifier", tok);
+    }
 #ifdef SUPPORT_TYPE_SPECIFIERS
-      case AUTO_KW:
-      case REGISTER_KW:
-      case STATIC_KW:
-      case EXTERN_KW:
-      case TYPEDEF_KW:
-        if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
-        if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
-        specifier_storage_class = tok;
-        get_tok();
-        break;
+    else if (tok == AUTO_KW || tok == REGISTER_KW
+          || tok == STATIC_KW || tok == EXTERN_KW
+          || tok == TYPEDEF_KW) {
+      if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
+      if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
+      specifier_storage_class = tok;
+      get_tok();
+    }
 #endif
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
-      case INLINE_KW:
-        get_tok(); // Ignore inline
-        break;
+    else if (tok == INLINE_KW) {
+      get_tok(); // Ignore inline
+    }
 #endif
 
-      case CONST_KW:
+    else if (tok == CONST_KW
 #ifdef SUPPORT_TYPE_SPECIFIERS
-      case VOLATILE_KW:
+          || tok == VOLATILE_KW
 #endif
-        type_qualifier = type_qualifier | MK_TYPE_SPECIFIER(tok);
-        get_tok();
-        break;
-
-      case CHAR_KW:
-      case INT_KW:
-      case VOID_KW:
-      case SHORT_KW:
-      case SIGNED_KW:
-      case UNSIGNED_KW:
-      case LONG_KW:
-      case FLOAT_KW:
-      case DOUBLE_KW:
-        if (type_specifier != 0) parse_error("Unexpected C type specifier", tok);
-        type_specifier = parse_type_specifier();
-        if (type_specifier == 0) parse_error("Failed to parse type specifier", tok);
-        break;
+        ) {
+      type_qualifier = type_qualifier | MK_TYPE_SPECIFIER(tok);
+      get_tok();
+    }
 
 #ifdef SUPPORT_STRUCT_UNION
-      case STRUCT_KW:
-      case UNION_KW:
-        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
-        type_specifier = parse_struct_or_union(tok);
-        break;
+    else if (tok == STRUCT_KW || tok == UNION_KW) {
+      if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+      type_specifier = parse_struct_or_union(tok);
+    }
 #endif
 
-      case ENUM_KW:
-        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
-        type_specifier = parse_enum();
-        break;
+    else if (tok == ENUM_KW) {
+      if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+      type_specifier = parse_enum();
+    }
 
-      case TYPE:
-        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
-        // Lookup type in the types table. It is stored in the tag of the
-        // interned string object.
+    else if (tok == TYPE) {
+      if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+      // Lookup type in the types table. It is stored in the tag of the
+      // interned string object.
 #ifdef target_exe
-        // The type is cloned so it can be modified.
-        type_specifier = clone_ast(symbol_tag(val));
+      // The type is cloned so it can be modified.
+      type_specifier = clone_ast(symbol_tag(val));
 #else
-        // pnut-sh/awk don't mutate the type nodes, so no need to clone them
-        type_specifier = symbol_tag(val);
+      // pnut-sh/awk don't mutate the type nodes, so no need to clone them
+      type_specifier = symbol_tag(val);
 #endif
-        get_tok();
-        break;
+      get_tok();
+    }
 
-      default:
+    else {
         loop = false; // Break out of loop
-        break;
     }
   }
 
@@ -3863,30 +3835,23 @@ int parse_param_list() {
 }
 
 ast get_inner_type(ast type) {
-  switch (get_op(type)) {
-    case DECL:
-    case '*':
-      return get_child(type, 1);
-    case '[':
-    case '(':
-      return get_child(type, 0);
-    default:
-      fatal_error("Invalid type");
-      return 0;
+  int op = get_op(type);
+  if (op == DECL || op == '*') {
+    return get_child_(op, type, 1);
+  } else if (op == '[' || op == '(') {
+    return get_child_(op, type, 0);
+  } else {
+    fatal_error("Invalid type");
+    return 0;
   }
 }
 
 void update_inner_type(ast parent_type, ast inner_type) {
-  switch (get_op(parent_type)) {
-    case DECL:
-    case '*':
-      set_child(parent_type, 1, inner_type);
-      break;
-
-    case '[':
-    case '(':
-      set_child(parent_type, 0, inner_type);
-      break;
+  int op = get_op(parent_type);
+  if (op == DECL || op == '*') {
+    set_child(parent_type, 1, inner_type);
+  } else if (op == '[' || op == '(') {
+    set_child(parent_type, 0, inner_type);
   }
 }
 
@@ -3924,39 +3889,37 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   ast arr_size_expr;
   ast parent_type_parent;
 
-  switch (tok) {
-    case IDENTIFIER:
-      result = new_ast3(DECL, new_ast0(IDENTIFIER, val), parent_type, 0); // child#2 is the initializer
-      parent_type_parent = result;
-      get_tok();
-      break;
+  if (tok == IDENTIFIER) {
+    result = new_ast3(DECL, new_ast0(IDENTIFIER, val), parent_type, 0); // child#2 is the initializer
+    parent_type_parent = result;
+    get_tok();
+  }
+  else if (tok == '*') {
+    get_tok();
+    // Pointers may be const-qualified
+    parent_type_parent = pointer_type(parent_type, tok == CONST_KW);
+    if (tok == CONST_KW) get_tok();
+    result = parse_declarator(abstract_decl, parent_type_parent);
+  }
 
-    case '*':
-      get_tok();
-      // Pointers may be const-qualified
-      parent_type_parent = pointer_type(parent_type, tok == CONST_KW);
-      if (tok == CONST_KW) get_tok();
-      result = parse_declarator(abstract_decl, parent_type_parent);
-      break;
-
+  else if (tok == '(') {
     // Parenthesis delimit the specifier-and-qualifier part of the declaration from the declarator
-    case '(':
-      get_tok();
-      result = parse_declarator(abstract_decl, parent_type);
-      parent_type_parent = parse_declarator_parent_type_parent;
-      expect_tok(')');
-      break;
+    get_tok();
+    result = parse_declarator(abstract_decl, parent_type);
+    parent_type_parent = parse_declarator_parent_type_parent;
+    expect_tok(')');
+  }
 
-    default:
-      // Abstract declarators don't need names, and so in the base declarator,
-      // we don't require an identifier. This is useful for function pointers.
-      // In that case, we create a DECL node with no identifier.
-      if (abstract_decl) {
-        result = new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
-        parent_type_parent = result;
-      } else {
-        parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
-      }
+  else {
+    // Abstract declarators don't need names, and so in the base declarator,
+    // we don't require an identifier. This is useful for function pointers.
+    // In that case, we create a DECL node with no identifier.
+    if (abstract_decl) {
+      result = new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
+      parent_type_parent = result;
+    } else {
+      parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
+    }
   }
 
   // At this point, the only non-recursive declarator is an identifier
@@ -4874,100 +4837,100 @@ int main(int argc, char **argv) {
 
   while (i < argc) {
     if (argv[i][0] == '-') {
-      switch (argv[i][1]) {
+      if (0) {} // dummy if to make the else-if chain below easier to read
 #ifdef target_exe
-        case 'o':
-          // Output file name
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
-            ++i;
-            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
-          } else {
-            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
-          }
-          break;
+      else if (argv[i][1] == 'o') {
+        // Output file name
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
+          ++i;
+          output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
+        } else {
+          output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+        }
+      }
 #endif
 
 #ifdef FULL_CLI_OPTIONS
-        case 'D':
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
-            ++i;
-            handle_macro_D(argv[i]);
-          } else {
-            handle_macro_D(argv[i] + 2); // skip '-D'
-          }
-          break;
+      else if (argv[i][1] == 'D') {
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
+          ++i;
+          handle_macro_D(argv[i]);
+        } else {
+          handle_macro_D(argv[i] + 2); // skip '-D'
+        }
+      }
 
-        case 'U':
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
-            ++i;
-            handle_macro_U(argv[i]);
-          } else {
-            handle_macro_U(argv[i] + 2); // skip '-U'
-          }
-          break;
+      else if (argv[i][1] == 'U') {
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
+          ++i;
+          handle_macro_U(argv[i]);
+        } else {
+          handle_macro_U(argv[i] + 2); // skip '-U'
+        }
+      }
 
-        case 'I':
-          if (include_search_path != 0) fatal_error("only one include path allowed");
+      else if (argv[i][1] == 'I') {
+        if (include_search_path != 0) fatal_error("only one include path allowed");
 
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing path for -I option");
-            ++i;
-            include_search_path = argv[i];
-          } else {
-            include_search_path = argv[i] + 2; // skip '-I'
-          }
-          break;
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing path for -I option");
+          ++i;
+          include_search_path = argv[i];
+        } else {
+          include_search_path = argv[i] + 2; // skip '-I'
+        }
+      }
 
 #ifdef SUPPORT_EMULATED_INT64
-        case 'r':
-          // -rt <file>: path to the 64-bit arithmetic runtime (arith64.c).
-          // It is compiled ahead of the user program (see include below),
-          // providing the runtime functions for emulated arithmetic types.
-          if (argv[i][2] != 't' || (argv[i][3] != 0 && argv[i][3] != '=')) fatal_error("unknown option");
-          if (argv[i][3] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing file name for -rt option");
-            ++i;
-            runtime_file_path = argv[i];
-          } else {
-            runtime_file_path = argv[i] + 4; // skip '-rt='
-          }
-          break;
+      else if (argv[i][1] == 'r' && argv[i][2] == 't') {
+        // -rt <file>: path to the 64-bit arithmetic runtime (arith64.c).
+        // It is compiled ahead of the user program (see include below),
+        // providing the runtime functions for emulated arithmetic types.
+        if (argv[i][2] != 't' || (argv[i][3] != 0 && argv[i][3] != '=')) fatal_error("unknown option");
+        if (argv[i][3] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing file name for -rt option");
+          ++i;
+          runtime_file_path = argv[i];
+        } else {
+          runtime_file_path = argv[i] + 4; // skip '-rt='
+        }
+      }
 #endif
 #else
-          case 'D':
-            // pnut-sh only needs -D<macro> and no other options
-            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+      else if (argv[i][1] == 'D') {
+        // pnut-sh only needs -D<macro> and no other options
+        init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
 #ifdef ANNOTATE_WITH_C_CODE
-            // Also add to  the list of macros to define in the generated shell script
-            cli_macros = cons(intern_str(argv[i] + 2), cli_macros);
+        // Also add to  the list of macros to define in the generated shell script
+        cli_macros = cons(intern_str(argv[i] + 2), cli_macros);
 #endif
-            break;
+      }
 #endif // FULL_CLI_OPTIONS
 #ifdef SUPPORT_EXTRACT_C_ANNOTATIONS
-        case 'C':
-          // The -C option takes the filename of a .sh file compiled by pnut-sh
-          // and extracts the C code included in it.
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing input file name for -C option");
-            ++i;
-            extract_c_code_from_annotated_file(argv[i]);
-          } else {
-            extract_c_code_from_annotated_file(argv[i] + 2);
-          }
-          return 0; // Done after extracting C code, no further processing needed
+      else if (argv[i][1] == 'C') {
+        // The -C option takes the filename of a .sh file compiled by pnut-sh
+        // and extracts the C code included in it.
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing input file name for -C option");
+          ++i;
+          extract_c_code_from_annotated_file(argv[i]);
+        } else {
+          extract_c_code_from_annotated_file(argv[i] + 2);
+        }
+        return 0; // Done after extracting C code, no further processing needed
+      }
 #endif
 #ifdef ANNOTATE_WITH_C_CODE
-        case 'q': // disable code annotations
-          code_annotations_quiet_mode = true;
-          break;
+      else if (argv[i][1] == 'q') { // disable code annotations
+        code_annotations_quiet_mode = true;
+      }
 #endif
-        default:
-          putstr("Option "); putstr(argv[i]); putchar('\n');
-          fatal_error("unknown option");
-          break;
+      else {
+        putstr("Option "); putstr(argv[i]); putchar('\n');
+        fatal_error("unknown option");
       }
     } else {
 #ifdef SUPPORT_STDIN_INPUT
