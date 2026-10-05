@@ -41,8 +41,8 @@ enum STMT_CTX {
 #define comp_rvalue(node) comp_rvalue_go((node), 0)
 text comp_rvalue_go(ast node, int outer_op);
 text comp_fun_call(ast node, ast params);
-bool comp_body(ast node, enum STMT_CTX stmt_ctx);
-bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
+bool comp_body(ast node, int stmt_ctx);
+bool comp_statement(ast node, int stmt_ctx);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
 
@@ -58,7 +58,7 @@ void print_awk_comment(char *comment) {
   putchar('\n');
 }
 
-void add_var_to_local_env(ast decl, enum BINDING kind) {
+void add_var_to_local_env(ast decl, int kind) {
   int ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
 
   // Make sure we're not shadowing an existing local variable
@@ -508,7 +508,7 @@ void handle_printf_call(char *format_str, ast params) {
   bool has_width = false;
   bool has_precision = false;
 
-  enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
+  int state = PRINTF_STATE_FLAGS;
 
   while (*format_str != '\0') {
     // Param is consumed, get the next one
@@ -684,7 +684,7 @@ text comp_fun_call(ast name, ast params) {
                        , wrap_char(')'));
 }
 
-bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_body(ast node, int stmt_ctx) {
   int start_cgc_locals = cgc_locals;
 
   while (node != 0) {
@@ -805,7 +805,7 @@ bool comp_switch(ast node) {
   return false;
 }
 
-bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_if(ast node, int stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
@@ -943,7 +943,7 @@ void comp_var_decls(ast node) {
 
 // Returns whether the statement always returns/breaks.
 // This is used to delimit the end of conditional blocks of switch statements.
-bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_statement(ast node, int stmt_ctx) {
   int op;
   text str;
   int start_cgc_locals = cgc_locals;

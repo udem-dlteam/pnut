@@ -80,7 +80,7 @@ int cgc_lookup_enclosing_loop_or_switch(int binding) {
   return binding;
 }
 
-int cgc_add_local(const enum BINDING binding_type, const int ident, const ast type, int env) {
+int cgc_add_local(const int binding_type, const int ident, const ast type, int env) {
   int binding = alloc_obj(5);
   binding_next(binding) = env;
   binding_kind(binding) = binding_type;
@@ -99,7 +99,7 @@ int cgc_add_local(const enum BINDING binding_type, const int ident, const ast ty
 #define loop_binding_action_end(binding)          heap[binding+3]
 #define switch_binding_in_tail_position(binding)  heap[binding+2]
 
-void cgc_add_local_var(const enum BINDING binding_type, const int ident, const ast type) {
+void cgc_add_local_var(const int binding_type, const int ident, const ast type) {
   ++cgc_fs;
   cgc_locals = cgc_add_local(binding_type, ident, type, cgc_locals);
   // Add to cgc_locals_fun as well, if not already there
@@ -305,7 +305,7 @@ void cgc_add_goto_label(const int ident, const int lbl) {
 
 #endif
 
-void cgc_add_typedef(const int ident, const enum BINDING struct_or_union_or_enum, const ast type) {
+void cgc_add_typedef(const int ident, const int struct_or_union_or_enum, const ast type) {
   int binding = alloc_obj(4);
   binding_next(binding) = cgc_globals;
   binding_kind(binding) = struct_or_union_or_enum;

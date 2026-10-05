@@ -2862,7 +2862,7 @@ void codegen_enum(ast node) {
 
 #ifdef SUPPORT_STRUCT_UNION
 
-void codegen_struct_or_union(ast node, enum BINDING kind) {
+void codegen_struct_or_union(ast node, int kind) {
   ast name = get_child(node, 1);
   ast members = get_child(node, 2);
   int binding;

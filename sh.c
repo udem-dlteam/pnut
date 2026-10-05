@@ -62,8 +62,8 @@ text comp_lvalue_address(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
-bool comp_body(ast node, enum STMT_CTX stmt_ctx);
-bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
+bool comp_body(ast node, int stmt_ctx);
+bool comp_statement(ast node, int stmt_ctx);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
 
@@ -259,7 +259,7 @@ ast fresh_string_ident(int string_symbol) {
   return new_ast0(IDENTIFIER_STRING, index - 1);
 }
 
-void add_var_to_local_env(ast decl, enum BINDING kind) {
+void add_var_to_local_env(ast decl, int kind) {
   int ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
 
   // Make sure we're not shadowing an existing local variable
@@ -1389,7 +1389,7 @@ void handle_printf_call(char *format_str, ast params) {
 #ifndef SH_MINIMAL_PRINTF
   text width_text = 0, precision_text = 0;
   bool has_width = false, has_precision = false;
-  enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
+  int state = PRINTF_STATE_FLAGS;
 #endif
 
   while (*format_str != '\0') {
@@ -1633,7 +1633,7 @@ void comp_assignment(ast lhs, ast rhs) {
   }
 }
 
-bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_body(ast node, int stmt_ctx) {
   int start_in_tail_position = in_tail_position;
   int start_cgc_locals = cgc_locals;
   ast child1;
@@ -1755,7 +1755,7 @@ bool comp_switch(ast node) {
   return false;
 }
 
-bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_if(ast node, int stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
@@ -1806,7 +1806,7 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
 // last_line and loop_end_stmt are mutually exclusive
 // last_line is the last line of the loop
 // loop_end_stmt is the statement that should be executed at the end of the for loop (increment, etc.)
-bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, enum STMT_CTX stmt_ctx) {
+bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, int stmt_ctx) {
   // Save loop end actions from possible outer loop
   int start_cgc_locals = cgc_locals;
   int start_glo_decl_idx;
@@ -1937,7 +1937,7 @@ void comp_var_decls(ast node) {
 
 // Returns whether the statement always returns/breaks.
 // This is used to delimit the end of conditional blocks of switch statements.
-bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_statement(ast node, int stmt_ctx) {
   int op;
   text str;
 
