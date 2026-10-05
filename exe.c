@@ -196,11 +196,13 @@ int grow_fs(const int words) {
   return cgc_fs;
 }
 
+#ifndef SUPPORT_EXTERN_DECLS
 extern const int reg_X;
 extern const int reg_Y;
 extern const int reg_Z;
 extern const int reg_SP;
 extern const int reg_glo;
+#endif
 
 void mov_reg_imm(int dst, int imm);             // Move 32 bit immediate to register
 #ifdef SUPPORT_64_BIT_LITERALS
@@ -469,6 +471,7 @@ void div_for_pointer_arith(int reg, int width) {
   }
 }
 
+#ifndef SUPPORT_EXTERN_DECLS
 extern const int EQ; // x == y
 extern const int NE; // x != y
 extern const int LT; // x < y
@@ -479,6 +482,7 @@ extern const int LE; // x <= y
 extern const int LE_U; // x <= y (unsigned)
 extern const int GT; // x > y
 extern const int GT_U; // x > y  (unsigned)
+#endif
 
 void jump_cond_reg_reg(int cond, int lbl, int reg1, int reg2);
 

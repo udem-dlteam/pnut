@@ -368,6 +368,16 @@
 #define extern
 #endif
 
+#ifdef NO_CONST_SUPPORT
+// C4 doesn't support the const keyword.
+#define const
+#endif
+
+// C4 doesn't support putchar, so we use printf instead.
+#ifdef PUTCHAR_WITH_PRINTF
+#define putchar(c) printf("%c", c)
+#endif
+
 #ifdef NO_TERNARY_SUPPORT
 // M2-Planet doesn't support ternary operator.
 // Ternary operator can be implemented using arithmetic operations.
@@ -1776,8 +1786,10 @@ void u64_to_obj(int *x) {
 
 int accum_digit(int base) {
   int digit = 99;
+#ifndef DISABLE_INTEGER_OVERFLOW_CHECK
   int MININT = -2147483648;
   int limit;
+#endif
   if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
   } else if ('A' <= ch && ch <= 'Z') {
@@ -1788,10 +1800,12 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; // character is not a digit in that base
   } else {
+#ifndef DISABLE_INTEGER_OVERFLOW_CHECK
     limit = MININT / base;
     if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
       syntax_error("literal integer overflow");
     }
+#endif
 
 #ifdef SUPPORT_64_BIT_LITERALS
     u64_mul_u32(val_32, base);

@@ -10,21 +10,6 @@
   #define WORD_SIZE 8
 #endif
 
-// x86 codegen
-#include "exe.c"
-
-#ifdef target_i386_linux
-  #include "elf.c"
-#endif
-
-#ifdef target_x86_64_linux
-  #include "elf.c"
-#endif
-
-#ifdef target_x86_64_mac
-  #include "mach-o.c"
-#endif
-
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
 
 const int AX = 0;
@@ -51,6 +36,34 @@ const int reg_Y = 1; // CX: temporary register
 const int reg_Z = 2; // DX: temporary register
 const int reg_SP = 4; // SP: stack pointer
 const int reg_glo = 3; // BX: global variables table
+
+// Conditions for use by jump_cond:
+
+const int EQ   = 0x4; // x == y
+const int NE   = 0x5; // x != y
+const int LT   = 0xc; // x < y
+const int LT_U = 0x2; // x < y  (Jump near if not above or equal (CF=1))
+const int GE   = 0xd; // x >= y
+const int GE_U = 0x3; // x >= y (Jump near if above or equal (CF=0))
+const int LE   = 0xe; // x <= y
+const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
+const int GT   = 0xf; // x > y
+const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
+
+// x86 codegen
+#include "exe.c"
+
+#ifdef target_i386_linux
+  #include "elf.c"
+#endif
+
+#ifdef target_x86_64_linux
+  #include "elf.c"
+#endif
+
+#ifdef target_x86_64_mac
+  #include "mach-o.c"
+#endif
 
 #if WORD_SIZE == 8
 void rex_prefix(int reg1, int reg2) {
@@ -663,19 +676,6 @@ void debug_interrupt() {
 
   emit_i8(0xcc);
 }
-
-// Conditions for use by jump_cond:
-
-const int EQ   = 0x4; // x == y
-const int NE   = 0x5; // x != y
-const int LT   = 0xc; // x < y
-const int LT_U = 0x2; // x < y  (Jump near if not above or equal (CF=1))
-const int GE   = 0xd; // x >= y
-const int GE_U = 0x3; // x >= y (Jump near if above or equal (CF=0))
-const int LE   = 0xe; // x <= y
-const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
-const int GT   = 0xf; // x > y
-const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
 
 void jump_cond(const int cond, const int lbl) {
 
