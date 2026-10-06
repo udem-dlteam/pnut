@@ -637,6 +637,23 @@ jobs:
             bash ./run-pnut-variant.sh --${variant} --shell bash
           done
 
+  compile-with-C4:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install gcc
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Bootstrap pnut-exe from c4
+        run: |
+          set -e
+          sh bootstrap-from-c4.sh
+
   compile-with-M2-Planet:
     runs-on: ubuntu-latest
     steps:
