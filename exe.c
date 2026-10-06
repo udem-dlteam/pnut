@@ -196,7 +196,12 @@ int grow_fs(const int words) {
   return cgc_fs;
 }
 
-#ifndef SUPPORT_EXTERN_DECLS
+// When pnut compiles itself for the minimal/bootstrap builds, PNUT_MIN makes
+// "extern" expand to nothing, so these become second definitions of the
+// globals. pnut-sh/awk emit an explicit "= 0" for an uninitialized global
+// declaration, which overwrites the real value defined earlier in x86.c.
+// So only emit them when "extern" isn't defined to nothing.
+#if !defined(extern) && !defined(NO_SUPPORT_TENTATIVE_DECLS)
 extern const int reg_X;
 extern const int reg_Y;
 extern const int reg_Z;
@@ -471,7 +476,7 @@ void div_for_pointer_arith(int reg, int width) {
   }
 }
 
-#ifndef SUPPORT_EXTERN_DECLS
+#if !defined(extern) && !defined(NO_SUPPORT_TENTATIVE_DECLS)
 extern const int EQ; // x == y
 extern const int NE; // x != y
 extern const int LT; // x < y
