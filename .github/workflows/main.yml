@@ -659,11 +659,27 @@ jobs:
           # every target can be checked here, including the Darwin one.
           for target in Linux.i386 Linux.x86_64 Darwin.x86_64; do
             echo "Bootstrapping pnut-exe ($target) from c4"
-            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0
-            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0 SAFE=0
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1 SAFE=0
             make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0 SAFE=1
             make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1 SAFE=1
           done
+
+      - name: Bootstrap pnut-sh from c4
+        run: |
+          set -e
+          make bootstrap-pnut-sh-from-c4 MINIMAL=0 SAFE=0
+          make bootstrap-pnut-sh-from-c4 MINIMAL=1 SAFE=0
+          make bootstrap-pnut-sh-from-c4 MINIMAL=0 SAFE=1
+          make bootstrap-pnut-sh-from-c4 MINIMAL=1 SAFE=1
+
+      - name: Bootstrap pnut-awk from c4
+        run: |
+          set -e
+          make bootstrap-pnut-awk-from-c4 MINIMAL=0 SAFE=0
+          make bootstrap-pnut-awk-from-c4 MINIMAL=1 SAFE=0
+          make bootstrap-pnut-awk-from-c4 MINIMAL=0 SAFE=1
+          make bootstrap-pnut-awk-from-c4 MINIMAL=1 SAFE=1
 
   # compile-with-M2-Planet:
   #   runs-on: ubuntu-latest
