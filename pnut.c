@@ -4976,11 +4976,6 @@ int main(int argc, char **argv) {
         fatal_error("unknown option");
       }
     } else {
-#ifdef SUPPORT_STDIN_INPUT
-      if (!isatty(0)) {
-        fatal_error("Cannot specify input file when stdin is not a terminal");
-      }
-#endif
       // Options that don't start with '-' are file names
       include_file(argv[i], 0);
     }
