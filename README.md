@@ -126,15 +126,15 @@ To bootstrap `tcc` from `pnut-sh.sh`, the following steps are taken:
 3. Compile the `kit/bintools.c` using `pnut-exe` to produce binary utilities used for bootstrapping.
 4. Compile TCC using `pnut-exe`, then recompile it with TCC (a few times) to get the final `tcc` executable.
 
-See [kit/README.md](kit/README.md) for more details on how to bootstrap TCC from
-`pnut-sh.sh`.
-
 `pnut` can also be bootstrapped from an even smaller compiler:
 `make bootstrap-pnut-exe-from-c4`, `make bootstrap-pnut-sh-from-c4` and
 `make bootstrap-pnut-awk-from-c4` compile `pnut-exe`, `pnut-sh.sh` and
 `pnut-awk.awk` with c4 ("C in four functions") and its companion preprocessor
 `cpp.c`, both taken from the `kit/bootstrap-C4` submodule, and verify that the
 result is identical to the one obtained with the system C compiler.
+
+See [kit/README.md](kit/README.md) for more details on how to bootstrap TCC from
+`pnut-sh.sh` and `c4`.
 
 ### Annotated Shell Scripts
 

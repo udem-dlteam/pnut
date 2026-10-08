@@ -4,6 +4,20 @@
 # It prepares the environment and builds the necessary tools, before building TCC.
 # This script assumes it runs in an environment where the jammed.sh archive has
 # been extracted, and that the necessary files are present.
+#
+# pnut-exe is bootstrapped from one of the two seed compilers below:
+#
+#   BOOTSTRAP_FROM=shell (default): pnut-exe is compiled by pnut-sh.sh, which
+#   is a C to POSIX shell compiler run by $BOOTSTRAP_SHELL.
+#
+#   BOOTSTRAP_FROM=c4: pnut-exe is compiled by c4 with the help of cpp.c, a
+#   preprocessor written in the C subset supported by c4. Both come from the
+#   kit/bootstrap-C4 submodule. The shell is still used to run this script and
+#   extract the archive, but it no longer compiles anything.
+#
+# The two seeds produce the exact same pnut-exe executable: c4 compiles the
+# minimal pnut-exe (the same one that pnut-sh.sh compiles), and that minimal
+# pnut-exe compiles the complete variant used to bootstrap TCC.
 
 set -e -u -x
 
@@ -21,6 +35,23 @@ log() {
 : ${MES_LIBC_VERSION:=0.27} # Default mes libc version
 : ${USE_GCC:=0}             # Default to not using gcc for bootstrapping TCC
 : ${STOP_AT_PNUT_EXE:=0}    # Default to not stopping at pnut bootstrap
+: ${CC:=gcc}                # Host C compiler, only used with USE_GCC=1 (make: $(CC))
+: ${BOOTSTRAP_FROM:=shell}  # Seed compiler used to bootstrap pnut-exe: shell or c4
+: ${C4:=./c4}               # c4 interpreter, when BOOTSTRAP_FROM=c4
+: ${C4_CPP:=cpp.c}          # c4-compatible preprocessor, when BOOTSTRAP_FROM=c4
+
+# Compilation options that make pnut's source code compatible with c4.
+# MUST BE KEPT IN SYNC WITH the C4_COMPAT variable in the makefile.
+if [ -z "${C4_COMPAT:-}" ]; then
+  C4_COMPAT="-DPNUT_CC -DNO_CONST_SUPPORT -DPUTCHAR_WITH_PRINTF"
+  C4_COMPAT="$C4_COMPAT -DNO_SUPPORT_TENTATIVE_DECLS -DDISABLE_INTEGER_OVERFLOW_CHECK"
+  C4_COMPAT="$C4_COMPAT -DNO_COLOR"
+fi
+
+case "$BOOTSTRAP_FROM" in
+  shell|c4) ;;
+  *) error "Unknown BOOTSTRAP_FROM value: '$BOOTSTRAP_FROM' (expected 'shell' or 'c4')";;
+esac
 
 # MUST BE KEPT IN SYNC WITH kit/setup-rootfs.sh
 PNUT_ARCH=i386_linux
@@ -37,15 +68,36 @@ fi
 
 # 3. Bootstrap pnut-exe (if necessary)
 if [ ! -e "pnut-exe" ]; then
-  # 3a. Bootstrap pnut-exe
-  log "Bootstrapping minimal pnut-exe from pnut-sh.sh"
-  $BOOTSTRAP_SHELL pnut-sh.sh pnut.c $PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP > pnut-exe.sh
-  # 3b. Make executable version of pnut-exe. Overwrite jammed.sh to reuse its execute bit.
-  log "Making executable pnut-exe (minimal)"
-  $BOOTSTRAP_SHELL pnut-exe.sh pnut.c $PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP -o jammed.sh
-  # Compile complete variant of pnut-exe with minimal pnut-exe (named jammed.sh)
-  log "Making executable pnut-exe (complete)"
-  ./jammed.sh pnut.c $PNUT_EXE_TCC_OPTIONS -o pnut-exe
+  case "$BOOTSTRAP_FROM" in
+    shell)
+      # 3a. Bootstrap pnut-exe
+      log "Bootstrapping minimal pnut-exe from pnut-sh.sh"
+      $BOOTSTRAP_SHELL pnut-sh.sh pnut.c $PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP > pnut-exe.sh
+      # 3b. Make executable version of pnut-exe. Overwrite jammed.sh to reuse its execute bit.
+      log "Making executable pnut-exe (minimal)"
+      $BOOTSTRAP_SHELL pnut-exe.sh pnut.c $PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP -o jammed.sh
+      # Compile complete variant of pnut-exe with minimal pnut-exe (named jammed.sh)
+      log "Making executable pnut-exe (complete)"
+      ./jammed.sh pnut.c $PNUT_EXE_TCC_OPTIONS -o pnut-exe
+      ;;
+    c4)
+      if [ ! -x "$C4" ]; then
+        error "c4 interpreter not found or not executable: $C4"
+      fi
+      # 3a. Preprocess pnut.c for c4 with cpp.c. The result is the source code
+      # of the minimal pnut-exe, written in the C subset that c4 understands.
+      log "Preprocessing the minimal pnut-exe source code with $C4_CPP"
+      $C4 "$C4_CPP" pnut.c $PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP $C4_COMPAT > pnut-exe-bootstrapping.c
+      # 3b. Interpret the minimal pnut-exe with c4 to make it compile itself. Unlike
+      # pnut-exe.sh, pnut-exe sets the execute bit of its output file itself, so
+      # there's no need to steal the execute bit of another file.
+      log "Making executable pnut-exe (minimal) with c4"
+      $C4 pnut-exe-bootstrapping.c pnut.c $PNUT_EXE_OPTIONS -DPNUT_BOOTSTRAP -o pnut-exe-min
+      # Compile complete variant of pnut-exe with the minimal pnut-exe made by c4
+      log "Making executable pnut-exe (complete)"
+      ./pnut-exe-min pnut.c $PNUT_EXE_TCC_OPTIONS -o pnut-exe
+      ;;
+  esac
 else
   log "pnut-exe already exists, skipping pnut-exe bootstrap"
 fi
@@ -206,15 +258,8 @@ fi
 # 9: Bootstrap initial version of TCC (tcc-pnut)
 
 make_tcc_bootstrap() { # $1: C compiler to use, $2: additional options
-  CC="$1"
-  case "$CC" in
-    gcc*|clang*)
-      EXTRA_OPTS="              \
-        -D HAVE_FLOAT=1         \
-        -D HAVE_BITFIELD=1      \
-        -D HAVE_LONG_LONG=1     \
-        -D HAVE_SETJMP=1"
-      ;;
+  TCC_CC="$1"
+  case "$TCC_CC" in
     *pnut-exe*)
       EXTRA_OPTS="              \
       -rt arith64.c             \
@@ -223,10 +268,14 @@ make_tcc_bootstrap() { # $1: C compiler to use, $2: additional options
       "
       ;;
     *)
-      echo "Unknown C compiler: $CC" >&2; exit 1
+      EXTRA_OPTS="              \
+        -D HAVE_FLOAT=1         \
+        -D HAVE_BITFIELD=1      \
+        -D HAVE_LONG_LONG=1     \
+        -D HAVE_SETJMP=1"
       ;;
   esac
-  $CC                                                                          \
+  $TCC_CC                                                                      \
     -D BOOTSTRAP=1                                                             \
     -D PNUT_CC=1                                                               \
     -D HAVE_LONG_LONG=1                                                        \
@@ -267,15 +316,15 @@ else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc. Assuming that the
   # system has a working gcc.
-  make_tcc_bootstrap "gcc -m32 -std=c99" ""
+  make_tcc_bootstrap "$CC -m32 -std=c99" ""
 fi
 
 # No need to revert patches, because the ones that are applied all keep the
 # existing code behind an #ifdef PNUT_CC directive.
 # revert_tcc_patches $TCC_PATCHES
 
-go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $2 if empty)
-  CC="$1"
+go() { # $1: previous compiler, $2: name of new compiler, $3: lib path (= $2 if empty)
+  PREV_CC="$1"
   NEW_CC="$2" # Suffix of new compiler: "boot0", "boot1", "boot2", ...
   if [ $# -lt 3 ]; then
     LIB_PATH="$TEMP_DIR/$NEW_CC-lib"
@@ -290,7 +339,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
   # files and the unified-libc.o file.
   if [ -e "mes-0.27" ]; then
     for file in "crt1" "crtn" "crti"; do
-      $CC -c                                                                   \
+      $PREV_CC -c                                                              \
         -D HAVE_CONFIG_H=1                                                     \
         -I $MES_DIR/include                                                    \
         -I $MES_DIR/include/linux/${MES_ARCH}                                  \
@@ -298,32 +347,32 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
         -o $LIB_PATH/$file.o
     done
     # libc+gcc.a
-    $CC -c                                                                     \
+    $PREV_CC -c                                                                \
       -D HAVE_CONFIG_H=1                                                       \
       -I $MES_DIR/include                                                      \
       -I $MES_DIR/include/linux/${MES_ARCH}                                    \
       $TEMP_DIR/unified-libc.c                                                 \
       -o $LIB_PATH/unified-libc.o
 
-    $CC -ar cr $LIB_PATH/libc.a $LIB_PATH/unified-libc.o
+    $PREV_CC -ar cr $LIB_PATH/libc.a $LIB_PATH/unified-libc.o
   else
     # With the pnut libc, we can just compile the crt1.o file and create an
     # empty crtn.o and crti.o files.
     # The libc.a file is created from the portable_libc/libc.c file.
-    $CC -c portable_libc/src/crt1.c -o "$LIB_PATH/crt1.o"
+    $PREV_CC -c portable_libc/src/crt1.c -o "$LIB_PATH/crt1.o"
     printf "" > "$LIB_PATH/crtn.o" # Empty file
     printf "" > "$LIB_PATH/crti.o" # Empty file
 
-    $CC -c -D ADD_LIBC_STUB -I portable_libc/include -o "$LIB_PATH/libc.o" portable_libc/libc.c
-    $CC -ar cr "$LIB_PATH/libc.a" "$LIB_PATH/libc.o"
+    $PREV_CC -c -D ADD_LIBC_STUB -I portable_libc/include -o "$LIB_PATH/libc.o" portable_libc/libc.c
+    $PREV_CC -ar cr "$LIB_PATH/libc.a" "$LIB_PATH/libc.o"
   fi
 
   # libtcc1.a
-  $CC -c -o "$LIB_PATH/libtcc1.o" kit/libtcc1.c
-  $CC -ar cr "$LIB_PATH/tcc/libtcc1.a" "$LIB_PATH/libtcc1.o"
+  $PREV_CC -c -o "$LIB_PATH/libtcc1.o" kit/libtcc1.c
+  $PREV_CC -ar cr "$LIB_PATH/tcc/libtcc1.a" "$LIB_PATH/libtcc1.o"
 
   # We can now compile tcc-$NEW_CC
-  $CC \
+  $PREV_CC \
       -v \
       -static \
       -o $TEMP_DIR/tcc-$NEW_CC \
@@ -352,7 +401,7 @@ go() { # $1: name of bootstrap comp, $2: name of new compiler, $3: lib path (= $
 
   # Create tcc-$NEW_CC.o file to help debugging. Hardcode the compile options
   # with paths to make sure they are the same when using the mes and pnut libc.
-  $CC \
+  $PREV_CC \
       -c \
       -v \
       -static \
