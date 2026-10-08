@@ -29,13 +29,15 @@ mkdir -p "$TEMP_DIR"
 
 CLONE_DIR="$TEMP_DIR/bootstrap-C4"
 C4_DIR="$CLONE_DIR/c4-pnut"
+C4_REPO="https://github.com/laurenthuberdeau/bootstrap-C4.git"
+C4_COMMIT="6fb0c9416aac615fcbd5cbd82c3ca59afef7a56a"
 
 if [ -e "$CLONE_DIR" ]; then
   echo "C4 directory already exists, skipping clone"
 else
-  git clone https://github.com/laurenthuberdeau/bootstrap-C4.git $CLONE_DIR
+  git clone $C4_REPO $CLONE_DIR
   TOP=$(pwd)
-  cd $CLONE_DIR && git checkout laurent/c4-for-pnut-exe-bootstrap && cd $TOP
+  cd $CLONE_DIR && git checkout $C4_COMMIT && cd $TOP
 fi
 
 PNUT_EXE_OPTS="$BUILD_OPT_EXE -DPNUT_BOOTSTRAP"
