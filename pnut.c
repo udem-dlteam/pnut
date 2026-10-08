@@ -75,8 +75,6 @@
     // Remove support for complex printf specifiers (flags, width, precision).
     // This results in smaller code for the compiler.
     #define SH_MINIMAL_PRINTF
-    // For global array initialization
-    #define SUPPORT_SIZEOF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -185,8 +183,6 @@
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
     #define MINIMAL_RUNTIME
-    // For global array initialization
-    #define SUPPORT_SIZEOF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -352,6 +348,7 @@
 
 // ===================== Compatibility macros and typedefs =====================
 
+#ifdef PNUT_MIN
 // pnut-sh and pnut-awk are only support a single translation unit, so the
 // extern keyword doesn't do anything, except forward declare a variable defined
 // later in the same translation unit.
@@ -360,8 +357,12 @@
 // This causes extern declarations to be compiled twice in pnut-sh and pnut-awk,
 // the first time zero-initializing the variable, and the second time
 // initializing it with its declared value.
-#ifdef PNUT_MIN
 #define extern
+#if defined (PNUT_SH) || defined(PNUT_AWK)
+// For pnut-sh and pnut-awk, the size of every non-struct/array type is 1 so we
+// can replace all sizeof() calls with 1.
+#define sizeof(x) 1
+#endif
 #endif
 
 #ifdef NO_CONST_SUPPORT
