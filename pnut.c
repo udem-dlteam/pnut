@@ -1342,7 +1342,7 @@ void pop_if_macro_mask() {
 #ifdef ANNOTATE_WITH_C_CODE
 #define C_CODE_BUF_LEN 200000
 
-char code_char_buf[C_CODE_BUF_LEN];
+char *code_char_buf;
 int code_char_buf_ix = 0;
 // Point to the **last** character of the **last** token.
 // This is used to skip the current token when printing the code of a
@@ -4868,6 +4868,9 @@ int main(int argc, char **argv) {
   io_buf         = malloc(1);
 #ifdef SUPPORT_64_BIT_LITERALS
   val_32         = malloc(2 * sizeof(int));
+#endif
+#ifdef ANNOTATE_WITH_C_CODE
+  code_char_buf  = malloc(C_CODE_BUF_LEN * sizeof(char));
 #endif
 
 #ifdef HANDLE_SIGNALS
