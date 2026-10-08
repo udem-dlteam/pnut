@@ -121,8 +121,31 @@ test_pnut_comp_options() { get_test_metadata "$1" "comp_pnut_opt"; }
 test_args()              { get_test_metadata "$1" "args"; }
 test_timeout()           { get_test_metadata "$1" "timeout"; }
 test_expect_failure()    { grep -q "// expect_failure$" "$1"; }
-test_expect_comp_failure() { grep -q "// expect_comp_failure" "$1"; }
+test_expect_comp_failure() { grep -q "// expect_comp_failure$" "$1"; }
+test_expect_comp_failure_for() { get_test_metadata "$1" "expect_comp_failure_for"; }
 test_expect_failure_for_shells() { get_test_metadata "$1" "expect_failure_for"; }
+
+# Some tests only check that pnut rejects a program, which makes sense for the
+# backends that can't compile it. "// expect_comp_failure_for: <backends>" lists
+# the backends where the compilation must fail; the test is skipped elsewhere,
+# because the other backends compile the program and run it fine.
+test_comp_failure_expected() { # $1: test file
+  if test_expect_comp_failure "$1"; then return 0; fi
+  for target in $(test_expect_comp_failure_for "$1"); do
+    if [ "$target" = "$backend" ]; then return 0; fi
+  done
+  return 1
+}
+
+test_comp_failure_only_other_backends() { # $1: test file
+  if test_expect_comp_failure "$1"; then return 1; fi
+  targets=$(test_expect_comp_failure_for "$1")
+  if [ -z "$targets" ]; then return 1; fi
+  for target in $targets; do
+    if [ "$target" = "$backend" ]; then return 1; fi
+  done
+  return 0
+}
 
 shell_version() {
   case "$1" in
@@ -242,11 +265,16 @@ run_test() { # file_to_test: $1
   expect_failed_comp=0                # Indicates if compilation is expected to fail
   expect_failed_test=0                # Indicates if test is expected to fail
 
-  if test_expect_comp_failure "$file"; then expect_failed_comp=1; fi
+  if test_comp_failure_expected "$file"; then expect_failed_comp=1; fi
   if test_failure_is_expected "$file"; then expect_failed_test=1; fi
 
   # Print file name early so we have some context before test finishes
   printf "$file: "
+
+  if test_comp_failure_only_other_backends "$file"; then
+    echo "⚠️  Test disabled (the compilation must only fail for $(test_expect_comp_failure_for "$file"))"
+    return 0
+  fi
 
   # Golden file generation
   if [ ! -f "$golden_file" ]; then
