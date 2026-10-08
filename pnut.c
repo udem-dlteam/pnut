@@ -1073,6 +1073,8 @@ ast list_singleton(const ast list) {
 //  - 2: length of the symbol's string
 //  - 3: token type (IDENTIFIER, MACRO, TYPEDEF, other C keyword, etc)
 //  - 4: token tag (for macros, typedefs, defstr index, etc)
+//  - 5: defstr index (pnut-sh) or awk name (pnut-awk), on the backends that
+//       allocate a sixth slot for every symbol
 char *symbol_buf(const int symbol) {
   return string_pool + heap[symbol + 1];
 }
@@ -1100,6 +1102,21 @@ int symbol_tag(const int symbol) {
 void set_symbol_tag(const int symbol, const int tag) {
   heap[symbol + 4] = tag;
 }
+
+#ifdef target_awk
+
+// Tells which identifiers awk won't accept as a variable name. The value is the
+// symbol of the name to use instead, or -1 for the names that the C code can't
+// use. See mark_awk_reserved_names in awk.c.
+int symbol_awk_name(const int symbol) {
+  return heap[symbol + 5];
+}
+
+void set_symbol_awk_name(const int symbol, const int awk_name) {
+  heap[symbol + 5] = awk_name;
+}
+
+#endif
 
 #ifdef target_sh
 
@@ -1199,7 +1216,9 @@ int end_symbol() {
   }
 
   // the symbol was not found, create a new one
-#ifdef target_sh
+#if defined(target_sh) || defined(target_awk)
+  // The sixth slot holds the defstr index on pnut-sh and the awk name on
+  // pnut-awk, see symbol_defstr_index and symbol_awk_name.
   symbol = alloc_obj(6);
 #else
   symbol = alloc_obj(5);
@@ -1212,8 +1231,8 @@ int end_symbol() {
   heap[symbol + 2] = end_symbol_len;  // Length of the symbol
   heap[symbol + 3] = IDENTIFIER;      // Token type
   heap[symbol + 4] = 0;               // Token tag
-#ifdef target_sh
-  heap[symbol + 5] = 0;               // defstr index
+#if defined(target_sh) || defined(target_awk)
+  heap[symbol + 5] = 0;               // defstr index (pnut-sh) / awk name (pnut-awk)
 #endif
 
   return symbol;

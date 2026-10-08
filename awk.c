@@ -75,7 +75,48 @@ text global_var(int ident_symbol) {
   return string_concat(wrap_char('_'), wrap_str_pool(ident_symbol));
 }
 
+// Marks every name that awk won't accept as a variable name with the name awk
+// gives it instead, which is the same name with a `_` added, and marks that name
+// back with -1 so that it can't be used in the C code. Without it, the C
+// variables `length` and `length_` would both become `length_` in awk and share
+// one variable, which is the same problem pnut-sh avoids by mapping argv to
+// argv_ and refusing argv_.
+void mark_awk_reserved_names() {
+  char *name;
+  int name_symbol;
+  int awk_name_symbol;
+
+  // The names awk reserves for its built-in functions and special variables, and
+  // the ones of the pnut-awk runtime, separated by spaces. They are in one string
+  // and not in a global initialized with a string, because pnut can't compile the
+  // latter when it bootstraps itself.
+  name = "atan2 close cos exp fflush getline gsub index int length log match printf rand sin split sprintf sqrt srand sub substr system tolower toupper and compl lshift or rshift xor ARGC ARGV CONVFMT ENVIRON FILENAME FNR FS NF NR OFS OFMT ORS RSTART RLENGTH RS SUBSEP comma defarr defstr get_pstr initialize make_argv";
+
+  while (*name != 0) {
+    begin_symbol();
+    while (*name != ' ' && *name != 0) {
+      accum_symbol_char(*name);
+      name = name + 1;
+    }
+    if (*name == ' ') { name = name + 1; }
+    name_symbol = end_symbol();
+
+    begin_symbol();
+    accum_symbol_string(name_symbol);
+    accum_symbol_char('_');
+    awk_name_symbol = end_symbol();
+
+    set_symbol_awk_name(name_symbol, awk_name_symbol);
+    // -1 tells that the name with the `_` is not a variable of its own.
+    set_symbol_awk_name(awk_name_symbol, -1);
+  }
+}
+
+// Unlike the global variables, the local ones keep the name they have in the C
+// source, because they are declared as extra parameters of the awk function.
 text local_var(int ident_symbol) {
+  int awk_symbol = symbol_awk_name(ident_symbol);
+  if (awk_symbol > 0) return wrap_str_pool(awk_symbol);
   return wrap_str_pool(ident_symbol);
 }
 
@@ -937,7 +978,12 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
     fatal_error("variable name is invalid. It can't start with '_'.");
   }
 
-  // FIXME: AWK has special variables that can't be used as regular variables.
+  // The reserved names are given a `_` by local_var, so the name with the `_`
+  // would collide with the variable it is given to.
+  if (local && symbol_awk_name(ident_symbol) == -1) {
+    dump_string("Variable name: ", name);
+    fatal_error("variable name is reserved by awk and can't be used as a local variable.");
+  }
 
   if (local) {
     // Local variables don't correspond to memory locations, and can't store more than 1 number/pointer.
@@ -1539,6 +1585,8 @@ void codegen_begin() {
     characters_useds[i] = 0;
     ++i;
   }
+
+  mark_awk_reserved_names();
 
   print_awk_shebang();
   putchar('\n');

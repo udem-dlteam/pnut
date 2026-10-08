@@ -1,0 +1,1 @@
+tests/_sh/checks/local_awk_reserved.c:13:0: variable name is reserved by awk and can't be used as a local variable.
