@@ -9,6 +9,8 @@
 #   --tcc-version <version>: Specify the TCC version to use (default: 0.9.27)
 #   --mes-libc: Use mes libc instead of pnut libc (default: pnut libc)
 #   --extract-archives: Extract .tar.gz files instead of passing them to jam.sh
+#   --bootstrap-from-c4: Seed the environment with c4 and cpp.c instead of
+#                        pnut-sh.sh. See BOOTSTRAP_FROM=c4 in kit/bootstrap.sh.
 
 set -e -u
 
@@ -21,18 +23,21 @@ readonly TEMP_DIR="build/kit"
 mkdir -p "$TEMP_DIR"
 
 : ${PNUT_OPTIONS:=} # Default to empty options
+: ${CC:=gcc}        # Host C compiler, to build pnut-sh.sh and compute dependencies (make: $(CC))
 INCLUDE_UTILS=0
 MES_LIBC_VERSION="0.27"
 TCC_VERSION="0.9.27"
 EXTRACT_ARCHIVES=0
 USE_MES_LIBC=0
+BOOTSTRAP_FROM="shell"
 TCC_OPTIONS="-DONE_SOURCE -DTCC_TARGET_I386"
 
 while [ $# -gt 0 ]; do
   case $1 in
-    --include-utils)    INCLUDE_UTILS=1;          shift 1 ;;
-    --extract-archives) EXTRACT_ARCHIVES=1;       shift 1 ;;
-    --mes-libc)         USE_MES_LIBC=1;           shift 1 ;;
+    --include-utils)     INCLUDE_UTILS=1;          shift 1 ;;
+    --extract-archives)  EXTRACT_ARCHIVES=1;       shift 1 ;;
+    --mes-libc)          USE_MES_LIBC=1;           shift 1 ;;
+    --bootstrap-from-c4) BOOTSTRAP_FROM="c4";      shift 1 ;;
     --tcc-version)
       if [ $# -lt 2 ]; then error "--tcc-version: missing argument"; fi
       TCC_VERSION="$2";                           shift 2 ;;
@@ -43,6 +48,7 @@ done
 readonly MES_ARCHIVE="kit/mes-0.27.tar.gz"
 readonly MES_ARCHIVE_DIR="$TEMP_DIR/mes-0.27"
 readonly MES_ARCH=x86
+readonly C4_DIR="kit/bootstrap-C4/c4-pnut"
 
 if [ $TCC_VERSION = 0.9.27 ]; then
   readonly TCC_ARCHIVE=kit/tcc-0.9.27.tar.gz
@@ -58,7 +64,7 @@ fi
 program_dependencies() { # $1: file, $2: compile options
   file="$1"
   comp_options="$2"
-  deps=$(gcc -MM "$file" $comp_options)
+  deps=$("$CC" -MM "$file" $comp_options)
   echo $(echo "$deps" | tr ':' '\n' | tr '\\' ' ' | sed '1d')
 }
 
@@ -105,19 +111,30 @@ add_file_recursive() { # $1: file or directory, $2: extraction path (optional)
   fi
 }
 
-# Prepare pnut-sh.sh
-PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dtarget_sh -DPNUT_BOOTSTRAP"
-gcc -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
-./$TEMP_DIR/pnut-sh $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
-
 # Prepare bintools
 make kit/bintools.c > /dev/null
 
-# Bootstrap seed
-add_file_recursive "$TEMP_DIR/pnut-sh.sh" "pnut-sh.sh"
+# Bootstrap seed: pnut-sh.sh (+ a POSIX shell) or c4 + cpp.c (+ a c4 executable).
+if [ "$BOOTSTRAP_FROM" = shell ]; then
+  # Prepare pnut-sh.sh (only needed when bootstrapping from the shell)
+  PNUT_SH_OPTIONS="$PNUT_OPTIONS -Dtarget_sh -DPNUT_BOOTSTRAP"
+  "$CC" -o "$TEMP_DIR/pnut-sh" $PNUT_SH_OPTIONS pnut.c
+  ./$TEMP_DIR/pnut-sh $PNUT_SH_OPTIONS pnut.c > "$TEMP_DIR/pnut-sh.sh"
+  add_file_recursive "$TEMP_DIR/pnut-sh.sh" "pnut-sh.sh"
+elif [ "$BOOTSTRAP_FROM" = c4 ]; then
+  # The c4 executable cannot be part of the archive, since nothing in the
+  # bootstrap environment can compile it. kit/setup-rootfs.sh copies it in.
+  for c4_file in "$C4_DIR/c4.c" "$C4_DIR/cpp.c"; do
+    if [ ! -f "$c4_file" ]; then
+      error "Missing $c4_file. Fetch the c4 submodule with: git submodule update --init kit/bootstrap-C4"
+    fi
+  done
+  add_file_recursive "$C4_DIR/cpp.c" "cpp.c"
+  # add_file_recursive "$C4_DIR/c4.c"  "c4.c"
+fi
 
 # Add the dependencies of pnut.c for the complete bootstrap
-for dep in $(program_dependencies 'pnut.c' '-Dtarget_i386_linux -DBOOTSTRAP_TCC'); do
+for dep in $(program_dependencies 'pnut.c' '-Dtarget_i386_linux'); do
   add_file_recursive "$dep"
 done
 

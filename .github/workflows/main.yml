@@ -598,6 +598,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
       - name: Install dependencies
         run: |
@@ -614,6 +616,12 @@ jobs:
 
           ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.26
           ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.27
+
+          ./kit/test-bootstrap.sh --bootstrap-from-c4 --tcc-version 0.9.26
+          ./kit/test-bootstrap.sh --bootstrap-from-c4 --tcc-version 0.9.27
+
+          ./kit/test-bootstrap.sh --bootstrap-from-c4 --mes-libc --tcc-version 0.9.26
+          ./kit/test-bootstrap.sh --bootstrap-from-c4 --mes-libc --tcc-version 0.9.27
 
   pnut-variants-run:
     runs-on: ubuntu-latest
