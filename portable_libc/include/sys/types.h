@@ -1,7 +1,9 @@
 #ifndef _SYS_TYPES_H
 #define _SYS_TYPES_H
 
-#if defined(PNUT_EXE_32) || defined(PNUT_SH)
+// The shell and awk backends only have int sized values, so the types that are
+// long on the exe backend are ints.
+#if defined(PNUT_EXE_32) || defined(PNUT_SH) || defined(PNUT_AWK)
 
 typedef int ssize_t;
 typedef int size_t;
