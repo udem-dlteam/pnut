@@ -33,7 +33,7 @@ C4_DIR="$CLONE_DIR/c4-pnut"
 if [ -e "$CLONE_DIR" ]; then
   echo "C4 directory already exists, skipping clone"
 else
-  git clone git@github.com:laurenthuberdeau/bootstrap-C4.git $CLONE_DIR
+  git clone https://github.com/laurenthuberdeau/bootstrap-C4.git $CLONE_DIR
   TOP=$(pwd)
   cd $CLONE_DIR && git checkout laurent/c4-for-pnut-exe-bootstrap && cd $TOP
 fi
