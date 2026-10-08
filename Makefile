@@ -12,6 +12,7 @@
 	bootstrap-pnut-sh bootstrap-pnut-exe-from-pnut-shell bootstrap-pnut-exe-from-shell \
 	bootstrap-pnut-awk bootstrap-pnut-exe-from-pnut-awk bootstrap-pnut-exe-from-awk \
 	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe \
+  bootstrap-pnut-sh-from-annotations bootstrap-pnut-exe-from-annotations \
 	bootstrap-pnut-exe-from-c4 bootstrap-pnut-sh-from-c4 bootstrap-pnut-awk-from-c4
 
 BUILD_DIR = build
@@ -272,30 +273,36 @@ pnut-artifact-arm:
 	docker build -t pnut-artifact-arm . --build-arg PNUT_SOURCE=clone --platform linux/arm64
 
 define BOOTSTRAP_HELP
-The following recipes perform some steps of the complete pnut bootstrap
-process to allow each part to be tested individually. The **bootstrap test**
-is used to verify that the step output is in a good enough state to recompile
-and reproduce itself bit-for-bit.
+The following recipes perform parts of the complete pnut bootstrap process to
+allow each part to be tested individually. The **bootstrap test** is used to
+verify that the step output is functional enough to recompile and reproduce
+itself bit-for-bit. To speed up testing, the expected output of each step is
+obtained using the system C compiler (gcc/clang) rather than the output of the
+previous step. Because each step compares its output to the output obtained
+using the system compiler, this ensures that the output and input of consecutive
+steps are equivalent, and that the bootstrap process is correct.
 
 The shell bootstrap steps are:
-1) Bootstrap pnut-sh.sh from pnut-sh.sh:  bootstrap-pnut-sh
-2) Bootstrap pnut-exe.sh from pnut-sh.sh: bootstrap-pnut-exe-from-pnut-shell
-3) Bootstrap pnut-exe from pnut-exe.sh:   bootstrap-pnut-exe-from-shell
-4) Bootstrap pnut-exe from pnut-exe:      bootstrap-pnut-exe
+1) pnut-sh.sh from pnut-sh.sh:     make bootstrap-pnut-sh
+2) pnut-exe.sh from pnut-sh.sh:    make bootstrap-pnut-exe-from-pnut-shell
+3) pnut-exe from pnut-exe.sh:      make bootstrap-pnut-exe-from-shell
+4) pnut-exe from pnut-exe:         make bootstrap-pnut-exe
 
-The same can be done for AWK with the following steps:
-1) Bootstrap pnut-awk.awk from pnut-awk.awk:  bootstrap-pnut-awk
-2) Bootstrap pnut-exe.awk from pnut-awk.awk: 	bootstrap-pnut-exe-from-pnut-awk
-3) Bootstrap pnut-exe from pnut-exe.awk:      bootstrap-pnut-exe-from-awk
+The AWK bootstrap steps are:
+1) pnut-awk.awk from pnut-awk.awk: make bootstrap-pnut-awk
+2) pnut-exe.awk from pnut-awk.awk: make bootstrap-pnut-exe-from-pnut-awk
+3) pnut-exe from pnut-exe.awk:     make bootstrap-pnut-exe-from-awk
 
-In principle, these steps depend on the output of the previous step. However,
-to speed up testing, the bootstrap compiler of each step is produced using the
-system C compiler (gcc/clang) rather than the output of the previous step. To
-ensure this does not invalidate the bootstrap process, each step compares its
-output to the output obtained using the system compiler. This ensures that the
-output and input of adjacent steps don't diverge.
+For completeness, pnut-sh and pnut-awk can be bootstrapped from pnut-exe:
+1) pnut-sh from pnut-exe:          make bootstrap-pnut-sh-with-pnut-exe
+2) pnut-awk from pnut-exe:         make bootstrap-pnut-awk-with-pnut-exe
 
-For completeness, an additional recipe bootstraps pnut-sh from pnut-exe.
+Pnut can also be bootstrapped from an even smaller compiler: c4 and its
+companion preprocessor cpp.c. All variants of pnut are supported by c4:
+
+1) pnut-exe from c4:               make bootstrap-pnut-exe-from-c4
+2) pnut-sh from c4:                make bootstrap-pnut-sh-from-c4
+3) pnut-awk from c4:               make bootstrap-pnut-awk-from-c4
 endef
 
 export BOOTSTRAP_HELP
