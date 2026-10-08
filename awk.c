@@ -269,7 +269,6 @@ text comp_assignment(ast lvalue, ast rvalue) {
 }
 
 text comp_rvalue_go(ast node, int outer_op) {
-  if (node == 0) return 0;
   int op = get_op(node);
   int nb_children = get_nb_children(node);
   text sub1, sub2, sub3;
@@ -611,13 +610,16 @@ void handle_printf_call(char *format_str, ast params) {
 #endif
 
 text comp_fun_call(ast name, ast params) {
+  int name_id;
+  text code_params;
+  ast param;
+
   if (get_op(name) != IDENTIFIER) {
     dump_node(name);
     fatal_error("comp_rvalue_go: function name must be an identifier");
   }
-  int name_id = get_val_(IDENTIFIER, name);
-  text code_params = 0;
-  ast param;
+  name_id = get_val_(IDENTIFIER, name);
+  code_params = 0;
 
 #ifdef AWK_INLINE_PRINTF
   if (((name_id == PUTS_ID || name_id == PUTSTR_ID || name_id == PRINTF_ID)
@@ -933,7 +935,7 @@ void comp_var_decls(ast node) {
 bool comp_statement(ast node, int stmt_ctx) {
   int op;
 #ifdef SUPPORT_FOR
-  text str;
+  text str = 0;
 #endif
   int start_cgc_locals = cgc_locals;
 
@@ -970,11 +972,19 @@ bool comp_statement(ast node, int stmt_ctx) {
 #ifdef SUPPORT_FOR
   } else if (op == FOR_KW) {
     cgc_add_enclosing_loop();
-    str = comp_rvalue(get_child_(FOR_KW, node, 0));
+    // Like awk's own for loop, all 3 clauses are optional: emit nothing for a
+    // clause that isn't there.
+    if (get_child_(FOR_KW, node, 0)) {
+      str = comp_rvalue(get_child_(FOR_KW, node, 0));
+    }
     str = string_concat(str, wrap_str_lit("; "));
-    str = string_concat(str, comp_rvalue(get_child_(FOR_KW, node, 1)));
+    if (get_child_(FOR_KW, node, 1)) {
+      str = string_concat(str, comp_rvalue(get_child_(FOR_KW, node, 1)));
+    }
     str = string_concat(str, wrap_str_lit("; "));
-    str = string_concat(str, comp_rvalue(get_child_(FOR_KW, node, 2)));
+    if (get_child_(FOR_KW, node, 2)) {
+      str = string_concat(str, comp_rvalue(get_child_(FOR_KW, node, 2)));
+    }
     append_glo_decl(string_concat3(wrap_str_lit("for ("),
                                    str,
                                    wrap_str_lit(") {")));
@@ -1040,8 +1050,10 @@ text comp_local_variables() {
 }
 
 void handle_function_params(ast lst) {
+  ast decl;
+
   while (lst != 0) {
-    ast decl = car_(DECL, lst);
+    decl = car_(DECL, lst);
     assert_var_decl_is_safe(decl, true);
     add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = tail(lst);
@@ -1055,6 +1067,7 @@ void comp_glo_fun_decl(ast node) {
   ast fun_type = get_child__(DECL, '(', fun_decl, 1);
   ast params = get_child_opt_('(', LIST, fun_type, 1);
   int local_vars_decl_fixup;
+  text fun_decl_text;
 
   if (body == -1) return; // ignore forward declarations
 
@@ -1076,7 +1089,7 @@ void comp_glo_fun_decl(ast node) {
 
   // Fixup local variable declarations
 
-  text fun_decl_text = string_concat5(
+  fun_decl_text = string_concat5(
     wrap_str_lit("function "),
     function_name(name_symbol),
     wrap_str_lit("("),
