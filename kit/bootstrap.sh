@@ -123,14 +123,14 @@ MES_DIR=mes-${MES_LIBC_VERSION}
 # version saves us from repeatedly passing the TCC version as an argument to the
 # bootstrap scripts.
 
-if [ -e "kit/tcc-0.9.27.tar.gz" ] || [ -e "tcc-0.9.27" ]; then
+if [ -e "tcc-0.9.27.tar.gz" ] || [ -e "tcc-0.9.27" ]; then
   TCC_VERSION=0.9.27
-  TCC_ARCHIVE=kit/tcc-0.9.27.tar.gz
+  TCC_ARCHIVE=tcc-0.9.27.tar.gz
   TCC_DIR=tcc-0.9.27
   TCC_PATCHES="$TCC_0_9_27_PATCHES"
-elif [ -e "kit/tcc-0.9.26.tar.gz" ] || [ -e "tcc-0.9.26-1147-gee75a10c" ]; then
+elif [ -e "tcc-0.9.26.tar.gz" ] || [ -e "tcc-0.9.26-1147-gee75a10c" ]; then
   TCC_VERSION=0.9.26
-  TCC_ARCHIVE=kit/tcc-0.9.26.tar.gz
+  TCC_ARCHIVE=tcc-0.9.26.tar.gz
   TCC_DIR=tcc-0.9.26-1147-gee75a10c
   TCC_PATCHES="$TCC_0_9_26_PATCHES"
 else
