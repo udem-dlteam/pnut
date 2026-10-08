@@ -117,7 +117,7 @@ make kit/bintools.c > /dev/null
 add_file_recursive "$TEMP_DIR/pnut-sh.sh" "pnut-sh.sh"
 
 # Add the dependencies of pnut.c for the complete bootstrap
-for dep in $(program_dependencies 'pnut.c' '-Dtarget_i386_linux -DBOOTSTRAP_TCC'); do
+for dep in $(program_dependencies 'pnut.c' '-Dtarget_i386_linux'); do
   add_file_recursive "$dep"
 done
 

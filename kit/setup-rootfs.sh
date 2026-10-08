@@ -153,7 +153,6 @@ if [ $SKIP_SHELL_BOOTSTRAP -eq 1 ]; then
     -o $TEMP_DIR/pnut-exe-by-cc
 
   ./$TEMP_DIR/pnut-exe-by-cc pnut.c \
-     -DBOOTSTRAP_TCC \
      $PNUT_EXE_TCC_OPTIONS \
      -o "$CHROOT_DIR/pnut-exe"
 fi

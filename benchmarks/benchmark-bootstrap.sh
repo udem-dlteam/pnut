@@ -21,7 +21,7 @@ for BOOTSTRAP_SHELL in ksh dash bash yash osh zsh; do
   cp kit/jammed.sh "$TEMP_DIR/$BOOTSTRAP_SHELL/jammed.sh"
 
   # Skip ahead to TCC bootstrap
-  # gcc pnut.c -o $TEMP_DIR/$BOOTSTRAP_SHELL/pnut-exe -Dtarget_i386_linux -DONE_PASS_GENERATOR -DBOOTSTRAP_TCC
+  # gcc pnut.c -o $TEMP_DIR/$BOOTSTRAP_SHELL/pnut-exe -Dtarget_i386_linux -DONE_PASS_GENERATOR
 
   cd "$TEMP_DIR/$BOOTSTRAP_SHELL"
   chmod +x jammed.sh
