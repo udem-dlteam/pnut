@@ -89,6 +89,61 @@ text env_var(ast ident) {
   }
 }
 
+// The characters that can't be put in an awk string literal keep the readable
+// name pnut-sh gives them, and the generated program defines each name it uses
+// with the value of the character, like the `readonly __LF__=10` lines at the
+// end of a pnut-sh script. The names are the same on both backends on purpose.
+#define CHARACTERS_BITFIELD_SIZE 16
+int *characters_useds;           // The characters that need a name. Bitfield, 16 per int.
+bool any_character_used = false; // Whether the program needs any name at all
+
+text character_ident(int c) {
+  text res;
+  char *str;
+
+  characters_useds[c / CHARACTERS_BITFIELD_SIZE] = characters_useds[c / CHARACTERS_BITFIELD_SIZE] | (1 << (c % CHARACTERS_BITFIELD_SIZE));
+  any_character_used = true;
+
+  if (c < 32) {
+    // First 32 characters are control characters.
+    str =
+      "NUL\0"     "SOH\0"     "STX\0"     "ETX\0"
+      "EOT\0"     "ENQ\0"     "ACK\0"     "BEL\0"
+      "BS\0\0"    "HT\0\0"    "LF\0\0"    "VT\0\0"
+      "FF\0\0"    "CR\0\0"    "SO\0\0"    "SI\0\0"
+      "DLE\0"     "DC1\0"     "DC2\0"     "DC3\0"
+      "DC4\0"     "NAK\0"     "SYN\0"     "ETB\0"
+      "CAN\0"     "EM\0\0"    "SUB\0"     "ESC\0"
+      "FS\0\0"    "GS\0\0"    "RS\0\0"    "US\0\0"
+    ;
+    res = wrap_str_lit(str + (c * 4)); // Each string has length 3 + null terminator
+  } else if (c == 127) {
+    res = wrap_str_lit("DEL");
+  } else {
+    dump_char(c);
+    fatal_error("character_ident: this character can be written as it is");
+  }
+
+  return string_concat3(wrap_str_lit("__"), res, wrap_str_lit("__"));
+}
+
+// The value of a character constant. The printable ones stay character literals,
+// with `ord` turning them back into their number, and only the ones awk can't
+// hold in a string literal get a name. Splicing the raw byte into the generated
+// program is not an option: a NUL makes gawk fail with an internal error, and a
+// newline breaks the line it is written on.
+text character_value(int c) {
+  if (c < 32 || c == 127) return character_ident(c);
+  if (c < 128) {
+    // escape_text is what keeps the double quote and the backslash, the two
+    // characters that would close or escape the literal, readable.
+    return string_concat3(wrap_str_lit("ord[\""), escape_text(wrap_char(c), false), wrap_str_lit("\"]"));
+  }
+  // Above ASCII there is no name worth giving, and putting the byte in the
+  // generated file would tie it to the encoding the file is read with.
+  return wrap_int(c);
+}
+
 #ifdef SUPPORT_STRUCT_UNION
 
 text struct_member_var(ast member_name_ident) {
@@ -289,8 +344,9 @@ text comp_rvalue_go(ast node, int outer_op) {
       return wrap_integer(1, node);
     }
     else if (op == CHARACTER) {
-      // For characters, return ord["c"]:
-      return string_concat3(wrap_str_lit("ord[\""), escape_text(wrap_char(get_val_(CHARACTER, node)), false), wrap_str_lit("\"]"));
+      // A character that awk can write stays a character literal, the others get
+      // the name that the program gives them.
+      return character_value(get_val_(CHARACTER, node));
     } else if (op == STRING) {
       // For string, call defstr("...") to define the string and return its identifier
       runtime_use_defstr = true;
@@ -1333,8 +1389,16 @@ void comp_glo_decl(ast node) {
 
 // Required codegen interface functions
 void codegen_begin() {
+  int i = 0;
+
   text_pool = malloc(TEXT_POOL_SIZE * sizeof(intptr_t));
   glo_decls = malloc(GLO_DECL_SIZE * sizeof(text));
+
+  characters_useds = malloc(CHARACTERS_BITFIELD_SIZE * sizeof(int));
+  while (i < CHARACTERS_BITFIELD_SIZE) {
+    characters_useds[i] = 0;
+    ++i;
+  }
 
   print_awk_shebang();
   putchar('\n');
@@ -1364,6 +1428,8 @@ void codegen_glo_decl(ast decl) {
 }
 
 void codegen_end() {
+  int c = 0;
+
 #ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   print_glo_decls();
 #endif
@@ -1385,6 +1451,17 @@ void codegen_end() {
     putstr("  __rt_file[0]=\"/dev/stdin\"; __rt_file[1]=\"/dev/stdout\"; __rt_file[2]=\"/dev/stderr\"\n");
   }
   putstr("  for (i = 0; i < 256; i++) ord[sprintf(\"%c\", i)] = i # Initialize characters table\n");
+  if (any_character_used) {
+    putstr("  # Character constants\n");
+    while (c < 256) {
+      if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & (1 << (c % CHARACTERS_BITFIELD_SIZE))) {
+        putstr("  ");
+        print_text(character_ident(c));
+        putstr("="); putint(c); putstr("\n");
+      }
+      ++c;
+    }
+  }
   if (init_block_id > 0) {
     putstr("  setup_"); putint(init_block_id); putstr("()\n");
   }
