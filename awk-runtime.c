@@ -8,7 +8,7 @@ bool runtime_use_and = DEFAULT_USE;
 bool runtime_and_defined = false;
 void runtime_and() {
   if (++runtime_and_defined - 1) return;
-  putstr("function and(a, b,    r, m) {\n");
+  putstr("function _and(a, b,    r, m) {\n");
   putstr("    a = int(a); b = int(b)\n");
   putstr("    if (a < 0) a += 4294967296\n");
   putstr("    if (b < 0) b += 4294967296\n");
@@ -27,7 +27,7 @@ bool runtime_use_or = DEFAULT_USE;
 bool runtime_or_defined = false;
 void runtime_or() {
   if (++runtime_or_defined - 1) return;
-  putstr("function or(a, b,    r, m) {\n");
+  putstr("function _or(a, b,    r, m) {\n");
   putstr("    a = int(a); b = int(b)\n");
   putstr("    if (a < 0) a += 4294967296\n");
   putstr("    if (b < 0) b += 4294967296\n");
@@ -46,7 +46,7 @@ bool runtime_use_xor = DEFAULT_USE;
 bool runtime_xor_defined = false;
 void runtime_xor() {
   if (++runtime_xor_defined - 1) return;
-  putstr("function xor(a, b,    r, m) {\n");
+  putstr("function _xor(a, b,    r, m) {\n");
   putstr("    a = int(a); b = int(b)\n");
   putstr("    if (a < 0) a += 4294967296\n");
   putstr("    if (b < 0) b += 4294967296\n");
@@ -65,7 +65,7 @@ bool runtime_use_compl = DEFAULT_USE;
 bool runtime_compl_defined = false;
 void runtime_compl() {
   if (++runtime_compl_defined - 1) return;
-  putstr("function compl(a) {\n");
+  putstr("function _compl(a) {\n");
   putstr("    return -int(a) - 1\n");
   putstr("}\n\n");
 }
@@ -74,7 +74,7 @@ bool runtime_use_lshift = DEFAULT_USE;
 bool runtime_lshift_defined = false;
 void runtime_lshift() {
   if (++runtime_lshift_defined - 1) return;
-  putstr("function lshift(a, b,    r) {\n");
+  putstr("function _lshift(a, b,    r) {\n");
   putstr("    r = int(int(a) * (2 ^ int(b)))\n");
   putstr("    r = r % 4294967296\n");
   putstr("    if (r >= 2147483648) r -= 4294967296\n");
@@ -86,7 +86,7 @@ bool runtime_use_rshift = DEFAULT_USE;
 bool runtime_rshift_defined = false;
 void runtime_rshift() {
   if (++runtime_rshift_defined - 1) return;
-  putstr("function rshift(a, b,    r, i, m) {\n");
+  putstr("function _rshift(a, b,    r, i, m) {\n");
   putstr("    a = int(a); b = int(b)\n");
   putstr("    if (a >= 0) {\n");
   putstr("        r = int(a / (2 ^ b))\n");

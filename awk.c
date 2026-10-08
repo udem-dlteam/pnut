@@ -212,25 +212,27 @@ text op_to_str(int op) {
 }
 
 // '&' || op == '|' || op == '^' || op == LSHIFT || op == RSHIFT
+// The runtime functions are prefixed with '_' because some awk implementations
+// provide them which makes redefining them an error.
 text function_op_to_str(int op) {
   if (op == '&' || op == AMP_EQ) {
     runtime_use_and = true;
-    return wrap_str_lit("and");
+    return wrap_str_lit("_and");
   } else if (op == '|' || op == BAR_EQ) {
     runtime_use_or = true;
-    return wrap_str_lit("or");
+    return wrap_str_lit("_or");
   } else if (op == '^' || op == CARET_EQ) {
     runtime_use_xor = true;
-    return wrap_str_lit("xor");
+    return wrap_str_lit("_xor");
   } else if (op == '~') {
     runtime_use_compl = true;
-    return wrap_str_lit("compl");
+    return wrap_str_lit("_compl");
   } else if (op == LSHIFT || op == LSHIFT_EQ) {
     runtime_use_lshift = true;
-    return wrap_str_lit("lshift");
+    return wrap_str_lit("_lshift");
   } else if (op == RSHIFT || op == RSHIFT_EQ) {
     runtime_use_rshift = true;
-    return wrap_str_lit("rshift");
+    return wrap_str_lit("_rshift");
   } else if (op == ',') {
     runtime_use_comma = true;
     return wrap_str_lit("comma");
