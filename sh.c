@@ -310,7 +310,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 #endif
        ) {
       dump_string("Variable name: ", name);
-      fatal_error("local array/struct value type is not supported for shell backend. Use a reference type instead.");
+      fatal_error("local array/struct value type is not supported by the shell and awk backends. Use a reference type instead.");
     }
   } else {
     // Arrays of structs and struct value types are not supported for now.
@@ -323,7 +323,7 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 #endif
        ) {
       dump_string("Variable name: ", name);
-      fatal_error("global array of struct and struct value type are not supported in shell backend. Use a reference type instead.");
+      fatal_error("global array of struct and struct value type are not supported by the shell and awk backends. Use a reference type instead.");
     }
   }
 }
@@ -2250,7 +2250,7 @@ void comp_struct(ast ident, ast members) {
     // When we have type information on the local and global variables, we'll
     // be able to generate the correct code for these cases.
     if (get_op(field_type) == '[' || get_op(field_type) == STRUCT_KW) {
-      fatal_error("Nested structures not supported by shell backend. Use a reference type instead.");
+      fatal_error("Nested structures not supported by the shell and awk backends. Use a reference type instead.");
     }
 
     comp_assignment_constant(struct_member_var(get_child_opt_(DECL, IDENTIFIER, decl, 0)), offset);
