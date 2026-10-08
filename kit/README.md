@@ -1,29 +1,25 @@
 # Kit - tools for bootstrapping TCC
 
-This directory contains scripts and tools to bootstrap TCC from source using
-`pnut-sh.sh`. The bootstrap starts from the following components:
+This directory contains scripts and tools to bootstrap the Tiny C Compiler
+(TCC). The bootstrap can start either from a shell with `pnut-sh.sh`, or from
+c4, a small C interpreter. Both paths produce the bit-for-bit identical
+`pnut-exe` executable that can then compile TCC.
 
-- `pnut-sh.sh`: A C to POSIX shell compiler.
-- A POSIX shell: bash, dash, ksh, zsh, etc.
+To bootstrap TCC from `pnut-exe`, the following files are needed:
 
-To bootstrap TCC from source, we need the following additional files:
-
-- `pnut-exe.c`: A C to machine code compiler used to compile TCC.
 - `bintools.c`: A collection of small utilities used to prepare the environment,
   including `cat`, `chmod`, `cp`, `mkdir`, `sha256sum`, `simple-patch`, `ungz`
   and `untar`.
 - A libc implementation to compile TCC with (pnut-libc or mes-libc).
 - Source code for TCC, with a few patches to make it compatible with `pnut-exe`.
 
-That's it!
-
 ## Usage
 
 To ensure that the bootstrap process is reproducible, we provide scripts to
 create an isolated environment where the bootstrap can be performed.
 
-1. `kit/bootstrap.sh`: bootstrap `pnut-exe` from `pnut-sh.sh`, then TCC from
-    `pnut-exe`.
+1. `kit/bootstrap.sh`: bootstrap `pnut-exe` from `pnut-sh.sh` or c4, then TCC
+    from `pnut-exe`.
 2. `kit/list-bootstrap-files.sh`: list the files to include in the bootstrap
     environment, given the TCC version and libc to use.
 3. `kit/make-jammed.sh` and `utils/jam.sh`: package the bootstrap files in
@@ -48,11 +44,11 @@ fa72fad5ce40797a8f70c5339d9517862986056f0b8c657a3c1612e23809eae9  build/tcc-boot
 ```
 
 Running the above command will create an isolated environment in `build/rootfs`
-where the bootstrap process is executed automatically. Because we're
-bootstrapping from a shell, the bootstrap process takes a few minutes to
-complete. If you only care about the TCC bootstrap, you can skip the shell
-bootstrap and use a precompiled `pnut-exe` executable with the
-`--skip-shell-bootstrap` option.
+where the bootstrap process is executed automatically. Because shell scripts
+aren't particularly fast at compiling C code, the bootstrap process takes a few
+minutes to complete. To skip ahead to the TCC bootstrap, the
+`--skip-initial-bootstrap` option can be used to have `pnut-exe` compiled by the
+host C compiler instead of bootstrapping it from `pnut-sh.sh`.
 
 The SHA256 checksums of the files produced by the bootstrap process are printed
 at the end. A fixed point should be reached, showing that the bootstrap process
@@ -73,9 +69,32 @@ d14b6f3894787a246b9584a31909b5ecde71e4ac733141e9eb678e95daa23a3f  build/tcc-boot
 Checksums match, bootstrap is reproducible.
 ```
 
-The two environments are created with `--skip-shell-bootstrap` since only the
+The two environments are created with `--skip-initial-bootstrap` since only the
 TCC bootstrap is tested; extra options given to `test-bootstrap.sh` are
 forwarded to `setup-rootfs.sh`.
+
+### Bootstrapping from c4
+
+`pnut-exe` can also be bootstrapped from c4, a small C interpreter written in
+around 600 lines of code, with the help of `cpp.c`, a preprocessor written in
+the C subset supported by c4. The size of c4 makes it ideal for bootstrapping,
+as it can be easily reviewed and run in minimal environments, and is faster than
+bootstrapping from `pnut-sh.sh`. The `--bootstrap-from-c4` `setup-rootfs.sh`
+option can be used to bootstrap `pnut-exe` from c4 instead of from `pnut-sh.sh`.
+
+```shell
+$ git submodule update --init kit/bootstrap-C4 # Fetch the c4 submodule if not already done
+$ sudo rm -rf build/rootfs
+$ ./kit/setup-rootfs.sh --dir build/rootfs \
+  --bootstrap-shell ksh-i386-sarge \
+  --include-utils \
+  --extract-archives \
+  --bootstrap-from-c4 \
+  --execute-bootstrap
+```
+
+Note that a shell is still needed to run the bootstrap scripts and extract the
+archive, but it no longer compiles anything.
 
 ### Options
 
@@ -84,8 +103,12 @@ The following options are available for `setup-rootfs.sh`:
 - `--dir <path>`: The directory to create the root filesystem in.
 - `--bootstrap-shell <shell>`: The shell to use for bootstrapping (bash-static,
   bash-i386-woody, zsh-i386-sarge, ksh-i386-sarge, dash-i386-lenny).
-- `--skip-shell-bootstrap`: Skip the slow shell bootstrap and use a precompiled
-  `pnut-exe` executable.
+- `--skip-initial-bootstrap`: Skip the initial bootstrap and use a `pnut-exe`
+  executable compiled by the host C compiler (`CC`, default: gcc).
+- `--bootstrap-from-c4`: Bootstrap `pnut-exe` from c4 and `cpp.c` instead of
+  from `pnut-sh.sh`.
+- `--c4 <path>`: Use this prebuilt statically linked c4 executable instead of
+  building one from the `kit/bootstrap-C4` submodule.
 - `--execute-bootstrap`: Execute the bootstrap process automatically after
   setting up the root filesystem.
 
@@ -100,3 +123,5 @@ passed through from `setup-rootfs.sh`:
 - `--mes-libc`: Use the Mes libc implementation instead of the Pnut libc
   implementation (default: Pnut libc).
 - `--tcc-version <version>`: The version of TCC to use (default: 0.9.27).
+- `--bootstrap-from-c4`: Include `cpp.c` instead of `pnut-sh.sh` in the
+  `jammed.sh` archive.
