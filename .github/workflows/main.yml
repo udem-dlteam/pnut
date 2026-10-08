@@ -642,6 +642,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
       - name: Install gcc
         run: |
@@ -652,7 +654,16 @@ jobs:
       - name: Bootstrap pnut-exe from c4
         run: |
           set -e
-          sh bootstrap-from-c4.sh
+          # c4 is platform independent: it runs on this runner whatever TARGET
+          # is, and the binaries it emits are only compared, not executed. So
+          # every target can be checked here, including the Darwin one.
+          for target in Linux.i386 Linux.x86_64 Darwin.x86_64; do
+            echo "Bootstrapping pnut-exe ($target) from c4"
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0 SAFE=1
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1 SAFE=1
+          done
 
   # compile-with-M2-Planet:
   #   runs-on: ubuntu-latest

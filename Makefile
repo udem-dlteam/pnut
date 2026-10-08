@@ -11,7 +11,8 @@
 	pnut-artifact-x86 pnut-artifact-arm \
 	bootstrap-pnut-sh bootstrap-pnut-exe-from-pnut-shell bootstrap-pnut-exe-from-shell \
 	bootstrap-pnut-awk bootstrap-pnut-exe-from-pnut-awk bootstrap-pnut-exe-from-awk \
-	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe
+	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe \
+	bootstrap-pnut-exe-from-c4
 
 BUILD_DIR = build
 export LC_ALL=C
@@ -95,6 +96,24 @@ SH_MIN_PRINTF   ?= 0
 ########################## pnut-exe specific options ###########################
 # Use one-pass code generator (default enabled)
 EXE_ONE_PASS 		?= 1
+
+############################## c4 specific options #############################
+# c4 sources from the kit/bootstrap-C4 submodule, and the c4 interpreter built
+# from them.
+C4_DIR    ?= kit/bootstrap-C4/c4-pnut
+C4         = $(BUILD_DIR)/c4
+# Options for the cpp.c pass: c4 has no preprocessor of its own, and so the
+# preprocessing must be done by a separate tool that is compatible with c4.
+# Options:
+# -	DPNUT_CC: define PNUT_CC to enable pnut-specific features in c4
+# - NO_CONST_SUPPORT: remove const type specifier
+# - PUTCHAR_WITH_PRINTF: use printf instead of putchar
+# - NO_SUPPORT_TENTATIVE_DECLS: remove tentative declarations
+# - DISABLE_INTEGER_OVERFLOW_CHECK: disable integer overflow checks to remove large integer literal
+# - NO_COLOR: remove color, don't use isatty which c4 doesn't provide
+C4_COMPAT ?= -DPNUT_CC -DNO_CONST_SUPPORT -DPUTCHAR_WITH_PRINTF \
+             -DNO_SUPPORT_TENTATIVE_DECLS -DDISABLE_INTEGER_OVERFLOW_CHECK \
+             -DNO_COLOR
 
 # Bootstrap flags
 BOOTSTRAP_FLAGS =
@@ -410,6 +429,35 @@ bootstrap-pnut-awk-with-pnut-exe: pnut-exe-bootstrapped pnut-awk.awk
 	$(BUILD_DIR)/pnut-awk-from-pnut-exe $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk-from-pnut-exe-again.awk
 	@if ! diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-from-pnut-exe-again.awk >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# Bootstrap pnut-exe from c4 ("C in four functions"), a tiny C interpreter, and
+# cpp.c, a preprocessor written in the same restricted C. Both come from the
+# kit/bootstrap-C4 submodule.
+#
+#   c4 + cpp.c --> pnut-exe.c --runs on c4--> compiles pnut.c into pnut-exe
+#
+# https://github.com/laurenthuberdeau/bootstrap-C4
+
+# Give a hint instead of a confusing error when the submodule is not checked out.
+$(C4_DIR)/c4.c:
+	@echo "Error: $(C4_DIR)/c4.c is missing. Fetch the c4 submodule with:"; \
+	echo "  git submodule update --init kit/bootstrap-C4"; \
+	exit 1
+
+$(C4): $(C4_DIR)/c4.c | build
+	$(CC) -w -o $(C4) $(C4_DIR)/c4.c
+
+bootstrap-pnut-exe-from-c4: build $(C4) pnut-exe-bootstrapped
+	@echo "Bootstrapping pnut-exe for $(TARGET) from c4..."
+	$(TIMEC) $(C4) $(C4_DIR)/cpp.c pnut.c $(BUILD_OPT_EXE) $(C4_COMPAT) > $(BUILD_DIR)/pnut-exe.c
+	@$(RM) $(BUILD_DIR)/pnut-exe-by-c4 # pnut leaves the tail of a preexisting output file
+	$(TIMEC) $(C4) $(BUILD_DIR)/pnut-exe.c pnut.c $(BUILD_OPT_EXE) -o $(BUILD_DIR)/pnut-exe-by-c4
+	@chmod +x $(BUILD_DIR)/pnut-exe-by-c4
+	@if ! diff -q $(BUILD_DIR)/pnut-exe-by-c4 $(BUILD_DIR)/pnut-exe-bootstrapped >/dev/null 2>&1; then \
+		echo "FAILURE: pnut-exe compiled by c4 differs from the bootstrapped pnut-exe"; \
 		exit 1; \
 	fi
 	@echo "Success!"
