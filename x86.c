@@ -10,21 +10,6 @@
   #define WORD_SIZE 8
 #endif
 
-// x86 codegen
-#include "exe.c"
-
-#ifdef target_i386_linux
-  #include "elf.c"
-#endif
-
-#ifdef target_x86_64_linux
-  #include "elf.c"
-#endif
-
-#ifdef target_x86_64_mac
-  #include "mach-o.c"
-#endif
-
 // Registers common to i386 and x86-64 (E and R prefixes are omitted).
 
 const int AX = 0;
@@ -51,6 +36,34 @@ const int reg_Y = 1; // CX: temporary register
 const int reg_Z = 2; // DX: temporary register
 const int reg_SP = 4; // SP: stack pointer
 const int reg_glo = 3; // BX: global variables table
+
+// Conditions for use by jump_cond:
+
+const int EQ   = 0x4; // x == y
+const int NE   = 0x5; // x != y
+const int LT   = 0xc; // x < y
+const int LT_U = 0x2; // x < y  (Jump near if not above or equal (CF=1))
+const int GE   = 0xd; // x >= y
+const int GE_U = 0x3; // x >= y (Jump near if above or equal (CF=0))
+const int LE   = 0xe; // x <= y
+const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
+const int GT   = 0xf; // x > y
+const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
+
+// x86 codegen
+#include "exe.c"
+
+#ifdef target_i386_linux
+  #include "elf.c"
+#endif
+
+#ifdef target_x86_64_linux
+  #include "elf.c"
+#endif
+
+#ifdef target_x86_64_mac
+  #include "mach-o.c"
+#endif
 
 #if WORD_SIZE == 8
 void rex_prefix(int reg1, int reg2) {
@@ -313,6 +326,8 @@ void mov_mem32_reg(const int base, const int offset, const int src) {
   mov_memory(0x89, src, base, offset, 4);
 }
 
+#if WORD_SIZE == 8
+
 void mov_mem64_reg(const int base, const int offset, const int src) {
 
   // MOVB [base_reg + offset], src_reg  ;; Move qword (8 bytes) from register to memory
@@ -320,6 +335,8 @@ void mov_mem64_reg(const int base, const int offset, const int src) {
 
   mov_memory(0x89, src, base, offset, 8);
 }
+
+#endif
 
 void mov_reg_mem8(const int dst, const int base, const int offset) {
 
@@ -371,6 +388,8 @@ void mov_reg_mem32_sign_ext(const int dst, const int base, const int offset) {
   mov_memory_extend(0x63, dst, base, offset, false);
 }
 
+#if WORD_SIZE == 8
+
 void mov_reg_mem64(const int dst, const int base, const int offset) {
 
   // MOV dst_reg, [base_reg + offset]  ;; Move qword (8 bytes) from memory to register
@@ -378,6 +397,8 @@ void mov_reg_mem64(const int dst, const int base, const int offset) {
 
   mov_memory(0x8b, dst, base, offset, 8);
 }
+
+#endif
 
 void imul_reg_reg(const int dst, const int src) {
 
@@ -555,31 +576,29 @@ void extend_reg(const int reg, const int width, const bool is_signed) {
   }
 #endif
 
-  switch (width) {
-    case 1:
+  if (width == 1) {
       rex_prefix(reg, reg);
       emit_i8(0x0f);
       emit_i8(TERNARY(is_signed, 0xbe, 0xb6)); // MOVSX/MOVZX reg, reg8
-      break;
-    case 2:
+  }
+  else if (width == 2) {
       rex_prefix(reg, reg);
       emit_i8(0x0f);
       emit_i8(TERNARY(is_signed, 0xbf, 0xb7)); // MOVSX/MOVZX reg, reg16
-      break;
-    case 4:
+  }
+  else if (width == 4) {
 #if WORD_SIZE == 8
-      // Only on x86-64, where WORD_SIZE is 8
-      if (is_signed) {
-        rex_prefix(reg, reg);
-        emit_i8(0x63); // MOVSXD reg, reg32
-      } else {
-        // Writes to a 32-bit register zero-extend into the upper half, so a
-        // 32-bit MOV of the register to itself does the job.
-        // No REX.W prefix because the operand size must remain 32 bits.
-        if (reg >= R8) emit_i8(0x45); // REX.R + REX.B
-        emit_i8(0x89); // MOV reg32, reg32
-      }
-      break;
+    // Only on x86-64, where WORD_SIZE is 8
+    if (is_signed) {
+      rex_prefix(reg, reg);
+      emit_i8(0x63); // MOVSXD reg, reg32
+    } else {
+      // Writes to a 32-bit register zero-extend into the upper half, so a
+      // 32-bit MOV of the register to itself does the job.
+      // No REX.W prefix because the operand size must remain 32 bits.
+      if (reg >= R8) emit_i8(0x45); // REX.R + REX.B
+      emit_i8(0x89); // MOV reg32, reg32
+    }
 #else
       // WORD_SIZE is 4, so the register is already extended into itself
       return;
@@ -657,19 +676,6 @@ void debug_interrupt() {
 
   emit_i8(0xcc);
 }
-
-// Conditions for use by jump_cond:
-
-const int EQ   = 0x4; // x == y
-const int NE   = 0x5; // x != y
-const int LT   = 0xc; // x < y
-const int LT_U = 0x2; // x < y  (Jump near if not above or equal (CF=1))
-const int GE   = 0xd; // x >= y
-const int GE_U = 0x3; // x >= y (Jump near if above or equal (CF=0))
-const int LE   = 0xe; // x <= y
-const int LE_U = 0x6; // x <= y (Jump near if below or equal (CF=1 or ZF=1))
-const int GT   = 0xf; // x > y
-const int GT_U = 0x7; // x > y  (Jump near if not below or equal (CF=0 and ZF=0))
 
 void jump_cond(const int cond, const int lbl) {
 

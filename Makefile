@@ -11,7 +11,9 @@
 	pnut-artifact-x86 pnut-artifact-arm \
 	bootstrap-pnut-sh bootstrap-pnut-exe-from-pnut-shell bootstrap-pnut-exe-from-shell \
 	bootstrap-pnut-awk bootstrap-pnut-exe-from-pnut-awk bootstrap-pnut-exe-from-awk \
-	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe
+	bootstrap-pnut-exe bootstrap-pnut-sh-with-pnut-exe \
+  bootstrap-pnut-sh-from-annotations bootstrap-pnut-exe-from-annotations \
+	bootstrap-pnut-exe-from-c4 bootstrap-pnut-sh-from-c4 bootstrap-pnut-awk-from-c4
 
 BUILD_DIR = build
 export LC_ALL=C
@@ -95,6 +97,24 @@ SH_MIN_PRINTF   ?= 0
 ########################## pnut-exe specific options ###########################
 # Use one-pass code generator (default enabled)
 EXE_ONE_PASS 		?= 1
+
+############################## c4 specific options #############################
+# c4 sources from the kit/bootstrap-C4 submodule, and the c4 interpreter built
+# from them.
+C4_DIR    ?= kit/bootstrap-C4/c4-pnut
+C4         = $(BUILD_DIR)/c4
+# Options for the cpp.c pass: c4 has no preprocessor of its own, and so the
+# preprocessing must be done by a separate tool that is compatible with c4.
+# Options:
+# -	DPNUT_CC: define PNUT_CC to enable pnut-specific features in c4
+# - NO_CONST_SUPPORT: remove const type specifier
+# - PUTCHAR_WITH_PRINTF: use printf instead of putchar
+# - NO_SUPPORT_TENTATIVE_DECLS: remove tentative declarations
+# - DISABLE_INTEGER_OVERFLOW_CHECK: disable integer overflow checks to remove large integer literal
+# - NO_COLOR: remove color, don't use isatty which c4 doesn't provide
+C4_COMPAT ?= -DPNUT_CC -DNO_CONST_SUPPORT -DPUTCHAR_WITH_PRINTF \
+             -DNO_SUPPORT_TENTATIVE_DECLS -DDISABLE_INTEGER_OVERFLOW_CHECK \
+             -DNO_COLOR
 
 # Bootstrap flags
 BOOTSTRAP_FLAGS =
@@ -253,30 +273,36 @@ pnut-artifact-arm:
 	docker build -t pnut-artifact-arm . --build-arg PNUT_SOURCE=clone --platform linux/arm64
 
 define BOOTSTRAP_HELP
-The following recipes perform some steps of the complete pnut bootstrap
-process to allow each part to be tested individually. The **bootstrap test**
-is used to verify that the step output is in a good enough state to recompile
-and reproduce itself bit-for-bit.
+The following recipes perform parts of the complete pnut bootstrap process to
+allow each part to be tested individually. The **bootstrap test** is used to
+verify that the step output is functional enough to recompile and reproduce
+itself bit-for-bit. To speed up testing, the expected output of each step is
+obtained using the system C compiler (gcc/clang) rather than the output of the
+previous step. Because each step compares its output to the output obtained
+using the system compiler, this ensures that the output and input of consecutive
+steps are equivalent, and that the bootstrap process is correct.
 
 The shell bootstrap steps are:
-1) Bootstrap pnut-sh.sh from pnut-sh.sh:  bootstrap-pnut-sh
-2) Bootstrap pnut-exe.sh from pnut-sh.sh: bootstrap-pnut-exe-from-pnut-shell
-3) Bootstrap pnut-exe from pnut-exe.sh:   bootstrap-pnut-exe-from-shell
-4) Bootstrap pnut-exe from pnut-exe:      bootstrap-pnut-exe
+1) pnut-sh.sh from pnut-sh.sh:     make bootstrap-pnut-sh
+2) pnut-exe.sh from pnut-sh.sh:    make bootstrap-pnut-exe-from-pnut-shell
+3) pnut-exe from pnut-exe.sh:      make bootstrap-pnut-exe-from-shell
+4) pnut-exe from pnut-exe:         make bootstrap-pnut-exe
 
-The same can be done for AWK with the following steps:
-1) Bootstrap pnut-awk.awk from pnut-awk.awk:  bootstrap-pnut-awk
-2) Bootstrap pnut-exe.awk from pnut-awk.awk: 	bootstrap-pnut-exe-from-pnut-awk
-3) Bootstrap pnut-exe from pnut-exe.awk:      bootstrap-pnut-exe-from-awk
+The AWK bootstrap steps are:
+1) pnut-awk.awk from pnut-awk.awk: make bootstrap-pnut-awk
+2) pnut-exe.awk from pnut-awk.awk: make bootstrap-pnut-exe-from-pnut-awk
+3) pnut-exe from pnut-exe.awk:     make bootstrap-pnut-exe-from-awk
 
-In principle, these steps depend on the output of the previous step. However,
-to speed up testing, the bootstrap compiler of each step is produced using the
-system C compiler (gcc/clang) rather than the output of the previous step. To
-ensure this does not invalidate the bootstrap process, each step compares its
-output to the output obtained using the system compiler. This ensures that the
-output and input of adjacent steps don't diverge.
+For completeness, pnut-sh and pnut-awk can be bootstrapped from pnut-exe:
+1) pnut-sh from pnut-exe:          make bootstrap-pnut-sh-with-pnut-exe
+2) pnut-awk from pnut-exe:         make bootstrap-pnut-awk-with-pnut-exe
 
-For completeness, an additional recipe bootstraps pnut-sh from pnut-exe.
+Pnut can also be bootstrapped from an even smaller compiler: c4 and its
+companion preprocessor cpp.c. All variants of pnut are supported by c4:
+
+1) pnut-exe from c4:               make bootstrap-pnut-exe-from-c4
+2) pnut-sh from c4:                make bootstrap-pnut-sh-from-c4
+3) pnut-awk from c4:               make bootstrap-pnut-awk-from-c4
 endef
 
 export BOOTSTRAP_HELP
@@ -410,6 +436,57 @@ bootstrap-pnut-awk-with-pnut-exe: pnut-exe-bootstrapped pnut-awk.awk
 	$(BUILD_DIR)/pnut-awk-from-pnut-exe $(BUILD_OPT_AWK) pnut.c > $(BUILD_DIR)/pnut-awk-from-pnut-exe-again.awk
 	@if ! diff $(BUILD_DIR)/pnut-awk.awk $(BUILD_DIR)/pnut-awk-from-pnut-exe-again.awk >/dev/null 2>&1; then \
 		echo "FAILURE: Bootstrap scripts differ"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+# Bootstrap pnut-exe from c4 ("C in four functions"), a tiny C interpreter, and
+# cpp.c, a preprocessor written in the same restricted C. Both come from the
+# kit/bootstrap-C4 submodule.
+#
+#   c4 + cpp.c --> pnut-exe.c --runs on c4--> compiles pnut.c into pnut-exe
+#
+# https://github.com/laurenthuberdeau/bootstrap-C4
+
+# Give a hint instead of a confusing error when the submodule is not checked out.
+$(C4_DIR)/c4.c:
+	@echo "Error: $(C4_DIR)/c4.c is missing. Fetch the c4 submodule with:"; \
+	echo "  git submodule update --init kit/bootstrap-C4"; \
+	exit 1
+
+$(C4): $(C4_DIR)/c4.c | build
+	$(CC) -w -o $(C4) $(C4_DIR)/c4.c
+
+bootstrap-pnut-exe-from-c4: build $(C4) pnut-exe-bootstrapped
+	@echo "Bootstrapping pnut-exe for $(TARGET) from c4..."
+	$(TIMEC) $(C4) $(C4_DIR)/cpp.c pnut.c $(BUILD_OPT_EXE) $(C4_COMPAT) > $(BUILD_DIR)/pnut-exe.c
+	@$(RM) $(BUILD_DIR)/pnut-exe-by-c4 # pnut leaves the tail of a preexisting output file
+	$(TIMEC) $(C4) $(BUILD_DIR)/pnut-exe.c pnut.c $(BUILD_OPT_EXE) -o $(BUILD_DIR)/pnut-exe-by-c4
+	@chmod +x $(BUILD_DIR)/pnut-exe-by-c4
+	@if ! diff -q $(BUILD_DIR)/pnut-exe-by-c4 $(BUILD_DIR)/pnut-exe-bootstrapped >/dev/null 2>&1; then \
+		echo "FAILURE: pnut-exe compiled by c4 differs from the bootstrapped pnut-exe"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+bootstrap-pnut-sh-from-c4: build $(C4) pnut-sh.sh
+	@echo "Bootstrapping pnut-sh from c4..."
+	$(TIMEC) $(C4) $(C4_DIR)/cpp.c pnut.c $(BUILD_OPT_SH) $(C4_COMPAT) > $(BUILD_DIR)/pnut-sh.c
+	$(TIMEC) $(C4) $(BUILD_DIR)/pnut-sh.c pnut.c $(BUILD_OPT_SH) > $(BUILD_DIR)/pnut-sh-by-c4.sh
+	@chmod +x $(BUILD_DIR)/pnut-sh-by-c4.sh
+	@if ! diff -q $(BUILD_DIR)/pnut-sh-by-c4.sh $(BUILD_DIR)/pnut-sh.sh >/dev/null 2>&1; then \
+		echo "FAILURE: pnut-sh generated by c4 differs from pnut-sh.sh"; \
+		exit 1; \
+	fi
+	@echo "Success!"
+
+bootstrap-pnut-awk-from-c4: build $(C4) pnut-awk.awk
+	@echo "Bootstrapping pnut-awk from c4..."
+	$(TIMEC) $(C4) $(C4_DIR)/cpp.c pnut.c $(BUILD_OPT_AWK) $(C4_COMPAT) > $(BUILD_DIR)/pnut-awk.c
+	$(TIMEC) $(C4) $(BUILD_DIR)/pnut-awk.c pnut.c $(BUILD_OPT_AWK) > $(BUILD_DIR)/pnut-awk-by-c4.awk
+	@chmod +x $(BUILD_DIR)/pnut-awk-by-c4.awk
+	@if ! diff -q $(BUILD_DIR)/pnut-awk-by-c4.awk $(BUILD_DIR)/pnut-awk.awk >/dev/null 2>&1; then \
+		echo "FAILURE: pnut-awk generated by c4 differs from pnut-awk.awk"; \
 		exit 1; \
 	fi
 	@echo "Success!"

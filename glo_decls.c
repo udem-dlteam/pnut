@@ -1,6 +1,6 @@
 #define GLO_DECL_SIZE 100000
 #define GLO_DECL_ENTRY_SIZE 3
-text glo_decls[GLO_DECL_SIZE];  // Generated code
+text *glo_decls;  // Generated code
 int glo_decl_ix = 0;            // Index of last generated line of code
 int nest_level = 0;             // Current level of indentation
 
@@ -9,7 +9,7 @@ void append_glo_decl(text decl) {
   glo_decls[glo_decl_ix] = nest_level;
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = decl;
-  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
+  glo_decl_ix = glo_decl_ix + GLO_DECL_ENTRY_SIZE;
 }
 
 // Fixups are represented as negative nest levels (-1, -2, ...). The actual
@@ -19,7 +19,7 @@ int append_glo_decl_fixup() {
   glo_decls[glo_decl_ix] = - (nest_level + 1);
   glo_decls[glo_decl_ix + 1] = 1; // If it's active or not. Used by undo_glo_decls and replay_glo_decls
   glo_decls[glo_decl_ix + 2] = 0;
-  glo_decl_ix += GLO_DECL_ENTRY_SIZE;
+  glo_decl_ix = glo_decl_ix + GLO_DECL_ENTRY_SIZE;
   return glo_decl_ix - GLO_DECL_ENTRY_SIZE;
 }
 
@@ -39,8 +39,8 @@ void fixup_glo_decl(int fixup_ix, text decl) {
 // This is useful to compile some code at a different time than it is used.
 void undo_glo_decls(int start) {
   while (start < glo_decl_ix) {
-    glo_decls[start + 1] -= 1; // To support nested undone declarations
-    start += GLO_DECL_ENTRY_SIZE;
+    --glo_decls[start + 1]; // To support nested undone declarations
+    start = start + GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -49,7 +49,7 @@ void undo_glo_decls(int start) {
 bool any_active_glo_decls(int start) {
   while (start < glo_decl_ix) {
     if (glo_decls[start + 1] && glo_decls[start + 2] != 0) return true;
-    start += GLO_DECL_ENTRY_SIZE;
+    start = start + GLO_DECL_ENTRY_SIZE;
   }
   return false;
 }
@@ -61,7 +61,7 @@ void replay_glo_decls(int start, int end) {
     if (glo_decls[start + 1] == 0) { // Skip inactive declarations that are at the current level
       append_glo_decl(glo_decls[start + 2]);
     }
-    start += GLO_DECL_ENTRY_SIZE;
+    start = start + GLO_DECL_ENTRY_SIZE;
   }
 }
 
@@ -71,7 +71,7 @@ text replay_glo_decls_inline(int start, int end) {
     if (glo_decls[start + 1] == 0) { // Skip inactive declarations
       res = concatenate_strings_with(res, glo_decls[start + 2], wrap_str_lit("; "));
     }
-    start += GLO_DECL_ENTRY_SIZE;
+    start = start + GLO_DECL_ENTRY_SIZE;
   }
   if (res != 0) { res = string_concat(res, wrap_str_lit("; ")); }
 
@@ -87,12 +87,12 @@ void print_glo_decls() {
         level = glo_decls[i];
         while (level > 0) {
           putchar(' '); putchar(' ');
-          level -= 1;
+          --level;
         }
         print_text(glo_decls[i + 2]);
         putchar('\n');
       }
     }
-    i += GLO_DECL_ENTRY_SIZE;
+    i = i + GLO_DECL_ENTRY_SIZE;
   }
 }

@@ -225,6 +225,8 @@
 
   #ifdef PNUT_BOOTSTRAP
     #define ALLOW_RECURSIVE_MACROS
+    // For global array initialization
+    #define SUPPORT_SIZEOF
   #else
     // Enable all C features for general pnut usage
     #define SUPPORT_ALL_C_FEATURES
@@ -282,7 +284,9 @@
   #define SUPPORT_EXTRACT_C_ANNOTATIONS
   #define SUPPORT_COMPLEX_INITIALIZER
   #define SUPPORT_DO_WHILE
+  #define SUPPORT_FOR
   #define SUPPORT_GOTO
+  #define SUPPORT_SWITCH
   #define SUPPORT_SIZEOF
   #define SUPPORT_STRUCT_UNION
   #define SUPPORT_TYPE_SPECIFIERS
@@ -344,6 +348,7 @@
 
 // ===================== Compatibility macros and typedefs =====================
 
+#ifdef PNUT_MIN
 // pnut-sh and pnut-awk are only support a single translation unit, so the
 // extern keyword doesn't do anything, except forward declare a variable defined
 // later in the same translation unit.
@@ -352,8 +357,22 @@
 // This causes extern declarations to be compiled twice in pnut-sh and pnut-awk,
 // the first time zero-initializing the variable, and the second time
 // initializing it with its declared value.
-#ifdef PNUT_MIN
 #define extern
+#if defined (PNUT_SH) || defined(PNUT_AWK)
+// For pnut-sh and pnut-awk, the size of every non-struct/array type is 1 so we
+// can replace all sizeof() calls with 1.
+#define sizeof(x) 1
+#endif
+#endif
+
+#ifdef NO_CONST_SUPPORT
+// C4 doesn't support the const keyword.
+#define const
+#endif
+
+// C4 doesn't support putchar, so we use printf instead.
+#ifdef PUTCHAR_WITH_PRINTF
+#define putchar(c) printf("%c", c)
 #endif
 
 #ifdef NO_TERNARY_SUPPORT
@@ -433,13 +452,13 @@ int last_tok_column_number = 0;
 
 #define INCLUDE_STACK_DEPTH 10
 
-intptr_t include_stack[INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE];
+intptr_t *include_stack;
 int include_stack_top = 0; // Point to top of the stack, i.e. the next free entry
 
 void putstr(char *str) {
   while (*str) {
     putchar(*str);
-    str += 1;
+    ++str;
   }
 }
 
@@ -604,7 +623,7 @@ void save_include_context() {
     include_stack[include_stack_top + 3] = line_number;
     include_stack[include_stack_top + 4] = column_number;
   #endif
-    include_stack_top += INCLUDE_ENTRY_SIZE;
+    include_stack_top = include_stack_top + INCLUDE_ENTRY_SIZE;
   }
 }
 
@@ -615,7 +634,7 @@ void restore_include_context() {
   if (fd_dirname != 0) free(fd_dirname);
   // We skip freeing the filepath because it may belong to the string pool
 
-  include_stack_top -= INCLUDE_ENTRY_SIZE;
+  include_stack_top = include_stack_top - INCLUDE_ENTRY_SIZE;
   // Must add parentheses because M2-Planet parses the cast operator with higher
   // precedence than the dereference operator.
   fd          =          include_stack[include_stack_top];
@@ -632,14 +651,18 @@ enum TOKEN {
   // C keywords
   KEYWORDS_START = 300,
   BREAK_KW,
+#ifdef SUPPORT_SWITCH
   CASE_KW,
+#endif
   CONTINUE_KW,
   DEFAULT_KW,
 #ifdef SUPPORT_DO_WHILE
   DO_KW,
 #endif
   ELSE_KW,
+#ifdef SUPPORT_FOR
   FOR_KW,
+#endif
   IF_KW,
   RETURN_KW,
 #ifdef SUPPORT_SIZEOF
@@ -754,7 +777,7 @@ int val;
 
 // String pool for C keywords, identifiers and string literals
 #define STRING_POOL_SIZE 250000
-char string_pool[STRING_POOL_SIZE];
+char *string_pool;
 int string_pool_alloc = 0;
 int string_start;
 int hash;
@@ -768,12 +791,12 @@ int hash;
 #else
 #define HEAP_SIZE 786432 // 768 KB
 #endif
-intptr_t heap[HEAP_SIZE];
+intptr_t *heap;
 int heap_alloc = HASH_PRIME;
 
 int alloc_obj(const int size) {
 
-  if ((heap_alloc += size) > HEAP_SIZE) {
+  if ((heap_alloc = heap_alloc + size) > HEAP_SIZE) {
     fatal_error("heap overflow");
   }
 
@@ -990,7 +1013,7 @@ ast new_ast4(const int op, const ast child0, const ast child1, const ast child2,
 
 ast clone_ast(const ast orig) {
   int nb_children = get_nb_children(orig);
-  int i;
+  int i = 0;
 
   // Account for the value of ast nodes with no child
   nb_children = TERNARY(nb_children > 0, nb_children, 1);
@@ -998,8 +1021,9 @@ ast clone_ast(const ast orig) {
   ast_result = alloc_obj(nb_children + 1);
 
   heap[ast_result] = heap[orig]; // copy operator and nb of children
-  for (i = 0; i < nb_children; i += 1) {
+  while (i < nb_children) {
     set_child(ast_result, i, get_child(orig, i));
+    ++i;
   }
 
   return ast_result;
@@ -1098,7 +1122,7 @@ void begin_symbol() {
 void accum_symbol_char(const char c) {
   hash = (c + (hash ^ HASH_PARAM)) % HASH_PRIME;
   string_pool[string_pool_alloc] = c;
-  string_pool_alloc += 1;
+  ++string_pool_alloc;
   if (string_pool_alloc >= STRING_POOL_SIZE) {
     fatal_error("string pool overflow");
   }
@@ -1110,7 +1134,7 @@ void accum_symbol_string(const int string_symbol) {
   char *string_end = string_start + symbol_len(string_symbol);
   while (string_start < string_end) {
     accum_symbol_char(*string_start);
-    string_start += 1;
+    ++string_start;
   }
 }
 
@@ -1145,7 +1169,7 @@ int curr_symbol;
 int end_symbol() {
   end_symbol_len = string_pool_alloc - string_start; // exclude terminator
   string_pool[string_pool_alloc] = 0; // terminate string
-  string_pool_alloc += 1; // account for terminator
+  ++string_pool_alloc; // account for terminator
 
   curr_symbol = hash;
 
@@ -1160,8 +1184,8 @@ int end_symbol() {
     c2 = string_pool + heap[symbol + 1];
     symbol_end = c1 + end_symbol_len;
     while (c1 < symbol_end && *c1 == *c2) {
-      c1 += 1;
-      c2 += 1;
+      ++c1;
+      ++c2;
     }
 
     if (c1 == symbol_end) {
@@ -1249,7 +1273,7 @@ void dump_op(int op) {
 #endif
 
 #define IFDEF_DEPTH_MAX 20
-int if_macro_stack[IFDEF_DEPTH_MAX]; // Stack of if macro states
+int *if_macro_stack; // Stack of if macro states
 int if_macro_stack_ix = 0;
 bool if_macro_mask = true;      // Indicates if the current if/elif block is being executed
 bool if_macro_executed = false; // If any of the previous if/elif conditions were true
@@ -1270,7 +1294,7 @@ bool expand_macro_arg = true;
 bool skip_newlines = true;
 
 #define MACRO_RECURSION_MAX 180 // Supports up to 60 (180 / 3) nested macro expansions.
-int macro_stack[MACRO_RECURSION_MAX];
+int *macro_stack;
 int macro_stack_ix = 0;
 
 int macro_tok_lst = 0;  // Current list of tokens to replay for the macro being expanded
@@ -1294,7 +1318,7 @@ void push_if_macro_mask(bool new_mask) {
   // Once if_macro_keep_directive_block_code is set, it is kept for all nested blocks.
   if_macro_stack[if_macro_stack_ix + 2] = if_macro_keep_directive_block_code;
 #endif
-  if_macro_stack_ix += IFDEF_STACK_ENTRY_SIZE;
+  if_macro_stack_ix = if_macro_stack_ix + IFDEF_STACK_ENTRY_SIZE;
 
   // If the current block is masked off, then the new mask is the logical AND of the current mask and the new mask
   new_mask = if_macro_mask & new_mask;
@@ -1307,7 +1331,7 @@ void pop_if_macro_mask() {
   if (if_macro_stack_ix == 0) {
     fatal_error("Unbalanced #ifdef/#ifndef/#else/#endif directives.");
   }
-  if_macro_stack_ix -= IFDEF_STACK_ENTRY_SIZE;
+  if_macro_stack_ix = if_macro_stack_ix - IFDEF_STACK_ENTRY_SIZE;
   if_macro_mask = if_macro_stack[if_macro_stack_ix];
   if_macro_executed = if_macro_stack[if_macro_stack_ix + 1];
 #ifdef ANNOTATE_WITH_C_CODE
@@ -1319,7 +1343,7 @@ void pop_if_macro_mask() {
 #ifdef ANNOTATE_WITH_C_CODE
 #define C_CODE_BUF_LEN 200000
 
-char code_char_buf[C_CODE_BUF_LEN];
+char *code_char_buf;
 int code_char_buf_ix = 0;
 // Point to the **last** character of the **last** token.
 // This is used to skip the current token when printing the code of a
@@ -1335,23 +1359,24 @@ bool code_annotations_quiet_mode = false;
 ast cli_macros = 0;
 
 void remove_c_code_substr(int start, int end) {
-  int i;
+  int i = end;
   if (code_annotations_quiet_mode) {
     // Discard C code and output nothing
     code_char_buf_ix = 0;
     return;
-  } else  if (start < 0 || end > code_char_buf_ix || start > end) {
+  } else if (start < 0 || end > code_char_buf_ix || start > end) {
     fatal_error("remove_c_code_substr: Invalid start or end index");
   } else if (start == end) {
     // Nothing to remove
   } else {
     // Move the characters after the removed substring to the start position
-    for (i = end; i < code_char_buf_ix; i += 1) {
+    while (i < code_char_buf_ix) {
       code_char_buf[start + i - end] = code_char_buf[i];
+      ++i;
     }
-    code_char_buf_ix -= (end - start);
+    code_char_buf_ix = code_char_buf_ix - (end - start);
     // Adjust last_tok_code_buf_ix
-    last_tok_code_buf_ix -= (end - start);
+    last_tok_code_buf_ix = last_tok_code_buf_ix - (end - start);
   }
 }
 
@@ -1364,7 +1389,7 @@ void adjust_for_trailing_comment() {
   int last_tok_code_buf_ix_save = last_tok_code_buf_ix;
   while (code_char_buf[last_tok_code_buf_ix + 1] == ' ' ||
           code_char_buf[last_tok_code_buf_ix + 1] == '\t') {
-    last_tok_code_buf_ix += 1;
+    ++last_tok_code_buf_ix;
   }
 
   if (code_char_buf[last_tok_code_buf_ix + 1] == '/'
@@ -1372,7 +1397,7 @@ void adjust_for_trailing_comment() {
     // Trailing comment, move last_tok_code_buf_ix to the end of the line
     while (code_char_buf[last_tok_code_buf_ix] != '\n' &&
             last_tok_code_buf_ix < code_char_buf_ix) {
-      last_tok_code_buf_ix += 1;
+      ++last_tok_code_buf_ix;
     }
   } else {
     // No trailing comment, back to original position
@@ -1398,7 +1423,7 @@ void output_declaration_c_code() {
   adjust_for_trailing_comment();
 
   // Skip leading newlines if any.
-  while (code_char_buf[i] == '\n') i += 1;
+  while (code_char_buf[i] == '\n') ++i;
 
   putchar('#');
   if (i + 2 < last_tok_code_buf_ix
@@ -1407,12 +1432,12 @@ void output_declaration_c_code() {
     // If the next 2 characters are "//", use "##" instead of "# //" to
     // preserve the indentation of the original comment.
     putchar('#');
-    i += 2;
+    i = i + 2;
   } else {
     putchar(' ');
   }
 
-  for (; i < last_tok_code_buf_ix; i += 1) {
+  while (i < last_tok_code_buf_ix) {
     if (code_char_buf[i] == '\n') {
       putchar('\n');
       putchar('#');
@@ -1422,13 +1447,14 @@ void output_declaration_c_code() {
         // If the next 2 characters are "//", use "##" instead of "# //" to
         // preserve the indentation of the original comment.
         putchar('#');
-        i += 2;
+        i = i + 2;
       } else {
         putchar(' ');
       }
     } else {
       putchar(code_char_buf[i]);
     }
+    ++i;
   }
 
   putchar('\n');
@@ -1442,12 +1468,13 @@ void output_declaration_c_code() {
 void output_defined_cli_macros() {
   ast macros = cli_macros;
   ast macro_tokens;
+  ast macro;
   int macro_tok;
   int macro_val;
   if (cli_macros != 0) putstr("## Macros defined from the command line:\n");
 
   while (macros != 0) {
-    ast macro = car(macros);
+    macro = car(macros);
     putstr(symbol_type(macro) == MACRO ? "# #define " : "# #undef ");
     putstr(symbol_buf(macro));
     // For macros with a single value token, we print it on the same line
@@ -1484,9 +1511,9 @@ void output_defined_cli_macros() {
 // when there's no more data. The runtimes that pnut targets (and the shell
 // runtime in particular) buffer reads per file descriptor, so we don't buffer
 // here to avoid keeping a second copy of the data.
-char read_buf[1];
+char *io_buf;
 int read_char(const int fd) {
-  if (read(fd, read_buf, 1) == 1) return read_buf[0] & 0xff;
+  if (read(fd, io_buf, 1) == 1) return io_buf[0] & 0xff;
   return EOF;
 }
 
@@ -1539,16 +1566,16 @@ void get_ch() {
   }
 #ifdef INCLUDE_LINE_NUMBER_ON_ERROR
   else if (ch == '\n') {
-    line_number += 1;
+    ++line_number;
     column_number = 0;
   } else {
-    column_number += 1;
+    ++column_number;
   }
 #endif
 #ifdef ANNOTATE_WITH_C_CODE
   // Save C code chars so they can be displayed with the shell code
   code_char_buf[code_char_buf_ix] = ch;
-  code_char_buf_ix += 1;
+  ++code_char_buf_ix;
   if (code_char_buf_ix >= C_CODE_BUF_LEN) {
     fatal_error("C code buffer overflow");
   }
@@ -1587,14 +1614,16 @@ bool skip_inactive_line() {
 
 int strlen(char *str) {
   int i = 0;
-  while (str[i] != '\0') i += 1;
+  while (str[i] != '\0') ++i;
   return i;
 }
 
 void memcpy(char *dest, char *src, int n) {
-  int i;
-  for (i = 0; i < n; i += 1) {
-    dest[i] = src[i];
+  while (n > 0) {
+    *dest = *src;
+    ++dest;
+    ++src;
+    --n;
   }
 }
 
@@ -1604,7 +1633,7 @@ char *strrchr(char *str, int c) {
   char *last = 0;
   while (*str != '\0') {
     if (*str == c) last = str;
-    str += 1;
+    ++str;
   }
   return last;
 }
@@ -1614,8 +1643,8 @@ char *strrchr(char *str, int c) {
 int strcmp(char *s1, char *s2) {
   while (*s1 != '\0' && *s2 != '\0') {
     if (*s1 != *s2) break;
-    s1 += 1;
-    s2 += 1;
+    ++s1;
+    ++s2;
   }
   return (*s1 - *s2);
 }
@@ -1701,7 +1730,7 @@ void include_file(char *file_name, char *relative_to) {
 #define large_int_hi(obj) heap[obj+1]
 
 // Array used to accumulate 64 bit unsigned integers on 32 bit systems
-int val_32[2];
+int *val_32;
 
 // x = x * y
 void u64_mul_u32(int *x, int y) {
@@ -1724,14 +1753,14 @@ void u64_add_u32(int *x, int y) {
   if (y > 255) fatal_error("u64_add_u32: Only small integers can be added to large integers");
 #endif
   // y is a single digit (< base <= 16), so a carry out of the low word can only
-  // clear bit 31, never set it. Detect it with a bit test, not `lo < 0`: a low
+  // clear bit 31, never set it. Detect it with a bit test, not `y < 0`: a low
   // word with bit 31 set is negative under GCC's 32-bit signed ints but positive
   // in the shell/awk runtime, so a signed test disagrees between runtimes.
-  int lo = x[0] + y;
-  x[1] = x[1] + (I32_NEGATIVE(x[0]) && I32_POSITIVE(lo));
+  y = x[0] + y; // low word addition, may overflow into high word
+  x[1] = x[1] + (I32_NEGATIVE(x[0]) && I32_POSITIVE(y));
   // Mask lo to 32 bits (awk's + doesn't wrap) by reassembling from its 16-bit
   // halves, avoiding the 0xffffffff literal which also serializes host-dependently.
-  x[0] = (I32_LOGICAL_RSHIFT_16(lo) << 16) + (lo & 0xffff);
+  x[0] = (I32_LOGICAL_RSHIFT_16(y) << 16) + (y & 0xffff);
 }
 
 // Pack a 64 bit unsigned integer into an object or immediate.
@@ -1754,7 +1783,10 @@ void u64_to_obj(int *x) {
 
 int accum_digit(int base) {
   int digit = 99;
+#ifndef DISABLE_INTEGER_OVERFLOW_CHECK
   int MININT = -2147483648;
+  int limit;
+#endif
   if ('0' <= ch && ch <= '9') {
     digit = ch - '0';
   } else if ('A' <= ch && ch <= 'Z') {
@@ -1765,10 +1797,12 @@ int accum_digit(int base) {
   if (digit >= base) {
     return 0; // character is not a digit in that base
   } else {
-    int limit = MININT / base;
+#ifndef DISABLE_INTEGER_OVERFLOW_CHECK
+    limit = MININT / base;
     if (base == 10 && if_macro_mask && ((val < limit) || ((val == limit) && (digit > limit * base - MININT)))) {
       syntax_error("literal integer overflow");
     }
+#endif
 
 #ifdef SUPPORT_64_BIT_LITERALS
     u64_mul_u32(val_32, base);
@@ -1945,7 +1979,7 @@ int lookup_macro_token(int args, int tok, int val) {
   while (args != 0) {
     if (car(args) == val) break; // Found!
     args = cdr(args);
-    ix += 1;
+    ++ix;
   }
 
   if (args == 0) { // Identifier is not a macro argument
@@ -2015,7 +2049,7 @@ void handle_define() {
       // Accumulate parameters in reverse order. That's ok because the arguments
       // to the macro will also be in reverse order.
       args = cons(val, args);
-      args_count += 1;
+      ++args_count;
     }
   } else {
     get_tok_macro(true); // Skip macro name
@@ -2036,88 +2070,87 @@ int compute_constant(ast expr, bool if_macro) {
     if (get_nb_children(expr) >= 2) val1 = compute_constant(get_child(expr, 1), if_macro);
   }
 
-  switch (op) {
-    case INTEGER:
+  if (op == INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-    case INTEGER_L:
-    case INTEGER_LL:
-    case INTEGER_U:
-    case INTEGER_UL:
-    case INTEGER_ULL:
+    || op == INTEGER_L
+    || op == INTEGER_LL
+    || op == INTEGER_U
+    || op == INTEGER_UL
+    || op == INTEGER_ULL
 #endif
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-    case INTEGER_HEX:
-    case INTEGER_OCT:
+    || op == INTEGER_HEX
+    || op == INTEGER_OCT
 #endif
+  ) {
 #ifdef SUPPORT_64_BIT_LITERALS
       // Disable large integers for now, hopefully they don't appear in TCC in enums and #if expressions
       if (is_large_int(get_val(expr))) fatal_error("constant expression too large");
 #endif
       return -get_val(expr);
-    case CHARACTER:   return get_val_(CHARACTER, expr);
-    case '~':         return ~val0;
-    case '!':         return !val0;
-    case '*':         return val0 *  val1;
-    case '/':         return val0 /  val1;
-    case '%':         return val0 %  val1;
-    case '&':         return val0 &  val1;
-    case '|':         return val0 |  val1;
-    case '^':         return val0 ^  val1;
-    case LSHIFT:      return val0 << val1;
-    case RSHIFT:      return val0 >> val1;
-    case EQ_EQ:       return val0 == val1;
-    case EXCL_EQ:     return val0 != val1;
-    case LT_EQ:       return val0 <= val1;
-    case GT_EQ:       return val0 >= val1;
-    case '<':         return val0 <  val1;
-    case '>':         return val0 >  val1;
+  }
+  else if (op == CHARACTER) return get_val_(CHARACTER, expr);
+  else if (op == '~')       return ~val0;
+  else if (op == '!')       return !val0;
+  else if (op == '*')       return val0 *  val1;
+  else if (op == '/')       return val0 /  val1;
+  else if (op == '%')       return val0 %  val1;
+  else if (op == '&')       return val0 &  val1;
+  else if (op == '|')       return val0 |  val1;
+  else if (op == '^')       return val0 ^  val1;
+  else if (op == LSHIFT)    return val0 << val1;
+  else if (op == RSHIFT)    return val0 >> val1;
+  else if (op == EQ_EQ)     return val0 == val1;
+  else if (op == EXCL_EQ)   return val0 != val1;
+  else if (op == LT_EQ)     return val0 <= val1;
+  else if (op == GT_EQ)     return val0 >= val1;
+  else if (op == '<')       return val0 <  val1;
+  else if (op == '>')       return val0 >  val1;
 
-    // - and + can be unary or binary
-    case '-':
-    case '+':
-      if (get_nb_children(expr) == 1) {
-        return TERNARY(op == '-', -val0, val0);
-      } else {
-        return TERNARY(op == '-', (val0 - val1), (val0 + val1));
-      }
+  else if (op == '-' || op == '+') {
+    if (get_nb_children(expr) == 1) {
+      return TERNARY(op == '-', -val0, val0);
+    } else {
+      return TERNARY(op == '-', (val0 - val1), (val0 + val1));
+    }
+  } else if (op == '?') {
+    val0 = compute_constant(get_child(expr, 0), if_macro);
+    if (val0) {
+      return compute_constant(get_child(expr, 1), if_macro);
+    } else {
+      return compute_constant(get_child(expr, 2), if_macro);
+    }
+  }
 
-    case '?':
-      val0 = compute_constant(get_child(expr, 0), if_macro);
-      if (val0) {
-        return compute_constant(get_child(expr, 1), if_macro);
-      } else {
-        return compute_constant(get_child(expr, 2), if_macro);
-      }
+  else if (op == AMP_AMP || op == BAR_BAR) {
+    val0 = compute_constant(get_child(expr, 0), if_macro);
+    if      (op == AMP_AMP && !val0) return 0;
+    else if (op == BAR_BAR && val0)  return 1;
+    else return compute_constant(get_child(expr, 1), if_macro);
+  }
 
-    case AMP_AMP:
-    case BAR_BAR:
-      val0 = compute_constant(get_child(expr, 0), if_macro);
-      if (op == AMP_AMP && !val0) return 0;
-      else if (op == BAR_BAR && val0) return 1;
-      else return compute_constant(get_child(expr, 1), if_macro);
-
-    case '(': // defined operators are represented as fun calls
-      if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
-        return get_child(expr, 1) == MACRO;
-      } else {
-        syntax_error("unknown function call in constant expressions");
-        return 0;
-      }
-
-    case IDENTIFIER:
-      if (!if_macro) {
-        // At this point, macros have already been expanded so we can't have a
-        // macro identifier, which means we're dealing with a regular identifier.
-        // TODO: Enums when outside of if_macro
-        syntax_error("identifiers are not allowed in constant expression");
-      }
-
-      return 0; // Undefined identifiers count as 0
-
-    default:
-      dump_op(op);
-      syntax_error("unsupported operator in constant expression");
+  else if (op == '(') { // defined operators are represented as fun calls
+    if (if_macro && get_val_(IDENTIFIER, get_child(expr, 0)) == DEFINED_ID) {
+      return get_child(expr, 1) == MACRO;
+    } else {
+      syntax_error("unknown function call in constant expressions");
       return 0;
+    }
+  }
+
+  else if (op == IDENTIFIER) {
+    if (!if_macro) {
+      // At this point, macros have already been expanded so we can't have a
+      // macro identifier, which means we're dealing with a regular identifier.
+      syntax_error("identifiers are not allowed in constant expression");
+    }
+    return 0; // Undefined identifiers count as 0
+  }
+
+  else {
+    dump_op(op);
+    syntax_error("unsupported operator in constant expression");
+    return 0;
   }
 }
 
@@ -2190,15 +2223,21 @@ bool handle_include() {
 
 // Handles preprocessor directives
 void handle_preprocessor_directive() {
+#ifdef ANNOTATE_WITH_C_CODE
+  int hash_code_buf_ix;
+  int dir_tok, dir_val;
+  bool keep_directive_code;
+  int last_newline_ix;
+  int directive_line_start_ix;
+#endif
   int temp;
   while (1) {
 #ifdef ANNOTATE_WITH_C_CODE
-    int hash_code_buf_ix = code_char_buf_ix;
-    int dir_tok, dir_val;
+    hash_code_buf_ix = code_char_buf_ix;
     // Forces the inclusion of the directive code in the C code buffer.
     // Used for system include directives, and trailing directives of conditional
     // blocks when if_macro_keep_directive_block_code is set.
-    bool keep_directive_code = if_macro_keep_directive_block_code;
+    keep_directive_code = if_macro_keep_directive_block_code;
 #endif
 
     get_tok_macro(true); // Get the # token
@@ -2218,7 +2257,7 @@ void handle_preprocessor_directive() {
       // directives from the C code buffer, except for those using PNUT_SH
       // so that when we extract the C code from pnut-exe.sh and bootstrap
       // pnut-exe from it, the C code contains the necessary directives.
-      if_macro_keep_directive_block_code |= (val == PNUT_TARGET_ID || val == PNUT_CC_ID);
+      if_macro_keep_directive_block_code = if_macro_keep_directive_block_code | (val == PNUT_TARGET_ID || val == PNUT_CC_ID);
 #endif
       get_tok_macro(true); // Skip the macro name
     } else if (tok == IF_KW) {
@@ -2228,7 +2267,7 @@ void handle_preprocessor_directive() {
       temp = compute_if_condition() ;
       if (prev_macro_mask() && !if_macro_executed) {
         if_macro_mask = temp != 0;
-        if_macro_executed |= if_macro_mask;
+        if_macro_executed = if_macro_executed | if_macro_mask;
       } else {
         if_macro_mask = false;
       }
@@ -2307,13 +2346,13 @@ void handle_preprocessor_directive() {
       // code_char_buf_ix points to the character after the newline following
       // the directive. So we need to find the last newline after the directive
       // and the newline before the directive.
-      int last_newline_ix = code_char_buf_ix;
+      last_newline_ix = code_char_buf_ix;
       while (last_newline_ix > 0 && code_char_buf[last_newline_ix - 1] != '\n') {
-        last_newline_ix -= 1;
+        --last_newline_ix;
       }
-      int directive_line_start_ix = hash_code_buf_ix;
+      directive_line_start_ix = hash_code_buf_ix;
       while (directive_line_start_ix > 0 && code_char_buf[directive_line_start_ix - 1] != '\n') {
-        directive_line_start_ix -= 1;
+        --directive_line_start_ix;
       }
 
       // Remove between the end of the directive and the last newline
@@ -2334,7 +2373,7 @@ void handle_preprocessor_directive() {
       if (!if_macro_keep_directive_block_code && !keep_directive_code) {
         code_char_buf_ix = hash_code_buf_ix - 1; // -1 to overwrite the '#'
         code_char_buf[code_char_buf_ix] = '#';
-        code_char_buf_ix += 1;
+        ++code_char_buf_ix;
         if (code_char_buf_ix >= C_CODE_BUF_LEN) {
           fatal_error("C code buffer overflow");
         }
@@ -2368,7 +2407,7 @@ int intern_str(char* name) {
 
   while (*name != 0) {
     accum_symbol_char(*name);
-    name += 1;
+    ++name;
   }
 
   return end_symbol();
@@ -2386,24 +2425,30 @@ void init_ident_table() {
 
   while (i < HASH_PRIME) {
     heap[i] = 0;
-    i += 1;
+    ++i;
   }
 
   init_ident(BREAK_KW,    "break");
+#ifdef SUPPORT_SWITCH
   init_ident(CASE_KW,     "case");
+#endif
   init_ident(CONTINUE_KW, "continue");
   init_ident(DEFAULT_KW,  "default");
 #ifdef SUPPORT_DO_WHILE
   init_ident(DO_KW,       "do");
 #endif
   init_ident(ELSE_KW,     "else");
+#ifdef SUPPORT_FOR
   init_ident(FOR_KW,      "for");
+#endif
   init_ident(IF_KW,       "if");
   init_ident(RETURN_KW,   "return");
 #ifdef SUPPORT_SIZEOF
   init_ident(SIZEOF_KW,   "sizeof");
 #endif
+#ifdef SUPPORT_SWITCH
   init_ident(SWITCH_KW,   "switch");
+#endif
   init_ident(WHILE_KW,    "while");
 
   // Type specifiers
@@ -2630,7 +2675,7 @@ int get_macro_args_toks(int macro) {
       get_tok_macro(false); // Skip comma
       if (prev_is_comma) { // Push empty arg
         args = cons(0, args);
-        macro_args_count += 1;
+        ++macro_args_count;
       }
       prev_is_comma = true;
       continue;
@@ -2639,14 +2684,14 @@ int get_macro_args_toks(int macro) {
     }
 
     args = cons(macro_parse_argument(), args);
-    macro_args_count += 1;
+    ++macro_args_count;
   }
 
   if (tok != ')') parse_error("unterminated macro argument list", tok);
 
   if (prev_is_comma) {
     args = cons(0, args); // Push empty arg
-    macro_args_count += 1;
+    ++macro_args_count;
   }
 
   check_macro_arity(macro_args_count, macro);
@@ -2659,7 +2704,7 @@ int get_macro_arg(int ix) {
   while (ix > 0) {
     if (arg == 0) fatal_error("get_macro_arg: argument index out of range");
     arg = cdr(arg);
-    ix -= 1;
+    --ix;
   }
   return car(arg);
 }
@@ -2669,7 +2714,7 @@ int get_macro_arg(int ix) {
 void return_to_parent_macro() {
   if (macro_stack_ix == 0) fatal_error("return_to_parent_macro: no parent macro");
 
-  macro_stack_ix -= 3;
+  macro_stack_ix = macro_stack_ix - 3;
   macro_tok_lst   = macro_stack[macro_stack_ix];
   macro_args      = macro_stack[macro_stack_ix + 1];
   macro_ident     = macro_stack[macro_stack_ix + 2];
@@ -2685,7 +2730,7 @@ void begin_macro_expansion(int ident, int tokens, int args) {
   macro_stack[macro_stack_ix]     = macro_tok_lst;
   macro_stack[macro_stack_ix + 1] = macro_args;
   macro_stack[macro_stack_ix + 2] = macro_ident;
-  macro_stack_ix += 3;
+  macro_stack_ix = macro_stack_ix + 3;
 
   macro_ident   = ident;
   macro_tok_lst = tokens;
@@ -2704,7 +2749,7 @@ bool macro_is_already_expanding(int ident) {
 
   // Traverse the stack to see if the macro is already expanding
   while (i > 0) {
-    i -= 3;
+    i = i - 3;
     if (macro_stack[i + 2] == ident) return true;
   }
   return false;
@@ -2793,8 +2838,8 @@ int paste_integers(int left_val, int right_val) {
   if (left_val < 0 || right_val < 0) fatal_error("Only small integers can be pasted");
 #endif
   while (right_digits > 0) {
-    result *= 10;
-    right_digits /= 10;
+    result = result * 10;
+    right_digits = right_digits / 10;
   }
   return result + right_val;
 }
@@ -3380,19 +3425,17 @@ ast parse_initializer();
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
 ast get_type_specifier(ast type_or_decl) {
+  int op;
   while (1) {
-    switch (get_op(type_or_decl)) {
-      case DECL:
-        type_or_decl = get_child_(DECL, type_or_decl, 1);
-        break;
-      case '[':
-        type_or_decl = get_child_('[', type_or_decl, 0);
-        break;
-      case '*':
-        type_or_decl = get_child_('*', type_or_decl, 1);
-        break;
-      default:
-        return type_or_decl;
+    op = get_op(type_or_decl);
+    if (op == DECL) {
+      type_or_decl = get_child_(DECL, type_or_decl, 1);
+    } else if (op == '[') {
+      type_or_decl = get_child_('[', type_or_decl, 0);
+    } else if (op == '*') {
+      type_or_decl = get_child_('*', type_or_decl, 1);
+    } else {
+      return type_or_decl;
     }
   }
 }
@@ -3422,12 +3465,12 @@ ast make_variadic_func(ast func_type) {
 #if defined(SH_OPTIMIZE_CONSTANT_PARAMS)
 // Used to optimize constant parameters of function
 bool is_constant_type(ast type) {
-  switch (get_op(type)) {
-    case '[': return false; // Array declarators cannot be marked as constant
-    case '(': return false; // Function declarators cannot be marked as constant
-    case '*': return TEST_TYPE_SPECIFIER(get_child_('*', type, 0), CONST_KW);
-    default:  return TEST_TYPE_SPECIFIER(get_child(type, 0), CONST_KW);
-  }
+  int op = get_op(type);
+
+  if      (op == '[') return false; // Array declarators cannot be marked as constant
+  else if (op == '(') return false; // Function declarators cannot be marked as constant
+  else if (op == '*') return TEST_TYPE_SPECIFIER(get_child_('*', type, 0), CONST_KW);
+  else                return TEST_TYPE_SPECIFIER(get_child(type, 0), CONST_KW);
 }
 #else
 #define is_constant_type(type) false
@@ -3435,28 +3478,24 @@ bool is_constant_type(ast type) {
 
 // Type and declaration parser
 bool is_type_starter(int tok) {
-  switch (tok) {
-    case INT_KW: case CHAR_KW: case SHORT_KW: case LONG_KW: // Numeric types
-    case VOID_KW: case FLOAT_KW: case DOUBLE_KW:            // Void and floating point types
-    case SIGNED_KW: case UNSIGNED_KW:                       // Signedness
-    case TYPE:                                              // User defined types
-    case CONST_KW:
-    case ENUM_KW:                                           // Enum
+  return (tok == INT_KW || tok == CHAR_KW || tok == SHORT_KW || tok == LONG_KW // Numeric types
+       || tok == VOID_KW || tok == FLOAT_KW || tok == DOUBLE_KW                // Void and floating point types
+       || tok == SIGNED_KW || tok == UNSIGNED_KW                               // Signedness
+       || tok == TYPE
+       || tok == CONST_KW
+       || tok == ENUM_KW                                                       // Enum
 #ifdef SUPPORT_STRUCT_UNION
-    case STRUCT_KW: case UNION_KW:                          // Struct, union
+       || tok == STRUCT_KW || tok == UNION_KW                                  // Struct, union
 #endif
-    // Storage class specifiers are not always valid type starters in all
-    // contexts, but we allow them here
 #ifdef SUPPORT_TYPE_SPECIFIERS
-    case AUTO_KW:   case EXTERN_KW:
-    case INLINE_KW: case REGISTER_KW:
-    case STATIC_KW: case TYPEDEF_KW:
-    case VOLATILE_KW:
+       // Storage class specifiers are not always valid type starters in all
+       // contexts, but we allow them here
+       || tok == AUTO_KW || tok == EXTERN_KW
+       || tok == INLINE_KW || tok == REGISTER_KW
+       || tok == STATIC_KW || tok == TYPEDEF_KW
+       || tok == VOLATILE_KW
 #endif
-      return true;
-    default:
-      return false;
-  }
+       );
 }
 
 ast parse_enum() {
@@ -3467,6 +3506,7 @@ ast parse_enum() {
   ast value = 0;
   int next_value = 0;
   int last_literal_type = INTEGER; // Default to decimal integer for enum values
+  int op;
 
   expect_tok(ENUM_KW);
 
@@ -3498,28 +3538,25 @@ ast parse_enum() {
         // Avoid recreating integer literal nodes unnecessarily.
         // Preserve the type of integer literals (dec/hex/oct), we use the last
         // literal type to determine which type to use when creating a new node.
-        switch (get_op(value)) {
-          case INTEGER:
+        op = get_op(value);
+        if (op != INTEGER
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-          case INTEGER_HEX: case INTEGER_OCT:
+          && op != INTEGER_HEX && op != INTEGER_OCT
 #endif
 #ifdef PARSE_NUMERIC_LITERAL_SUFFIX
-          case INTEGER_U:
-          case INTEGER_UL:
-          case INTEGER_ULL:
-          case INTEGER_L:
-          case INTEGER_LL:
+          && op != INTEGER_U
+          && op != INTEGER_UL && op != INTEGER_ULL
+          && op != INTEGER_L  && op != INTEGER_LL
 #endif
-            break;
-          default:
-            // Compute the constant expression to get its integer value
-            value = new_ast0(last_literal_type, -compute_constant(value, false)); // negative value to indicate it's a small integer
+        ) {
+          // Compute the constant expression to get its integer value
+          value = new_ast0(last_literal_type, -compute_constant(value, false)); // negative value to indicate it's a small integer
         }
         next_value = get_val(value) - 1; // Next value is the current value + 1, but val is negative
         last_literal_type = get_op(value);
       } else {
         value = new_ast0(last_literal_type, next_value);
-        next_value -= 1;
+        --next_value;
       }
 
       if (result == 0) {
@@ -3621,64 +3658,56 @@ ast parse_struct_or_union(int struct_or_union_tok) {
 
 ast parse_type_specifier() {
   ast type_specifier = 0;
-  switch (tok) {
-    case CHAR_KW:
-    case INT_KW:
-    case VOID_KW:
+  if (tok == CHAR_KW || tok == INT_KW || tok == VOID_KW
 #ifdef target_exe
-    case FLOAT_KW:
-    case DOUBLE_KW:
+      || tok == FLOAT_KW || tok == DOUBLE_KW
 #endif
-      type_specifier = new_ast0(tok, 0);
-      get_tok();
-      return type_specifier;
-
-    case SHORT_KW:
-      get_tok();
-      if (tok == INT_KW) get_tok(); // Just "short" is equivalent to "short int"
-      return new_ast0(SHORT_KW, 0);
-
-    case SIGNED_KW:
-      get_tok();
-      type_specifier = parse_type_specifier();
-      // Just "signed" is equivalent to "signed int"
-      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
-      return type_specifier;
-
+  ) {
+    type_specifier = new_ast0(tok, 0);
+    get_tok();
+    return type_specifier;
+  } else if (tok == SHORT_KW) {
+    get_tok();
+    if (tok == INT_KW) get_tok(); // Just "short" is equivalent to "short int"
+    return new_ast0(SHORT_KW, 0);
+  } else if (tok == SIGNED_KW) {
+    get_tok();
+    type_specifier = parse_type_specifier();
+    // Just "signed" is equivalent to "signed int"
+    if (type_specifier == 0) type_specifier = new_ast0(INT_KW, 0);
+    return type_specifier;
 #ifdef target_exe
-    case UNSIGNED_KW:
-      get_tok();
-      type_specifier = parse_type_specifier();
-      // Just "unsigned" is equivalent to "unsigned int"
-      if (type_specifier == 0) type_specifier = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
-      // Set the unsigned flag
-      else set_val(type_specifier, get_val(type_specifier) | MK_TYPE_SPECIFIER(UNSIGNED_KW));
-      return type_specifier;
+  } else if (tok == UNSIGNED_KW) {
+    get_tok();
+    type_specifier = parse_type_specifier();
+    // Just "unsigned" is equivalent to "unsigned int"
+    if (type_specifier == 0) type_specifier = new_ast0(INT_KW, MK_TYPE_SPECIFIER(UNSIGNED_KW));
+    // Set the unsigned flag
+    else set_val(type_specifier, get_val(type_specifier) | MK_TYPE_SPECIFIER(UNSIGNED_KW));
+    return type_specifier;
 #endif
-
-    case LONG_KW:
-      get_tok();
+  } else if (tok == LONG_KW) {
+    get_tok();
 #ifdef target_exe
-      if (tok == DOUBLE_KW) {
+    if (tok == DOUBLE_KW) {
+      get_tok();
+      return new_ast0(DOUBLE_KW, 0);
+    } else
+#endif
+    {
+      if (tok == LONG_KW) {
         get_tok();
-        return new_ast0(DOUBLE_KW, 0);
-      } else
-#endif
-      {
-        if (tok == LONG_KW) {
-          get_tok();
-          if (tok == INT_KW) get_tok(); // Just "long long" is equivalent to "long long int"
-          return new_ast0(LONG_KW, 0);
-        } else if (tok == INT_KW) {
-          get_tok(); // Just "long" is equivalent to "long int", which we treat as "int"
-          return new_ast0(INT_KW, 0);
-        } else {
-          return new_ast0(INT_KW, 0);
-        }
+        if (tok == INT_KW) get_tok(); // Just "long long" is equivalent to "long long int"
+        return new_ast0(LONG_KW, 0);
+      } else if (tok == INT_KW) {
+        get_tok(); // Just "long" is equivalent to "long int", which we treat as "int"
+        return new_ast0(INT_KW, 0);
+      } else {
+        return new_ast0(INT_KW, 0);
       }
-
-    default:
-      return 0;
+    }
+  } else {
+    return 0;
   }
 }
 
@@ -3698,78 +3727,67 @@ ast parse_declaration_specifiers(bool allow_typedef) {
 #endif
 
   while (loop) {
-    switch (tok) {
+    if (tok == CHAR_KW || tok == INT_KW     || tok == VOID_KW
+    || tok == SHORT_KW || tok == SIGNED_KW  || tok == UNSIGNED_KW
+    || tok == LONG_KW  || tok == FLOAT_KW   || tok == DOUBLE_KW) {
+      if (type_specifier != 0) parse_error("Unexpected C type specifier", tok);
+      type_specifier = parse_type_specifier();
+      if (type_specifier == 0) parse_error("Failed to parse type specifier", tok);
+    }
 #ifdef SUPPORT_TYPE_SPECIFIERS
-      case AUTO_KW:
-      case REGISTER_KW:
-      case STATIC_KW:
-      case EXTERN_KW:
-      case TYPEDEF_KW:
-        if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
-        if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
-        specifier_storage_class = tok;
-        get_tok();
-        break;
+    else if (tok == AUTO_KW || tok == REGISTER_KW
+          || tok == STATIC_KW || tok == EXTERN_KW
+          || tok == TYPEDEF_KW) {
+      if (specifier_storage_class != 0) parse_error("Multiple storage classes not supported", tok);
+      if (tok == TYPEDEF_KW && !allow_typedef) parse_error("Unexpected typedef", tok);
+      specifier_storage_class = tok;
+      get_tok();
+    }
 #endif
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
-      case INLINE_KW:
-        get_tok(); // Ignore inline
-        break;
+    else if (tok == INLINE_KW) {
+      get_tok(); // Ignore inline
+    }
 #endif
 
-      case CONST_KW:
+    else if (tok == CONST_KW
 #ifdef SUPPORT_TYPE_SPECIFIERS
-      case VOLATILE_KW:
+          || tok == VOLATILE_KW
 #endif
-        type_qualifier |= MK_TYPE_SPECIFIER(tok);
-        get_tok();
-        break;
-
-      case CHAR_KW:
-      case INT_KW:
-      case VOID_KW:
-      case SHORT_KW:
-      case SIGNED_KW:
-      case UNSIGNED_KW:
-      case LONG_KW:
-      case FLOAT_KW:
-      case DOUBLE_KW:
-        if (type_specifier != 0) parse_error("Unexpected C type specifier", tok);
-        type_specifier = parse_type_specifier();
-        if (type_specifier == 0) parse_error("Failed to parse type specifier", tok);
-        break;
+        ) {
+      type_qualifier = type_qualifier | MK_TYPE_SPECIFIER(tok);
+      get_tok();
+    }
 
 #ifdef SUPPORT_STRUCT_UNION
-      case STRUCT_KW:
-      case UNION_KW:
-        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
-        type_specifier = parse_struct_or_union(tok);
-        break;
+    else if (tok == STRUCT_KW || tok == UNION_KW) {
+      if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+      type_specifier = parse_struct_or_union(tok);
+    }
 #endif
 
-      case ENUM_KW:
-        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
-        type_specifier = parse_enum();
-        break;
+    else if (tok == ENUM_KW) {
+      if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+      type_specifier = parse_enum();
+    }
 
-      case TYPE:
-        if (type_specifier != 0) parse_error("Multiple types not supported", tok);
-        // Lookup type in the types table. It is stored in the tag of the
-        // interned string object.
+    else if (tok == TYPE) {
+      if (type_specifier != 0) parse_error("Multiple types not supported", tok);
+      // Lookup type in the types table. It is stored in the tag of the
+      // interned string object.
 #ifdef target_exe
-        // The type is cloned so it can be modified.
-        type_specifier = clone_ast(symbol_tag(val));
+      // The type is cloned so it can be modified.
+      type_specifier = clone_ast(symbol_tag(val));
 #else
-        // pnut-sh/awk don't mutate the type nodes, so no need to clone them
-        type_specifier = symbol_tag(val);
+      // pnut-sh/awk don't mutate the type nodes, so no need to clone them
+      type_specifier = symbol_tag(val);
 #endif
-        get_tok();
-        break;
+      get_tok();
+    }
 
-      default:
+    else {
         loop = false; // Break out of loop
-        break;
     }
   }
 
@@ -3847,30 +3865,23 @@ int parse_param_list() {
 }
 
 ast get_inner_type(ast type) {
-  switch (get_op(type)) {
-    case DECL:
-    case '*':
-      return get_child(type, 1);
-    case '[':
-    case '(':
-      return get_child(type, 0);
-    default:
-      fatal_error("Invalid type");
-      return 0;
+  int op = get_op(type);
+  if (op == DECL || op == '*') {
+    return get_child_(op, type, 1);
+  } else if (op == '[' || op == '(') {
+    return get_child_(op, type, 0);
+  } else {
+    fatal_error("Invalid type");
+    return 0;
   }
 }
 
 void update_inner_type(ast parent_type, ast inner_type) {
-  switch (get_op(parent_type)) {
-    case DECL:
-    case '*':
-      set_child(parent_type, 1, inner_type);
-      break;
-
-    case '[':
-    case '(':
-      set_child(parent_type, 0, inner_type);
-      break;
+  int op = get_op(parent_type);
+  if (op == DECL || op == '*') {
+    set_child(parent_type, 1, inner_type);
+  } else if (op == '[' || op == '(') {
+    set_child(parent_type, 0, inner_type);
   }
 }
 
@@ -3908,39 +3919,37 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
   ast arr_size_expr;
   ast parent_type_parent;
 
-  switch (tok) {
-    case IDENTIFIER:
-      result = new_ast3(DECL, new_ast0(IDENTIFIER, val), parent_type, 0); // child#2 is the initializer
-      parent_type_parent = result;
-      get_tok();
-      break;
+  if (tok == IDENTIFIER) {
+    result = new_ast3(DECL, new_ast0(IDENTIFIER, val), parent_type, 0); // child#2 is the initializer
+    parent_type_parent = result;
+    get_tok();
+  }
+  else if (tok == '*') {
+    get_tok();
+    // Pointers may be const-qualified
+    parent_type_parent = pointer_type(parent_type, tok == CONST_KW);
+    if (tok == CONST_KW) get_tok();
+    result = parse_declarator(abstract_decl, parent_type_parent);
+  }
 
-    case '*':
-      get_tok();
-      // Pointers may be const-qualified
-      parent_type_parent = pointer_type(parent_type, tok == CONST_KW);
-      if (tok == CONST_KW) get_tok();
-      result = parse_declarator(abstract_decl, parent_type_parent);
-      break;
-
+  else if (tok == '(') {
     // Parenthesis delimit the specifier-and-qualifier part of the declaration from the declarator
-    case '(':
-      get_tok();
-      result = parse_declarator(abstract_decl, parent_type);
-      parent_type_parent = parse_declarator_parent_type_parent;
-      expect_tok(')');
-      break;
+    get_tok();
+    result = parse_declarator(abstract_decl, parent_type);
+    parent_type_parent = parse_declarator_parent_type_parent;
+    expect_tok(')');
+  }
 
-    default:
-      // Abstract declarators don't need names, and so in the base declarator,
-      // we don't require an identifier. This is useful for function pointers.
-      // In that case, we create a DECL node with no identifier.
-      if (abstract_decl) {
-        result = new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
-        parent_type_parent = result;
-      } else {
-        parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
-      }
+  else {
+    // Abstract declarators don't need names, and so in the base declarator,
+    // we don't require an identifier. This is useful for function pointers.
+    // In that case, we create a DECL node with no identifier.
+    if (abstract_decl) {
+      result = new_ast3(DECL, 0, parent_type, 0); // child#0 is the identifier, child#2 is the initializer
+      parent_type_parent = result;
+    } else {
+      parse_error("Invalid declarator, expected an identifier but declarator doesn't have one", tok);
+    }
   }
 
   // At this point, the only non-recursive declarator is an identifier
@@ -3957,7 +3966,8 @@ ast parse_declarator(bool abstract_decl, ast parent_type) {
     if (tok == '[') {
       // Check if not a void array
       if (get_op(result) == VOID_KW) parse_error("void array not allowed", tok);
-        get_tok();
+
+      get_tok(); // Skip the '[' token
       if (tok == ']') {
         val = 0;
       } else {
@@ -4492,7 +4502,9 @@ ast parse_statement() {
   ast result;
   ast child1;
   ast child2;
+#ifdef SUPPORT_FOR
   ast child3;
+#endif
 #ifdef SUPPORT_GOTO
   int start_tok;
 #endif
@@ -4512,6 +4524,7 @@ ast parse_statement() {
 
     result = new_ast3(IF_KW, result, child1, child2);
 
+#ifdef SUPPORT_SWITCH
   } else if (tok == SWITCH_KW) {
 
     get_tok();
@@ -4528,6 +4541,8 @@ ast parse_statement() {
     child1 = parse_statement();
 
     result = new_ast2(CASE_KW, result, child1);
+
+#endif
 
   } else if (tok == DEFAULT_KW) {
 
@@ -4557,6 +4572,7 @@ ast parse_statement() {
     result = new_ast2(DO_KW, result, child1);
 #endif // SUPPORT_DO_WHILE
 
+#ifdef SUPPORT_FOR
   } else if (tok == FOR_KW) {
 
     get_tok();
@@ -4570,6 +4586,7 @@ ast parse_statement() {
     child3 = parse_statement();
 
     result = new_ast4(FOR_KW, result, child1, child2, child3);
+#endif
 
 #ifdef SUPPORT_GOTO
   } else if (tok == GOTO_KW) {
@@ -4718,18 +4735,18 @@ void handle_macro_D(char *opt) {
 
   while (*opt != 0 && *opt != '=') {
     accum_symbol_char(*opt);
-    opt += 1;
+    ++opt;
   }
 
   macro_symbol = end_symbol();
   set_symbol_type(macro_symbol, MACRO); // Mark as macro
 
   if (*opt == '=') {
-    opt += 1;
+    ++opt;
     if (*opt == '"') { // Start of string literal
-      opt += 1;
+      ++opt;
       start = opt;
-      while (*opt != 0 && *opt != '"') opt += 1;
+      while (*opt != 0 && *opt != '"') ++opt;
       if (*opt == 0) fatal_error("Unterminated string literal");
       *opt = 0; // Temporarily terminate the string
       value_symbol = intern_str(start);
@@ -4738,9 +4755,9 @@ void handle_macro_D(char *opt) {
     } else if ('0' <= *opt && *opt <= '9') { // Start of integer token
       acc = 0;
       while ('0' <= *opt && *opt <= '9') {
-        acc *= 10;
-        acc += *opt - '0';
-        opt += 1;
+        acc = acc * 10;
+        acc = acc + (*opt - '0');
+        ++opt;
       }
       if (*opt != 0) fatal_error("Invalid macro definition value");
       set_builtin_int_macro(macro_symbol, acc);
@@ -4786,7 +4803,7 @@ void output_rest_of_line(const int fd, char *prefix) {
   int c;
   while (newline_accumulated > 0) {
     putchar('\n');
-    newline_accumulated -= 1;
+    --newline_accumulated;
   }
   if (prefix) putstr(prefix);
   while ((c = read_char(fd)) != EOF && c != '\n') {
@@ -4815,7 +4832,7 @@ void extract_c_code_from_annotated_file(char * const filename) {
   // - Other lines are ignored (shell commands or shell comments starting with "#_")
   while ((c = read_char(sh_fp)) != EOF) {
     if (c == '\n') {
-      newline_accumulated += 1;
+      ++newline_accumulated;
     } else if (c == '#') {
       c = read_char(sh_fp);
       if (c == ' ') {
@@ -4841,8 +4858,21 @@ void extract_c_code_from_annotated_file(char * const filename) {
 #endif // SUPPORT_EXTRACT_C_ANNOTATIONS
 
 int main(int argc, char **argv) {
-  int i;
+  int i = 1;
   ast decl;
+
+  include_stack  = malloc(INCLUDE_STACK_DEPTH * INCLUDE_ENTRY_SIZE * sizeof(intptr_t));
+  string_pool    = malloc(STRING_POOL_SIZE * sizeof(char));
+  heap           = malloc(HEAP_SIZE * sizeof(intptr_t));
+  if_macro_stack = malloc(IFDEF_DEPTH_MAX * sizeof(int));
+  macro_stack    = malloc(MACRO_RECURSION_MAX * sizeof(int));
+  io_buf         = malloc(1);
+#ifdef SUPPORT_64_BIT_LITERALS
+  val_32         = malloc(2 * sizeof(int));
+#endif
+#ifdef ANNOTATE_WITH_C_CODE
+  code_char_buf  = malloc(C_CODE_BUF_LEN * sizeof(char));
+#endif
 
 #ifdef HANDLE_SIGNALS
   signal(SIGINT, signal_callback_handler);
@@ -4852,112 +4882,108 @@ int main(int argc, char **argv) {
 
   init_pnut_macros();
 
-  for (i = 1; i < argc; i += 1) {
+  while (i < argc) {
     if (argv[i][0] == '-') {
-      switch (argv[i][1]) {
+      if (0) {} // dummy if to make the else-if chain below easier to read
 #ifdef target_exe
-        case 'o':
-          // Output file name
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
-            i += 1;
-            output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
-          } else {
-            output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
-          }
-          break;
+      else if (argv[i][1] == 'o') {
+        // Output file name
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing output file name for -o option");
+          ++i;
+          output_fd = open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, 0755);
+        } else {
+          output_fd = open(argv[i] + 2, O_WRONLY | O_CREAT | O_TRUNC, 0755);
+        }
+      }
 #endif
 
 #ifdef FULL_CLI_OPTIONS
-        case 'D':
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
-            i += 1;
-            handle_macro_D(argv[i]);
-          } else {
-            handle_macro_D(argv[i] + 2); // skip '-D'
-          }
-          break;
+      else if (argv[i][1] == 'D') {
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing macro name for -D option");
+          ++i;
+          handle_macro_D(argv[i]);
+        } else {
+          handle_macro_D(argv[i] + 2); // skip '-D'
+        }
+      }
 
-        case 'U':
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
-            i += 1;
-            handle_macro_U(argv[i]);
-          } else {
-            handle_macro_U(argv[i] + 2); // skip '-U'
-          }
-          break;
+      else if (argv[i][1] == 'U') {
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing macro name for -U option");
+          ++i;
+          handle_macro_U(argv[i]);
+        } else {
+          handle_macro_U(argv[i] + 2); // skip '-U'
+        }
+      }
 
-        case 'I':
-          if (include_search_path != 0) fatal_error("only one include path allowed");
+      else if (argv[i][1] == 'I') {
+        if (include_search_path != 0) fatal_error("only one include path allowed");
 
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing path for -I option");
-            i += 1;
-            include_search_path = argv[i];
-          } else {
-            include_search_path = argv[i] + 2; // skip '-I'
-          }
-          break;
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing path for -I option");
+          ++i;
+          include_search_path = argv[i];
+        } else {
+          include_search_path = argv[i] + 2; // skip '-I'
+        }
+      }
 
 #ifdef SUPPORT_EMULATED_INT64
-        case 'r':
-          // -rt <file>: path to the 64-bit arithmetic runtime (arith64.c).
-          // It is compiled ahead of the user program (see include below),
-          // providing the runtime functions for emulated arithmetic types.
-          if (argv[i][2] != 't' || (argv[i][3] != 0 && argv[i][3] != '=')) fatal_error("unknown option");
-          if (argv[i][3] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing file name for -rt option");
-            i += 1;
-            runtime_file_path = argv[i];
-          } else {
-            runtime_file_path = argv[i] + 4; // skip '-rt='
-          }
-          break;
+      else if (argv[i][1] == 'r' && argv[i][2] == 't') {
+        // -rt <file>: path to the 64-bit arithmetic runtime (arith64.c).
+        // It is compiled ahead of the user program (see include below),
+        // providing the runtime functions for emulated arithmetic types.
+        if (argv[i][2] != 't' || (argv[i][3] != 0 && argv[i][3] != '=')) fatal_error("unknown option");
+        if (argv[i][3] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing file name for -rt option");
+          ++i;
+          runtime_file_path = argv[i];
+        } else {
+          runtime_file_path = argv[i] + 4; // skip '-rt='
+        }
+      }
 #endif
 #else
-          case 'D':
-            // pnut-sh only needs -D<macro> and no other options
-            init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
+      else if (argv[i][1] == 'D') {
+        // pnut-sh only needs -D<macro> and no other options
+        init_builtin_int_macro(argv[i] + 2, 1); // +2 to skip -D
 #ifdef ANNOTATE_WITH_C_CODE
-            // Also add to  the list of macros to define in the generated shell script
-            cli_macros = cons(intern_str(argv[i] + 2), cli_macros);
+        // Also add to  the list of macros to define in the generated shell script
+        cli_macros = cons(intern_str(argv[i] + 2), cli_macros);
 #endif
-            break;
+      }
 #endif // FULL_CLI_OPTIONS
 #ifdef SUPPORT_EXTRACT_C_ANNOTATIONS
-        case 'C':
-          // The -C option takes the filename of a .sh file compiled by pnut-sh
-          // and extracts the C code included in it.
-          if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
-            if (argv[i + 1] == 0) fatal_error("missing input file name for -C option");
-            i += 1;
-            extract_c_code_from_annotated_file(argv[i]);
-          } else {
-            extract_c_code_from_annotated_file(argv[i] + 2);
-          }
-          return 0; // Done after extracting C code, no further processing needed
+      else if (argv[i][1] == 'C') {
+        // The -C option takes the filename of a .sh file compiled by pnut-sh
+        // and extracts the C code included in it.
+        if (argv[i][2] == 0) { // rest of option is in argv[i + 1]
+          if (argv[i + 1] == 0) fatal_error("missing input file name for -C option");
+          ++i;
+          extract_c_code_from_annotated_file(argv[i]);
+        } else {
+          extract_c_code_from_annotated_file(argv[i] + 2);
+        }
+        return 0; // Done after extracting C code, no further processing needed
+      }
 #endif
 #ifdef ANNOTATE_WITH_C_CODE
-        case 'q': // disable code annotations
-          code_annotations_quiet_mode = true;
-          break;
+      else if (argv[i][1] == 'q') { // disable code annotations
+        code_annotations_quiet_mode = true;
+      }
 #endif
-        default:
-          putstr("Option "); putstr(argv[i]); putchar('\n');
-          fatal_error("unknown option");
-          break;
+      else {
+        putstr("Option "); putstr(argv[i]); putchar('\n');
+        fatal_error("unknown option");
       }
     } else {
-#ifdef SUPPORT_STDIN_INPUT
-      if (!isatty(0)) {
-        fatal_error("Cannot specify input file when stdin is not a terminal");
-      }
-#endif
       // Options that don't start with '-' are file names
       include_file(argv[i], 0);
     }
+    ++i;
   }
 
   if (fd == -1) {

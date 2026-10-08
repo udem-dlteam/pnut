@@ -80,7 +80,7 @@ int cgc_lookup_enclosing_loop_or_switch(int binding) {
   return binding;
 }
 
-int cgc_add_local(const enum BINDING binding_type, const int ident, const ast type, int env) {
+int cgc_add_local(const int binding_type, const int ident, const ast type, int env) {
   int binding = alloc_obj(5);
   binding_next(binding) = env;
   binding_kind(binding) = binding_type;
@@ -99,8 +99,8 @@ int cgc_add_local(const enum BINDING binding_type, const int ident, const ast ty
 #define loop_binding_action_end(binding)          heap[binding+3]
 #define switch_binding_in_tail_position(binding)  heap[binding+2]
 
-void cgc_add_local_var(const enum BINDING binding_type, const int ident, const ast type) {
-  cgc_fs += 1;
+void cgc_add_local_var(const int binding_type, const int ident, const ast type) {
+  ++cgc_fs;
   cgc_locals = cgc_add_local(binding_type, ident, type, cgc_locals);
   // Add to cgc_locals_fun as well, if not already there
   if (cgc_lookup_var(ident, cgc_locals_fun) == 0) {
@@ -130,7 +130,7 @@ int cgc_loop_depth(int binding) {
   binding = cgc_lookup_enclosing_loop(binding); // Find the first loop
   while (binding != 0) {
     binding = cgc_lookup_enclosing_loop(binding_next(binding));
-    loop_depth += 1;
+    ++loop_depth;
   }
   return loop_depth;
 }
@@ -207,11 +207,11 @@ int cgc_lookup_enum_value(const int ident, const int env) {
 
 void cgc_add_local_param(const int ident, const int width, const ast type) {
   cgc_locals = cgc_add_local(BINDING_PARAM_LOCAL, ident, type, cgc_locals);
-  cgc_fs -= width;
+  cgc_fs = cgc_fs - width;
 }
 
 void cgc_add_local_var(const int ident, const int width, const ast type) {
-  cgc_fs += width;
+  cgc_fs = cgc_fs + width;
   cgc_locals = cgc_add_local(BINDING_VAR_LOCAL, ident, type, cgc_locals);
 }
 
@@ -257,7 +257,7 @@ void cgc_add_global(const int ident, const int width, const ast type, const bool
   binding_ident(binding) = ident;
   var_binding_offset(binding) = cgc_global_alloc;
   var_binding_type(binding) = type;
-  cgc_global_alloc += width;
+  cgc_global_alloc = cgc_global_alloc + width;
   if (is_static_local) {
     cgc_locals = binding;
   } else {
@@ -278,7 +278,7 @@ void cgc_add_global_fun(const int ident, const int label, const ast type) {
   fun_binding_type(binding) = type;
 #ifdef ONE_PASS_GENERATOR
   fun_binding_glo_entry(binding) = cgc_global_alloc; // For forward jump table
-  cgc_global_alloc += WORD_SIZE;
+  cgc_global_alloc = cgc_global_alloc + WORD_SIZE;
 #endif
   cgc_globals = binding;
 }
@@ -305,7 +305,7 @@ void cgc_add_goto_label(const int ident, const int lbl) {
 
 #endif
 
-void cgc_add_typedef(const int ident, const enum BINDING struct_or_union_or_enum, const ast type) {
+void cgc_add_typedef(const int ident, const int struct_or_union_or_enum, const ast type) {
   int binding = alloc_obj(4);
   binding_next(binding) = cgc_globals;
   binding_kind(binding) = struct_or_union_or_enum;

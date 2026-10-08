@@ -36,15 +36,18 @@ void print_tok_string(int symbol) {
 
   while (string_start < string_end) {
     print_string_char(*string_start);
-    string_start += 1;
+    ++string_start;
   }
 }
 
 int print_tok_indent_level = 0;
 int print_tok_preceding_nl_count = 0;
 void print_tok_indent() {
-  int i;
-  for (i = 0; i < print_tok_indent_level; i += 1) putchar(' ');
+  int i = 0;
+  while (i < print_tok_indent_level) {
+    putchar(' '); putchar(' ');
+    ++i;
+  }
 }
 
 void print_tok(int tok, int val) {
@@ -59,16 +62,16 @@ void print_tok(int tok, int val) {
 
   if (tok == '\n') {
     if (print_tok_preceding_nl_count >= 2) return; // Skip consecutive newlines
-    print_tok_preceding_nl_count += 1;
+    ++print_tok_preceding_nl_count;
     putchar('\n');
     return;
   } else if (tok == '{') {
     print_tok_indent();
     putchar(tok);
-    print_tok_indent_level += 2;
+    ++print_tok_indent_level;
     return;
   } else if (tok == '}') {
-    print_tok_indent_level -= 2;
+    --print_tok_indent_level;
     print_tok_indent();
     putchar(tok);
     return;
@@ -81,20 +84,26 @@ void print_tok(int tok, int val) {
 
 
   if      (tok == BREAK_KW)     putstr("break");
+#ifdef SUPPORT_SWITCH
   else if (tok == CASE_KW)      putstr("case");
+#endif
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
 #ifdef SUPPORT_DO_WHILE
   else if (tok == DO_KW)        putstr("do");
 #endif
   else if (tok == ELSE_KW)      putstr("else");
+#ifdef SUPPORT_FOR
   else if (tok == FOR_KW)       putstr("for");
+#endif
   else if (tok == IF_KW)        putstr("if");
   else if (tok == RETURN_KW)    putstr("return");
 #ifdef SUPPORT_SIZEOF
   else if (tok == SIZEOF_KW)    putstr("sizeof");
 #endif
+#ifdef SUPPORT_SWITCH
   else if (tok == SWITCH_KW)    putstr("switch");
+#endif
   else if (tok == TYPEDEF_KW)   putstr("typedef");
   else if (tok == WHILE_KW)     putstr("while");
   else if (tok == CHAR_KW)      putstr("char");
@@ -184,10 +193,7 @@ void print_tok(int tok, int val) {
     putint(val);
   }
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
-  else if (tok == INTEGER_HEX) {
-    putint(val);
-  }
-  else if (tok == INTEGER_OCT) {
+  else if (tok == INTEGER_HEX || tok == INTEGER_OCT) {
     putint(val);
   }
 #endif
@@ -225,20 +231,26 @@ void print_tok(int tok, int val) {
 void print_tok_type(int tok) {
 
   if      (tok == BREAK_KW)     putstr("break");
+#ifdef SUPPORT_SWITCH
   else if (tok == CASE_KW)      putstr("case");
+#endif
   else if (tok == CONTINUE_KW)  putstr("continue");
   else if (tok == DEFAULT_KW)   putstr("default");
 #ifdef SUPPORT_DO_WHILE
   else if (tok == DO_KW)        putstr("do");
 #endif
   else if (tok == ELSE_KW)      putstr("else");
+#ifdef SUPPORT_FOR
   else if (tok == FOR_KW)       putstr("for");
+#endif
   else if (tok == IF_KW)        putstr("if");
   else if (tok == RETURN_KW)    putstr("return");
 #ifdef SUPPORT_SIZEOF
   else if (tok == SIZEOF_KW)    putstr("sizeof");
 #endif
+#ifdef SUPPORT_SWITCH
   else if (tok == SWITCH_KW)    putstr("switch");
+#endif
   else if (tok == TYPEDEF_KW)   putstr("typedef");
   else if (tok == WHILE_KW)     putstr("while");
   else if (tok == CHAR_KW)      putstr("char");
@@ -359,204 +371,194 @@ void ast_list_to_sexp(ast obj) {
 }
 
 void type_ast_to_sexp(ast type) {
-  switch (get_op(type)) {
-    case '*':
-      putstr("(* ");
-      type_ast_to_sexp(get_child_('*', type, 1));
-      putstr(")");
-      break;
+  int op = get_op(type);
+  if (op == '*') {
+    putstr("(* ");
+    type_ast_to_sexp(get_child_('*', type, 1));
+    putstr(")");
+  }
+  else if (op == '[') {
+    putstr("[");
+    type_ast_to_sexp(get_child_('[', type, 0));
+    putstr(" ");
+    putint(get_child_('[', type, 1));
+    putstr("]");
+  }
+  else if (op == '(') {
+    putstr("(-> (");
+    ast_list_to_sexp(get_child_opt_('(', LIST, type, 1)); // Function args
+    if (get_child_('(', type, 2)) putstr(" ..."); // Varargs
+    putstr(") ");
+    type_ast_to_sexp(get_child_('(', type, 0));
+    putstr(")");
+  }
 
-    case '[':
-      putstr("[");
-      type_ast_to_sexp(get_child_('[', type, 0));
-      putstr(" ");
-      putint(get_child_('[', type, 1));
-      putstr("]");
-      break;
+  else if (op == CHAR_KW || op == INT_KW || op == VOID_KW || op == SHORT_KW || op == SIGNED_KW || op == UNSIGNED_KW || op == LONG_KW || op == FLOAT_KW || op == DOUBLE_KW) {
+    print_tok_type(get_op(type));
+  }
 
-    case '(':
-      putstr("(-> (");
-      ast_list_to_sexp(get_child_opt_('(', LIST, type, 1)); // Function args
-      if (get_child_('(', type, 2)) putstr(" ..."); // Varargs
-      putstr(") ");
-      type_ast_to_sexp(get_child_('(', type, 0));
-      putstr(")");
-      break;
-
-    case CHAR_KW:
-    case INT_KW:
-    case VOID_KW:
-    case SHORT_KW:
-    case SIGNED_KW:
-    case UNSIGNED_KW:
-    case LONG_KW:
-    case FLOAT_KW:
-    case DOUBLE_KW:
-      print_tok_type(get_op(type));
-      break;
-
+  else if (op == ENUM_KW)
 #ifdef SUPPORT_STRUCT_UNION
-    case STRUCT_KW:
-    case UNION_KW:
+        || op == STRUCT_KW
+        || op == UNION_KW
 #endif
-    case ENUM_KW:
-      putstr("(");
-      print_tok_type(get_op(type));
-      putstr(" ");
-      ast_to_sexp(get_child(type, 0)); // Struct/union name
-      putstr(" ");
-      ast_list_to_sexp(get_child(type, 2)); // Struct/union members
-      putstr(")");
-      break;
-
-    default:
-      putstr("<Unknown type ");
-      putint(get_op(type));
-      putstr(">");
-      exit(1);
+          ) {
+    putstr("(");
+    print_tok_type(get_op(type));
+    putstr(" ");
+    ast_to_sexp(get_child(type, 0)); // Struct/union name
+    putstr(" ");
+    ast_list_to_sexp(get_child(type, 2)); // Struct/union members
+    putstr(")");
+  }
+  else {
+    putstr("<Unknown type ");
+    putint(get_op(type));
+    putstr(">");
+    exit(1);
   }
 }
 
 void ast_to_sexp(ast obj) {
   int i = 0;
+  int op = get_op(obj);
 
   if (obj == 0) {
     putstr("#f");
     return;
   }
 
-  switch (get_op(obj)) {
-    case IDENTIFIER:
-      putstr(symbol_buf(get_val_(IDENTIFIER, obj)));
-      break;
-
-    case STRING:
-      putchar('"');
-      print_tok_string(get_val_(STRING, obj));
-      putchar('"');
-      break;
-
-    case INTEGER:
-      putint(-get_val_(INTEGER, obj));
-      break;
-
-    case CHARACTER:
-      // Removed so gambit scheme can read the output
-      // If printable ASCII: print as character, otherwise print as octal
-      // if (get_val_(CHARACTER, obj) >= 32 && get_val_(CHARACTER, obj) < 127) {
-      //   putchar('\'');
-      //   print_string_char(get_val_(CHARACTER, obj));
-      //   putchar('\'');
-      // }
-      putstr("(char ");
-      putint(get_val_(CHARACTER, obj));
-      putchar(')');
-      break;
-
-    case DECLS:
-      // For clarity, we print the declarations without a parent `DECLS` node
-      ast_list_to_sexp(get_child_opt_(DECLS, LIST, obj, 0));
-      break;
-
-    case TYPEDEF_KW:
-      putstr("(typedef ");
-      ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, LIST, obj, 0));
-      putstr(")");
-      break;
-
-#ifdef SUPPORT_STRUCT_UNION
-    case STRUCT_KW:
-    case UNION_KW:
+  if (op == IDENTIFIER) {
+    putstr(symbol_buf(get_val_(IDENTIFIER, obj)));
+  }
+  else if (op == STRING) {
+    putchar('"');
+    print_tok_string(get_val_(STRING, obj));
+    putchar('"');
+  }
+  else if (op == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+    || op == INTEGER_HEX || op == INTEGER_OCT
 #endif
-    case ENUM_KW:
-      type_ast_to_sexp(obj);
-      break;
+    ) {
+    putint(-get_val(obj));
+  }
 
-    case DECL:
-      // Nodes of type DECL are a bit special because they contain a type, and types have their own structure
-      putstr("(decl ");
-      ast_to_sexp(get_child_opt_(DECL, IDENTIFIER, obj, 0));
-      putchar(' ');
-      type_ast_to_sexp(get_child_(DECL, obj, 1));
-      if (get_child_(DECL, obj, 2)) { // Initializer, if present
-        putchar(' ');
-        ast_to_sexp(get_child_(DECL, obj, 2));
-      }
-      putstr(")");
-      break;
+  else if (op == CHARACTER) {
+    // Removed so gambit scheme can read the output
+    // If printable ASCII: print as character, otherwise print as octal
+    // if (get_val_(CHARACTER, obj) >= 32 && get_val_(CHARACTER, obj) < 127) {
+    //   putchar('\'');
+    //   print_string_char(get_val_(CHARACTER, obj));
+    //   putchar('\'');
+    // }
+    putstr("(char ");
+    putint(get_val_(CHARACTER, obj));
+    putchar(')');
+  }
+  else if (op == DECLS) {
+    // For clarity, we print the declarations without a parent `DECLS` node
+    ast_list_to_sexp(get_child_opt_(DECLS, LIST, obj, 0));
+  }
 
-    case FUN_DECL:
-      putstr("(define-fun ");
-      putstr(symbol_buf(get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, get_child__(FUN_DECL, DECL, obj, 0), 0))));
-      putchar(' ');
-      type_ast_to_sexp(get_child_(DECL, get_child__(FUN_DECL, DECL, obj, 0), 1)); // Get type out of decl
-      putchar(' ');
-      ast_to_sexp(get_child_(FUN_DECL, obj, 1)); // Body
-      putstr(")");
-      break;
+  else if (op == TYPEDEF_KW) {
+    putstr("(typedef ");
+    ast_list_to_sexp(get_child_opt_(TYPEDEF_KW, LIST, obj, 0));
+    putstr(")");
+  }
 
-    case CAST:
-      putstr("(cast ");
-      type_ast_to_sexp(get_child_(DECL, get_child__(CAST, DECL, obj, 0), 1)); // Get type out of decl
-      putstr(" ");
-      ast_to_sexp(get_child_(CAST, obj, 1));
-      putstr(")");
-      break;
+  else if (op == ENUM_KW
+#ifdef SUPPORT_STRUCT_UNION
+    || op == STRUCT_KW
+    || op == UNION_KW
+#endif
+  ) {
+    type_ast_to_sexp(obj);
+  }
+
+  else if (op == DECL) {
+    // Nodes of type DECL are a bit special because they contain a type, and types have their own structure
+    putstr("(decl ");
+    ast_to_sexp(get_child_opt_(DECL, IDENTIFIER, obj, 0));
+    putchar(' ');
+    type_ast_to_sexp(get_child_(DECL, obj, 1));
+    if (get_child_(DECL, obj, 2)) { // Initializer, if present
+      putchar(' ');
+      ast_to_sexp(get_child_(DECL, obj, 2));
+    }
+    putstr(")");
+  }
+
+  else if (op == FUN_DECL) {
+    putstr("(define-fun ");
+    putstr(symbol_buf(get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, get_child__(FUN_DECL, DECL, obj, 0), 0))));
+    putchar(' ');
+    type_ast_to_sexp(get_child_(DECL, get_child__(FUN_DECL, DECL, obj, 0), 1)); // Get type out of decl
+    putchar(' ');
+    ast_to_sexp(get_child_(FUN_DECL, obj, 1)); // Body
+    putstr(")");
+  }
+  else if (op == CAST) {
+    putstr("(cast ");
+    type_ast_to_sexp(get_child_(DECL, get_child__(CAST, DECL, obj, 0), 1)); // Get type out of decl
+    putstr(" ");
+    ast_to_sexp(get_child_(CAST, obj, 1));
+    putstr(")");
+  }
 
 #ifdef SUPPORT_SIZEOF
-    case SIZEOF_KW:
-      putstr("(sizeof ");
-      if (get_op(get_child_(SIZEOF_KW, obj, 0)) == DECL) {
-        type_ast_to_sexp(get_child_(DECL, get_child_(SIZEOF_KW, obj, 0), 1));
-      } else {
-        ast_to_sexp(get_child_(SIZEOF_KW, obj, 0));
-      }
-      putstr(")");
-      break;
+  else if (op == SIZEOF_KW) {
+    putstr("(sizeof ");
+    if (get_op(get_child_(SIZEOF_KW, obj, 0)) == DECL) {
+      type_ast_to_sexp(get_child_(DECL, get_child_(SIZEOF_KW, obj, 0), 1));
+    } else {
+      ast_to_sexp(get_child_(SIZEOF_KW, obj, 0));
+    }
+    putstr(")");
+  }
 #endif
 
-    case '[':
-      putstr("(array_at ");
-      ast_to_sexp(get_child_('[', obj, 0));
+  else if (op == '[') {
+    putstr("(array_at ");
+    ast_to_sexp(get_child_('[', obj, 0));
+    putstr(" ");
+    ast_to_sexp(get_child_('[', obj, 1));
+    putstr(")");
+  }
+
+  else if (op == '(') { // Function calls, we print the function and its arguments
+    putstr("(");
+    ast_to_sexp(get_child_('(', obj, 0));
+    if (get_child_('(', obj, 1) != 0) {
       putstr(" ");
-      ast_to_sexp(get_child_('[', obj, 1));
-      putstr(")");
-      break;
+      ast_to_sexp(get_child_('(', obj, 1));
+    }
+    putstr(")");
+  }
 
-    case '(': // Function calls, we print the function and its arguments
-      putstr("(");
-      ast_to_sexp(get_child_('(', obj, 0));
-      if (get_child_('(', obj, 1) != 0) {
-        putstr(" ");
-        ast_to_sexp(get_child_('(', obj, 1));
-      }
-      putstr(")");
-      break;
+  else if (op == LIST) {
+    putstr("(list ");
+    ast_list_to_sexp(obj);
+    putstr(")");
+  }
 
-    case LIST:
-      putstr("(list ");
-      ast_list_to_sexp(obj);
-      putstr(")");
-      break;
-
-    case '{':
-      while (obj != 0) {
-        ast_to_sexp(get_child_('{', obj, 0));
-        obj = get_child_opt_('{', '{', obj, 1);
-        if (obj != 0) putchar(' ');
-      }
-      break;
-
-    default:
-      putchar('(');
-      print_tok_type(get_op(obj));
-      putchar(' ');
-      for (; i < get_nb_children(obj); i += 1) {
-        ast_to_sexp(get_child(obj, i));
-        if (get_child(obj, i) != 0 && i < get_nb_children(obj) - 1) putchar(' ');
-      }
-      putchar(')');
-      break;
+  else if (op == '{') {
+    while (obj != 0) {
+      ast_to_sexp(get_child_('{', obj, 0));
+      obj = get_child_opt_('{', '{', obj, 1);
+      if (obj != 0) putchar(' ');
+    }
+  }
+  else {
+    putchar('(');
+    print_tok_type(get_op(obj));
+    putchar(' ');
+    while (i < get_nb_children(obj)) {
+      ast_to_sexp(get_child(obj, i));
+      if (get_child(obj, i) != 0 && i < get_nb_children(obj) - 1) putchar(' ');
+      ++i;
+    }
+    putchar(')');
   }
 }
 
@@ -607,7 +609,7 @@ void print_macro_stack() {
   while (3 * i < macro_stack_ix) {
     print_macro_ctx(i, macro_stack[i * 3 + 2], macro_stack[i * 3], macro_stack[i * 3 + 1]);
     putchar('\n');
-    i += 1;
+    ++i;
   }
   print_macro_ctx(i, macro_ident, macro_tok_lst, macro_args);
   putstr("\n################################\n");

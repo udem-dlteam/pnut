@@ -62,9 +62,8 @@ text comp_lvalue_address(ast node);
 text comp_lvalue(ast node);
 text comp_fun_call_code(ast node, ast assign_to);
 void comp_fun_call(ast node, ast assign_to);
-bool comp_body(ast node, enum STMT_CTX stmt_ctx);
-bool comp_statement(ast node, enum STMT_CTX stmt_ctx);
-void mark_mutable_variables_body(ast node);
+bool comp_body(ast node, int stmt_ctx);
+bool comp_statement(ast node, int stmt_ctx);
 void handle_enum_struct_union_type_decl(ast node);
 ast handle_side_effects_go(ast node, bool executes_conditionally);
 
@@ -78,7 +77,7 @@ ast rest_loc_var_fixups = 0;    // rest_loc_vars call to fixup after compiling a
 bool main_defined = false;      // If the main function is defined
 
 #define CHARACTERS_BITFIELD_SIZE 16
-int characters_useds[16];        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
+int *characters_useds;        // Characters used in string literals. Bitfield, each int stores 16 bits, so 16 ints in total
 bool any_character_used = false; // If any character is used
 
 // Internal identifier node types used by the compiler
@@ -90,17 +89,17 @@ enum IDENTIFIER_TYPE {
 
 // Pre-allocated internal identifier nodes to reduce memory usage.
 #define IDENTIFIER_INTERNAL_PREALLOC_SIZE 10
-int preallocated_fresh_idents[IDENTIFIER_INTERNAL_PREALLOC_SIZE]; // 1 to 10
+int *preallocated_fresh_idents; // 1 to 10
 
 #define IDENTIFIER_DOLLAR_PREALLOC_SIZE 10 // 1 to 10
-int preallocated_dollar_idents[IDENTIFIER_DOLLAR_PREALLOC_SIZE]; // 1 to 10
+int *preallocated_dollar_idents; // 1 to 10
 
 void init_comp_context() {
   int i = 0;
   // Initialize characters_useds table
   while (i < 16) {
     characters_useds[i] = 0;
-    i += 1;
+    ++i;
   }
 
 #ifdef SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
@@ -117,14 +116,14 @@ void init_comp_context() {
   i = 0;
   while (i < IDENTIFIER_INTERNAL_PREALLOC_SIZE) {
     preallocated_fresh_idents[i] = new_ast0(IDENTIFIER_INTERNAL, i);
-    i += 1;
+    ++i;
   }
 
   // Initialize preallocated_dollar_idents
   i = 0;
   while (i < IDENTIFIER_DOLLAR_PREALLOC_SIZE) {
     preallocated_dollar_idents[i] = new_ast0(IDENTIFIER_DOLLAR, i);
-    i += 1;
+    ++i;
   }
 }
 
@@ -142,27 +141,30 @@ void init_comp_context() {
 // the variable is not local.
 text format_special_var(ast ident, bool prefixed_with_dollar) {
   int i;
-  switch (get_op(ident)) {
-    case IDENTIFIER_INTERNAL:
-      return INTERNAL_VAR_FORMAT(get_val_(IDENTIFIER_INTERNAL, ident));
-    case IDENTIFIER_STRING:
-      return STRING_VAR_FORMAT(get_val_(IDENTIFIER_STRING, ident));
-    case IDENTIFIER_DOLLAR:
-      i = get_val_(IDENTIFIER_DOLLAR, ident);
-      if (prefixed_with_dollar) {
-          if (i <= 9) {
-            return wrap_int(i);
-        } else {
-            return string_concat3(wrap_char('{'), wrap_int(i), wrap_char('}'));
-        }
+  int op = get_op(ident);
+  if (op == IDENTIFIER_INTERNAL) {
+    return INTERNAL_VAR_FORMAT(get_val_(IDENTIFIER_INTERNAL, ident));
+  }
+  else if (op == IDENTIFIER_STRING) {
+    return STRING_VAR_FORMAT(get_val_(IDENTIFIER_STRING, ident));
+  }
+  else if (op == IDENTIFIER_DOLLAR) {
+    i = get_val_(IDENTIFIER_DOLLAR, ident);
+    if (prefixed_with_dollar) {
+      if (i <= 9) {
+        return wrap_int(i);
       } else {
-          if (i <= 9) {
-            return string_concat(wrap_char('$'), wrap_int(i));
-        } else {
-            return string_concat3(wrap_str_lit("${"), wrap_int(i), wrap_char('}'));
-        }
+        return string_concat3(wrap_char('{'), wrap_int(i), wrap_char('}'));
       }
-    default:
+    } else {
+      if (i <= 9) {
+        return string_concat(wrap_char('$'), wrap_int(i));
+      } else {
+        return string_concat3(wrap_str_lit("${"), wrap_int(i), wrap_char('}'));
+      }
+    }
+  }
+  else {
       fatal_error("format_special_var: unknown identifier type");
       return 0;
   }
@@ -240,7 +242,7 @@ ast new_fresh_ident(int ix) {
 }
 
 ast fresh_ident() {
-  gensym_ix += 1;
+  ++gensym_ix;
   fun_gensym_ix = gensym_ix > fun_gensym_ix ? gensym_ix : fun_gensym_ix;
   max_gensym_ix = gensym_ix > max_gensym_ix ? gensym_ix : max_gensym_ix;
 
@@ -253,14 +255,14 @@ ast fresh_string_ident(int string_symbol) {
   // This allows comp_defstr to use the same string variable for the same string.
   int index = symbol_defstr_index(string_symbol);
   if (index == 0) { // index defaults to 0
-    set_symbol_defstr_index(string_symbol, string_counter += 1); // Mark the string as defined
+    set_symbol_defstr_index(string_symbol, ++string_counter); // Mark the string as defined
     index = string_counter;
 
   }
   return new_ast0(IDENTIFIER_STRING, index - 1);
 }
 
-void add_var_to_local_env(ast decl, enum BINDING kind) {
+void add_var_to_local_env(ast decl, int kind) {
   int ident_symbol = get_val_(IDENTIFIER, get_child__(DECL, IDENTIFIER, decl, 0));
 
   // Make sure we're not shadowing an existing local variable
@@ -327,8 +329,9 @@ void assert_var_decl_is_safe(ast variable, bool local) { // Helper function for 
 }
 
 void handle_function_params(ast lst) {
+  ast decl;
   while (lst != 0) {
-    ast decl = car_(DECL, lst);
+    decl = car_(DECL, lst);
     assert_var_decl_is_safe(decl, true);
     add_var_to_local_env(decl, BINDING_PARAM_LOCAL);
     lst = tail(lst);
@@ -356,7 +359,7 @@ text save_local_vars() {
   // Save internal variables
   while (counter > 0) {
     res = concatenate_strings_with(res, string_concat(wrap_char('$'), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1)), wrap_char(' '));
-    counter -= 1;
+    --counter;
   }
 
   if (res) {
@@ -381,7 +384,7 @@ text restore_local_vars(int params_count) {
 
   while (env != 0) {
     if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
-      env_non_cst_size += 1;
+      ++env_non_cst_size;
     }
     env = binding_next(env);
   }
@@ -393,7 +396,7 @@ text restore_local_vars(int params_count) {
     ident = binding_ident(env);
     if (binding_kind(env) != BINDING_PARAM_LOCAL || !is_constant_type(var_binding_type(env))) { // Skip constant params
       res = concatenate_strings_with(string_concat5(wrap_str_lit("$(("), local_var(ident), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + env_non_cst_size - local_var_pos), true), wrap_str_lit("))")), res, wrap_char(' '));
-      local_var_pos += 1;
+      ++local_var_pos;
     }
     env = binding_next(env);
   }
@@ -401,8 +404,8 @@ text restore_local_vars(int params_count) {
   // Restore internal variables
   while (counter > 0) {
     res = concatenate_strings_with(res, string_concat5(wrap_str_lit("$(("), INTERNAL_VAR_FORMAT(fun_gensym_ix - counter + 1), wrap_str_lit(" = $"), format_special_var(new_dollar_ident(params_count + local_var_pos + 1), true), wrap_str_lit("))")), wrap_char(' '));
-    local_var_pos += 1;
-    counter -= 1;
+    ++local_var_pos;
+    --counter;
   }
 
   if (res) {
@@ -435,10 +438,10 @@ text let_params(int params) {
                                     , sep_str);
     }
     params = tail(params);
-    params_ix += 1;
+    ++params_ix;
   }
 
-  runtime_use_local_vars |= res != 0;
+  runtime_use_local_vars = runtime_use_local_vars | (res != 0);
 
   if (res != 0) res = string_concat(wrap_char(' '), res);
 
@@ -460,7 +463,7 @@ text save_local_vars() {
                                                 , format_special_var(ident, true))
                                   , res
                                   , sep_str);
-    counter -= 1;
+    --counter;
   }
 
   // Save local variables and parameters
@@ -473,7 +476,7 @@ text save_local_vars() {
     env = binding_next(env);
   }
 
-  runtime_use_local_vars |= res != 0;
+  runtime_use_local_vars = runtime_use_local_vars | (res != 0);
 
   return res;
 }
@@ -490,7 +493,7 @@ text restore_local_vars(int params_count) {
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_char(' '));
-    counter -= 1;
+    --counter;
   }
 
   while (env != 0) {
@@ -564,14 +567,15 @@ text test_op_to_str(int op) {
 text character_ident(int c) {
   // Mark character as used
   text res = 0;
-  characters_useds[c / CHARACTERS_BITFIELD_SIZE] |= 1 << (c % CHARACTERS_BITFIELD_SIZE);
+  char* str;
+  characters_useds[c / CHARACTERS_BITFIELD_SIZE] = characters_useds[c / CHARACTERS_BITFIELD_SIZE] | (1 << (c % CHARACTERS_BITFIELD_SIZE));
   any_character_used = true;
 
   if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9')) {
     res = wrap_char(c);
   } else if (c < 32) {
     // First 32 characters are control characters.
-    char* control_character_identifiers =
+    str =
       "NUL\0"     "SOH\0"     "STX\0"     "ETX\0"
       "EOT\0"     "ENQ\0"     "ACK\0"     "BEL\0"
       "BS\0\0"    "HT\0\0"    "LF\0\0"    "VT\0\0"
@@ -582,37 +586,37 @@ text character_ident(int c) {
       "FS\0\0"    "GS\0\0"    "RS\0\0"    "US\0\0"
     ;
     // Control characters
-    res = wrap_str_lit(control_character_identifiers + (c * 4)); // Each string has length 3 + null terminator
+    res = wrap_str_lit(str + (c * 4)); // Each string has length 3 + null terminator
   } else if (c < '0') {
     // Symbols from space to /
-    char* printable_character_identifiers1 =
+    str =
       "SPACE\0\0\0"     "EXCL\0\0\0\0"    "DQUOTE\0\0"        "HASH\0\0\0\0"
       "DOLLAR\0\0"      "PERCENT\0"       "AMP\0\0\0\0\0"     "QUOTE\0\0\0"
       "LPAREN\0\0"      "RPAREN\0\0"      "STAR\0\0\0\0"      "PLUS\0\0\0\0"
       "COMMA\0\0\0"     "MINUS\0\0\0"     "PERIOD\0\0"        "SLASH\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers1 + (c - ' ') * 8); // Each string has length 7 + null terminator
+    res = wrap_str_lit(str + (c - ' ') * 8); // Each string has length 7 + null terminator
   } else if (c <= 'A') {
     // Symbols from : to @
-    char* printable_character_identifiers2 =
+    str =
       "COLON\0\0\0\0\0"     "SEMICOLON\0"         "LT\0\0\0\0\0\0\0\0"    "EQ\0\0\0\0\0\0\0\0"
       "GT\0\0\0\0\0\0\0\0"  "QUESTION\0\0"        "AT\0\0\0\0\0\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers2 + (c - ':') * 10); // Each string has length 9 + null terminator
+    res = wrap_str_lit(str + (c - ':') * 10); // Each string has length 9 + null terminator
   } else if (c <= 'a') {
     // Symbols from [ to `
-    char* printable_character_identifiers3 =
+    str =
       "LBRACK\0\0\0\0\0"      "BACKSLASH\0\0"         "RBRACK\0\0\0\0\0"        "CARET\0\0\0\0\0\0"
       "UNDERSCORE\0"          "BACKTICK\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers3 + (c - '[') * 11); // Each string has length 10 + null terminator
+    res = wrap_str_lit(str + (c - '[') * 11); // Each string has length 10 + null terminator
   } else if (c <= 127) {
     // Symbols from { to ~ and DEL (127)
-    char* printable_character_identifiers4 =
+    str =
       "LBRACE\0"      "BAR\0\0\0\0"   "RBRACE\0"        "TILDE\0\0"
       "DEL\0\0\0\0"
     ;
-    res = wrap_str_lit(printable_character_identifiers4 + (c - '{') * 7); // Each string has length 6 + null terminator
+    res = wrap_str_lit(str + (c - '{') * 7); // Each string has length 6 + null terminator
   } else {
     dump_char(c);
     fatal_error("character_ident: invalid character");
@@ -640,7 +644,7 @@ ast handle_fun_call_side_effect(ast node, ast assign_to, bool executes_condition
     // At this point, the temporary identifier of the variable is not live and
     // can be used to compute the function arguments. This reduces the number
     // of temporary variables.
-    gensym_ix -= 1;
+    --gensym_ix;
   }
 
   // Traverse the arguments and replace them with the result of
@@ -841,7 +845,7 @@ int initializer_list_len(ast node) {
 
   // Each element of the list has size 1 since nested initializers are not allowed
   while (node != 0) {
-    res += 1;
+    ++res;
     node = tail(node);
   }
 
@@ -852,34 +856,34 @@ text comp_initializer_list(ast initializer_list, int expected_len) {
   text args = 0;
   ast element;
   ast str_ident;
+  int op;
 
   runtime_use_initialize = true;
 
   while (initializer_list != 0) {
     element = car(initializer_list);
-    switch (get_op(element)) {
-      case INTEGER:
-        args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
-        break;
+    op = get_op(element);
+    if (op == INTEGER) {
+      args = concatenate_strings_with(args, wrap_int(-get_val_(INTEGER, element)), wrap_char(' '));
+    }
 #ifndef PARSE_NUMERIC_LITERAL_WITH_BASE
-      case INTEGER_HEX:
-      case INTEGER_OCT:
-        // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
-        args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
-        break;
+    else if (op == INTEGER_HEX || op == INTEGER_OCT) {
+      // We need to wrap in $(( ... )) to make sure the number is converted to base 10 when stored in a variable.
+      args = concatenate_strings_with(args, string_concat3(wrap_str_lit("$(("), wrap_integer(1, element), wrap_str_lit("))")), wrap_char(' '));
+    }
 #endif
-      case CHARACTER:
-        // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
-        args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
-        break;
-      case STRING:
-        str_ident = fresh_string_ident(get_val_(STRING, element));
-        comp_defstr(str_ident, get_val_(STRING, element), -1);
-        args = concatenate_strings_with(args, string_concat(wrap_char('$'), format_special_var(str_ident, true)), wrap_char(' '));
-        break;
-      default:
-        // TODO: Support nested initializers and constant expressions
-        fatal_error("comp_initializer: unexpected operator");
+    else if (op == CHARACTER) {
+      // TODO: Character identifiers are only defined at the end of the script, so we can't use them here
+      args = concatenate_strings_with(args, wrap_int(get_val_(CHARACTER, element)), wrap_char(' '));
+    }
+    else if (op == STRING) {
+      str_ident = fresh_string_ident(get_val_(STRING, element));
+      comp_defstr(str_ident, get_val_(STRING, element), -1);
+      args = concatenate_strings_with(args, string_concat(wrap_char('$'), format_special_var(str_ident, true)), wrap_char(' '));
+    }
+    else {
+      // TODO: Support nested initializers and constant expressions
+      fatal_error("comp_initializer: unexpected operator");
     }
     initializer_list = tail(initializer_list);
   }
@@ -1044,24 +1048,20 @@ text comp_rvalue_go(ast node, int context, ast test_side_effects, int outer_op) 
       // child0 is either an abstract declaration or an expression
       if (get_op(child0) == DECL) {
         child0 = get_child_(DECL, child0, 1); // Get the type
-        switch (get_op(child0)) {
-          case INT_KW:
-          case SHORT_KW:
-          case LONG_KW:
-          case CHAR_KW:
-          case VOID_KW:
-          case ENUM_KW:
-          case '*': // If it's a pointer
-            return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
-
+        op = get_op(child0);
+        if (op == INT_KW || op == SHORT_KW || op == LONG_KW || op == CHAR_KW || op == VOID_KW
+          || op == ENUM_KW || op == '*') {
+          return wrap_in_condition_if_needed(context, test_side_effects, wrap_int(1));
+        }
 #ifdef SUPPORT_STRUCT_UNION
-          case STRUCT_KW:
-            return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+        else if (op == STRUCT_KW) {
+          return wrap_if_needed(false, context, test_side_effects, struct_sizeof_var(get_child__(STRUCT_KW, IDENTIFIER, child0, 1)), outer_op, op);
+        }
 #endif
-          default:
-            dump_node(child0);
-            fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
-            return 0;
+        else {
+          dump_node(child0);
+          fatal_error("comp_rvalue_go: sizeof is not supported for this type or expression");
+          return 0;
         }
       } else {
         dump_node(child0);
@@ -1210,7 +1210,7 @@ text comp_rvalue(ast node, int context) {
   } else {
     result = comp_rvalue_go(simple_ast, context, 0, 0);
   }
-  contains_side_effects |= contains_side_effects2;
+  contains_side_effects = contains_side_effects | contains_side_effects2;
   return result;
 }
 
@@ -1388,7 +1388,7 @@ void handle_printf_call(char *format_str, ast params) {
 #ifndef SH_MINIMAL_PRINTF
   text width_text = 0, precision_text = 0;
   bool has_width = false, has_precision = false;
-  enum PRINTF_STATE state = PRINTF_STATE_FLAGS;
+  int state = PRINTF_STATE_FLAGS;
 #endif
 
   while (*format_str != '\0') {
@@ -1399,121 +1399,111 @@ void handle_printf_call(char *format_str, ast params) {
     }
 
     if (mod) {
-      switch (*format_str) {
+      // The flags/width/precision state machine is only compiled in when
+      // SH_MINIMAL_PRINTF is off. When it is on, the "literal %" branch below
+      // becomes the first branch of the chain.
+      if (*format_str == '%') { // Literal %
+        mod = false;
+      }
 #ifndef SH_MINIMAL_PRINTF
-        case ' ': case '#': case '+': case '-': case '0': // Flags
-          // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
-          // 16 bits meaning we can easily convert char -> bit if we wanted to.
-          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
-          break;
-
-        // Width or precision literal
-        case '1': case '2': case '3':
-        case '4': case '5': case '6':
-        case '7': case '8': case '9':
-          if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
-          while ('0' <= *format_str && *format_str <= '9') format_str += 1; // Skip the rest of the number
-          has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
-          has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
-          state += 1;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
-          format_str -= 1; // Reprocess non-numeric character
-          break;
-
-        // Precision
-        case '.':
-          if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
-          state = PRINTF_STATE_PRECISION;
-          break;
-
-        case '*':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          if (state == PRINTF_STATE_FLAGS) {
-            width_text = comp_rvalue(param, RVALUE_CTX_BASE);
-            has_width = true;
-          } else if (state == PRINTF_STATE_PRECISION) {
-            precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
-            has_precision = true;
-          } else {
-            fatal_error("printf: width or precision already specified");
-          }
-          param = 0;
-          break;
-#endif
-
-        case '%':
-#ifndef SH_MINIMAL_PRINTF
-          if (state != PRINTF_STATE_FLAGS) fatal_error("printf: cannot use flags, width or precision with %%");
-#endif
-          mod = false;
-          break;
-
+      else if (*format_str == ' ' || *format_str == '#' || *format_str == '+' || *format_str == '-' || *format_str == '0') { // Flags
+        // Flags correspond to 0x20,0x23,0x2b,0x2d,0x30 which are spread over
+        // 16 bits meaning we can easily convert char -> bit if we wanted to.
+        if (state != PRINTF_STATE_FLAGS) fatal_error("printf: flags must come before width and precision");
+      }
+      else if ('0' <= *format_str && *format_str <= '9') { // Width or precision literal
+        if (state != PRINTF_STATE_FLAGS && state != PRINTF_STATE_PRECISION) fatal_error("printf: width or precision already specified");
+        while ('0' <= *format_str && *format_str <= '9') ++format_str; // Skip the rest of the number
+        has_width = state == PRINTF_STATE_FLAGS ? true : has_width;
+        has_precision = state == PRINTF_STATE_PRECISION ? true : has_precision;
+        ++state;      // Move to the next state (PRINTF_STATE_FLAGS => PRINTF_STATE_WIDTH, PRINTF_STATE_PRECISION => PRINTF_STATE_SPECIFIER)
+        --format_str; // Reprocess non-numeric character
+      }
+      else if (*format_str == '.') { // Precision
+        if (state >= PRINTF_STATE_PRECISION) fatal_error("printf: precision already specified");
+        state = PRINTF_STATE_PRECISION;
+      }
+      else if (*format_str == '*') { // Width or precision from parameter
+        if (param == 0) fatal_error("printf: not enough parameters");
+        if (state == PRINTF_STATE_FLAGS) {
+          width_text = comp_rvalue(param, RVALUE_CTX_BASE);
+          has_width = true;
+        } else if (state == PRINTF_STATE_PRECISION) {
+          precision_text = comp_rvalue(param, RVALUE_CTX_BASE);
+          has_precision = true;
+        } else {
+          fatal_error("printf: width or precision already specified");
+        }
+        param = 0;
+      }
+#endif // SH_MINIMAL_PRINTF
+      else if (*format_str == 'l' || *format_str == 'd'
+            || *format_str == 'o' || *format_str == 'u'
+            || *format_str == 'x' || *format_str == 'X'
+            || *format_str == 'i') { // Specifier
         // The following options are the same between the shell's printf and C's printf
-        case 'l': case 'd': case 'i': case 'o': case 'u': case 'x': case 'X':
-          if (*format_str == 'l') {
-            while (*format_str == 'l') format_str += 1; // Skip the 'l' for long
-            if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
-              dump_string("format_str = ", specifier_start);
-              fatal_error("printf: unsupported format specifier");
-            }
+        if (*format_str == 'l') {
+          while (*format_str == 'l') ++format_str; // Skip the 'l' for long
+          if (*format_str != 'd' && *format_str != 'i' && *format_str != 'o' && *format_str != 'u' && *format_str != 'x' && *format_str != 'X') {
+            dump_string("format_str = ", specifier_start);
+            fatal_error("printf: unsupported format specifier");
           }
+        }
 
-          if (param == 0) fatal_error("printf: not enough parameters");
+        if (param == 0) fatal_error("printf: not enough parameters");
 #ifndef SH_MINIMAL_PRINTF
-          params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
-          params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+        params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
+        params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
 #endif
-          params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
-          param = 0; // Consume param
-          mod = false;
-          break;
-
+        params_text = concatenate_strings_with(params_text, comp_rvalue(param, RVALUE_CTX_BASE), wrap_char(' ')); // Add the parameter
+        param = 0; // Consume param
+        mod = false;
+      }
+      else if (*format_str == 'c') {
         // We can't pass characters to printf directly because %c has a different meaning.
         // %c does not support the width parameter as it's not worth the extra complexity to handle * and numbers.
-        case 'c':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          // TODO: Find way to support width that's not too verbose
+        if (param == 0) fatal_error("printf: not enough parameters");
+        // TODO: Find way to support width that's not too verbose
 #ifndef SH_MINIMAL_PRINTF
-          if (has_width) fatal_error("printf: width not supported for %c");
+        if (has_width) fatal_error("printf: width not supported for %c");
 #endif
+        // Generate printf call with what we have so far
+        append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+        // New format string starts after the %
+        format_start = format_str + 1;
+        // Generate the printf call for the character
+        append_glo_decl(comp_putchar_inline(param));
+        param = 0; // Consume param
+        params_text = 0; // Reset the parameters
+        mod = false;
+      }
+      else if (*format_str == 's') {
+        // We can't a string to printf directly, it needs to be unpacked first.
+        if (param == 0) fatal_error("printf: not enough parameters");
+        // If the format specifier has width or precision, we have to pack the string and call then printf.
+        // Otherwise, we can call _put_pstr directly and avoid the subshell.
+        runtime_use_put_pstr = true;
+#ifndef SH_MINIMAL_PRINTF
+        if (has_width || has_precision) {
+          params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
+          params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
+          params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("\"$(_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE), wrap_str_lit(")\"")), wrap_char(' ')); // Add the parameter
+        } else
+#endif
+        {
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
           // New format string starts after the %
           format_start = format_str + 1;
-          // Generate the printf call for the character
-          append_glo_decl(comp_putchar_inline(param));
-          param = 0; // Consume param
-          params_text = 0; // Reset the parameters
-          mod = false;
-          break;
-
-        // We can't a string to printf directly, it needs to be unpacked first.
-        case 's':
-          if (param == 0) fatal_error("printf: not enough parameters");
-          // If the format specifier has width or precision, we have to pack the string and call then printf.
-          // Otherwise, we can call _put_pstr directly and avoid the subshell.
-          runtime_use_put_pstr = true;
-#ifndef SH_MINIMAL_PRINTF
-          if (has_width || has_precision) {
-            params_text = concatenate_strings_with(params_text, width_text, wrap_char(' '));     // Add width param if needed
-            params_text = concatenate_strings_with(params_text, precision_text, wrap_char(' ')); // Add precision param if needed
-            params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("\"$(_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE), wrap_str_lit(")\"")), wrap_char(' ')); // Add the parameter
-          } else
-#endif
-          {
-            // Generate printf call with what we have so far
-            append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
-            // New format string starts after the %
-            format_start = format_str + 1;
-            // Compile printf("...%s...", str) to _put_pstr str
-            append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE)));
-          }
-          param = 0; // Consume param
-          mod = false;
-          break;
-
-        default:
-          dump_string("format_str = ", specifier_start);
-          fatal_error("printf: unsupported format specifier");
+          // Compile printf("...%s...", str) to _put_pstr str
+          append_glo_decl(string_concat(wrap_str_lit("_put_pstr __ "), comp_rvalue(param, RVALUE_CTX_BASE)));
+        }
+        param = 0; // Consume param
+        mod = false;
+      }
+      else {
+        dump_string("format_str = ", specifier_start);
+        fatal_error("printf: unsupported format specifier");
       }
     } else if (*format_str == '%') {
       mod = true;
@@ -1526,7 +1516,7 @@ void handle_printf_call(char *format_str, ast params) {
     }
 
     // Keep accumulating the format string
-    format_str += 1;
+    ++format_str;
   }
 
   // Dump the remaining format string
@@ -1632,7 +1622,7 @@ void comp_assignment(ast lhs, ast rhs) {
   }
 }
 
-bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_body(ast node, int stmt_ctx) {
   int start_in_tail_position = in_tail_position;
   int start_cgc_locals = cgc_locals;
   ast child1;
@@ -1651,6 +1641,8 @@ bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
   return node != 0; // If node is not null, it means the block was terminated early
 }
 
+#ifdef SUPPORT_SWITCH
+
 // Assemble switch pattern from case and default statements.
 // Case and default statements are like labelled statements, meaning that they
 // wrap the next statement. This function unwraps the next statements until a
@@ -1660,27 +1652,26 @@ bool comp_body(ast node, enum STMT_CTX stmt_ctx) {
 ast last_stmt;
 text make_switch_pattern(ast statement) {
   text str = 0;
+  int op;
 
   while (1) { // statement will never be null
-    switch (get_op(statement)) {
-      case DEFAULT_KW:
-        str = wrap_char('*');
-        statement = get_child_(DEFAULT_KW, statement, 0);
-        break;
-
-      case CASE_KW:
-        // This is much more permissive than what a C compiler would allow,
-        // but Shell allows matching on arbitrary expression in case
-        // patterns so it's fine. If we wanted to do this right, we'd check
-        // that the pattern is a numeric literal or an enum identifier.
-        str = concatenate_strings_with(str, comp_rvalue(get_child_(CASE_KW, statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
-        statement = get_child_(CASE_KW, statement, 1);
-        break;
-
-      default:
-        if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
-        last_stmt = statement;
-        return string_concat(str, wrap_char(')'));
+    op = get_op(statement);
+    if (op == DEFAULT_KW) {
+      str = wrap_char('*');
+      statement = get_child_(DEFAULT_KW, statement, 0);
+    }
+    else if (op == CASE_KW) {
+      // This is much more permissive than what a C compiler would allow,
+      // but Shell allows matching on arbitrary expression in case
+      // patterns so it's fine. If we wanted to do this right, we'd check
+      // that the pattern is a numeric literal or an enum identifier.
+      str = concatenate_strings_with(str, comp_rvalue(get_child_(CASE_KW, statement, 0), RVALUE_CTX_BASE), wrap_char('|'));
+      statement = get_child_(CASE_KW, statement, 1);
+    }
+    else {
+      if (str == 0) fatal_error("Expected case in switch. Fallthrough is not supported.");
+      last_stmt = statement;
+      return string_concat(str, wrap_char(')'));
     }
   }
 }
@@ -1696,7 +1687,7 @@ bool comp_switch(ast node) {
     ));
 
   cgc_add_enclosing_switch(in_tail_position);
-  nest_level += 1;
+  ++nest_level;
 
   node = get_child_(SWITCH_KW, node, 1);
 
@@ -1715,7 +1706,7 @@ bool comp_switch(ast node) {
     append_glo_decl(make_switch_pattern(statement));
     statement = last_stmt; // last_stmt is set by make_switch_pattern
 
-    nest_level += 1;
+    ++nest_level;
 
     // Since we don't know if the switch is exhaustive, we can't compile in tail
     // position mode, see comment below.
@@ -1731,11 +1722,11 @@ bool comp_switch(ast node) {
       }
     }
 
-    nest_level -= 1;
+    --nest_level;
     append_glo_decl(wrap_str_lit(";;"));
   }
 
-  nest_level -= 1;
+  --nest_level;
   append_glo_decl(wrap_str_lit("esac"));
 
   cgc_locals = start_cgc_locals;
@@ -1754,7 +1745,9 @@ bool comp_switch(ast node) {
   return false;
 }
 
-bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
+#endif
+
+bool comp_if(ast node, int stmt_ctx) {
   int start_glo_decl_idx;
   bool termination_lhs = false;
   bool termination_rhs = false;
@@ -1770,12 +1763,12 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
           wrap_str_lit(" ; then")
         ));
 
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
   termination_lhs = comp_statement(get_child_(IF_KW, node, 1), stmt_ctx);
   // ifs cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-  nest_level -= 1;
+  --nest_level;
 
   if (else_node != 0) {
     // Compile sequence of if else if using elif
@@ -1783,11 +1776,11 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
       termination_rhs = comp_if(else_node, stmt_ctx | STMT_CTX_ELSE_IF); // STMT_CTX_ELSE_IF => next if stmt will use elif
     } else {
       append_glo_decl(wrap_str_lit("else"));
-      nest_level += 1;
+      ++nest_level;
       start_glo_decl_idx = glo_decl_ix;
       termination_rhs = comp_statement(else_node, stmt_ctx & ~STMT_CTX_ELSE_IF); // Clear STMT_CTX_ELSE_IF bit
       if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-      nest_level -= 1;
+      --nest_level;
     }
   }
   if (!else_if) append_glo_decl(wrap_str_lit("fi"));
@@ -1805,7 +1798,7 @@ bool comp_if(ast node, enum STMT_CTX stmt_ctx) {
 // last_line and loop_end_stmt are mutually exclusive
 // last_line is the last line of the loop
 // loop_end_stmt is the statement that should be executed at the end of the for loop (increment, etc.)
-bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, enum STMT_CTX stmt_ctx) {
+bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, int stmt_ctx) {
   // Save loop end actions from possible outer loop
   int start_cgc_locals = cgc_locals;
   int start_glo_decl_idx;
@@ -1831,14 +1824,14 @@ bool comp_loop(text cond, ast body, ast loop_end_stmt, text last_line, enum STMT
   }
 
   append_glo_decl(string_concat3(wrap_str_lit("while "), cond ? cond : wrap_char(':'), wrap_str_lit("; do")));
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
   always_returns = comp_statement(body, stmt_ctx);
   append_glo_decl(last_line);
   replay_glo_decls(loop_binding_action_start(loop_binding), loop_binding_action_end(loop_binding));
   // while loops cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
-  nest_level -= 1;
+  --nest_level;
   append_glo_decl(wrap_str_lit("done"));
   cgc_locals = start_cgc_locals;
 
@@ -1884,7 +1877,7 @@ bool comp_return(ast return_value) {
   // ...and then we take care of the control flow part of the return statement
   // SWITCH blocks specify if they are in tail position
   if (binding != 0 && binding_kind(binding) == BINDING_SWITCH) {
-    in_tail_position |= switch_binding_in_tail_position(binding);
+    in_tail_position = in_tail_position | switch_binding_in_tail_position(binding);
   }
 
   if (in_tail_position && binding != 0) {
@@ -1913,12 +1906,10 @@ void comp_var_decls(ast node) {
   ast var_decl;
 
 #ifdef SUPPORT_TYPE_SPECIFIERS
-  switch (get_child_(DECLS, node, 1)) {
+  int spec = get_child_(DECLS, node, 1);
+  if (spec == EXTERN_KW || spec == STATIC_KW) {
     // AUTO_KW and REGISTER_KW can simply be ignored.
-    case EXTERN_KW:
-    case STATIC_KW:
-      fatal_error("Extern and static storage class specifier not supported on local variables");
-      break;
+    fatal_error("Extern and static storage class specifier not supported on local variables");
   }
 #endif
   node = get_child_opt_(DECLS, LIST, node, 0);
@@ -1936,7 +1927,7 @@ void comp_var_decls(ast node) {
 
 // Returns whether the statement always returns/breaks.
 // This is used to delimit the end of conditional blocks of switch statements.
-bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
+bool comp_statement(ast node, int stmt_ctx) {
   int op;
   text str;
 
@@ -1964,6 +1955,7 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
                      stmt_ctx
                      );
 #endif
+#ifdef SUPPORT_FOR
   } else if (op == FOR_KW) {
     comp_statement(get_child_(FOR_KW, node, 0), STMT_CTX_DEFAULT);
 
@@ -1978,8 +1970,11 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
                      0, // No last line
                      stmt_ctx
                      );
+#endif
+#ifdef SUPPORT_SWITCH
   } else if (op == SWITCH_KW) {
     return comp_switch(node);
+#endif
   } else if (op == BREAK_KW) {
     return comp_break(); // Break out of switch statement
   } else if (op == CONTINUE_KW) {
@@ -2004,9 +1999,11 @@ bool comp_statement(ast node, enum STMT_CTX stmt_ctx) {
     fatal_error("goto statements not supported");
     return false;
 #endif
+#ifdef SUPPORT_SWITCH
   } else if (get_op(node) == CASE_KW || get_op(node) == DEFAULT_KW) {
     fatal_error("case/default must be at the beginning of a switch conditional block");
     return false;
+#endif
   } else if (op == DECLS) {
     comp_var_decls(node);
     return false;
@@ -2058,7 +2055,7 @@ void comp_glo_fun_decl(ast node) {
     }
 #endif
     params = tail(params);
-    params_ix += 1;
+    ++params_ix;
   }
   if (function_comment != 0) function_comment = string_concat(wrap_str_lit(" # "), function_comment);
 
@@ -2071,7 +2068,7 @@ void comp_glo_fun_decl(ast node) {
   ));
 
   in_tail_position = true;
-  nest_level += 1;
+  ++nest_level;
   start_glo_decl_idx = glo_decl_ix;
 
   save_loc_vars_fixup = append_glo_decl_fixup(); // Fixup is done after compiling body
@@ -2088,7 +2085,7 @@ void comp_glo_fun_decl(ast node) {
       comp_assignment(get_child_(DECL, decl, 0), new_dollar_ident(params_ix));
     }
     params = tail(params);
-    params_ix += 1;
+    ++params_ix;
   }
 #endif
 
@@ -2110,7 +2107,7 @@ void comp_glo_fun_decl(ast node) {
   // functions cannot be empty so we insert ':' if it's empty
   if (!any_active_glo_decls(start_glo_decl_idx)) append_glo_decl(wrap_char(':'));
 
-  nest_level -= 1;
+  --nest_level;
 
   append_glo_decl(wrap_str_lit("}\n"));
 }
@@ -2345,7 +2342,7 @@ void comp_glo_decl(ast node) {
 }
 
 void codegen_end() {
-  int c;
+  int c = 0;
 
 #ifdef ONE_PASS_GENERATOR_NO_EARLY_OUTPUT
   print_glo_decls();
@@ -2353,12 +2350,13 @@ void codegen_end() {
 
   if (any_character_used) {
     putstr("#_ Character constants\n");
-    for(c = 0; c < 256; c += 1) {
+    while (c < 256) {
       if (characters_useds[c / CHARACTERS_BITFIELD_SIZE] & 1 << (c % CHARACTERS_BITFIELD_SIZE)) {
         putstr("readonly ");
         print_text(character_ident(c));
         putchar('='); putint(c); putchar('\n');
       }
+      ++c;
     }
   }
 
@@ -2396,7 +2394,7 @@ text initialize_function_variables() {
   while (counter > 0) {
     ident = new_fresh_ident(counter);
     res = concatenate_strings_with(res, format_special_var(ident, false), wrap_str_lit(" = "));
-    counter -= 1;
+    --counter;
   }
 
   // Local variables and parameters
@@ -2415,6 +2413,12 @@ text initialize_function_variables() {
 }
 
 void codegen_begin() {
+  text_pool = malloc(TEXT_POOL_SIZE * sizeof(intptr_t));
+  characters_useds = malloc(CHARACTERS_BITFIELD_SIZE * sizeof(int));
+  preallocated_fresh_idents = malloc(IDENTIFIER_INTERNAL_PREALLOC_SIZE * sizeof(int));
+  preallocated_dollar_idents = malloc(IDENTIFIER_DOLLAR_PREALLOC_SIZE * sizeof(int));
+  glo_decls = malloc(GLO_DECL_SIZE * sizeof(text));
+
   init_comp_context();
 
   putstr("#!/bin/sh\n");
@@ -2451,6 +2455,6 @@ void codegen_glo_decl(ast decl) {
 #ifdef PRINT_MEMORY_STATS
   // Statistics
   max_text_alloc = max_text_alloc > text_alloc ? max_text_alloc : text_alloc;
-  cumul_text_alloc += text_alloc;
+  cumul_text_alloc = cumul_text_alloc + text_alloc;
 #endif
 }

@@ -637,11 +637,13 @@ jobs:
             bash ./run-pnut-variant.sh --${variant} --shell bash
           done
 
-  compile-with-M2-Planet:
+  compile-with-C4:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
       - name: Install gcc
         run: |
@@ -649,63 +651,105 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
 
-      - name: Install M2-Planet
+      - name: Bootstrap pnut-exe from c4
         run: |
           set -e
-          git clone https://github.com/oriansj/M2-Planet.git M2-Planet --recursive
-          # cee2359694740a7c1b5a85a16b0f96f5aa74e1ac is from Nov 5th 2025
-          cd M2-Planet
-          git checkout cee2359694740a7c1b5a85a16b0f96f5aa74e1ac
-          # Build M2-Planet
-          make
-          # Sanity check
-          ./bin/M2-Planet --version
+          # c4 is platform independent: it runs on this runner whatever TARGET
+          # is, and the binaries it emits are only compared, not executed. So
+          # every target can be checked here, including the Darwin one.
+          for target in Linux.i386 Linux.x86_64 Darwin.x86_64; do
+            echo "Bootstrapping pnut-exe ($target) from c4"
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0 SAFE=0
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1 SAFE=0
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=0 SAFE=1
+            make bootstrap-pnut-exe-from-c4 TARGET=$target MINIMAL=1 SAFE=1
+          done
 
-      - name: Install mescc-tools
+      - name: Bootstrap pnut-sh from c4
         run: |
           set -e
-          git clone https://github.com/oriansj/mescc-tools.git mescc-tools --recursive
-          cd mescc-tools
-          # 9b1375115f9175d876c360dbbfd7e231dd9f2a2f is from Oct 9th 2025
-          git checkout 9b1375115f9175d876c360dbbfd7e231dd9f2a2f
-          # Build mescc-tools
-          make
-          # Sanity checks
-          ./bin/M1 --version
-          ./bin/hex2 --version
-          ./bin/blood-elf --version
-          ./bin/get_machine --version
+          make bootstrap-pnut-sh-from-c4 MINIMAL=0 SAFE=0
+          make bootstrap-pnut-sh-from-c4 MINIMAL=1 SAFE=0
+          make bootstrap-pnut-sh-from-c4 MINIMAL=0 SAFE=1
+          make bootstrap-pnut-sh-from-c4 MINIMAL=1 SAFE=1
 
-      - name: Compile pnut-exe with M2-Planet
+      - name: Bootstrap pnut-awk from c4
         run: |
           set -e
+          make bootstrap-pnut-awk-from-c4 MINIMAL=0 SAFE=0
+          make bootstrap-pnut-awk-from-c4 MINIMAL=1 SAFE=0
+          make bootstrap-pnut-awk-from-c4 MINIMAL=0 SAFE=1
+          make bootstrap-pnut-awk-from-c4 MINIMAL=1 SAFE=1
 
-          # Use the M2libc from mescc-tools and not the one from M2-Planet
-          M2LIB="./M2-Planet/M2libc"
+  # compile-with-M2-Planet:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
 
-          # Compile to M1 using M2-Planet
-          ./M2-Planet/bin/M2-Planet --architecture x86 -D target_i386_linux -D NO_TERNARY_SUPPORT -D ONE_PASS_GENERATOR -D SMALL_HEAP -I $M2LIB --expand-includes --debug pnut.c > pnut.M1
+  #     - name: Install gcc
+  #       run: |
+  #         set -e
+  #         sudo apt-get update
+  #         sudo apt-get install -y build-essential
 
-          # Generate basic DWARF debug info
-          ./mescc-tools/bin/blood-elf -f pnut.M1 --little-endian --entry _start -o pnut-footer.M1
+  #     - name: Install M2-Planet
+  #       run: |
+  #         set -e
+  #         git clone https://github.com/oriansj/M2-Planet.git M2-Planet --recursive
+  #         # cee2359694740a7c1b5a85a16b0f96f5aa74e1ac is from Nov 5th 2025
+  #         cd M2-Planet
+  #         git checkout cee2359694740a7c1b5a85a16b0f96f5aa74e1ac
+  #         # Build M2-Planet
+  #         make
+  #         # Sanity check
+  #         ./bin/M2-Planet --version
 
-          # Compile to hex2 (for debug: -f pnut-footer.M1)
-          ./mescc-tools/bin/M1 -f $M2LIB/x86/x86_defs.M1 -f $M2LIB/x86/libc-full.M1 -f pnut.M1 -f pnut-footer.M1 --architecture x86 --little-endian -o pnut.hex2
+  #     - name: Install mescc-tools
+  #       run: |
+  #         set -e
+  #         git clone https://github.com/oriansj/mescc-tools.git mescc-tools --recursive
+  #         cd mescc-tools
+  #         # 9b1375115f9175d876c360dbbfd7e231dd9f2a2f is from Oct 9th 2025
+  #         git checkout 9b1375115f9175d876c360dbbfd7e231dd9f2a2f
+  #         # Build mescc-tools
+  #         make
+  #         # Sanity checks
+  #         ./bin/M1 --version
+  #         ./bin/hex2 --version
+  #         ./bin/blood-elf --version
+  #         ./bin/get_machine --version
 
-          # Assemble
-          ./mescc-tools/bin/hex2 --architecture x86 --little-endian --file $M2LIB/x86/ELF-x86-debug.hex2 --file pnut.hex2 --base-address 0x8048000 --output pnut
+  #     - name: Compile pnut-exe with M2-Planet
+  #       run: |
+  #         set -e
 
-          # Recompile pnut with itself
-          ./pnut pnut.c -Dtarget_i386_linux -D ONE_PASS_GENERATOR -o pnut-exe-by-pnut-exe
+  #         # Use the M2libc from mescc-tools and not the one from M2-Planet
+  #         M2LIB="./M2-Planet/M2libc"
 
-          # Recompile pnut-exe-by-pnut-exe with itself
-          ./pnut-exe-by-pnut-exe pnut.c -Dtarget_i386_linux -D ONE_PASS_GENERATOR -o pnut-exe-by-pnut-exe-by-pnut-exe
+  #         # Compile to M1 using M2-Planet
+  #         ./M2-Planet/bin/M2-Planet --architecture x86 -D target_i386_linux -D NO_TERNARY_SUPPORT -D ONE_PASS_GENERATOR -D SMALL_HEAP -I $M2LIB --expand-includes --debug pnut.c > pnut.M1
 
-          # Fixed point?
-          wc pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe
-          sha256sum pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe
-          diff pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe 2>&1 > /dev/null \
-            || { echo "Binaries differ after recompilation" ; exit 1; }
+  #         # Generate basic DWARF debug info
+  #         ./mescc-tools/bin/blood-elf -f pnut.M1 --little-endian --entry _start -o pnut-footer.M1
+
+  #         # Compile to hex2 (for debug: -f pnut-footer.M1)
+  #         ./mescc-tools/bin/M1 -f $M2LIB/x86/x86_defs.M1 -f $M2LIB/x86/libc-full.M1 -f pnut.M1 -f pnut-footer.M1 --architecture x86 --little-endian -o pnut.hex2
+
+  #         # Assemble
+  #         ./mescc-tools/bin/hex2 --architecture x86 --little-endian --file $M2LIB/x86/ELF-x86-debug.hex2 --file pnut.hex2 --base-address 0x8048000 --output pnut
+
+  #         # Recompile pnut with itself
+  #         ./pnut pnut.c -Dtarget_i386_linux -D ONE_PASS_GENERATOR -o pnut-exe-by-pnut-exe
+
+  #         # Recompile pnut-exe-by-pnut-exe with itself
+  #         ./pnut-exe-by-pnut-exe pnut.c -Dtarget_i386_linux -D ONE_PASS_GENERATOR -o pnut-exe-by-pnut-exe-by-pnut-exe
+
+  #         # Fixed point?
+  #         wc pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe
+  #         sha256sum pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe
+  #         diff pnut-exe-by-pnut-exe pnut-exe-by-pnut-exe-by-pnut-exe 2>&1 > /dev/null \
+  #           || { echo "Binaries differ after recompilation" ; exit 1; }
 
   bootstrap-from-annotations:
     runs-on: ubuntu-latest
@@ -748,7 +792,7 @@ jobs:
            , bootstrap-bash-2_05a
            , bootstrap-pnut-exe-on-scavenged-shell
            , pnut-variants-run
-           , compile-with-M2-Planet
+          #  , compile-with-M2-Planet
            , bootstrap-from-annotations
            ]
 

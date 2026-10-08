@@ -1,7 +1,7 @@
 #define text int
 #define TEXT_POOL_SIZE 1000000
 
-intptr_t text_pool[TEXT_POOL_SIZE];
+intptr_t *text_pool;
 int text_alloc = 1; // Start at 1 because 0 is the empty text
 
 // Text pool nodes
@@ -35,7 +35,7 @@ text wrap_int(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
-  return (text_alloc += 2) - 2;
+  return (text_alloc = text_alloc + 2) - 2;
 }
 
 #ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
@@ -44,27 +44,27 @@ text wrap_int_hex(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_HEX);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
-  return (text_alloc += 2) - 2;
+  return (text_alloc = text_alloc + 2) - 2;
 }
 
 text wrap_int_oct(const int i) {
   if (text_alloc + 2 >= TEXT_POOL_SIZE) fatal_error("string tree pool overflow");
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_INTEGER_OCT);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(i);
-  return (text_alloc += 2) - 2;
+  return (text_alloc = text_alloc + 2) - 2;
 }
 
 text wrap_integer(const int multiply, const int obj) {
-  switch (get_op(obj)) {
-    case INTEGER:
-      return wrap_int(multiply * -get_val_(INTEGER, obj));
-    case INTEGER_HEX:
-      return wrap_int_hex(multiply * -get_val_(INTEGER_HEX, obj));
-    case INTEGER_OCT:
-      return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
-    default:
-      fatal_error("wrap_integer: unknown integer type");
-      return 0;
+  int op = get_op(obj);
+  if (op == INTEGER) {
+    return wrap_int(multiply * -get_val_(INTEGER, obj));
+  } else if (op == INTEGER_HEX) {
+    return wrap_int_hex(multiply * -get_val_(INTEGER_HEX, obj));
+  } else if (op == INTEGER_OCT) {
+    return wrap_int_oct(multiply * -get_val_(INTEGER_OCT, obj));
+  } else {
+    fatal_error("wrap_integer: unknown integer type");
+    return 0;
   }
 }
 #else
@@ -77,7 +77,7 @@ text escape_text(const text t, const bool for_printf) {
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_ESCAPED);
   text_pool[text_alloc + 1] = TEXT_FROM_INT(t);
   text_pool[text_alloc + 2] = TEXT_FROM_INT(for_printf);
-  return (text_alloc += 3) - 3;
+  return (text_alloc = text_alloc + 3) - 3;
 }
 
 text string_concat(const text t1, const text t2) {
@@ -86,7 +86,7 @@ text string_concat(const text t1, const text t2) {
   text_pool[text_alloc + 1] = TEXT_FROM_INT(2);
   text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
   text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
-  return (text_alloc += 4) - 4;
+  return (text_alloc = text_alloc + 4) - 4;
 }
 
 text string_concat3(const text t1, const text t2, const text t3) {
@@ -96,7 +96,7 @@ text string_concat3(const text t1, const text t2, const text t3) {
   text_pool[text_alloc + 2] = TEXT_FROM_INT(t1);
   text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
   text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
-  return (text_alloc += 5) - 5;
+  return (text_alloc = text_alloc + 5) - 5;
 }
 
 text string_concat4(const text t1, const text t2, const text t3, const text t4) {
@@ -107,7 +107,7 @@ text string_concat4(const text t1, const text t2, const text t3, const text t4) 
   text_pool[text_alloc + 3] = TEXT_FROM_INT(t2);
   text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
   text_pool[text_alloc + 5] = TEXT_FROM_INT(t4);
-  return (text_alloc += 6) - 6;
+  return (text_alloc = text_alloc + 6) - 6;
 }
 
 text string_concat5(const text t1, const text t2, const text t3, const text t4, const text t5) {
@@ -119,7 +119,7 @@ text string_concat5(const text t1, const text t2, const text t3, const text t4, 
   text_pool[text_alloc + 4] = TEXT_FROM_INT(t3);
   text_pool[text_alloc + 5] = TEXT_FROM_INT(t4);
   text_pool[text_alloc + 6] = TEXT_FROM_INT(t5);
-  return (text_alloc += 7) - 7;
+  return (text_alloc = text_alloc + 7) - 7;
 }
 
 // Dead code but keeping it around in case we need to wrap mutable strings
@@ -128,11 +128,11 @@ text string_concat5(const text t1, const text t2, const text t3, const text t4, 
 //   int result = text_alloc;
 //
 //   text_pool[result] = TEXT_FROM_INT(TEXT_TREE);
-//   text_alloc += 2;
+//   text_alloc = text_alloc + 2;
 //   while (s[i] != 0) {
 //     text_pool[text_alloc] = wrap_char(s[i]);
-//     text_alloc += 1;
-//     i += 1;
+//     ++text_alloc;
+//     ++i;
 //   }
 //
 //   text_pool[result + 1] = TEXT_FROM_INT(i);
@@ -146,7 +146,7 @@ text wrap_str_imm(char * const s, char * const end) {
   text_pool[text_alloc] = TEXT_FROM_INT(TEXT_STRING);
   text_pool[text_alloc + 1] = TEXT_FROM_PTR(s);
   text_pool[text_alloc + 2] = TEXT_FROM_PTR(end); // end of string address. 0 for null-terminated strings
-  return (text_alloc += 3) - 3;
+  return (text_alloc = text_alloc + 3) - 3;
 }
 
 text wrap_str_lit(char * const s) {
@@ -192,12 +192,12 @@ void print_escaped_string(char *string_start, char *string_end, int for_printf) 
   if (string_end) {
     while (string_start < string_end) {
       print_escaped_char(*string_start, for_printf);
-      string_start += 1;
+      ++string_start;
     }
   } else {
     while (*string_start != 0) {
       print_escaped_char(*string_start, for_printf);
-      string_start += 1;
+      ++string_start;
     }
   }
 }
@@ -217,7 +217,7 @@ void print_escaped_text(text t, bool for_printf) {
       } else {
         print_escaped_text(TEXT_TO_INT(text_pool[t + i + 2]), for_printf);
       }
-      i += 1;
+      ++i;
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
@@ -254,7 +254,7 @@ void print_text(text t) {
       } else {
         print_text(TEXT_TO_INT(text_pool[t + i + 2]));
       }
-      i += 1;
+      ++i;
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_INTEGER)) {
     putint(TEXT_TO_INT(text_pool[t + 1]));
@@ -273,7 +273,7 @@ void print_text(text t) {
       s = (char*) text_pool[t + 1]; // start
       while (s < (char*) text_pool[t + 2] || *s != 0) {
         putchar(*s);
-        s += 1;
+        ++s;
       }
     }
   } else if (text_pool[t] == TEXT_FROM_INT(TEXT_ESCAPED)) {
