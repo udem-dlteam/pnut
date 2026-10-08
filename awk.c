@@ -1158,11 +1158,103 @@ void comp_glo_fun_decl(ast node) {
 }
 
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+
+// Each element of the list has size 1 since nested initializers are not allowed
+int initializer_list_len(ast node) {
+  int res = 0;
+
+  while (node != 0) {
+    ++res;
+    node = tail(node);
+  }
+
+  return res;
+}
+
+// Like the shell backend's comp_defstr, which gives the array its own copy of
+// the string instead of sharing the one that string literals use, because the
+// array is a variable that can be modified. The elements after the string are
+// set to 0, which puts the null terminator in place.
+void comp_defstr(ast ident, int string_symbol, int array_size) {
+  runtime_use_defstr_arr = true;
+
+  append_glo_decl(string_concat4(
+    global_var(get_val_(IDENTIFIER, ident)),
+    wrap_str_lit(" = _defstr_arr(\""),
+    escape_text(wrap_str_pool(string_symbol), false),
+    string_concat3(wrap_str_lit("\", "), wrap_int(array_size), wrap_char(')'))
+  ));
+}
+
+// The values of the initializer list are put in a single string ("1 2 3") that
+// the initialize() runtime function splits, because awk functions can't take the
+// variable number of arguments that pnut-sh passes to its initialize(). The
+// values that are only known when the program starts, like the address of a
+// string literal, are concatenated into that string.
+text comp_initializer_list(ast initializer_list) {
+  ast element;
+  int op;
+  text args = 0;
+  text nums = 0;
+
+  while (initializer_list != 0) {
+    element = car(initializer_list);
+    op = get_op(element);
+    if (op == STRING) {
+      if (nums != 0) {
+        args = concatenate_strings_with(args,
+          string_concat3(wrap_char('"'), nums, wrap_char('"')),
+          wrap_str_lit(" \" \" "));
+        nums = 0;
+      }
+      args = concatenate_strings_with(args, comp_rvalue(element), wrap_str_lit(" \" \" "));
+    }
+    else if (op == INTEGER
+#ifdef PARSE_NUMERIC_LITERAL_WITH_BASE
+        || op == INTEGER_HEX || op == INTEGER_OCT
+#endif
+        ) {
+      // The numbers are known, so they share one part of the string.
+      if (nums != 0) nums = string_concat(nums, wrap_char(' '));
+      nums = string_concat(nums, comp_rvalue(element));
+    }
+    else if (op == CHARACTER) {
+      // The values are read back by initialize() which splits the string into
+      // numbers, so a character has to be written as a number here even when the
+      // program is given a name for it.
+      if (nums != 0) nums = string_concat(nums, wrap_char(' '));
+      nums = string_concat(nums, wrap_int(get_val_(CHARACTER, element)));
+    }
+    else {
+      // TODO: Support nested initializers and constant expressions
+      fatal_error("comp_initializer: unexpected operator");
+    }
+    initializer_list = tail(initializer_list);
+  }
+
+  if (nums != 0) {
+    args = concatenate_strings_with(args,
+      string_concat3(wrap_char('"'), nums, wrap_char('"')),
+      wrap_str_lit(" \" \" "));
+  }
+  if (args == 0) args = wrap_str_lit("\"\"");
+
+  return args;
+}
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
+
 void comp_glo_var_decl(ast node) {
   ast name = get_child__(DECL, IDENTIFIER, node, 0);
   ast type = get_child_(DECL, node, 1);
   ast init = get_child_(DECL, node, 2);
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+  ast values = 0;
+  int init_len = 0;
+#endif
   int arr_len;
+  text addr;
 
   if (get_op(type) == '(') return; // Ignore function declarations
 
@@ -1174,17 +1266,65 @@ void comp_glo_var_decl(ast node) {
   if (get_op(type) == '[') { // Array declaration
     arr_len = get_child_('[', type, 1);
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+    // If the array is initialized with a string, we copy the string into the
+    // array instead of pointing at the string literal, so that the array can be
+    // modified like in the shell backend.
+    if (init != 0 && get_op(init) == STRING) {
+      init_len = symbol_len(get_val_(STRING, init)) + 1; // +1 for null terminator
+      if (arr_len != 0 && arr_len < init_len) {
+        fatal_error("Array type is too small for initializer");
+      }
+      comp_defstr(name, get_val_(STRING, init), arr_len != 0 ? arr_len : init_len);
+      return;
+    }
+
+    // If the array is initialized with an initializer list, we store the values
+    // after allocating the array. Because the array size is optional, we need to
+    // calculate the size of the array from the initializer list if it's not
+    // provided.
+    if (init != 0) {
+      if (get_op(init) != INITIALIZER_LIST) fatal_error("Array declaration with invalid initializer");
+      values = get_child_(INITIALIZER_LIST, init, 0);
+
+      init_len = initializer_list_len(values);
+      if (arr_len == 0) {
+        arr_len = init_len;
+      } else if (arr_len < init_len) {
+        fatal_error("Array type is too small for initializer");
+      }
+    }
+#else
+    if (init != 0) {
+      fatal_error("Array declaration with initializer list not supported");
+    }
+#endif // SUPPORT_COMPLEX_INITIALIZER
+
     if (arr_len == 0) {
       fatal_error("Array declaration without size or initializer list");
-    } else if (init != 0) {
-      fatal_error("Array declaration with initializer list not supported");
     }
 
     runtime_use_malloc = true;
+    addr = global_var(get_val_(IDENTIFIER, name));
+
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+    if (values != 0) {
+      // Like the shell backend, one call to defarr allocates the array and
+      // stores the values of the initializer list in it.
+      runtime_use_defarr = true;
+      append_glo_decl(string_concat4(
+        addr,
+        wrap_str_lit(" = defarr("),
+        wrap_int(arr_len),
+        string_concat3(wrap_str_lit(", "), comp_initializer_list(values), wrap_str_lit(")"))
+      ));
+      return;
+    }
+#endif // SUPPORT_COMPLEX_INITIALIZER
 
     append_glo_decl(
       string_concat4(
-        global_var(get_val_(IDENTIFIER, name)),
+        addr,
         wrap_str_lit(" = _malloc("),
         wrap_int(arr_len),
         wrap_str_lit(")")

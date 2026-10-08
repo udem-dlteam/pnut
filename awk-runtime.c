@@ -155,6 +155,66 @@ void runtime_defstr() {
   putstr("}\n\n");
 }
 
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+
+// Like defstr, but the string is copied into an array of the given size. An
+// array initialized with a string is a variable, so it can't share the memory of
+// the string literal, and the elements after the string have to be set to 0.
+// This is the awk version of the defstr/initialize pair that pnut-sh uses for
+// its array initializers.
+bool runtime_use_defstr_arr = DEFAULT_USE;
+bool runtime_defstr_arr_defined = false;
+void runtime_defstr_arr() {
+  if (++runtime_defstr_arr_defined - 1) return;
+  runtime_malloc();
+  putstr("function _defstr_arr(str, size,    addr, chars, len, i) {\n");
+  putstr("  addr = _malloc(size)\n");
+  putstr("  len = split(str, chars, \"\")\n");
+  putstr("  if (len > size) len = size # A string that doesn't fit has no null terminator\n");
+  putstr("  for (i = 1; i <= len; i++)\n");
+  putstr("    _[addr + i - 1] = ord[chars[i]]\n");
+  putstr("  # The rest of the array is set to 0, which puts the null terminator in place\n");
+  putstr("  for (i = len + 1; i <= size; i++)\n");
+  putstr("    _[addr + i - 1] = 0\n");
+  putstr("  return addr\n");
+  putstr("}\n\n");
+}
+
+// Sets the elements of an array from the values of an initializer list. The
+// values are passed as a single string ("1 2 3") because awk functions can't
+// take a variable number of arguments like pnut-sh's initialize() does. When
+// there are fewer values than elements in the array, the remaining elements are
+// set to 0: the awk heap isn't pre-zeroed, so this is pnut-sh's initialize()
+// with RT_NO_INIT_GLOBALS.
+bool runtime_initialize_defined = false;
+void runtime_initialize() {
+  if (++runtime_initialize_defined - 1) return;
+  putstr("function initialize(addr, size, vals,    v, n, i) {\n");
+  putstr("  n = split(vals, v, \" \")\n");
+  putstr("  # split gives the text of each value, int gives the number it spells.\n");
+  putstr("  for (i = 1; i <= n; i++) _[addr + i - 1] = int(v[i])\n");
+  putstr("  for (i = n + 1; i <= size; i++) _[addr + i - 1] = 0\n");
+  putstr("}\n\n");
+}
+
+// Allocates an array and initializes it, like pnut-sh's defarr, except that the
+// address of the array is returned instead of being stored in the variable that
+// is passed as argument in the shell.
+bool runtime_use_defarr = DEFAULT_USE;
+bool runtime_defarr_defined = false;
+void runtime_defarr() {
+  if (++runtime_defarr_defined - 1) return;
+  runtime_malloc();
+  runtime_initialize();
+  putstr("function defarr(size, vals,    addr) {\n");
+  putstr("  addr = _malloc(size)\n");
+  putstr("  if (vals != \"\") initialize(addr, size, vals)\n");
+  putstr("  return addr\n");
+  putstr("}\n\n");
+}
+
+#endif // SUPPORT_COMPLEX_INITIALIZER
+
 // An implementation of puts, used to replace printf("%s", ...) calls.
 bool runtime_use_put_pstr = DEFAULT_USE;
 bool runtime_put_pstr_defined = false;
@@ -399,6 +459,10 @@ void produce_runtime() {
   if (runtime_use_malloc)               runtime_malloc();
   if (runtime_use_free)                 runtime_free();
   if (runtime_use_defstr)               runtime_defstr();
+#ifdef SUPPORT_COMPLEX_INITIALIZER
+  if (runtime_use_defstr_arr)           runtime_defstr_arr();
+  if (runtime_use_defarr)               runtime_defarr();
+#endif
   if (runtime_use_put_pstr)             runtime_put_pstr();
   if (runtime_use_open)                 runtime_open();
   if (runtime_use_close)                runtime_close();
