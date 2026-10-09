@@ -69,4 +69,5 @@ void main() {
   // Testing multiple format specifiers at the same time
   printf("'%d %c %x %s'\n", 42, 'a', 42, "world");
   printf("'%10d %-.4c %x %.4s'\n", 42, 'a', 42, "world");
+  printf("'%d %s %d'\n", 1, "mid", 2); // A string between two numbers
 }

@@ -679,6 +679,8 @@ void handle_printf_call(char *format_str, ast params) {
         } else {
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
+          // Those parameters are used up by the call just emitted.
+          params_text = 0;
           // New format string starts after the %
           format_start = format_str + 1;
           // Compile printf("...%s...", str) to _put_pstr str
