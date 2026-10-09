@@ -234,10 +234,10 @@ void runtime_put_pstr() {
 
 // Input / output
 
-bool runtime_use_open = DEFAULT_USE;
-bool runtime_open_defined = false;
-void runtime_open() {
-  if (++runtime_open_defined - 1) return;
+bool runtime_use_get_pstr = DEFAULT_USE;
+bool runtime_get_pstr_defined = false;
+void runtime_get_pstr() {
+  if (++runtime_get_pstr_defined - 1) return;
   putstr("function get_pstr(addr,    s, c) {\n");
   putstr("  s = \"\"\n");
   putstr("  while ((c = _[addr]) != 0) {\n");
@@ -247,6 +247,13 @@ void runtime_open() {
   putstr("  return s\n");
   putstr("}\n");
   putstr("\n");
+}
+
+bool runtime_use_open = DEFAULT_USE;
+bool runtime_open_defined = false;
+void runtime_open() {
+  if (++runtime_open_defined - 1) return;
+  runtime_get_pstr(); // _open reads the path from memory
   putstr("function __file_size(path,    cmd, size) {\n");
   putstr("  # The only portable way to get the size of a file. It is needed by\n");
   putstr("  # _fgetc to tell a last line that ends with a newline from one that\n");
@@ -467,6 +474,7 @@ void produce_runtime() {
   if (runtime_use_defarr)               runtime_defarr();
 #endif
   if (runtime_use_put_pstr)             runtime_put_pstr();
+  if (runtime_use_get_pstr)             runtime_get_pstr();
   if (runtime_use_open)                 runtime_open();
   if (runtime_use_close)                runtime_close();
   if (runtime_use_read)                 runtime_read();

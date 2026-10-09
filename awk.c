@@ -669,23 +669,31 @@ void handle_printf_call(char *format_str, ast params) {
         mod = false;
       }
       else if (*format_str == 's') {
-        // We can't a string to printf directly, it needs to be unpacked first.
+        // We can't pass a string to printf directly, it needs to be unpacked first.
         if (param == 0) fatal_error("printf: not enough parameters");
-        runtime_use_put_pstr = true;
-        // If the format specifier has width or precision, we have to pack the string and call then printf.
-        // Otherwise, we can call _put_pstr directly and avoid the subshell.
         if (has_width || has_precision) {
-          fatal_error("printf: width and precision for strings not supported");
+          // awk's printf pads and truncates, so hand it the string get_pstr
+          // reads back from memory, after the width and precision it asks for.
+          runtime_use_get_pstr = true;
+          params_text = concatenate_strings_with(params_text, width_text, wrap_str_lit(", "));     // Add width param if needed
+          params_text = concatenate_strings_with(params_text, precision_text, wrap_str_lit(", ")); // Add precision param if needed
+          params_text = concatenate_strings_with(params_text, string_concat3(wrap_str_lit("get_pstr("), comp_rvalue(param), wrap_char(')')), wrap_str_lit(", ")); // Add the string
+          // The %s stays in the format, awk's printf is the one filling it in.
+          append_glo_decl(printf_call(format_start, format_str + 1, params_text, false));
+          // Those parameters are used up by the call just emitted.
+          params_text = 0;
         } else {
+          // With nothing to pad, _put_pstr writes the string without a printf.
+          runtime_use_put_pstr = true;
           // Generate printf call with what we have so far
           append_glo_decl(printf_call(format_start, specifier_start, params_text, false));
           // Those parameters are used up by the call just emitted.
           params_text = 0;
-          // New format string starts after the %
-          format_start = format_str + 1;
           // Compile printf("...%s...", str) to _put_pstr str
           append_glo_decl(string_concat3(wrap_str_lit("_put_pstr("), comp_rvalue(param), wrap_char(')')));
         }
+        // New format string starts after the %
+        format_start = format_str + 1;
         param = 0; // Consume param
         mod = false;
       }
