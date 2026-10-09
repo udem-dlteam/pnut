@@ -76,12 +76,27 @@ void runtime_compl() {
 
 bool runtime_use_lshift = DEFAULT_USE;
 bool runtime_lshift_defined = false;
+// Some awk builds leave out the `^' operator because they are compiled without
+// math support, so 2 ** n gets computed by doubling instead.
+bool runtime_pow2_defined = false;
+void runtime_pow2() {
+  if (runtime_pow2_defined) return;
+  runtime_pow2_defined = true;
+  putstr("function __pow2(n,    r, i) {\n");
+  putstr("    # 2 ** n without the `^' operator, for the shift helpers\n");
+  putstr("    r = 1; i = 0\n");
+  putstr("    while (i < n) { r *= 2; ++i }\n");
+  putstr("    return r\n");
+  putstr("}\n\n");
+}
+
 void runtime_lshift() {
   if (++runtime_lshift_defined - 1) return;
+  runtime_pow2();
   putstr("function _lshift(a, b,    r) {\n");
   putstr("    # awk numbers are wider than an int: keep the 32 bits C would use\n");
   putstr("    a = int(a) % 4294967296; if (a < 0) a += 4294967296\n");
-  putstr("    r = int(a * (2 ^ int(b))) % 4294967296\n");
+  putstr("    r = int(a * __pow2(int(b))) % 4294967296\n");
   putstr("    if (r >= 2147483648) r -= 4294967296\n");
   putstr("    return r\n");
   putstr("}\n\n");
@@ -91,10 +106,11 @@ bool runtime_use_rshift = DEFAULT_USE;
 bool runtime_rshift_defined = false;
 void runtime_rshift() {
   if (++runtime_rshift_defined - 1) return;
+  runtime_pow2();
   putstr("function _rshift(a, b,    r, i, m) {\n");
   putstr("    # awk numbers are wider than an int: keep the 32 bits C would use\n");
   putstr("    a = int(a) % 4294967296; if (a < 0) a += 4294967296\n");
-  putstr("    r = int(a / (2 ^ b))\n");
+  putstr("    r = int(a / __pow2(b))\n");
   putstr("    if (a >= 2147483648) {\n");
   putstr("        # Those 32 bits are a negative number: shift ones in from the left\n");
   putstr("        m = 2147483648\n");
