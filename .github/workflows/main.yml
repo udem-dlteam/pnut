@@ -614,14 +614,20 @@ jobs:
           ./kit/test-bootstrap.sh --tcc-version 0.9.26
           ./kit/test-bootstrap.sh --tcc-version 0.9.27
 
+          # The x86-64 backend only exists in TCC 0.9.27, hence no 0.9.26 run.
+          ./kit/test-bootstrap.sh --tcc-version 0.9.27 --arch x86_64
+
           ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.26
           ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.27
+          ./kit/test-bootstrap.sh --mes-libc --tcc-version 0.9.27 --arch x86_64
 
           ./kit/test-bootstrap.sh --bootstrap-from-c4 --tcc-version 0.9.26
           ./kit/test-bootstrap.sh --bootstrap-from-c4 --tcc-version 0.9.27
+          ./kit/test-bootstrap.sh --bootstrap-from-c4 --tcc-version 0.9.27 --arch x86_64
 
           ./kit/test-bootstrap.sh --bootstrap-from-c4 --mes-libc --tcc-version 0.9.26
           ./kit/test-bootstrap.sh --bootstrap-from-c4 --mes-libc --tcc-version 0.9.27
+          ./kit/test-bootstrap.sh --bootstrap-from-c4 --mes-libc --tcc-version 0.9.27 --arch x86_64
 
   pnut-variants-run:
     runs-on: ubuntu-latest

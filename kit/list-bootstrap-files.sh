@@ -73,6 +73,13 @@ readonly MES_ARCHIVE="kit/mes-0.27.tar.gz"
 readonly MES_ARCHIVE_DIR="$TEMP_DIR/mes-0.27"
 readonly C4_DIR="kit/bootstrap-C4/c4-pnut"
 
+# Checked here as well as in kit/bootstrap.sh: this script is what the command
+# line reaches first, and without it the failure surfaces much later as a
+# missing lib/va_list.c while the archive is being built.
+if [ "$TCC_TARGET_ARCH" = X86_64 ] && [ "$TCC_VERSION" != 0.9.27 ]; then
+  error "The x86-64 backend is only supported with TCC 0.9.27, not $TCC_VERSION."
+fi
+
 if [ $TCC_VERSION = 0.9.27 ]; then
   readonly TCC_ARCHIVE=kit/tcc-0.9.27.tar.gz
   readonly TCC_DIR=tcc-0.9.27
