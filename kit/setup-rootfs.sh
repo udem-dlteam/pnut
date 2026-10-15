@@ -10,7 +10,10 @@
 #                             the host C compiler instead
 #   --bootstrap-from-c4: Bootstrap pnut-exe from c4 instead of from pnut-sh.sh
 #   --c4 <path>: Use this prebuilt c4 executable with --bootstrap-from-c4.
-#                Must be statically linked
+#                Must be statically linked.
+#   --arch <arch>: Target architecture of the bootstrap environment:
+#                   - i386 (default)
+#                   - x86_64
 #   --execute-bootstrap: Execute the bootstrap scripts inside the chroot after setup
 #
 # The following options are passed directly to make-jammed.sh and control which
@@ -41,6 +44,7 @@ EXECUTE_BOOTSTRAP=0
 BOOTSTRAP_FROM="shell"
 C4_BINARY=""
 JAMMED_OPTS=""
+BOOTSTRAP_ARCH="i386"
 
 # c4 source, from the kit/bootstrap-C4 submodule.
 readonly C4_SRC="kit/bootstrap-C4/c4-pnut/c4.c"
@@ -68,6 +72,16 @@ while [ $# -gt 0 ]; do
     --c4)
       if [ $# -lt 2 ]; then error "Missing argument for --c4 option."; fi
       C4_BINARY="$2"
+      shift 2
+      ;;
+    --arch)
+      if [ $# -lt 2 ]; then error "Missing argument for --arch option."; fi
+      case "$2" in
+        i386|x86_64) BOOTSTRAP_ARCH="$2" ;;
+        *) error "Unknown architecture: $2 (expected i386 or x86_64)." ;;
+      esac
+      # list-bootstrap-files.sh needs it to pick the files for the right architecture.
+      JAMMED_OPTS="$JAMMED_OPTS $1 $2"
       shift 2
       ;;
     --execute-bootstrap)
@@ -110,6 +124,17 @@ if [ -n "$C4_BINARY" ] && [ ! -x "$C4_BINARY" ]; then
 fi
 
 mkdir -p "$TEMP_DIR"
+
+case "$BOOTSTRAP_ARCH" in
+  i386)
+    readonly PNUT_ARCH="i386_linux"
+    readonly TCC_TARGET_ARCH="I386"
+    ;;
+  x86_64)
+    readonly PNUT_ARCH="x86_64_linux"
+    readonly TCC_TARGET_ARCH="X86_64"
+    ;;
+esac
 
 # The root filesystem has the following structure:
 # - /bin directory with the bootstrap shell
@@ -210,9 +235,17 @@ if [ $SKIP_INITIAL_BOOTSTRAP -eq 1 ]; then
   # Prebuild pnut-exe with the host C compiler to skip the slow shell bootstrap
   echo "Skipping the initial bootstrap by precompiling pnut-exe"
   # MUST BE KEPT IN SYNC WITH kit/bootstrap.sh
-  readonly PNUT_ARCH=i386_linux
   readonly PNUT_EXE_OPTIONS="-Dtarget_$PNUT_ARCH -DONE_PASS_GENERATOR"
-  readonly PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_OPTIONS -DSUPPORT_EMULATED_INT64 -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DNO_BUILTIN_LIBC"
+  PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_OPTIONS -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DNO_BUILTIN_LIBC"
+  if [ "$PNUT_ARCH" = i386_linux ]; then
+    # 64-bit integers are emulated with 32-bit arithmetic on 32-bit targets.
+    PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_TCC_OPTIONS -DSUPPORT_EMULATED_INT64"
+  fi
+  if [ "$TCC_TARGET_ARCH" = X86_64 ]; then
+    # Compiling TCC's x86-64 backend overflows pnut's internal heap and the
+    # default 1MB program size.
+    PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_TCC_OPTIONS -DHEAP_SIZE=$((2000 * 1024)) -DMAX_CODE_SIZE=$((2000 * 1024)) -DPROGRAM_SIZE=$((2000 * 1024))"
+  fi
   "$CC" -std=c99 pnut.c \
     $PNUT_EXE_OPTIONS \
     -o $TEMP_DIR/pnut-exe-by-cc
@@ -222,12 +255,16 @@ if [ $SKIP_INITIAL_BOOTSTRAP -eq 1 ]; then
      -o "$CHROOT_DIR/pnut-exe"
 fi
 
+# The bootstrap shell and the rootfs don't have to match --arch: the shell
+# only runs pnut-sh.sh, which is a compiler written in shell script that emits
+# code for --arch, so a 32-bit shell can produce 64-bit binaries.
+
 if [ $EXECUTE_BOOTSTRAP -eq 1 ]; then
   echo "Executing bootstrap script inside chroot..."
-  sudo chroot "$CHROOT_DIR" /bin/sh -c "sh jammed.sh && INSTALL_EXECS=1 BOOTSTRAP_SHELL=/bin/$SHELL_EXE BOOTSTRAP_FROM=$BOOTSTRAP_FROM sh bootstrap.sh"
+  sudo chroot "$CHROOT_DIR" /bin/sh -c "sh jammed.sh && INSTALL_EXECS=1 BOOTSTRAP_SHELL=/bin/$SHELL_EXE BOOTSTRAP_FROM=$BOOTSTRAP_FROM BOOTSTRAP_ARCH=$BOOTSTRAP_ARCH sh bootstrap.sh"
 else
   echo "You can now chroot into the bootstrap environment at $CHROOT_DIR and run the jammed script:"
   echo "  sudo chroot $CHROOT_DIR /bin/sh"
   echo "  $ sh jammed.sh"
-  echo "  $ INSTALL_EXECS=0 BOOTSTRAP_SHELL=/bin/$SHELL_EXE BOOTSTRAP_FROM=$BOOTSTRAP_FROM sh bootstrap.sh"
+  echo "  $ INSTALL_EXECS=0 BOOTSTRAP_SHELL=/bin/$SHELL_EXE BOOTSTRAP_FROM=$BOOTSTRAP_FROM BOOTSTRAP_ARCH=$BOOTSTRAP_ARCH sh bootstrap.sh"
 fi

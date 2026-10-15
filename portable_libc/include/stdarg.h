@@ -29,11 +29,16 @@ void *__va_arg(__va_list_struct *ap, int arg_type, int size, int align);
 #define va_copy(dest, src) (*(dest) = *(src))
 #define va_end(ap)
 
-#elif defined(PNUT_CC)
+#elif defined(__i386__) || defined(PNUT_CC)
 
 // On 32-bit x86 every argument is passed on the stack, so a pointer into the
 // stack is enough to iterate over the variadic arguments.
-// Pnut uses the same calling convention for x86-64, so this also works there.
+// Pnut uses the same calling convention for x86-64, so this also works there:
+// __i386__ covers TCC and pnut compiling for i386, and PNUT_CC covers pnut
+// compiling for x86-64, where it cannot use the branch above. PNUT_CC is not
+// predefined by pnut, so it has to come from the command line: it is passed
+// when pnut compiles TCC, but not when TCC compiles the libc, which is why
+// __i386__ is needed for the 32-bit case.
 
 typedef char *va_list;
 
