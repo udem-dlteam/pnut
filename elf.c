@@ -4,12 +4,17 @@
 // than the size of the program. In that case, we can set the size to some big
 // value and output the header at the beginning of the compilation process.
 #ifdef ONE_PASS_GENERATOR
-// M2-Planet doesn't support recursive macros, so hard coding MAX_CODE_SIZE here
-// and checking that it's set correctly.
-#if MAX_CODE_SIZE != 1000000
-#error "When using ONE_PASS_GENERATOR, MAX_CODE_SIZE must be 1000000"
-#endif
+// M2-Planet doesn't support recursive macros, so hard coding the program size
+// here (instead of using MAX_CODE_SIZE) and checking that MAX_CODE_SIZE isn't
+// bigger than the size written in the program header. Bootstrapping TCC's
+// x86-64 backend produces executables that are bigger than 1MB, which is why
+// both MAX_CODE_SIZE and PROGRAM_SIZE can be set with -D options.
+#ifndef PROGRAM_SIZE
 #define PROGRAM_SIZE 1000000
+#endif
+#if MAX_CODE_SIZE > PROGRAM_SIZE
+#error "When using ONE_PASS_GENERATOR, MAX_CODE_SIZE must be <= PROGRAM_SIZE"
+#endif
 #else
 #define PROGRAM_SIZE code_alloc
 #endif

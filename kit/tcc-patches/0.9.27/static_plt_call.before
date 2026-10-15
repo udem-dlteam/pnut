@@ -1,0 +1,5 @@
+            if (gotplt_entry == NO_GOTPLT_ENTRY) {
+                continue;
+            }
+
+            /* Automatically create PLT/GOT [entry] if it is an undefined

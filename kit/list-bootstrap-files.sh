@@ -11,6 +11,9 @@
 #   --extract-archives: Extract .tar.gz files instead of passing them to jam.sh
 #   --bootstrap-from-c4: Seed the environment with c4 and cpp.c instead of
 #                        pnut-sh.sh. See BOOTSTRAP_FROM=c4 in kit/bootstrap.sh.
+#   --arch <arch>: Target architecture of the bootstrap environment:
+#                   - i386 (default)
+#                   - x86_64
 
 set -e -u
 
@@ -30,6 +33,7 @@ TCC_VERSION="0.9.27"
 EXTRACT_ARCHIVES=0
 USE_MES_LIBC=0
 BOOTSTRAP_FROM="shell"
+ARCH="i386"
 TCC_OPTIONS="-DONE_SOURCE -DTCC_TARGET_I386"
 
 while [ $# -gt 0 ]; do
@@ -41,14 +45,40 @@ while [ $# -gt 0 ]; do
     --tcc-version)
       if [ $# -lt 2 ]; then error "--tcc-version: missing argument"; fi
       TCC_VERSION="$2";                           shift 2 ;;
+    --arch)
+      if [ $# -lt 2 ]; then error "--arch: missing argument"; fi
+      ARCH="$2"                                   shift 2
+      ;;
     *)               error "Unknown option: $1"           ;;
   esac
 done
 
+case $ARCH in
+  i386)
+    readonly PNUT_ARCH="i386_linux"
+    readonly TCC_TARGET_ARCH="I386"
+    readonly MES_ARCH="x86"
+    ;;
+  x86_64)
+    readonly PNUT_ARCH="x86_64_linux"
+    readonly TCC_TARGET_ARCH="X86_64"
+    readonly MES_ARCH="x86_64"
+    ;;
+  *) error "Unknown architecture: $ARCH (expected i386 or x86_64)";;
+esac
+
+readonly TCC_OPTIONS="-DONE_SOURCE -DTCC_TARGET_$TCC_TARGET_ARCH"
+
 readonly MES_ARCHIVE="kit/mes-0.27.tar.gz"
 readonly MES_ARCHIVE_DIR="$TEMP_DIR/mes-0.27"
-readonly MES_ARCH=x86
 readonly C4_DIR="kit/bootstrap-C4/c4-pnut"
+
+# Checked here as well as in kit/bootstrap.sh: this script is what the command
+# line reaches first, and without it the failure surfaces much later as a
+# missing lib/va_list.c while the archive is being built.
+if [ "$TCC_TARGET_ARCH" = X86_64 ] && [ "$TCC_VERSION" != 0.9.27 ]; then
+  error "The x86-64 backend is only supported with TCC 0.9.27, not $TCC_VERSION."
+fi
 
 if [ $TCC_VERSION = 0.9.27 ]; then
   readonly TCC_ARCHIVE=kit/tcc-0.9.27.tar.gz
@@ -134,7 +164,7 @@ elif [ "$BOOTSTRAP_FROM" = c4 ]; then
 fi
 
 # Add the dependencies of pnut.c for the complete bootstrap
-for dep in $(program_dependencies 'pnut.c' '-Dtarget_i386_linux'); do
+for dep in $(program_dependencies 'pnut.c' "-Dtarget_${PNUT_ARCH}"); do
   add_file_recursive "$dep"
 done
 
@@ -196,6 +226,10 @@ else
   for dep in $deps; do
     add_file_recursive "$dep" "$(strip_path_prefix "$TEMP_DIR/" "$dep")"
   done
+  if [ "$TCC_TARGET_ARCH" = X86_64 ]; then
+    # Not reachable from tcc.c, but goes into libtcc1.a, see kit/bootstrap.sh.
+    add_file_recursive "$TEMP_DIR/$TCC_DIR/lib/va_list.c" "$TCC_DIR/lib/va_list.c"
+  fi
 fi
 
 if [ $USE_MES_LIBC -eq 1 ]; then

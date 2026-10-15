@@ -786,9 +786,8 @@ int hash;
 #define HASH_PARAM 1026
 #define HASH_PRIME 1009
 // Some C implementations place globals on the stack, where size is limited.
-#ifdef SMALL_HEAP
-#define HEAP_SIZE 131072 // 128 KB
-#else
+// The -DHEAP_SIZE=<words> option overrides the default size.
+#ifndef HEAP_SIZE
 #define HEAP_SIZE 786432 // 768 KB
 #endif
 intptr_t *heap;

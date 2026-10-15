@@ -1,0 +1,4 @@
+    /* This definition must be synced with stdarg.h */
+    enum __va_arg_type {
+        __va_gen_reg, __va_float_reg, __va_stack
+    };

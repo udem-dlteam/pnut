@@ -39,6 +39,21 @@ log() {
 : ${BOOTSTRAP_FROM:=shell}  # Seed compiler used to bootstrap pnut-exe: shell or c4
 : ${C4:=./c4}               # c4 interpreter, when BOOTSTRAP_FROM=c4
 : ${C4_CPP:=cpp.c}          # c4-compatible preprocessor, when BOOTSTRAP_FROM=c4
+: ${BOOTSTRAP_ARCH:=i386}   # TCC target architecture to bootstrap: i386 or x86_64
+
+case "$BOOTSTRAP_ARCH" in
+  i386)
+    readonly PNUT_ARCH="i386_linux"
+    readonly TCC_TARGET_ARCH="I386"
+    readonly MES_ARCH="x86"
+    ;;
+  x86_64)
+    readonly PNUT_ARCH="x86_64_linux"
+    readonly TCC_TARGET_ARCH="X86_64"
+    readonly MES_ARCH="x86_64"
+    ;;
+  *) error "Unknown BOOTSTRAP_ARCH value: '$BOOTSTRAP_ARCH' (expected 'i386' or 'x86_64')";;
+esac
 
 # Compilation options that make pnut's source code compatible with c4.
 # MUST BE KEPT IN SYNC WITH the C4_COMPAT variable in the makefile.
@@ -54,9 +69,34 @@ case "$BOOTSTRAP_FROM" in
 esac
 
 # MUST BE KEPT IN SYNC WITH kit/setup-rootfs.sh
-PNUT_ARCH=i386_linux
 PNUT_EXE_OPTIONS="$PNUT_OPTIONS -Dtarget_$PNUT_ARCH -DONE_PASS_GENERATOR"
-PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_OPTIONS -DSUPPORT_EMULATED_INT64 -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DNO_BUILTIN_LIBC"
+PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_OPTIONS -DUNDEFINED_LABELS_ARE_RUNTIME_ERRORS -DENABLE_PNUT_INLINE_INTERRUPT -DNO_BUILTIN_LIBC"
+
+# On 32-bit targets, `long long` is emulated with 32-bit arithmetic, which
+# requires the arith64.c runtime to be linked into the programs that use it.
+case "$PNUT_ARCH" in
+  i386_linux)
+    PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_TCC_OPTIONS -DSUPPORT_EMULATED_INT64"
+    ARITH64_RT="-rt arith64.c"
+    GCC_ARCH_OPTS="-m32"
+    ;;
+  x86_64_*)
+    # 64-bit integers are native, no runtime needed.
+    ARITH64_RT=""
+    GCC_ARCH_OPTS="-m64"
+    ;;
+  *) error "Unknown PNUT_ARCH value: '$PNUT_ARCH' (expected 'i386_linux' or 'x86_64_linux')";;
+esac
+
+# Compiling TCC's x86-64 backend produces a bigger compiler than its i386
+# backend: it overflows pnut's default AST heap and its 1MB program size, so
+# both limits are raised. pnut's heap is in words and the program size in bytes.
+case "$TCC_TARGET_ARCH" in
+  I386)   PNUT_SIZE_OPTS="" ;;
+  X86_64) PNUT_SIZE_OPTS="-DHEAP_SIZE=$((2000 * 1024)) -DMAX_CODE_SIZE=$((2000 * 1024)) -DPROGRAM_SIZE=$((2000 * 1024))" ;;
+  *) error "Unknown TCC_TARGET_ARCH value: '$TCC_TARGET_ARCH' (expected 'I386' or 'X86_64')";;
+esac
+PNUT_EXE_TCC_OPTIONS="$PNUT_EXE_TCC_OPTIONS $PNUT_SIZE_OPTS"
 
 # 1. Unpack jammed.sh (already done)
 # ./jammed.sh
@@ -105,7 +145,7 @@ fi
 # 4. Compile bintools with pnut-exe (named jammed.sh)
 if [ ! -e "bintools" ]; then
   log "Compiling bintools from pnut-exe"
-  ./pnut-exe -D FLAT_INCLUDES -I "./" -rt arith64.c bintools.c bintools-libc.c -o bintools
+  ./pnut-exe -D FLAT_INCLUDES -I "./" $ARITH64_RT bintools.c bintools-libc.c -o bintools
 fi
 
 # 5. Install bintools and pnut-exe
@@ -135,8 +175,6 @@ fi
 ################################ TCC bootstrap #################################
 ################################################################################
 
-TCC_TARGET_ARCH=I386
-
 TCC_0_9_26_PATCHES="
 tccpp.c  array_sizeof
 libtcc.c error_set_jmp_enabled
@@ -158,13 +196,20 @@ tccpp.c   scientific-notation-parser
 libtcc.c  sscanf_TCC_VERSION
 "
 
+# Extra patches needed by TCC's x86-64 backend.
+TCC_X86_64_PATCHES="
+x86_64-gen.c  va_arg_local_enum
+x86_64-gen.c  gfunc_call_vla
+tccelf.c  static_plt_call
+tccelf.c  static_got_reloc
+"
+
 PATCHES_DIR="tcc-patches"
 INCLUDE_PATH="portable_libc/include" # pnut libc
 
 TEMP_DIR="build"
 if [ ! -d "$TEMP_DIR" ]; then ./bintools mkdir -p "$TEMP_DIR"; fi
 
-MES_ARCH=x86
 MES_ARCHIVE=mes-${MES_LIBC_VERSION}.tar.gz
 MES_DIR=mes-${MES_LIBC_VERSION}
 
@@ -187,6 +232,14 @@ elif [ -e "tcc-0.9.26.tar.gz" ] || [ -e "tcc-0.9.26-1147-gee75a10c" ]; then
   TCC_PATCHES="$TCC_0_9_26_PATCHES"
 else
   error "Missing tcc archive or unrecognized version. Supported versions are 0.9.26 and 0.9.27."
+fi
+
+# For x86-64, only TCC 0.9.27 is supported.
+if [ "$TCC_TARGET_ARCH" = X86_64 ]; then
+  if [ "$TCC_VERSION" != 0.9.27 ]; then
+    error "The x86-64 backend is only supported with TCC 0.9.27, not $TCC_VERSION."
+  fi
+  TCC_PATCHES="$TCC_PATCHES $TCC_X86_64_PATCHES"
 fi
 
 if [ -e "$TCC_ARCHIVE" ]; then
@@ -239,6 +292,43 @@ if [ -e "mes-0.27" ]; then
   ./bintools cp $MES_DIR/include/linux/${MES_ARCH}/signal.h $MES_DIR/include/arch/signal.h
   ./bintools cp $MES_DIR/include/linux/${MES_ARCH}/syscall.h $MES_DIR/include/arch/syscall.h
 
+  # Mes' stdarg.h only works with the cdecl calling convention, which is used by
+  # TCC's i386 backend. The x86-64 backend uses the System V AMD64 ABI, which
+  # passes some of the first arguments in registers. Overwrite Mes' stdarg.h
+  # with TCC's own stdarg.h when bootstrapping TCC x86-64, keeping its va_arg8
+  # macro and its vexec declaration, and moving the v*printf and v*scanf
+  # prototypes to stdio.h, where they belong.
+  if [ "$BOOTSTRAP_ARCH" = x86_64 ]; then
+    log "Replacing $MES_DIR/include/stdarg.h with the TCC header"
+    ./bintools cp portable_libc/include/stdarg.h "$MES_DIR/include/stdarg.h"
+    # Two things have to come back: va_arg8, which reads an argument as a
+    # double, and vexec, whose only declaration anywhere in Mes was in the
+    # header just replaced -- and which has to stay reachable through
+    # <stdarg.h>, because lib/posix/execl.c and execlp.c include that and not
+    # <stdio.h>.
+    printf '%s\n' \
+      '#define va_arg8(ap, type) va_arg (ap, type)' \
+      'int vexec (char const *file_name, va_list ap);' \
+      >> "$MES_DIR/include/stdarg.h"
+
+    # The v*printf and v*scanf prototypes were in the header just replaced,
+    # which is an odd home for them; stdio.h declares the variants that take
+    # "..." but not these, and is what lib/stdio/*.c includes, so that is where
+    # they go back. <stdarg.h> is for va_list: Mes's stdio.h does not include
+    # it, which is also why a program including only <stdio.h> never sees
+    # va_list. size_t comes with stdio.h, so <sys/types.h> is no longer needed.
+    log "Declaring the v*printf and v*scanf functions in $MES_DIR/include/stdio.h"
+    printf '%s\n' \
+      '#include <stdarg.h>' \
+      'int vfprintf (FILE * stream, char const *template, va_list ap);' \
+      'int vfscanf (FILE * stream, char const *template, va_list ap);' \
+      'int vprintf (char const *format, va_list ap);' \
+      'int vsprintf (char *str, char const *format, va_list ap);' \
+      'int vsnprintf (char *str, size_t size, char const *format, va_list ap);' \
+      'int vsscanf (char const *s, char const *template, va_list ap);' \
+      >> "$MES_DIR/include/stdio.h"
+  fi
+
   # Create empty config.h
   printf "\n" > ${MES_DIR}/include/mes/config.h
 
@@ -262,7 +352,7 @@ make_tcc_bootstrap() { # $1: C compiler to use, $2: additional options
   case "$TCC_CC" in
     *pnut-exe*)
       EXTRA_OPTS="              \
-      -rt arith64.c             \
+      $ARITH64_RT               \
       -I portable_libc/include/ \
       portable_libc/libc.c      \
       "
@@ -306,7 +396,7 @@ if [ $USE_GCC -eq 0 ]; then
     pnut.c                          \
     $PNUT_EXE_TCC_OPTIONS           \
     -DSAFE_MODE                     \
-    -rt arith64.c                   \
+    $ARITH64_RT                     \
     -I portable_libc/include/       \
     portable_libc/libc.c            \
     -o "$TEMP_DIR/pnut-exe-for-tcc"
@@ -316,7 +406,7 @@ else
   # To confirm that the result isn't totally wrong, we can check that the
   # executable is the same as the one we would get with gcc. Assuming that the
   # system has a working gcc.
-  make_tcc_bootstrap "$CC -m32 -std=c99" ""
+  make_tcc_bootstrap "$CC $GCC_ARCH_OPTS -std=c99" ""
 fi
 
 # No need to revert patches, because the ones that are applied all keep the
@@ -369,7 +459,14 @@ go() { # $1: previous compiler, $2: name of new compiler, $3: lib path (= $2 if 
 
   # libtcc1.a
   $PREV_CC -c -o "$LIB_PATH/libtcc1.o" kit/libtcc1.c
-  $PREV_CC -ar cr "$LIB_PATH/tcc/libtcc1.a" "$LIB_PATH/libtcc1.o"
+  if [ "$TCC_TARGET_ARCH" = X86_64 ]; then
+    # TCC's x86-64 backend implements __va_start/__va_arg in lib/va_list.c and
+    # upstream puts that object in libtcc1.a too (see lib/Makefile, OBJ-x86_64).
+    $PREV_CC -c -o "$LIB_PATH/va_list.o" "$TCC_DIR/lib/va_list.c"
+    $PREV_CC -ar cr "$LIB_PATH/tcc/libtcc1.a" "$LIB_PATH/libtcc1.o" "$LIB_PATH/va_list.o"
+  else
+    $PREV_CC -ar cr "$LIB_PATH/tcc/libtcc1.a" "$LIB_PATH/libtcc1.o"
+  fi
 
   # We can now compile tcc-$NEW_CC
   $PREV_CC \

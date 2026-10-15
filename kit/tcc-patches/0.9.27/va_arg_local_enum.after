@@ -1,0 +1,11 @@
+    /* This definition must be synced with stdarg.h */
+#ifdef PNUT_CC
+    /* pnut doesn't support enum declarations in function bodies */
+    #define __va_gen_reg 0
+    #define __va_float_reg 1
+    #define __va_stack 2
+#else
+    enum __va_arg_type {
+        __va_gen_reg, __va_float_reg, __va_stack
+    };
+#endif

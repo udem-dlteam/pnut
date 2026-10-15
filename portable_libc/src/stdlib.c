@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define HEAP_SIZE 26214400 // 25 MB heap size
+#ifndef LIBC_HEAP_SIZE
+#define LIBC_HEAP_SIZE 26214400 // 25 MB heap size
+#endif
 
 // TCC defines malloc, free and realloc as macros in libtcc.c which conflicts
 // with our definitions here. This wouldn't be a problem if the libc was
@@ -14,7 +16,7 @@
 #error "malloc, free and realloc are already defined"
 #endif
 
-char _heap[HEAP_SIZE];
+char _heap[LIBC_HEAP_SIZE];
 int _heap_alloc = 0;
 
 void *malloc(size_t size) {
@@ -23,7 +25,7 @@ void *malloc(size_t size) {
   size += sizeof(size_t); // size + size_t (for size)
   char *result = _heap + _heap_alloc;
   _heap_alloc += size;
-  if (_heap_alloc > HEAP_SIZE) {
+  if (_heap_alloc > LIBC_HEAP_SIZE) {
     return 0; // out of memory
   }
   *((size_t*)result) = size; // store size
@@ -217,6 +219,11 @@ unsigned long strtoul(const char *str, char **endptr, int base) {
 
 int atoi(const char *str) {
   return strtol(str, 0, 10);
+}
+
+void abort() {
+  pnut_abort("abort\n");
+  exit(1); // Not reached, but pnut_abort may return in some configurations
 }
 
 char *getenv(const char *name) {
