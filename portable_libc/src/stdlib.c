@@ -221,6 +221,11 @@ int atoi(const char *str) {
   return strtol(str, 0, 10);
 }
 
+void abort() {
+  pnut_abort("abort\n");
+  exit(1); // Not reached, but pnut_abort may return in some configurations
+}
+
 char *getenv(const char *name) {
   return 0; /*TODO*/
 }
