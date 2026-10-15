@@ -20,11 +20,13 @@ void exit(int status) {
   __asm__ (
     "mov   $1, %%eax\n"  /* 1 = SYS_EXIT */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
-    : : "b" (status)
+    : : "b" (status) : "eax"
   );
   while (1) ; /* avoid noreturn warning */
 }
 
+/* Reads argc and argv from the stack relative to %ebp: this requires the
+   compiler to set up a frame pointer (i.e. not to use -fomit-frame-pointer). */
 void _start() {
   int argc;
   char **argv;
@@ -84,7 +86,7 @@ int close(int fd) {
 off_t lseek(int fd, off_t offset, int whence) {
   off_t result;
   __asm__ (
-    "mov   $19, %%eax\n"  /* 8 = SYS_LSEEK */
+    "mov   $19, %%eax\n"  /* 19 = SYS_LSEEK */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
     : "=a" (result) : "b" (fd), "c" (offset), "d" (whence)
   );
@@ -132,12 +134,16 @@ int access(const char *pathname, int amode) {
 }
 
 char *_getcwd(char *buf, size_t size) {
-  char *result;
+  int result;
   __asm__ (
-    "mov   $183, %%eax\n"  /* 79 = SYS_GETCWD */
+    "mov   $183, %%eax\n"  /* 183 = SYS_GETCWD */
     ".byte 0xcd,0x80\n"  /* int 0x80 (system call) */
     : "=a" (result) : "b" (buf), "c" (size)
   );
+  if (result < 0) return 0;
+  return buf;
+}
+
   return result;
 }
 
