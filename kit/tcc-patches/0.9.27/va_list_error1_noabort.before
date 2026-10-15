@@ -1,0 +1,6 @@
+    va_start(ap, fmt);
+    error1(s1, 0, fmt, ap);
+    va_end(ap);
+}
+
+PUB_FUNC void tcc_error(const char *fmt, ...)

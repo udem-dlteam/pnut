@@ -1,0 +1,1 @@
+    strcat_vprintf(buf, buf_size, fmt, ap);

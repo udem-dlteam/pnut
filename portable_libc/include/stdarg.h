@@ -29,6 +29,36 @@ void *__va_arg(__va_list_struct *ap, int arg_type, int size, int align);
 #define va_copy(dest, src) (*(dest) = *(src))
 #define va_end(ap)
 
+#define _VA_LIST_TYPE va_list
+#define _VA_PASS(ap) (ap)
+#define _VA_ARG(ap, type) va_arg(ap, type)
+
+#elif defined(__aarch64__)
+
+/* Taken from TCC 0.9.27's include/stdarg.h. The aarch64 backend implements
+   __va_start and __va_arg itself (arm64-gen.c's gen_va_start/gen_va_arg),
+   writing this exact layout, so the struct must not be changed. */
+
+typedef struct {
+    void *__stack;
+    void *__gr_top;
+    void *__vr_top;
+    int   __gr_offs;
+    int   __vr_offs;
+} va_list;
+
+#define va_start(ap, last) __va_start(ap, last)
+#define va_arg(ap, type) __va_arg(ap, type)
+#define va_end(ap)
+#define va_copy(dest, src) ((dest) = (src))
+
+/* TCC's aarch64 backend doesn't support struct arguments (arm64_pcs asserts)
+   and va_list is a struct here, so functions that forward a va_list take a
+   pointer to it. The macros below let the same code work on both targets. */
+#define _VA_LIST_TYPE va_list *
+#define _VA_PASS(ap) (&(ap))
+#define _VA_ARG(ap, type) __va_arg(*(ap), type)
+
 #elif defined(__i386__) || defined(PNUT_CC)
 
 // On 32-bit x86 every argument is passed on the stack, so a pointer into the
@@ -49,6 +79,11 @@ typedef char *va_list;
 #define va_arg(ap,type) (ap += va_word_align(sizeof(type)), *(type *)(ap - va_word_align(sizeof(type))))
 #define va_end(ap)
 #define va_copy(d,s) ((d) = (s))
+
+/* On targets where va_list is a plain value, it is passed around as is. */
+#define _VA_LIST_TYPE va_list
+#define _VA_PASS(ap) (ap)
+#define _VA_ARG(ap, type) va_arg(ap, type)
 
 #else
 

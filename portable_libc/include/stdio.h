@@ -51,13 +51,16 @@ int fseek( FILE* stream, long offset, int origin );
 long ftell( FILE* stream );
 int remove(const char *_Filename);
 
-int vfprintf(FILE *stream, const char *format, va_list ap);
+/* The v*printf functions take the va_list through a pointer on targets where
+   it is a struct that can't be passed by value (see _VA_LIST_TYPE). */
+int vprintf(const char *format, _VA_LIST_TYPE ap);
+int vfprintf(FILE *stream, const char *format, _VA_LIST_TYPE ap);
 int fprintf(FILE *stream, const char *format, ...);
 int printf(const char *format, ...);
 int fflush(FILE *stream);
 int sscanf(const char *str, const char *format, ...);
 
-int vsnprintf(char *str, size_t size, const char *format, va_list ap);
+int vsnprintf(char *str, size_t size, const char *format, _VA_LIST_TYPE ap);
 int snprintf(char *str, size_t size, const char *format, ...);
 int sprintf(char *str, const char *format, ...);
 

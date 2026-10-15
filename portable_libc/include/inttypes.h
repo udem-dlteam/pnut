@@ -11,7 +11,7 @@ typedef int int32_t;
 typedef unsigned long long uint64_t;
 typedef long long int64_t;
 
-#if __x86_64__
+#if __x86_64__ || __aarch64__
 typedef unsigned long long uintptr_t;
 #elif __i386__
 typedef unsigned int uintptr_t;

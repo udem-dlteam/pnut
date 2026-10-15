@@ -227,7 +227,7 @@ char *_int_to_str(int n, int base, int width, int force_0, int force_plus, int l
   return out;
 }
 
-int vfprintf(FILE *stream, const char *format, va_list ap) {
+int vfprintf(FILE *stream, const char *format, _VA_LIST_TYPE ap) {
 
   char c;
   int result = 0;
@@ -263,13 +263,13 @@ int vfprintf(FILE *stream, const char *format, va_list ap) {
         c = *format++;
       }
       if (c == 'c') {
-        fputc(va_arg(ap, int), stream);
+        fputc(_VA_ARG(ap, int), stream);
         result += 1;
       } else if (c == 'd' || c == 'u' || c == 'o' || c == 'x') {
         base = c == 'x' ? 16 : c == 'o' ? 8 : 10;
-        result += _fputstr(_int_to_str(va_arg(ap, int), base, width, force_0, force_sign, left_justify), stream);
+        result += _fputstr(_int_to_str(_VA_ARG(ap, int), base, width, force_0, force_sign, left_justify), stream);
       } else if (c == 's') {
-        result += _fputstr(va_arg(ap, char*), stream);
+        result += _fputstr(_VA_ARG(ap, char*), stream);
       } else {
         fputc('?', stream);
         fputc('?', stream);
@@ -291,13 +291,13 @@ int fprintf(FILE *stream, const char *format, ...) {
   int result;
 
   va_start(ap, format);
-  result = vfprintf(stream, format, ap);
+  result = vfprintf(stream, format, _VA_PASS(ap));
   va_end(ap);
 
   return result;
 }
 
-int vprintf(const char *format, va_list ap) {
+int vprintf(const char *format, _VA_LIST_TYPE ap) {
   return vfprintf(stdout, format, ap);
 }
 
@@ -307,13 +307,13 @@ int printf(const char *format, ...) {
   int result;
 
   va_start(ap, format);
-  result = vfprintf(stdout, format, ap);
+  result = vfprintf(stdout, format, _VA_PASS(ap));
   va_end(ap);
 
   return result;
 }
 
-int vsnprintf(char *str, size_t size, const char *format, va_list ap) {
+int vsnprintf(char *str, size_t size, const char *format, _VA_LIST_TYPE ap) {
 
   int result;
 
@@ -333,7 +333,7 @@ int snprintf(char *str, size_t size, const char *format, ...) {
   int result;
 
   va_start(ap, format);
-  result = vsnprintf(str, size, format, ap);
+  result = vsnprintf(str, size, format, _VA_PASS(ap));
   va_end(ap);
 
   return result;
@@ -345,7 +345,7 @@ int sprintf(char *str, const char *format, ...) {
   int result;
 
   va_start(ap, format);
-  result = vsnprintf(str, 999999999, format, ap);
+  result = vsnprintf(str, 999999999, format, _VA_PASS(ap));
   va_end(ap);
 
   return result;

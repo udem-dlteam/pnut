@@ -1,0 +1,2 @@
+static void error1(TCCState *s1, int is_warning, const char *fmt,
+                   _VA_LIST_TYPE ap)

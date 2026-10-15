@@ -1,0 +1,17 @@
+/* On targets where va_list is a struct that cannot be passed by value, the
+   pnut libc's v*printf functions take a pointer to it and advertise it with
+   _VA_LIST_TYPE (see portable_libc/include/stdarg.h): TCC's aarch64 backend
+   asserts on struct arguments, and its va_list is a 40 byte struct. Every other
+   libc, and every other TCC target, passes va_list by value. */
+#ifndef _VA_LIST_TYPE
+# define _VA_LIST_TYPE va_list
+# define _VA_PASS(ap) (ap)
+#endif
+
+static void strcat_vprintf(char *buf, int buf_size, const char *fmt,
+                           _VA_LIST_TYPE ap)
+{
+    int len;
+    len = strlen(buf);
+    vsnprintf(buf + len, buf_size - len, fmt, ap);
+}

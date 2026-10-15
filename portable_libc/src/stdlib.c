@@ -94,9 +94,40 @@ float strtof(const char *str, char **endptr) {
   return (float) strtod(str, endptr);
 }
 
+#ifdef __aarch64__
+/* aarch64's long double is IEEE binary128, and converting a double to it
+   normally calls the soft-float helper __extenddftf2, which upstream gets from
+   libgcc and libtcc1.a for arm64 doesn't provide. A double -> binary128
+   conversion is only an exponent rebias and a mantissa shift, so do it with
+   integer arithmetic: binary128 is {sign:1, exponent:15, mantissa:112}. */
+long double strtold(const char *str, char **endptr) {
+  long double r;
+  unsigned long long *w = (unsigned long long *) &r;
+  union { double d; unsigned long long u; } v;
+  unsigned long long s, e, sig;
+
+  v.d = strtod(str, endptr);
+  s = v.u >> 63;
+  e = (v.u >> 52) & 0x7ff;
+  sig = (1ULL << 52) | (v.u & 0xfffffffffffffULL);
+
+  if (e == 0x7ff) { /* infinity, or a NaN with a propagated mantissa */
+    w[0] = v.u << 61;
+    w[1] = (s << 63) | (0x7fffULL << 48) | (v.u >> 5);
+  } else if (e == 0) { /* zero (denormals are flushed to zero) */
+    w[0] = 0;
+    w[1] = s << 63;
+  } else {
+    w[0] = (sig & 31) << 59;
+    w[1] = (s << 63) | ((e + (16383 - 1023)) << 48) | (sig >> 5);
+  }
+  return r;
+}
+#else
 long double strtold(const char *str, char **endptr) {
   return (long double) strtod(str, endptr);
 }
+#endif
 
 unsigned long long strtoull(const char *str, char **endptr, int base) {
   unsigned long long n = 0;

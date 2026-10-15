@@ -292,6 +292,118 @@ char *_getcwd(char *buf, size_t size) {
   return buf;
 }
 
+#elif defined(__aarch64__)
+
+/* This implementation assumes the OS is linux */
+
+/* aarch64 Linux syscall convention:
+    x8 = syscall number
+    x0-x5 = arguments 1-6
+    svc #0
+    return value in x0
+
+   TCC's aarch64 backend has no inline assembly support (its assembler is only
+   implemented for i386/x86-64/arm), and the data segment of the ELF files it
+   produces is not executable. The trampoline below is therefore raw aarch64
+   machine code, put in the text section with a section attribute so that it
+   can be called through a function pointer. */
+
+typedef long (*syscall_fn)(long, long, long, long, long, long, long);
+
+__attribute__((section(".text")))
+static const unsigned int syscall_tramp[9] = {
+  0xaa0003e8, /* mov x8, x0    syscall number */
+  0xaa0103e0, /* mov x0, x1    argument 1 */
+  0xaa0203e1, /* mov x1, x2    argument 2 */
+  0xaa0303e2, /* mov x2, x3    argument 3 */
+  0xaa0403e3, /* mov x3, x4    argument 4 */
+  0xaa0503e4, /* mov x4, x5    argument 5 */
+  0xaa0603e5, /* mov x5, x6    argument 6 */
+  0xd4000001, /* svc #0 */
+  0xd65f03c0, /* ret */
+};
+
+/* The syscall number comes first and the trampoline shifts the arguments down
+   by one register, so that a syscall never needs more than 6 arguments. */
+static long syscall6(long n, long a1, long a2, long a3, long a4, long a5) {
+  return ((syscall_fn) &syscall_tramp[0])(n, a1, a2, a3, a4, a5, 0);
+}
+
+#define AT_FDCWD (-100)
+
+void exit(int status) {
+  syscall6(93 /* __NR_exit */, status, 0, 0, 0, 0);
+  while (1) ; /* avoid noreturn warning */
+}
+
+/* Every function that TCC generates starts by pushing x29/x30 and reserving
+   the 224 byte register save area used by va_start (see gfunc_prolog in
+   arm64-gen.c), so the stack pointer at function entry is always
+   __builtin_frame_address(0) + 224. When the process starts, the kernel puts
+   argc at that address, followed by argv. */
+void _start() {
+  int argc;
+  char **argv;
+  long *entry_sp = (long *) ((char *) __builtin_frame_address(0) + 224);
+  argc = (int) entry_sp[0];
+  argv = (char **) &entry_sp[1];
+  exit(main(argc, argv));
+}
+
+ssize_t read(int fd, void *buf, size_t count) {
+  return syscall6(63 /* __NR_read */, fd, (long) buf, (long) count, 0, 0);
+}
+
+ssize_t write(int fd, void *buf, size_t count) {
+  return syscall6(64 /* __NR_write */, fd, (long) buf, (long) count, 0, 0);
+}
+
+int open(const char *pathname, int flags, ...) {
+  /* aarch64 has no open syscall, only openat, and the mode is optional. */
+  va_list ap;
+  long mode = 0;
+  va_start(ap, flags);
+  mode = va_arg(ap, int);
+  va_end(ap);
+  return syscall6(56 /* __NR_openat */, AT_FDCWD, (long) pathname, flags,
+                  mode, 0);
+}
+
+int close(int fd) {
+  return syscall6(57 /* __NR_close */, fd, 0, 0, 0, 0);
+}
+
+off_t lseek(int fd, off_t offset, int whence) {
+  return syscall6(62 /* __NR_lseek */, fd, (long) offset, whence, 0, 0);
+}
+
+/* aarch64 only has the *at() variants of these system calls, which all take
+   a directory file descriptor as their first argument. */
+
+int unlink(const char *pathname) {
+  return syscall6(35 /* __NR_unlinkat */, AT_FDCWD, (long) pathname, 0, 0, 0);
+}
+
+int mkdir(const char *pathname, mode_t mode) {
+  return syscall6(34 /* __NR_mkdirat */, AT_FDCWD, (long) pathname, mode, 0, 0);
+}
+
+int chmod(const char *pathname, mode_t mode) {
+  return syscall6(53 /* __NR_fchmodat */, AT_FDCWD, (long) pathname, mode, 0, 0);
+}
+
+int access(const char *pathname, int amode) {
+  return syscall6(48 /* __NR_faccessat */, AT_FDCWD, (long) pathname, amode, 0, 0);
+}
+
+char *_getcwd(char *buf, size_t size) {
+  /* The getcwd system call returns the length of the path on success, or a
+     negative error code on failure, not the buffer itself. */
+  long result = syscall6(17 /* __NR_getcwd */, (long) buf, (long) size, 0, 0, 0);
+  if (result < 0) return 0;
+  return buf;
+}
+
 #else
 
 #error Unsupported architecture
