@@ -764,9 +764,9 @@ enum TOKEN {
                          // token lists of expanded macro arguments, where it prevents the token
                          // from being expanded a second time. Do not reload the kind of the
                          // ident, and do not expand it.
-  MACRO_ARG_END = 498, // Sentinel appended to the tokens of a macro argument that is being
-                       // expanded, so we know when the expansion is over.  Internal to the
-                       // preprocessor, it never escapes to the parser.
+  MACRO_ARG_END = 498, // Sentinel token that marks the end of the tokens of a macro argument
+                       // that is being expanded, so we know when the expansion is over. Internal
+                       // to the preprocessor, it never escapes to the parser.
   MACRO_ARG = 499,
   IDENTIFIER = 500, // 500 because it's easy to remember
   TYPE = 501,
@@ -1303,7 +1303,11 @@ bool collecting_macro_tokens = false;
 // Don't produce newline tokens. Used when reading the tokens of a macro definition.
 bool skip_newlines = true;
 
-#define MACRO_RECURSION_MAX 180 // Supports up to 60 (180 / 3) nested macro expansions.
+// Each macro expansion uses 3 entries, and expanding the argument of a macro uses one more entry
+// while the argument is expanded, so a macro that is called in the argument of another macro
+// costs 6 entries: the nesting below is how deep such calls can be. This is 2.4 KB with 4 byte
+// ints, and gcc's preprocessor handles deeper calls than that without a fixed limit.
+#define MACRO_RECURSION_MAX 600 // Supports up to 100 (600 / 6) nested macro expansions like that.
 int *macro_stack;
 int macro_stack_ix = 0;
 
@@ -2783,33 +2787,10 @@ bool macro_is_already_expanding(int ident) {
   return false;
 }
 
-// Copies the tokens of a macro argument, and appends the MACRO_ARG_END sentinel at the end of
-// the copy. The sentinel is needed because get_tok pops the macro expansion frames by itself
-// when it reaches the end of a token list: without it, expanding an argument would keep
-// expanding whatever comes after the argument.
-int copy_macro_arg_tokens(int tokens) {
-  int copy = 0;
-  int rest;
-
-  while (tokens != 0) {
-    if (copy == 0) {
-      copy = cons(cons(car(car(tokens)), cdr(car(tokens))), 0);
-      rest = copy;
-    } else {
-      set_cdr(rest, cons(cons(car(car(tokens)), cdr(car(tokens))), 0));
-      rest = cdr(rest);
-    }
-    tokens = cdr(tokens);
-  }
-
-  if (copy == 0) {
-    copy = cons(cons(MACRO_ARG_END, 0), 0);
-  } else {
-    set_cdr(rest, cons(cons(MACRO_ARG_END, 0), 0));
-  }
-
-  return copy;
-}
+// The one-token list with the MACRO_ARG_END sentinel. It is installed in the saved token list of
+// the macro expansion frame of a macro argument, so that get_tok returns it when the tokens of
+// the argument are all expanded. Allocated once, and never modified.
+int macro_arg_end_token_lst = 0;
 
 // Expands the tokens of a macro argument. As described in
 // https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html
@@ -2818,13 +2799,16 @@ int copy_macro_arg_tokens(int tokens) {
 // that is being called is not hidden yet. This is what allows a macro to appear in its own
 // argument, as in `f(f(1))`.
 //
-// The expansion is driven by get_tok, replaying the tokens of the argument in a new macro
-// expansion frame. That frame is anonymous, and the ident of the macro whose argument is
-// expanded (saved on the macro stack by begin_macro_expansion) is cleared, so that the macros
-// hidden during the expansion are exactly the macros that are being expanded at the call site.
-// The frames pushed by the expansion are popped by hand at the end, because the expansion may
-// leave an extra frame behind when undo_token pushes back a token (a function-like macro at the
-// end of an argument is not expanded, since there is no `(` after it in the argument).
+// The expansion is driven by get_tok, replaying the tokens of the argument in a new anonymous
+// macro expansion frame. The ident of the macro whose argument is expanded (saved on the macro
+// stack by begin_macro_expansion) is cleared, so that the macros hidden during the expansion are
+// exactly the macros that are being expanded at the call site. And the token list that
+// return_to_parent_macro restores when this frame runs out of tokens is replaced by a one-token
+// list with the MACRO_ARG_END sentinel: without it, the expansion would resume the macro whose
+// argument is expanded instead of stopping at the end of the argument.
+// The frame is popped by hand at the end, because the expansion may leave it behind when
+// undo_token pushes back a token (a function-like macro at the end of an argument is not
+// expanded, since there is no `(` after it in the argument).
 int expand_macro_arg_tokens(int tokens) {
   int baseline                     = macro_stack_ix;
   int owner_tok_lst                = macro_tok_lst;
@@ -2837,10 +2821,13 @@ int expand_macro_arg_tokens(int tokens) {
 
   if (tokens == 0) return 0; // An empty argument expands to nothing
 
+  if (macro_arg_end_token_lst == 0) macro_arg_end_token_lst = cons(cons(MACRO_ARG_END, 0), 0);
+
   expand_macro = true;
   collecting_macro_tokens = true;
-  begin_macro_expansion(0, copy_macro_arg_tokens(tokens), 0);
+  begin_macro_expansion(0, tokens, 0);
   macro_stack[baseline + 2] = 0; // The macro whose argument is expanded is not hidden at the call site
+  macro_stack[baseline]     = macro_arg_end_token_lst; // End the expansion when the argument is done
 
   while (1) {
     get_tok();
@@ -2860,6 +2847,7 @@ int expand_macro_arg_tokens(int tokens) {
   expand_macro                = prev_expand_macro;
   collecting_macro_tokens     = prev_collecting_macro_tokens;
   macro_stack_ix = baseline;
+  macro_stack[baseline] = owner_tok_lst; // Undo the MACRO_ARG_END sentinel put in the saved slot
   macro_tok_lst  = owner_tok_lst;
   macro_args     = owner_args;
   macro_ident    = owner_ident;

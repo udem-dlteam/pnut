@@ -19,6 +19,12 @@ int v = 1;
 #define TWICE(z) ((z) + (z))
 #define ADD(a, b) ((a) + (b))
 #define SWAP_ADD(a, b) ADD(b, a)
+#define ID(z) (z)
+
+// A chain of `ID` calls that are each the argument of the next one. Each level is
+// expanded at its own call site and costs 6 entries of the macro stack (see
+// MACRO_RECURSION_MAX), so this checks that an argument expansion does not use up
+// more than the frame of the expansion itself.
 
 void putdigit(int n) {
   putchar('0' + n);
@@ -34,4 +40,5 @@ void main() {
   putdigit(TWICE(TWICE(1)));       //                   = 4
   putdigit(ADD(INC(1), INC(2)));   // 2 + 3             = 5
   putdigit(SWAP_ADD(1, TWICE(2))); // 4 + 1             = 5
+  putdigit(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(ID(7)))))))))))))))))))))))))))))))));                     // 32 levels deep     = 7
 }
