@@ -761,6 +761,9 @@ enum TOKEN {
   DECLS,
   FUN_DECL,
   CAST,
+  MACRO_ARG_END = 498, // Sentinel appended to the tokens of a macro argument that is being
+                       // expanded, so we know when the expansion is over.  Internal to the
+                       // preprocessor, it never escapes to the parser.
   MACRO_ARG = 499,
   IDENTIFIER = 500, // 500 because it's easy to remember
   TYPE = 501,
@@ -2663,6 +2666,10 @@ void check_macro_arity(int macro_args_count, int macro) {
 // Reads the arguments of a macro call, where the arguments are split by commas.
 // Note that args are accumulated in reverse order, as the macro arguments refer
 // to the tokens in reverse order.
+// Each argument is a (raw tokens, expanded tokens) pair.  The raw tokens are the tokens of the
+// argument as they appear in the source, and are used for the `#` and `##` operators.  The
+// expanded tokens are the result of expanding the argument, and are computed on first use (and
+// then reused, so that an argument that is used several times is expanded only once).
 int get_macro_args_toks(int macro) {
   int args = 0;
   int macro_args_count = 0;
@@ -2673,7 +2680,7 @@ int get_macro_args_toks(int macro) {
     if (tok == ',') {
       get_tok_macro(false); // Skip comma
       if (prev_is_comma) { // Push empty arg
-        args = cons(0, args);
+        args = cons(cons(0, 0), args);
         ++macro_args_count;
       }
       prev_is_comma = true;
@@ -2682,14 +2689,14 @@ int get_macro_args_toks(int macro) {
       prev_is_comma = false;
     }
 
-    args = cons(macro_parse_argument(), args);
+    args = cons(cons(macro_parse_argument(), 0), args);
     ++macro_args_count;
   }
 
   if (tok != ')') parse_error("unterminated macro argument list", tok);
 
   if (prev_is_comma) {
-    args = cons(0, args); // Push empty arg
+    args = cons(cons(0, 0), args); // Push empty arg
     ++macro_args_count;
   }
 
@@ -2698,14 +2705,22 @@ int get_macro_args_toks(int macro) {
   return args;
 }
 
-int get_macro_arg(int ix) {
+// Returns the (raw tokens, expanded tokens) pair of the `ix`th argument of the macro being
+// expanded.
+int get_macro_arg_pair(int ix) {
   int arg = macro_args;
   while (ix > 0) {
     if (arg == 0) fatal_error("get_macro_arg: argument index out of range");
     arg = cdr(arg);
     --ix;
   }
+  if (arg == 0) fatal_error("get_macro_arg: argument index out of range");
   return car(arg);
+}
+
+// Returns the tokens of the `ix`th argument, as they appear in the source (without expansion).
+int get_macro_arg(int ix) {
+  return car(get_macro_arg_pair(ix));
 }
 
 // "Pops" the current macro expansion and restores the previous macro expansion context.
@@ -2754,6 +2769,103 @@ bool macro_is_already_expanding(int ident) {
   return false;
 }
 #endif
+
+// Copies the tokens of a macro argument, and appends the MACRO_ARG_END sentinel at the end of
+// the copy. The sentinel is needed because get_tok pops the macro expansion frames by itself
+// when it reaches the end of a token list: without it, expanding an argument would keep
+// expanding whatever comes after the argument.
+int copy_macro_arg_tokens(int tokens) {
+  int copy = 0;
+  int rest;
+
+  while (tokens != 0) {
+    if (copy == 0) {
+      copy = cons(cons(car(car(tokens)), cdr(car(tokens))), 0);
+      rest = copy;
+    } else {
+      set_cdr(rest, cons(cons(car(car(tokens)), cdr(car(tokens))), 0));
+      rest = cdr(rest);
+    }
+    tokens = cdr(tokens);
+  }
+
+  if (copy == 0) {
+    copy = cons(cons(MACRO_ARG_END, 0), 0);
+  } else {
+    set_cdr(rest, cons(cons(MACRO_ARG_END, 0), 0));
+  }
+
+  return copy;
+}
+
+// Expands the tokens of a macro argument. As described in
+// https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html
+// the arguments of a macro call are completely macro-expanded before being substituted in the
+// replacement list, and this expansion is done at the *call site*, where the name of the macro
+// that is being called is not hidden yet. This is what allows a macro to appear in its own
+// argument, as in `f(f(1))`.
+//
+// The expansion is driven by get_tok, replaying the tokens of the argument in a new macro
+// expansion frame. That frame is anonymous, and the ident of the macro whose argument is
+// expanded (saved on the macro stack by begin_macro_expansion) is cleared, so that the macros
+// hidden during the expansion are exactly the macros that are being expanded at the call site.
+// The frames pushed by the expansion are popped by hand at the end, because the expansion may
+// leave an extra frame behind when undo_token pushes back a token (a function-like macro at the
+// end of an argument is not expanded, since there is no `(` after it in the argument).
+int expand_macro_arg_tokens(int tokens) {
+  int baseline           = macro_stack_ix;
+  int owner_tok_lst      = macro_tok_lst;
+  int owner_args         = macro_args;
+  int owner_ident        = macro_ident;
+  int prev_expand_macro  = expand_macro;
+  int expanded = 0;
+  int rest;
+
+  if (tokens == 0) return 0; // An empty argument expands to nothing
+
+  expand_macro = true;
+  begin_macro_expansion(0, copy_macro_arg_tokens(tokens), 0);
+  macro_stack[baseline + 2] = 0; // The macro whose argument is expanded is not hidden at the call site
+
+  while (1) {
+    get_tok();
+    if (tok == MACRO_ARG_END) break;
+    if (tok == EOF) fatal_error("internal error: unexpected end of file while expanding a macro argument");
+
+    if (expanded == 0) {
+      expanded = cons(cons(tok, val), 0);
+      rest = expanded;
+    } else {
+      set_cdr(rest, cons(cons(tok, val), 0));
+      rest = cdr(rest);
+    }
+  }
+
+  // Restore the macro expansion context of the macro whose argument was expanded
+  expand_macro   = prev_expand_macro;
+  macro_stack_ix = baseline;
+  macro_tok_lst  = owner_tok_lst;
+  macro_args     = owner_args;
+  macro_ident    = owner_ident;
+
+  return expanded;
+}
+
+// Returns the expanded tokens of the `ix`th argument of the macro being expanded. The expansion
+// is done on first use and then reused, so that an argument that is used several times in the
+// replacement list is expanded only once, and that an argument that is never used (or only used
+// as an operand of the `#` and `##` operators) is never expanded.
+int get_macro_arg_expanded(int ix) {
+  int pair = get_macro_arg_pair(ix);
+  int expanded;
+
+  if (cdr(pair) == 0) {
+    expanded = expand_macro_arg_tokens(car(pair));
+    set_cdr(pair, expanded);
+  }
+
+  return cdr(pair);
+}
 
 // Undoes the effect of get_tok by replacing the current token with the previous
 // token and saving the current token to be returned by the next call to get_tok.
@@ -2944,6 +3056,9 @@ void get_tok() {
   int prev_tok_column_number = column_number;
 #endif
 
+  int arg_ix;     // Index of the macro argument being replayed
+  int arg_tokens; // Tokens of the macro argument being replayed
+
   while (1) {
     // Check if there are any tokens to replay. Macros are just identifiers that
     // have been marked as macros. In terms of how we get into that state, a
@@ -2988,7 +3103,16 @@ void get_tok() {
         }
         break;
       } else if (tok == MACRO_ARG && expand_macro_arg) {
-        begin_macro_expansion(0, get_macro_arg(val), 0); // Play the tokens of the macro argument
+        arg_ix = val;
+        // The operands of `##` are not macro-expanded, so replay the tokens of the argument as
+        // they appear in the source. The right-hand side of `##` is read by paste_tokens, which
+        // disables the expansion of macro arguments to get the raw tokens as well.
+        if (paste_last_token) {
+          arg_tokens = get_macro_arg(arg_ix);
+        } else {
+          arg_tokens = get_macro_arg_expanded(arg_ix);
+        }
+        begin_macro_expansion(0, arg_tokens, 0); // Play the tokens of the macro argument
         continue;
       }
 #ifdef FULL_PREPROCESSOR_SUPPORT
