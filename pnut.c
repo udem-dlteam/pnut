@@ -69,7 +69,6 @@
   #define PARSE_NUMERIC_LITERAL_WITH_BASE
 
   #ifdef PNUT_BOOTSTRAP
-    #define ALLOW_RECURSIVE_MACROS
     #define MINIMAL_RUNTIME
     #define SH_INCLUDE_ALL_ALPHANUM_CHARACTERS
     // Remove support for complex printf specifiers (flags, width, precision).
@@ -181,7 +180,6 @@
 #elif defined(target_awk)
 
   #ifdef PNUT_BOOTSTRAP
-    #define ALLOW_RECURSIVE_MACROS
     #define MINIMAL_RUNTIME
   #else
     // Enable all C features for general pnut usage
@@ -224,7 +222,6 @@
   #endif
 
   #ifdef PNUT_BOOTSTRAP
-    #define ALLOW_RECURSIVE_MACROS
     // For global array initialization
     #define SUPPORT_SIZEOF
   #else
@@ -761,6 +758,12 @@ enum TOKEN {
   DECLS,
   FUN_DECL,
   CAST,
+  IDENT_NO_EXPAND = 497, // Identifier that was left unexpanded because its macro was already
+                         // being expanded (it is said to be "painted blue").  It is always
+                         // returned to the caller as an IDENTIFIER, and only survives in the
+                         // token lists of expanded macro arguments, where it prevents the token
+                         // from being expanded a second time. Do not reload the kind of the
+                         // ident, and do not expand it.
   MACRO_ARG_END = 498, // Sentinel appended to the tokens of a macro argument that is being
                        // expanded, so we know when the expansion is over.  Internal to the
                        // preprocessor, it never escapes to the parser.
@@ -1292,6 +1295,11 @@ bool if_macro_keep_directive_block_code = false; // Whether to keep the code of 
 bool expand_macro = true;
 // Don't expand macro arguments. Used for stringification and token pasting.
 bool expand_macro_arg = true;
+// Whether we are collecting tokens into a token list that will be replayed later (the tokens of
+// an expanded macro argument, or the raw tokens of a macro argument). When we are, the
+// identifiers that were left unexpanded are kept as IDENT_NO_EXPAND instead of being turned back
+// into IDENTIFIER, so that they are not expanded again when the list is replayed.
+bool collecting_macro_tokens = false;
 // Don't produce newline tokens. Used when reading the tokens of a macro definition.
 bool skip_newlines = true;
 
@@ -2636,7 +2644,11 @@ int macro_parse_argument() {
   int arg_tokens = 0;
   int parens_depth = 0;
   int rest;
+  bool prev_collecting_macro_tokens = collecting_macro_tokens;
 
+  // The arguments are read as they come out of the macro expansions that are being replayed,
+  // so the identifiers that those expansions left unexpanded must stay unexpanded.
+  collecting_macro_tokens = true;
   while ((parens_depth > 0 || (tok != ',' && tok != ')')) && tok != EOF) {
     parens_depth = parens_depth + (tok == '(') - (tok == ')');
 
@@ -2649,6 +2661,7 @@ int macro_parse_argument() {
     }
     get_tok_macro(false);
   }
+  collecting_macro_tokens = prev_collecting_macro_tokens;
 
   return arg_tokens;
 }
@@ -2751,15 +2764,16 @@ void begin_macro_expansion(int ident, int tokens, int args) {
   macro_args    = args;
 }
 
-// The macro_is_already_expanding function is buggy and has false positives in
-// the repl example. Disable it until we rework macro argument expansion as
-// described in https://web.archive.org/web/20250328104901/https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html.
-#ifndef ALLOW_RECURSIVE_MACROS
-// Search the macro stack to see if the macro is already expanding.
+// Search the macro stack to see if the macro is already expanding, in which case its name must
+// not be expanded again: the macro tokens that are being replayed are the ones that hide the
+// macro name, and a macro stops hiding its name as soon as its tokens are all replayed. Note
+// that the ident of a macro expansion frame is either in the macro_ident global (for the frame
+// that is being replayed) or in the slot saved by the frame above it, which means that both
+// have to be looked at.
 bool macro_is_already_expanding(int ident) {
   int i = macro_stack_ix;
-  if (ident == 0 || macro_ident == 0) return false; // Unnamed macro or no macro is expanding
-  if (ident == macro_ident)           return true;  // The same macro is already expanding
+  if (ident == 0)                   return false; // Not a macro name, nothing hides it
+  if (ident == macro_ident)         return true;  // The same macro is already expanding
 
   // Traverse the stack to see if the macro is already expanding
   while (i > 0) {
@@ -2768,7 +2782,6 @@ bool macro_is_already_expanding(int ident) {
   }
   return false;
 }
-#endif
 
 // Copies the tokens of a macro argument, and appends the MACRO_ARG_END sentinel at the end of
 // the copy. The sentinel is needed because get_tok pops the macro expansion frames by itself
@@ -2817,13 +2830,15 @@ int expand_macro_arg_tokens(int tokens) {
   int owner_tok_lst      = macro_tok_lst;
   int owner_args         = macro_args;
   int owner_ident        = macro_ident;
-  int prev_expand_macro  = expand_macro;
+  int prev_expand_macro              = expand_macro;
+  int prev_collecting_macro_tokens   = collecting_macro_tokens;
   int expanded = 0;
   int rest;
 
   if (tokens == 0) return 0; // An empty argument expands to nothing
 
   expand_macro = true;
+  collecting_macro_tokens = true;
   begin_macro_expansion(0, copy_macro_arg_tokens(tokens), 0);
   macro_stack[baseline + 2] = 0; // The macro whose argument is expanded is not hidden at the call site
 
@@ -2842,7 +2857,8 @@ int expand_macro_arg_tokens(int tokens) {
   }
 
   // Restore the macro expansion context of the macro whose argument was expanded
-  expand_macro   = prev_expand_macro;
+  expand_macro                = prev_expand_macro;
+  collecting_macro_tokens     = prev_collecting_macro_tokens;
   macro_stack_ix = baseline;
   macro_tok_lst  = owner_tok_lst;
   macro_args     = owner_args;
@@ -2884,14 +2900,14 @@ bool attempt_macro_expansion(int macro) {
   // We must save the tokens because the macro may be redefined while reading the arguments
   int tokens = car(symbol_tag(macro));
 
-#ifndef ALLOW_RECURSIVE_MACROS
   if (macro_is_already_expanding(macro)) { // Self referencing macro
-    tok = IDENTIFIER;
+    // Paint the token so that it is not expanded again when it is replayed later, after the
+    // expansion that hides this macro name is over.
+    tok = IDENT_NO_EXPAND;
     val = macro;
     return false;
-  } else
-#endif
-  if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
+  }
+  else if (cdr(symbol_tag(macro)) == -1) { // Object-like macro
 #ifdef FULL_PREPROCESSOR_SUPPORT
     // Note: Redefining __{FILE,LINE}__ macros, either with the #define or #line directives is not supported.
     if (macro == FILE__ID) {
@@ -2931,6 +2947,9 @@ void stringify() {
   }
   arg = get_macro_arg(val);
   tok = car(car(arg));
+  // Painted identifiers (identifiers left unexpanded because their macro was already being
+  // expanded) are regular identifiers as far as stringification is concerned.
+  if (tok == IDENT_NO_EXPAND) tok = IDENTIFIER;
   // Support the case where the argument is a single identifier/macro/keyword token
   if ((tok == IDENTIFIER || tok == MACRO || (KEYWORDS_START <= tok && tok <= KEYWORDS_END)) && cdr(arg) == 0) {
     val = cdr(car(arg)); // Use the identifier symbol
@@ -2976,6 +2995,9 @@ void paste_tokens(int left_tok, int left_val) {
   }
   right_tok = tok;
   right_val = val;
+  // Painted identifiers are regular identifiers as far as token pasting is concerned
+  if (left_tok == IDENT_NO_EXPAND) left_tok = IDENTIFIER;
+  if (right_tok == IDENT_NO_EXPAND) right_tok = IDENTIFIER;
   if (left_tok == IDENTIFIER || left_tok == TYPE || left_tok == MACRO
     || (KEYWORDS_START <= left_tok && left_tok <= KEYWORDS_END)) {
     // Something that starts with an identifier can only be an identifier
@@ -3097,7 +3119,7 @@ void get_tok() {
       }
 #endif // FULL_PREPROCESSOR_SUPPORT
 
-      if (tok == MACRO) { // Nested macro expansion!
+      if (tok == MACRO && expand_macro) { // Nested macro expansion!
         if (attempt_macro_expansion(val)) {
           continue;
         }
@@ -3508,6 +3530,11 @@ void get_tok() {
   last_tok_line_number = prev_tok_line_number;
   last_tok_column_number = prev_tok_column_number;
 #endif
+
+  // An identifier that was left unexpanded is opaque to the caller: it's a regular identifier.
+  // The tokens of an expanded macro argument are the only ones that need to know that the
+  // identifier must not be expanded again, and they are collected by expand_macro_arg_tokens.
+  if (tok == IDENT_NO_EXPAND && !collecting_macro_tokens) tok = IDENTIFIER;
 }
 
 // parser

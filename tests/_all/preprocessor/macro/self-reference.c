@@ -41,5 +41,5 @@ void main() {
   putdigit(y);
   A(test1, test2);
   A(test3, x);
-  // B(x, y);
+  B(x, y);
 }
