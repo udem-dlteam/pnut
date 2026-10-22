@@ -1,0 +1,11 @@
+#ifdef PNUT_CC
+    /* pnut doesn't support variable length arrays, so use a fixed size array
+       instead. TCC doesn't need to pass many arguments at once. */
+    #define ONSTACK_ARGS_MAX 256
+    static char _onstack[ONSTACK_ARGS_MAX];
+    char *onstack = _onstack;
+    if (nb_args > ONSTACK_ARGS_MAX)
+        tcc_error("too many function arguments (%d)", nb_args);
+#else
+    char _onstack[nb_args], *onstack = _onstack;
+#endif

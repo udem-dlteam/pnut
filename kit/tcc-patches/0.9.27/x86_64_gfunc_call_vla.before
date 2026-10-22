@@ -1,0 +1,1 @@
+    char _onstack[nb_args], *onstack = _onstack;

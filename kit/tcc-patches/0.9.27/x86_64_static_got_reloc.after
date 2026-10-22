@@ -1,0 +1,16 @@
+#if defined(TCC_TARGET_I386) || defined(TCC_MUSL)
+        if (s->reloc && s != s1->got && (s->sh_flags & SHF_ALLOC)) //gr
+        /* On X86 gdb 7.3 works in any case but gdb 6.6 will crash if SHF_ALLOC
+        checking is removed */
+#else
+  #ifdef CONFIG_TCCBOOT
+        /* Backport of TinyCC 05f6aa1ad: fix generation of statically linked
+           x86-64 executables. */
+        if (s->reloc && (s != s1->got || s1->static_link))
+  #else
+        if (s->reloc && s != s1->got)
+  #endif
+        /* On X86_64 gdb 7.3 will crash if SHF_ALLOC checking is present */
+#endif
+            relocate_section(s1, s);
+    }

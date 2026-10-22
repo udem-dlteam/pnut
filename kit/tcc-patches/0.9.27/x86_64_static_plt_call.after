@@ -1,0 +1,21 @@
+#ifdef TCC_TARGET_X86_64
+  #ifdef CONFIG_TCCBOOT
+    /* Backport of TinyCC 05f6aa1ad: fix generation of statically linked
+       x86-64 executables. */
+            if ((type == R_X86_64_PLT32 || type == R_X86_64_PC32) &&
+                sym->st_shndx != SHN_UNDEF &&
+                (ELFW(ST_VISIBILITY)(sym->st_other) != STV_DEFAULT ||
+                 ELFW(ST_BIND)(sym->st_info) == STB_LOCAL ||
+                 s1->output_type == TCC_OUTPUT_EXE)) {
+                rel->r_info = ELFW(R_INFO)(sym_index, R_X86_64_PC32);
+                continue;
+            }
+  #else
+            if ((type == R_X86_64_PLT32 || type == R_X86_64_PC32) &&
+                (ELFW(ST_VISIBILITY)(sym->st_other) != STV_DEFAULT ||
+		 ELFW(ST_BIND)(sym->st_info) == STB_LOCAL)) {
+                rel->r_info = ELFW(R_INFO)(sym_index, R_X86_64_PC32);
+                continue;
+            }
+  #endif
+#endif

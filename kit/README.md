@@ -111,6 +111,8 @@ The following options are available for `setup-rootfs.sh`:
   building one from the `kit/bootstrap-C4` submodule.
 - `--execute-bootstrap`: Execute the bootstrap process automatically after
   setting up the root filesystem.
+- `--arch <arch>`: Architecture of the bootstrap environment: `i386` (default)
+  or `x86_64`.
 
 And the following options are available for `list-bootstrap-files.sh` and are
 passed through from `setup-rootfs.sh`:
@@ -123,5 +125,7 @@ passed through from `setup-rootfs.sh`:
 - `--mes-libc`: Use the Mes libc implementation instead of the Pnut libc
   implementation (default: Pnut libc).
 - `--tcc-version <version>`: The version of TCC to use (default: 0.9.27).
+- `--arch <arch>`: Architecture of the bootstrap environment: `i386` (default)
+  or `x86_64`.
 - `--bootstrap-from-c4`: Include `cpp.c` instead of `pnut-sh.sh` in the
   `jammed.sh` archive.
