@@ -84,8 +84,7 @@ echo '(display "Hello, world!")' > $COMP_DIR/program.scm
 
 PNUT_SH_OPTIONS="-Dtarget_sh -DSH_OPTIMIZE_LONG_LINES"
 # BOOTSTRAP_LONG so long long are mapped to 32-bit integers (long long is used in c4)
-# ALLOW_RECURSIVE_MACROS so repl.c can be compiled to work around a recursive macro expansion bug
-PNUT_EXE_OPTIONS="-Dtarget_i386_linux -DONE_PASS_GENERATOR -DBOOTSTRAP_LONG -DALLOW_RECURSIVE_MACROS"
+PNUT_EXE_OPTIONS="-Dtarget_i386_linux -DONE_PASS_GENERATOR -DBOOTSTRAP_LONG"
 gcc -o $COMP_DIR/pnut-sh-base.exe $PNUT_SH_OPTIONS -O3 pnut.c 2> /dev/null || fail "Error: Failed to compile pnut-sh"
 gcc -o $COMP_DIR/pnut-exe $PNUT_EXE_OPTIONS -O3 pnut.c 2> /dev/null || fail "Error: Failed to compile pnut-exe"
 

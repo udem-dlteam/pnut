@@ -90,12 +90,22 @@
 //   - System and user includes: #include <stdio.h> and #include "foo.h"
 //
 // In standard C, macros can expand to other macros, or take macros as
-// parameters, both of which result in further expansion. Pnut's tokenizer
-// recursively expands macros without any special handling for self-referential
-// macros, meaning self-referential macros expand indefinitely. This departure
-// from the C language simplifies the expansion logic, but means
-// self-referencing macros cannot be used in pnut as they hit the maximum
-// expansion depth, which raises an error.
+// parameters, both of which result in further expansion. A macro name is
+// invisible while its own replacement is being scanned, which is what keeps a
+// self-referencing macro such as `#define FOO FOO + 1` from expanding forever:
+// the reference in the replacement list is left unexpanded and refers to the
+// ident with the same name. Pnut enforces this rule by searching the macro
+// stack for the macro that is being expanded (macro_is_already_expanding), and
+// by marking the identifiers that are left unexpanded with the IDENT_NO_EXPAND
+// token kind, so that they stay unexpanded when they are replayed later on.
+//
+// The arguments of a macro call are expanded before being substituted in the
+// replacement list, and that expansion happens in the context of the call site,
+// where the macro that is being called is not invisible yet: this is what lets a
+// macro appear in its own argument, as in `CAR(CAR(x))`. The tokens of an
+// argument are therefore kept twice, once as written in the source (used by the
+// `#` and `##` operators, whose operands are not expanded) and once expanded
+// (used everywhere else).
 //
 // Because preprocessor macros are global, they are kept in the symbol table,
 // alongside their arity and their list of tokens, for the entire execution
@@ -119,12 +129,21 @@
 // Relevant types, variables and functions (macro expansion):
 //  - expand_macro: Enable/disable macro expansion
 //  - expand_macro_arg: Enable/disable macro expansion for macro arguments
+//  - collecting_macro_tokens: Whether the tokens read by get_tok are collected into
+//    a token list that will be replayed, instead of being parsed
 //  - skip_newlines: Enable/disable skipping of newlines in tokenizer
 //  - if_macro_stack: Stack to keep track of nested conditional groups
 //  - if_macro_mask: If the current conditional group is active or not
 //  - if_macro_executed: If any branch of the current conditional group has run
-//  - macro_stack: Stack to keep track of nested macro expansions
+//  - macro_stack: Stack to keep track of nested macro expansions. Each frame
+//    saves the tokens, arguments and ident of the enclosing expansion
 //  - macro_tok_lst: List of tokens of the macro being expanded
+//  - macro_args: Arguments of the macro being expanded, each one a
+//    (tokens as written, expanded tokens) pair
+//  - macro_ident: Ident of the macro being expanded, hidden during its expansion
+//  - get_macro_arg(): tokens of an argument, as written in the source
+//  - get_macro_arg_expanded(): tokens of an argument, expanded on first use
+//  - macro_is_already_expanding(): is a macro forbidden right now
 //
 //  - get_tok_macro(): like get_tok, but with macro expansion disabled
 //  - handle_preprocessor_directive(): entry point for handling cpp directives

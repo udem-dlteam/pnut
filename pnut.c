@@ -2826,12 +2826,12 @@ int copy_macro_arg_tokens(int tokens) {
 // leave an extra frame behind when undo_token pushes back a token (a function-like macro at the
 // end of an argument is not expanded, since there is no `(` after it in the argument).
 int expand_macro_arg_tokens(int tokens) {
-  int baseline           = macro_stack_ix;
-  int owner_tok_lst      = macro_tok_lst;
-  int owner_args         = macro_args;
-  int owner_ident        = macro_ident;
-  int prev_expand_macro              = expand_macro;
-  int prev_collecting_macro_tokens   = collecting_macro_tokens;
+  int baseline                     = macro_stack_ix;
+  int owner_tok_lst                = macro_tok_lst;
+  int owner_args                   = macro_args;
+  int owner_ident                  = macro_ident;
+  bool prev_expand_macro           = expand_macro;
+  bool prev_collecting_macro_tokens = collecting_macro_tokens;
   int expanded = 0;
   int rest;
 
@@ -3532,8 +3532,8 @@ void get_tok() {
 #endif
 
   // An identifier that was left unexpanded is opaque to the caller: it's a regular identifier.
-  // The tokens of an expanded macro argument are the only ones that need to know that the
-  // identifier must not be expanded again, and they are collected by expand_macro_arg_tokens.
+  // Only the token lists that are built to be replayed later need to know that such an
+  // identifier must not be expanded again, and they set collecting_macro_tokens.
   if (tok == IDENT_NO_EXPAND && !collecting_macro_tokens) tok = IDENTIFIER;
 }
 
