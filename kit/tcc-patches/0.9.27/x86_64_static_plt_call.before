@@ -1,0 +1,8 @@
+#ifdef TCC_TARGET_X86_64
+            if ((type == R_X86_64_PLT32 || type == R_X86_64_PC32) &&
+                (ELFW(ST_VISIBILITY)(sym->st_other) != STV_DEFAULT ||
+		 ELFW(ST_BIND)(sym->st_info) == STB_LOCAL)) {
+                rel->r_info = ELFW(R_INFO)(sym_index, R_X86_64_PC32);
+                continue;
+            }
+#endif

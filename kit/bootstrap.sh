@@ -198,10 +198,10 @@ libtcc.c  sscanf_TCC_VERSION
 
 # Extra patches needed by TCC's x86-64 backend.
 TCC_X86_64_PATCHES="
-x86_64-gen.c  va_arg_local_enum
-x86_64-gen.c  gfunc_call_vla
-tccelf.c  static_plt_call
-tccelf.c  static_got_reloc
+x86_64-gen.c  x86_64_va_arg_local_enum
+x86_64-gen.c  x86_64_gfunc_call_vla
+tccelf.c  x86_64_static_plt_call
+tccelf.c  x86_64_static_got_reloc
 "
 
 PATCHES_DIR="tcc-patches"
